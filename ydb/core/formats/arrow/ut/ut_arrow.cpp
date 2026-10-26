@@ -481,8 +481,23 @@ std::vector<TDataRow> TestRows() {
     return rows;
 }
 
+const std::vector<std::pair<TString, TTypeInfo>>& MakeTable1000Schema() {
+    static const auto schema = [] {
+        std::vector<std::pair<TString, TTypeInfo>> result;
+        for (const auto& column : TDataRow::MakeYdbSchema()) {
+            if (column.first == "i8" || column.first == "i16" || column.first == "i32") {
+                result.emplace_back(column);
+            }
+        }
+
+        return result;
+    }();
+
+    return schema;
+}
+
 const std::vector<TTypeInfo>& MakeTable1000Types() {
-    static const std::vector<TTypeInfo> types = { TTypeInfo(NTypeIds::Int8), TTypeInfo(NTypeIds::Int16), TTypeInfo(NTypeIds::Int32) };
+    static const auto types = NArrow::ColumnTypes(MakeTable1000Schema());
     return types;
 }
 
@@ -900,9 +915,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns, std::nullopt,
-                std::nullopt, MakeTable1000Types(), std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int8) });
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                MakeTable1000Schema(), batch->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -928,9 +943,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt,
-                std::nullopt, MakeTable1000Types(), std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int8) });
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                MakeTable1000Schema(), batch->schema(), true, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
@@ -955,9 +970,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns,
-                std::nullopt, std::nullopt, MakeTable1000Types(), std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Uint64) });
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -992,9 +1007,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns,
-                maxVersionCursor, uncommittedVersionCursor, MakeTable1000Types(), std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Uint64) });
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -1021,8 +1036,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
                                   .ValueOrDie();
         }
 
-        std::shared_ptr<arrow::Schema> sortingSchema = std::make_shared<arrow::Schema>(*batchesByKey.front()->schema());
-
         std::shared_ptr<arrow::RecordBatch> maxVersion =
             arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
         maxVersion = AddSnapColumn(maxVersion, 1);
@@ -1039,10 +1052,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = { "snap" };
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(sortingSchema, batches[0]->schema(), false, vColumns,
-                maxVersionCursor, uncommittedVersionCursor, std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Uint64) },
-                std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Uint64) });
+            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                std::vector<std::pair<TString, TTypeInfo>>{ { "key", TTypeInfo(NTypeIds::Uint64) } }, batches[0]->schema(), false, versionSchema,
+                maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }

@@ -155,9 +155,8 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         return TConclusionStatus::Fail("not enough pk fields");
     }
     auto result = batchConclusion.DetachResult();
-    const auto& pkTypes = GetIndexInfo().GetPrimaryKeyTypes();
-    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), pkColumns, pkTypes, true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKey(), pkTypes));
+    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), GetIndexInfo().GetPrimaryKeyColumns(), true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKeyColumns()));
     return result;
 }
 

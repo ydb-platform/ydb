@@ -2,6 +2,7 @@
 #include "schema.h"
 
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/sys_view_schema.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
@@ -11,16 +12,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPa
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(portionId);
 
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(), std::vector<NScheme::TTypeInfo>(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)));
-}
-
-const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
-    static std::shared_ptr<arrow::Schema> schema = []() {
-        arrow::FieldVector fields = { std::make_shared<arrow::Field>("PathId", arrow::uint64()),
-            std::make_shared<arrow::Field>("TabletId", arrow::uint64()), std::make_shared<arrow::Field>("PortionId", arrow::uint64()) };
-        return std::make_shared<arrow::Schema>(std::move(fields));
-    }();
-    return schema;
+    return NCommon::BuildSysViewPKRow<NKikimr::NSysView::Schema::PrimaryIndexPortionStats>(writer.Finish());
 }
 
 TIndexInfo TSchemaAdapter::GetIndexInfo(

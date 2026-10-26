@@ -2,6 +2,7 @@
 #include "schema.h"
 
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/sys_view_schema.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NChunks {
 
@@ -18,20 +19,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKTrivialRow(
     writer.Append<ui64>(portionId);
     writer.Append<ui32>(entityId);
     writer.Append<ui64>(chunkIdx);
-    return NArrow::TSimpleRow(
-        writer.Finish(), GetPKSchema(), { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
-                                            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
-                                            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) });
-}
-
-const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
-    static std::shared_ptr<arrow::Schema> schema = []() {
-        arrow::FieldVector fields = { std::make_shared<arrow::Field>("PathId", arrow::uint64()),
-            std::make_shared<arrow::Field>("TabletId", arrow::uint64()), std::make_shared<arrow::Field>("PortionId", arrow::uint64()),
-            std::make_shared<arrow::Field>("InternalEntityId", arrow::uint32()), std::make_shared<arrow::Field>("ChunkIdx", arrow::uint64()) };
-        return std::make_shared<arrow::Schema>(std::move(fields));
-    }();
-    return schema;
+    return NCommon::BuildSysViewPKRow<NKikimr::NSysView::Schema::PrimaryIndexStats>(writer.Finish());
 }
 
 TIndexInfo TSchemaAdapter::GetIndexInfo(

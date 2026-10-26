@@ -8,7 +8,7 @@
 namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
-    AFL_VERIFY(point.IsSameSortingSchema(*SortSchema))("point", point.DebugJson())("schema", SortSchema->ToString());
+    AFL_VERIFY(point.IsSameSortingSchema(SortSchema))("point", point.DebugJson());
     Y_ABORT_UNLESS(point.IsReverseSort() == Reverse);
     Y_ABORT_UNLESS(++ControlPoints == 1);
 
@@ -71,7 +71,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         result = SortHeap.Current().GetKeyColumns().SliceData(pos.GetPosition() + (include ? 0 : 1), resultSize);
         if (lastResultPosition && resultSize) {
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(pos.GetPosition() + (include ? 0 : 1), resultSize);
-            *lastResultPosition = TCursor(keys, 0, SortSchema->field_names(), LogicalTypes);
+            *lastResultPosition = TCursor(keys, 0, SortSchema);
         }
         if (SortHeap.Current().GetFilter()) {
             SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(pos.GetPosition() + (include ? 0 : 1), resultSize));
@@ -80,7 +80,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
         if (lastResultPosition && resultSize) {
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(startPos, resultSize);
-            *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema->field_names(), LogicalTypes);
+            *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema);
         }
         if (SortHeap.Current().GetFilter()) {
             SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(startPos, resultSize));

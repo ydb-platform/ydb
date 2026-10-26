@@ -55,6 +55,7 @@ SRCS(
     ut_index_blob_size_limit.cpp
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
+    sys_view_keys_ut.cpp
     tx_event_logical_types_ut.cpp
     helper.cpp
 )

@@ -58,6 +58,8 @@ public:
 
     NMerger::TSortableBatchPosition BuildSortablePosition(const bool reverse = false) const;
 
+    explicit TSimpleRow(const NMerger::TSortableBatchPosition& position);
+
     TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         AFL_VERIFY(batch);

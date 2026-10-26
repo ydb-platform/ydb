@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
@@ -47,14 +48,21 @@ public:
         return result;
     }
 
+    static const std::vector<std::pair<TString, NScheme::TTypeInfo>>& GetSnapshotColumns() {
+        static const std::vector<std::pair<TString, NScheme::TTypeInfo>> result = { { SPEC_COL_PLAN_STEP,
+                                                                                        NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) },
+            { SPEC_COL_TX_ID, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) },
+            { SPEC_COL_WRITE_ID, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) } };
+        return result;
+    }
+
     static const std::vector<std::string>& GetSnapshotColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_WRITE_ID) };
+        static const auto result = NArrow::ColumnNames(GetSnapshotColumns());
         return result;
     }
 
     static const std::vector<NScheme::TTypeInfo>& GetSnapshotColumnTypes() {
-        static const std::vector<NScheme::TTypeInfo> result(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        static const auto result = NArrow::ColumnTypes(GetSnapshotColumns());
         return result;
     }
 

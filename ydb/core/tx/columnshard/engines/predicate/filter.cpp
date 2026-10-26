@@ -323,9 +323,8 @@ TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
 
     auto batch = BatchBuilder.FlushBatch(false, false);
     TPKRangesFilter result(batch);
-    auto fieldNames = ArrPK->field_names();
     for (const auto& range : RangesInfo) {
-        auto status = result.Add(range.first.BuildPredicate(ArrPK, batch, YdbPK), range.second.BuildPredicate(ArrPK, batch, YdbPK));
+        auto status = result.Add(BuildPredicate(range.first, batch), BuildPredicate(range.second, batch));
         if (status.IsFail()) {
             return status;
         }

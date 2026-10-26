@@ -90,9 +90,14 @@ private:
 
 public:
     explicit TFirstLastSpecialKeys(const TString& data);
-    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow, const std::shared_ptr<arrow::Schema>& schema)
-        : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), schema) {
+
+    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow)
+        : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), firstRow.GetSchema())
+    {
+        AFL_VERIFY(firstRow.GetSchema()->Equals(*lastRow.GetSchema()));
+        AFL_VERIFY(firstRow.GetLogicalTypes() == lastRow.GetLogicalTypes());
     }
+
     explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(std::vector<TString>({ firstRow, lastRow }), schema) {
     }

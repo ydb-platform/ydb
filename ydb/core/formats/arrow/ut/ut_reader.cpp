@@ -339,12 +339,11 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         std::shared_ptr<arrow::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, oldVersion);
         std::shared_ptr<arrow::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}}, newVersion);
 
-        auto vColumns = TDataRow::GetVersionColumns();
         auto sColumns = TDataRow::GetSortingColumns();
 
-        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(), TDataRow::MakeDataSchema(),
-            isReverse, vColumns, std::nullopt, std::nullopt, std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) },
-            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) });
+        const auto schema = TDataRow::MakeYdbSchema();
+        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(std::vector<std::pair<TString, TTypeInfo>>{ schema[0] },
+            TDataRow::MakeDataSchema(), isReverse, std::vector<std::pair<TString, TTypeInfo>>{ schema[2] }, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
@@ -405,12 +404,11 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         std::shared_ptr<arrow::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}, {p3, oldValue}}, v1);
         std::shared_ptr<arrow::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}, {p3, newValue}, {p4, newValue}}, v2);
 
-        auto vColumns = TDataRow::GetVersionColumns();
         auto sColumns = TDataRow::GetSortingColumns();
 
-        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(), TDataRow::MakeDataSchema(),
-            isReverse, vColumns, std::nullopt, std::nullopt, std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) },
-            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) });
+        const auto schema = TDataRow::MakeYdbSchema();
+        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(std::vector<std::pair<TString, TTypeInfo>>{ schema[0] },
+            TDataRow::MakeDataSchema(), isReverse, std::vector<std::pair<TString, TTypeInfo>>{ schema[2] }, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));

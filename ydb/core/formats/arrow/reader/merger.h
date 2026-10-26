@@ -22,12 +22,10 @@ private:
 #endif
     bool PossibleSameVersionFlag = true;
 
-    std::shared_ptr<arrow::Schema> SortSchema;
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>> SortSchema;
     std::shared_ptr<arrow::Schema> DataSchema;
     const bool Reverse;
-    const std::vector<std::string> VersionColumnNames;
-    const std::vector<NScheme::TTypeInfo> LogicalTypes;
-    const std::vector<NScheme::TTypeInfo> VersionTypes;
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>> VersionSchema;
     std::optional<TCursor> MaxVersion;
     std::optional<TCursor> MinUncommittedVersion;
     ui32 ControlPoints = 0;
@@ -125,23 +123,18 @@ private:
     }
 
 public:
-    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse,
-        const std::vector<std::string>& versionColumnNames, const std::optional<TCursor>& maxVersion,
-        const std::optional<TCursor>& minUncommittedVersion, const std::vector<NScheme::TTypeInfo>& logicalTypes,
-        const std::vector<NScheme::TTypeInfo>& versionTypes)
+    TMergePartialStream(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortSchema, std::shared_ptr<arrow::Schema> dataSchema,
+        const bool reverse, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& versionSchema, const std::optional<TCursor>& maxVersion,
+        const std::optional<TCursor>& minUncommittedVersion)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
         , Reverse(reverse)
-        , VersionColumnNames(versionColumnNames)
-        , LogicalTypes(logicalTypes)
-        , VersionTypes(versionTypes)
+        , VersionSchema(versionSchema)
         , MaxVersion(maxVersion)
-        , MinUncommittedVersion(minUncommittedVersion) {
+        , MinUncommittedVersion(minUncommittedVersion)
+    {
         AFL_VERIFY(maxVersion.has_value() == minUncommittedVersion.has_value());
-        Y_ABORT_UNLESS(SortSchema);
-        Y_ABORT_UNLESS(SortSchema->num_fields());
-        AFL_VERIFY(LogicalTypes.size() == (size_t)SortSchema->num_fields());
-        AFL_VERIFY(VersionTypes.size() == VersionColumnNames.size());
+        Y_ABORT_UNLESS(!SortSchema.empty());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
@@ -179,12 +172,11 @@ public:
             return;
         }
         AFL_VERIFY((i64)order.GetStart() < (i64)batch->num_rows())("start", order.GetStart())("num_rows", batch->num_rows());
-        //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
         static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
-        TBatchIterator iterator(batch, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, VersionColumnNames,
-            sourceId, TIterationOrder(Reverse, order.GetStart()), LogicalTypes, VersionTypes);
+        TBatchIterator iterator(batch, filterImpl, SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, VersionSchema,
+            sourceId, TIterationOrder(Reverse, order.GetStart()));
         if (MaxVersion) {
             MaxVersion->ValidateSchema(*iterator.GetVersionColumns().GetSorting());
         }

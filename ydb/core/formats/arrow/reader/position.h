@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -12,9 +13,9 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
+#include <util/datetime/base.h>
 #include <util/generic/array_ref.h>
 #include <util/system/types.h>
-#include <util/datetime/base.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -31,6 +32,11 @@ public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns,
         const std::vector<NScheme::TTypeInfo>& logicalTypes);
+
+    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema)
+        : TCursor(table, position, ColumnNames(schema), ColumnTypes(schema))
+    {
+    }
 
     TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses,
         const std::vector<NScheme::TTypeInfo>& logicalTypes)
@@ -230,13 +236,13 @@ public:
         return true;
     }
 
-    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes = {}) const {
+    NJson::TJsonValue DebugJson(const ui64 position) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
         for (ui32 i = 0; i < Fields.size(); ++i) {
-            if (i < pkTypes.size()) {
+            if (i < LogicalTypes.size()) {
                 TStringBuilder sb;
-                sb << Fields[i]->name() << ": " << NScheme::TypeName(pkTypes[i]);
+                sb << Fields[i]->name() << ": " << NScheme::TypeName(LogicalTypes[i]);
                 jsonFields.AppendValue(sb);
             } else {
                 jsonFields.AppendValue(Fields[i]->ToString());
@@ -246,7 +252,7 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            const NKikimr::NScheme::TTypeInfo* logicalType = (i < pkTypes.size()) ? &pkTypes[i] : nullptr;
+            const NKikimr::NScheme::TTypeInfo* logicalType = (i < LogicalTypes.size()) ? &LogicalTypes[i] : nullptr;
             jsonColumn["value"] = GetPositionAddress(i).DebugString(position, logicalType);
         }
 
@@ -418,11 +424,35 @@ public:
         return Sorting->IsSameSchema(schema);
     }
 
+    bool IsSameSortingSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) const {
+        const auto& fields = Sorting->GetFields();
+        const auto& types = Sorting->GetLogicalTypes();
+        if (schema.size() != fields.size() || schema.size() != types.size()) {
+            return false;
+        }
+
+        for (ui32 i = 0; i < schema.size(); ++i) {
+            if (std::string(schema[i].first.data(), schema[i].first.size()) != fields[i]->name() || schema[i].second != types[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool IsSameDataSchema(const arrow::Schema& schema) const {
         if (!Data) {
             return schema.num_fields() == 0;
         }
         return Data->IsSameSchema(schema);
+    }
+
+    template <class TRecords>
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const std::vector<std::string>& dataColumns,
+        const bool reverseSort)
+        : TSortableBatchPosition(batch, position, ColumnNames(sortingSchema), dataColumns, reverseSort, ColumnTypes(sortingSchema))
+    {
     }
 
     template <class TRecords>
@@ -905,9 +935,9 @@ public:
     };
 
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, const TIntervalPositions& container, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& keySchema, const TIntervalPositions& container) {
         TIntervalPointsIterator it(container);
-        return SplitByBorders(batch, columnNames, it, logicalTypes);
+        return SplitByBorders(batch, ColumnNames(keySchema), it, ColumnTypes(keySchema));
     }
 };
 

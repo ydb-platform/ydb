@@ -1,17 +1,19 @@
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/formats/arrow/special_keys.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
+#include <algorithm>
 #include <compare>
 #include <cstring>
 #include <initializer_list>
@@ -98,6 +100,9 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         UNIT_ASSERT(restored == original);
         const auto position = restored.BuildSortablePosition();
         UNIT_ASSERT(position.GetSorting()->GetLogicalTypes() == original.GetLogicalTypes());
+        const TSimpleRow fromTemporaryPosition(restored.BuildSortablePosition());
+        UNIT_ASSERT(fromTemporaryPosition == original);
+        UNIT_ASSERT(fromTemporaryPosition.GetLogicalTypes() == original.GetLogicalTypes());
         const TSimpleRowRef originalRef(TSimpleRowViewV0(original.GetData()), *schema, original.GetLogicalTypes());
         const TSimpleRowRef restoredRef(TSimpleRowViewV0(restored.GetData()), *schema, restored.GetLogicalTypes());
         UNIT_ASSERT(originalRef == restoredRef);
@@ -133,8 +138,10 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
             TActorSystemStub actorSystem;
             actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-            const auto sorted = SortBatch(batch, keySchema, logicalTypes, true);
-            UNIT_ASSERT(IsSortedAndUnique(sorted, keySchema, logicalTypes));
+            const std::vector<std::pair<TString, NScheme::TTypeInfo>> sortingSchema = { { "decimal", logicalTypes[0] },
+                { "uuid", logicalTypes[1] } };
+            const auto sorted = SortBatch(batch, sortingSchema, true);
+            UNIT_ASSERT(IsSortedAndUnique(sorted, sortingSchema));
             UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 4);
             const auto& sortedIds = static_cast<const arrow::UInt32Array&>(*sorted->column(2));
             UNIT_ASSERT_VALUES_EQUAL(sortedIds.Value(0), 2);
@@ -165,6 +172,59 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
                 }
 
                 UNIT_ASSERT_VALUES_EQUAL(position, expected->num_rows());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(MergeUsesLogicalSchemaAndLatestVersion, NumericComparison) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
+        const NScheme::TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        const NScheme::TTypeInfo uuidType(NScheme::NTypeIds::Uuid);
+        const NScheme::TTypeInfo versionType(NScheme::NTypeIds::Uint64);
+        // Physical column order differs from both the key and version order.
+        const auto schema = arrow::schema({ arrow::field("tx_id", arrow::uint64()), arrow::field("uuid", arrow::fixed_size_binary(16)),
+            arrow::field("id", arrow::uint32()), arrow::field("decimal", arrow::fixed_size_binary(16)),
+            arrow::field("write_id", arrow::uint64()), arrow::field("plan_step", arrow::uint64()) });
+        std::string zero(16, '\0');
+        std::string one = zero;
+        one[0] = 1;
+        std::string twoHundredFiftySix = zero;
+        twoHundredFiftySix[1] = 1;
+        const auto makeBatch = [&](const std::string& decimal, const std::string& uuid, const ui64 planStep, const ui64 txId, const ui64 writeId,
+                                   const ui32 id) {
+            arrow::FixedSizeBinaryBuilder decimals(arrow::fixed_size_binary(16));
+            arrow::FixedSizeBinaryBuilder uuids(arrow::fixed_size_binary(16));
+            UNIT_ASSERT(decimals.Append(decimal).ok());
+            UNIT_ASSERT(uuids.Append(uuid).ok());
+            return arrow::RecordBatch::Make(schema, 1,
+                { MakeArray<arrow::UInt64Builder, ui64>({ txId }), Finish(uuids), MakeArray<arrow::UInt32Builder, ui32>({ id }),
+                    Finish(decimals), MakeArray<arrow::UInt64Builder, ui64>({ writeId }), MakeArray<arrow::UInt64Builder, ui64>({ planStep }) });
+        };
+        const std::vector<std::shared_ptr<arrow::RecordBatch>> batches = { makeBatch(one, zero, 7, 100, 99, 10),
+            makeBatch(one, zero, 8, 0, 0, 11), makeBatch(one, zero, 8, 1, 0, 12), makeBatch(one, zero, 8, 1, 1, 13),
+            makeBatch(twoHundredFiftySix, zero, 0, 0, 0, 20), makeBatch(one, one, 0, 0, 0, 30) };
+        for (const bool reverse : { false, true }) {
+            // The merger must own the schema after the constructor arguments expire.
+            NMerger::TMergePartialStream merger({ { "decimal", decimalType }, { "uuid", uuidType } }, schema, reverse,
+                { { "plan_step", versionType }, { "tx_id", versionType }, { "write_id", versionType } }, std::nullopt, std::nullopt);
+            for (const auto& batch : batches) {
+                merger.AddSource(batch, nullptr, NMerger::TIterationOrder(reverse, 0));
+            }
+
+            NMerger::TRecordBatchBuilder builder(schema->fields());
+            merger.DrainAll(builder);
+            const auto result = builder.Finalize();
+            std::vector<ui32> expected = NumericComparison ? std::vector<ui32>{ 13, 30, 20 } : std::vector<ui32>{ 20, 13, 30 };
+            if (reverse) {
+                std::reverse(expected.begin(), expected.end());
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(result->num_rows(), expected.size());
+            const auto& ids = static_cast<const arrow::UInt32Array&>(*result->GetColumnByName("id"));
+            for (ui32 i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL_C(ids.Value(i), expected[i], TStringBuilder() << "reverse=" << reverse << "; row=" << i);
             }
         }
     }

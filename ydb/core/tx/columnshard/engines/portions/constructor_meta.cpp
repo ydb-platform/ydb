@@ -35,7 +35,7 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
 
 TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     PKTypes = meta.GetPKTypes();
-    FirstAndLastPK = NArrow::TFirstLastSpecialKeys(meta.IndexKeyStart(), meta.IndexKeyEnd(), meta.IndexKeyStart().GetSchema());
+    FirstAndLastPK = NArrow::TFirstLastSpecialKeys(meta.IndexKeyStart(), meta.IndexKeyEnd());
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
     CompactionLevel = meta.GetCompactionLevel();

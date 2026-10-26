@@ -8,6 +8,11 @@
 
 namespace NKikimr::NArrow {
 
+TSimpleRow::TSimpleRow(const NMerger::TSortableBatchPosition& position)
+    : TSimpleRow(position.MakeRecordBatch(), 0, position.GetSorting()->GetLogicalTypes())
+{
+}
+
 std::partial_ordering TSimpleRow::operator<=>(const TSimpleRow& item) const {
     AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema));
     AFL_VERIFY_DEBUG(LogicalTypes == item.LogicalTypes);

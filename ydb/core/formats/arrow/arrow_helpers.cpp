@@ -131,6 +131,26 @@ arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(
     return fields.status();
 }
 
+std::vector<std::string> ColumnNames(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+    std::vector<std::string> result;
+    result.reserve(schema.size());
+    for (const auto& column : schema) {
+        result.emplace_back(column.first.data(), column.first.size());
+    }
+
+    return result;
+}
+
+std::vector<NScheme::TTypeInfo> ColumnTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+    std::vector<NScheme::TTypeInfo> result;
+    result.reserve(schema.size());
+    for (const auto& column : schema) {
+        result.emplace_back(column.second);
+    }
+
+    return result;
+}
+
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<NSerialization::TBufferOverString>(str));
     arrow::io::BufferReader reader(buffer);
@@ -240,6 +260,21 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
     } else {
         return batch;
     }
+}
+
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool andUnique) {
+    const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
+    AFL_VERIFY(keyBatch);
+    return SortBatch(batch, keyBatch->columns(), ColumnTypes(sortingSchema), andUnique);
+}
+
+bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool desc) {
+    const auto keyBatch = TColumnOperator().Extract(batch, ColumnNames(sortingSchema));
+    AFL_VERIFY(keyBatch);
+    return desc ? IsSelfSorted<true, true>(keyBatch, ColumnTypes(sortingSchema))
+                : IsSelfSorted<false, true>(keyBatch, ColumnTypes(sortingSchema));
 }
 
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original) {

@@ -100,15 +100,10 @@ private:
     THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
 
-    std::vector<std::string> GetVersionColumnNames() const {
-        return IIndexInfo::GetSnapshotColumnNames();
-    }
-
     NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
         NArrow::TGeneralContainer batch(1);
         IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-        return NArrow::NMerger::TCursor(
-            batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames(), IIndexInfo::GetSnapshotColumnTypes());
+        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumns());
     };
 
 public:

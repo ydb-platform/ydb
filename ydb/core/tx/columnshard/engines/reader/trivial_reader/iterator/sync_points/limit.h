@@ -59,8 +59,8 @@ private:
             AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo)(
                                                                                  "type", Source->GetType());
             const auto firstPK = Source->GetAs<IDataSource>()->GetFirstPK();
-            auto batch = firstPK.ToBatch();
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse, firstPK.GetLogicalTypes());
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(
+                firstPK.BuildSortablePosition(Reverse).BuildRWPosition(false, false));
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,

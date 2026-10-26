@@ -51,6 +51,9 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
 arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns,  const std::set<std::string>& notNullColumns = {});
 arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns = {});
 
+std::vector<std::string> ColumnNames(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+std::vector<NScheme::TTypeInfo> ColumnTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options);
@@ -69,6 +72,11 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const s
     const std::vector<NScheme::TTypeInfo>& logicalTypes, bool desc = false);
 void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
     const std::vector<NScheme::TTypeInfo>& logicalTypes, std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
+
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool andUnique);
+bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool desc = false);
 
 [[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 [[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(

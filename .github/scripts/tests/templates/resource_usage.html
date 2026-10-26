@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test CPU and disk I/O by area</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 24px; color: #202934; background: #f8fafc; }
+    a { color: #185ca0; }
+    h1 { margin-bottom: 8px; }
+    .notes { max-width: 1100px; line-height: 1.55; }
+    .cards { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+    .card { padding: 16px; background: white; border: 1px solid #d5dce3; border-radius: 8px; min-width: 170px; }
+    .card strong { display: block; font-size: 24px; margin-top: 8px; }
+    .scroll { overflow-x: auto; border: 1px solid #d5dce3; background: white; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { padding: 9px 12px; border-bottom: 1px solid #e5e9ee; text-align: right; white-space: nowrap; }
+    th { background: #edf2f7; }
+    td:first-child, th:first-child { text-align: left; }
+    tr:hover { background: #f1f6fc; }
+    th button { border: 0; background: none; font: inherit; font-weight: 600; cursor: pointer; color: inherit; }
+    .suite { white-space: normal; overflow-wrap: anywhere; min-width: 280px; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; }
+    select, input { font: inherit; padding: 6px; }
+    .area-filter { border: 0; background: none; color: #185ca0; cursor: pointer; font: inherit; }
+    .muted { color: #596776; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<p><a href="../ya-test.html">← Test results for this try</a> · <a href="suites.csv">Suites CSV</a> · <a href="areas.csv">Areas CSV</a> · <a href="usage.json">JSON</a></p>
+<h1>Test CPU and disk I/O by area</h1>
+<p class="notes">Resource consumption in this try, summed over test chunks. All statuses are included, including failed and muted tests.
+  Retries in other <code>try_N</code> reports are separate. Click an area to see its suites; click a column heading to sort.</p>
+<div class="cards">
+  <div class="card">Suites / chunks<strong>{{ totals.suites }} / {{ totals.chunks }}</strong></div>
+  <div class="card">CPU · hours<strong>{{ format_usage(totals, 'cpu_seconds') }}</strong></div>
+  <div class="card">Read · GiB<strong>{{ format_usage(totals, 'read_bytes') }}</strong></div>
+  <div class="card">Written · GiB<strong>{{ format_usage(totals, 'write_bytes') }}</strong></div>
+</div>
+<details class="notes">
+  <summary>What is measured / coverage</summary>
+  <ul>
+    <li>CPU is <code>ru_utime + ru_stime</code>, summed across chunks. One CPU-hour means one core busy for one hour.</li>
+    <li>Read/write are Linux <code>ru_inblock / ru_oublock × 512</code> bytes of accounted storage I/O
+      (<a href="https://github.com/torvalds/linux/blob/master/include/linux/task_io_accounting_ops.h">kernel accounting</a>).
+      They are not log sizes, syscall byte counts, or exact physical device traffic. Cached reads do not count as storage reads.</li>
+    <li>These are the processes accounted for by the test runner; external services, compilation, linking and later CI artifact processing are not attributed to suites here.</li>
+    <li>Only chunk records are summed, never case or suite summary records. Missing metrics appear as “—”; “†” means a partial sum.
+      Measured chunks (CPU / read / write): {{ totals.cpu_seconds_chunks }} / {{ totals.read_bytes_chunks }} / {{ totals.write_bytes_chunks }} out of {{ totals.chunks }}.</li>
+    <li>Areas use the same TESTOWNERS matching as the test report and <code>owner_area_mapping.json</code>.
+      Shared areas form one group to avoid double counting; suites without a team are “unassigned”.</li>
+    <li>Percentages use measured test usage in this try as the denominator, not all host activity.
+      Suite shares show “all suites / own area”. CSV and JSON retain seconds, bytes and per-metric coverage.</li>
+  </ul>
+</details>
+{% macro pct(value) -%}{{ '%.1f%%'|format(value) if value is not none else '—' }}{%- endmacro %}
+{% macro metric_cells(row, key, suite=false) %}
+  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured chunks: {{ row[key + '_chunks'] }} / {{ row.chunks }}">{{ format_usage(row, key) }}</td>
+  <td data-sort="{{ row[key + '_pct_total'] if row[key + '_pct_total'] is not none else '' }}">{{ pct(row[key + '_pct_total']) }}{% if suite %} / {{ pct(row[key + '_pct_area']) }}{% endif %}</td>
+{% endmacro %}
+<h2>Areas</h2>
+<div class="scroll"><table id="areas">
+  <thead><tr>
+    <th><button type="button" data-text>Area ↕</button></th><th><button type="button">Suites ↕</button></th>
+    <th><button type="button">CPU · h ↕</button></th><th><button type="button">% of CPU ↕</button></th>
+    <th><button type="button">Read · GiB ↕</button></th><th><button type="button">% of reads ↕</button></th>
+    <th><button type="button">Written · GiB ↕</button></th><th><button type="button">% of writes ↕</button></th>
+  </tr></thead>
+  <tbody>{% for row in areas %}<tr>
+    <td><button class="area-filter" data-area="{{ row.area }}">{{ row.area }}</button></td><td data-sort="{{ row.suites }}">{{ row.suites }}</td>
+    {{ metric_cells(row, 'cpu_seconds') }}{{ metric_cells(row, 'read_bytes') }}{{ metric_cells(row, 'write_bytes') }}
+  </tr>{% endfor %}</tbody>
+</table></div>
+<h2 id="suite-heading">Suites</h2>
+<div class="controls">
+  <label>Area <select id="area"><option value="">All areas</option>{% for row in areas|sort(attribute='area') %}<option>{{ row.area }}</option>{% endfor %}</select></label>
+  <label>Suite <input id="search" type="search" placeholder="Filter by path"></label>
+  <span id="count" class="muted">{{ suites|length }} suites</span>
+</div>
+<p class="muted">Shares: % of all suites / % of own area. † Partial measurement; hover over a value for chunk coverage.</p>
+<div class="scroll"><table id="suites">
+  <thead><tr>
+    <th><button type="button" data-text>Suite ↕</button></th><th><button type="button" data-text>Area ↕</button></th>
+    <th><button type="button">Chunks ↕</button></th>
+    <th><button type="button">CPU · h ↕</button></th><th><button type="button">CPU share ↕</button></th>
+    <th><button type="button">Read · GiB ↕</button></th><th><button type="button">Read share ↕</button></th>
+    <th><button type="button">Written · GiB ↕</button></th><th><button type="button">Write share ↕</button></th>
+  </tr></thead>
+  <tbody>{% for row in suites %}<tr data-area="{{ row.area }}" data-path="{{ row.suite_folder }}">
+    <td class="suite">{{ row.suite_folder }}</td><td>{{ row.area }}</td><td data-sort="{{ row.chunks }}">{{ row.chunks }}</td>
+    {{ metric_cells(row, 'cpu_seconds', true) }}{{ metric_cells(row, 'read_bytes', true) }}{{ metric_cells(row, 'write_bytes', true) }}
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% if not suites %}<p>No test chunk resource records in this try.</p>{% endif %}
+<script>
+  const area = document.getElementById('area');
+  const search = document.getElementById('search');
+  const suiteRows = Array.from(document.querySelectorAll('#suites tbody tr'));
+  function filterSuites() {
+    const query = search.value.trim().toLowerCase();
+    let count = 0;
+    for (const row of suiteRows) {
+      row.hidden = (area.value && row.dataset.area !== area.value) || !row.dataset.path.toLowerCase().includes(query);
+      if (!row.hidden) count++;
+    }
+    document.getElementById('count').textContent = `${count} suites`;
+  }
+  area.addEventListener('change', filterSuites);
+  search.addEventListener('input', filterSuites);
+  document.querySelectorAll('.area-filter').forEach(button => button.addEventListener('click', () => {
+    area.value = button.dataset.area;
+    filterSuites();
+    document.getElementById('suite-heading').scrollIntoView();
+  }));
+  document.querySelectorAll('th button').forEach(button => button.addEventListener('click', () => {
+    const table = button.closest('table');
+    const column = button.closest('th').cellIndex;
+    const text = button.hasAttribute('data-text');
+    const ascending = button.dataset.ascending !== 'true';
+    const direction = text ? (ascending ? 1 : -1) : (ascending ? -1 : 1);
+    button.dataset.ascending = String(ascending);
+    const rows = Array.from(table.tBodies[0].rows);
+    rows.sort((a, b) => {
+      const x = a.cells[column], y = b.cells[column];
+      if (text) return direction * x.textContent.localeCompare(y.textContent);
+      if (x.dataset.sort === '') return y.dataset.sort === '' ? 0 : 1;
+      if (y.dataset.sort === '') return -1;
+      return direction * (Number(x.dataset.sort) - Number(y.dataset.sort));
+    });
+    for (const row of rows) table.tBodies[0].appendChild(row);
+  }));
+</script>
+</body>
+</html>

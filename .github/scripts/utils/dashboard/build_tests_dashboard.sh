@@ -10,6 +10,17 @@
 TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
 mkdir -p "$TESTS_METRICS_DIR"
 
+RESOURCE_USAGE_DIR="$CURRENT_PUBLIC_DIR/test_resources"
+mkdir -p "$RESOURCE_USAGE_DIR"
+if timeout 120 python3 .github/scripts/tests/resource_usage_report.py \
+  --report "$CURRENT_REPORT" --output-dir "$RESOURCE_USAGE_DIR" \
+  > "$RESOURCE_USAGE_DIR/build.log" 2>&1; then
+  rm -f "$RESOURCE_USAGE_DIR/build.log"
+else
+  rm -f "$RESOURCE_USAGE_DIR/index.html"
+  echo "Test resource report generation failed (see test_resources/build.log)"
+fi
+
 DASHBOARD_ARGS=()
 if [ -n "$DASHBOARD_SANITIZER" ]; then
   DASHBOARD_ARGS+=(--sanitizer "$DASHBOARD_SANITIZER")

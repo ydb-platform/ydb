@@ -410,6 +410,25 @@ message TChangeGroupSizeInUnits {
     uint64 ItemConfigGeneration = 100;
 }
 
+// Change BridgeMode of the storage pool of the bridged cluster with non-uniform storage enabled; groups created
+// afterwards follow the new mode, while existing groups keep their ids and data. Making the pool bridged turns its
+// ordinary groups into inline piles in the piles they reside in (each group must reside in a single pile), then the
+// groups get their parts in other piles, which are synced in the background. Making the pool ordinary leaves every
+// bridged group with its part in a single pile, the other parts are deleted in the background.
+message TChangeStoragePoolBridgeMode {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    bool BridgeMode = 3;
+
+    // the pile which bridged groups keep their parts in when the pool is made ordinary; by default, the group keeps
+    // the part it relies on (e.g. the one it has been made bridged from), its inline pile, or its part in the primary
+    // pile
+    string RetainPileName = 4;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
 message TAddMigrationPlan {
     string Name = 1;
     repeated TMoveCommand MoveCommand = 2;
@@ -773,6 +792,7 @@ message TConfigRequest {
             TMoveDDisk MoveDDisk = 60;
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
+            TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

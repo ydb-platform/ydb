@@ -465,6 +465,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     CheckBridgeConversion();
     CheckBridgePileOperation();
+    CheckBridgeGroupModes(); // groups may wait for their piles to get synchronized
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -1114,6 +1115,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         cFunc(TEvPrivate::EvRetryBridgeConversion, HandleRetryBridgeConversion);
         cFunc(TEvPrivate::EvRetryBridgePileOperation, HandleRetryBridgePileOperation);
+        cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
+        cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:
@@ -1288,6 +1291,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

@@ -1,3 +1,5 @@
+* Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
+
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.
 
 * Added `TBridgeClient::AddPile()` to add an INACTIVE pile to a bridged cluster, and `TGetClusterStateResult::GetPendingPileOperation()`.

@@ -83,6 +83,7 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxConvertToBridge;
+    class TTxUpdateBridgeGroupModes;
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
@@ -904,6 +905,28 @@ public:
                 !BridgeProxyGroupId && !BridgePileId;
         }
 
+        // the bridged group being made ordinary one (its pool is not bridged anymore) keeps its authority part only,
+        // the part in the pile is going away then
+        bool IsBridgePartDropped(TBridgePileId bridgePileId, bool poolBridgeMode) const {
+            if (poolBridgeMode || !BridgeGroupInfo) {
+                return false;
+            }
+            const auto& state = BridgeGroupInfo->GetBridgeGroupState();
+            const auto authorityPileId = TBridgePileId::FromProto(&state,
+                &NKikimrBridge::TGroupState::GetAuthorityPileId);
+            return authorityPileId && authorityPileId != bridgePileId;
+        }
+
+        // turn the conversion candidate into inline pile in the pile its VDisks reside in; the group generation has to
+        // be bumped (pile generation gets adjusted along with it on commit)
+        void MakeInlinePile(TBridgePileId bridgePileId) {
+            Y_ABORT_UNLESS(IsBridgeConversionCandidate());
+            BridgePileId = bridgePileId;
+            BridgeProxyGroupId = ID;
+            NBridge::MakeInlinePileGroupState(BridgeGroupInfo.emplace().MutableBridgeGroupState(), ID, Generation,
+                bridgePileId);
+        }
+
         // BlobDepotId as reported to node wardens: actual tablet id for working virtual group, zero for virtual group which
         // BlobDepot has failed to be created for, and nothing otherwise
         std::optional<ui64> GetReportedBlobDepotId() const {
@@ -1672,6 +1695,8 @@ private:
             EvCheckSyncerDisconnectedNodes,
             EvRetryBridgeConversion,
             EvRetryBridgePileOperation,
+            EvRetryBridgeGroupModes,
+            EvCheckBridgeGroupModes,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2197,14 +2222,53 @@ private:
         std::optional<TString> error);
     void HandleRetryBridgePileOperation();
 
-    // add the part in the pile to every bridged group lacking it; added gets (bridge proxy group, new part) pairs
+    // bring the bridged groups relying on single parts in line with the modes of their pools: the ones of bridged pools
+    // stop relying on them when all their parts are synced, the ones of ordinary pools lose their other parts
+    TRetriableStep BridgeGroupModesStep{TEvPrivate::EvRetryBridgeGroupModes};
+    bool BridgeGroupModesCheckScheduled = false;
+    void CheckBridgeGroupModes();
+    void OnBridgeGroupModesStepDone(bool failed, bool recheckLater);
+    void HandleRetryBridgeGroupModes();
+    void HandleCheckBridgeGroupModes();
+
+    // the parts of the groups being made ordinary ones stop getting requests first, and they are deleted after this
+    // delay, so that the requests issued with older group info get finished meanwhile
+    static constexpr TDuration BridgePartDropDelay = TDuration::Seconds(30);
+    // parts which have stopped getting requests, and when BSC has noticed this
+    THashMap<TGroupId, TMonotonic> DroppedBridgePartsSince;
+
+    // add the part in the pile to every bridged group of bridged pool lacking it; added gets (bridge proxy group, new
+    // part) pairs
     void AddBridgePileGroups(TConfigState& state, TBridgePileId pileId, ui64 becameUnsyncedGeneration,
+        std::vector<std::tuple<TGroupId, TGroupId>> *added);
+
+    // part of the bridged group to be created in the pile; it is unsynced from the beginning
+    struct TBridgeGroupPart {
+        TGroupId ProxyGroupId;
+        TBridgePileId PileId;
+        ui64 BecameUnsyncedGeneration = 0; // the one of the current sync of the pile, if there is one going
+    };
+
+    // create the parts of bridged groups, throws TExError when some can't be placed; added gets (bridge proxy group,
+    // new part) pairs
+    void AddBridgeGroupParts(TConfigState& state, const std::vector<TBridgeGroupPart>& parts,
         std::vector<std::tuple<TGroupId, TGroupId>> *added);
 
     // delete the part in the pile of every bridged group (inline pile keeps serving as bridge proxy group only); every
     // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
+    // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
+    // its inline pile goes away
+    void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
+
+    // the parts of the groups being made fully bridged ones are synced in synchronized piles by this many syncers at
+    // most, so that the traffic between piles doesn't hamper them
+    static constexpr size_t MaxBridgeUpgradeSyncers = 16;
+
+    // syncer of the part in the synchronized pile of the group being made fully bridged one
+    bool IsBridgeUpgradeSyncer(const TSyncerState& syncerState);
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
@@ -2460,6 +2524,7 @@ public:
         CheckSyncerDisconnectedNodes();
         CheckBridgeConversion();
         CheckBridgePileOperation();
+        CheckBridgeGroupModes();
     }
 
     void UpdatePDisksCounters() {

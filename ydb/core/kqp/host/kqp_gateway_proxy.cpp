@@ -573,12 +573,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             return false;
         }
 
-        if (columnIt->second.IsDefaultFromExpression()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Generated columns are not supported in column tables";
-            return false;
-        }
-
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
         columnDesc.SetId(nextColumnId++);
         columnDesc.SetName(columnIt->second.Name);
@@ -588,6 +582,20 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnIt->second.TypeInfo, columnIt->second.TypeMod);
         if (columnType.TypeInfo) {
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
+        }
+
+        if (columnIt->second.IsDefaultFromExpression()) {
+            Y_ENSURE(columnIt->second.DefaultExpression);
+            const auto& generated = *columnIt->second.DefaultExpression;
+            auto* generatedProto = columnDesc.MutableDefaultFromExpression();
+            generatedProto->SetExprText(generated.ExprText);
+            generatedProto->SetStored(generated.Stored);
+            for (const auto& dependency : generated.Dependencies) {
+                generatedProto->AddDependencyColumnNames(dependency);
+            }
+            if (!columnIt->second.Families.empty()) {
+                columnDesc.SetColumnFamilyName(columnIt->second.Families.front());
+            }
         }
 
         if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {

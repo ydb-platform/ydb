@@ -61,6 +61,12 @@ bool TOlapMultiColumnStatisticsSchema::ApplyUpsert(const TOlapSchema& currentSch
                 TStringBuilder() << "Undefined column: " << columnName);
             return false;
         }
+        if (column->IsVirtualGenerated()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Statistics '" << Name << "' cannot reference VIRTUAL generated column '"
+                << columnName << "'");
+            return false;
+        }
         ColumnNames.emplace_back(columnName);
         ColumnIds.emplace_back(column->GetId());
     }

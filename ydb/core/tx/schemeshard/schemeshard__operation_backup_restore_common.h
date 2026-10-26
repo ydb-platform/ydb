@@ -727,6 +727,15 @@ public:
                     return result;
                 }
             }
+        } else if (TxType == TTxState::TxBackup && context.SS->ColumnTables.contains(path.Base()->PathId)) {
+            const auto& schema = context.SS->ColumnTables.at(path.Base()->PathId)->Description.GetSchema();
+            for (const auto& column : schema.GetColumns()) {
+                if (column.HasDefaultFromExpression()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        TStringBuilder() << "Cannot backup table with generated column '" << column.GetName() << "'");
+                    return result;
+                }
+            }
         }
 
         TString errStr;

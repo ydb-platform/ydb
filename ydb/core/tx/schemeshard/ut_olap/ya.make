@@ -30,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_olap.cpp
+    ut_olap_generated_columns.cpp
     ut_olap_schema_entity_id.cpp
 )
 

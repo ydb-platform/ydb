@@ -26,6 +26,12 @@ bool TOlapSchema::ValidateTtlSettings(
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
+            if (column->IsVirtualGenerated()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "TTL column '" << column->GetName()
+                    << "' cannot reference a VIRTUAL generated column");
+                return false;
+            }
             return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), context, errors);
         }
         case TTtlProto::kDisabled:
@@ -49,6 +55,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
+    if (!ValidateGeneratedColumns(errors)) {
+        return false;
+    }
+
     ++Version;
     return true;
 }
@@ -62,6 +72,9 @@ bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tabl
         return false;
     }
     ParseIndexesFromFullSchema(tableSchema);
+    if (!ValidateGeneratedColumns(errors)) {
+        return false;
+    }
     if (!Indexes.ValidateNoDuplicateMinMaxAndBloomFilterIndexes(*this, errors)) {
         return false;
     }
@@ -94,7 +107,49 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     std::swap(resultLocal, tableSchemaExt);
 }
 
+void TOlapSchema::SerializeForColumnShard(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
+    Serialize(tableSchema);
+    auto* columns = tableSchema.MutableColumns();
+    for (int i = columns->size() - 1; i >= 0; --i) {
+        const auto& column = columns->Get(i);
+        if (column.HasDefaultFromExpression() && !column.GetDefaultFromExpression().GetStored()) {
+            columns->DeleteSubrange(i, 1);
+        }
+    }
+}
+
+bool TOlapSchema::ValidateGeneratedColumns(IErrorCollector& errors) const {
+    if (!Columns.ValidateGeneratedColumns(errors)) {
+        return false;
+    }
+
+    for (const auto& [_, index] : Indexes.GetIndexes()) {
+        const auto columnId = index.GetIndexMeta()->GetSingleColumnId();
+        if (!columnId) {
+            continue;
+        }
+        const auto* column = Columns.GetById(*columnId);
+        if (column && column->IsVirtualGenerated()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Index '" << index.GetName() << "' cannot reference VIRTUAL generated column '"
+                << column->GetName() << "'");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    for (const auto& column : opSchema.GetColumns()) {
+        if (column.HasDefaultFromExpression()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Generated column '" << column.GetName()
+                << "' is not supported in TABLESTORE schema presets");
+            return false;
+        }
+    }
+
     if (!Columns.ValidateForStore(opSchema, errors)) {
         return false;
     }

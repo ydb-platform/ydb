@@ -75,7 +75,7 @@ public:
             {"allocated", Self->AllocatedTxIds.size()});
 
         const auto replication = Self->GetSingle();
-        if (replication && Self->IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
+        if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
             Self->PendingTxId.clear();
             return true;
         }
@@ -176,8 +176,10 @@ public:
         Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
-        for (auto& [nodeId, ev] : Result) {
-            ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
+        if (Self->ReplicationsWithSourceOffsetMismatch.empty()) {
+            for (auto& [nodeId, ev] : Result) {
+                ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
+            }
         }
 
         Self->AllocateTxIds(ctx);
@@ -194,11 +196,7 @@ public:
 void TController::AllocateTxIds(const TActorContext& ctx) {
     const auto replication = GetSingle();
     if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-        const auto* deadline = DrainDeadlines.FindPtr(replication->GetId());
-        // Only refill when admitted writers are waiting during the drain.
-        if (!deadline || ctx.Now() >= *deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
-            return;
-        }
+        return;
     }
     if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
         return;

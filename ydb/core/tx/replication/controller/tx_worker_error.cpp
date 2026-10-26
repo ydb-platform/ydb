@@ -8,7 +8,7 @@ class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
     const bool SourceOffsetMismatch;
-    bool DrainStarted = false;
+    bool StopWorkers = false;
     bool RemoveStoppedWorker = false;
 
 public:
@@ -67,8 +67,14 @@ public:
 
         if (SourceOffsetMismatch && Self->TracksSourceOffsets(WorkerId)) {
             NIceDb::TNiceDb db(txc.DB);
-            Self->StartMismatchDrain(WorkerId, TStringBuilder() << Error << " Worker " << WorkerId << ".", db, ctx);
-            DrainStarted = true;
+            replication->SetState(TReplication::EState::Error, TStringBuilder() << Error << " Worker " << WorkerId << ".");
+            Self->ReplicationsWithSourceOffsetMismatch.insert(WorkerId.ReplicationId());
+            db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()),
+                NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(true));
+            YDB_LOG_ERROR_CTX(ctx, "Destination source offset mismatch", {"worker", WorkerId}, {"issue", replication->GetIssue()});
+            StopWorkers = true;
             return true;
         }
 
@@ -100,8 +106,8 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
-        if (DrainStarted) {
-            Self->StopWorkersForMismatch(WorkerId.ReplicationId(), true, ctx);
+        if (StopWorkers) {
+            Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
             return;
         }
         if (RemoveStoppedWorker) {

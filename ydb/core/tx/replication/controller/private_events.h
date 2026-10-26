@@ -50,17 +50,11 @@ struct TEvPrivate {
         EvUpdateYdbProxy,
         EvCancelCreateStream,
         EvCancelDropStream,
-        EvCheckDrain,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-    struct TEvCheckDrain: public TEventLocal<TEvCheckDrain, EvCheckDrain> {
-        ui64 ReplicationId;
-        explicit TEvCheckDrain(ui64 id): ReplicationId(id) {}
-    };
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {

@@ -222,8 +222,6 @@ public:
         AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
-        record.MutableController()->SetTabletId(ControllerTabletId);
-        record.MutableController()->SetGeneration(Generation);
         ctx.Send(ev->Forward(ActorId));
     }
 
@@ -869,10 +867,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         YDB_LOG_INFO("Stop worker",
             {"worker", id});
-        if (record.GetDrain()) {
-            Send(session.GetWorkerActorId(id), new TEvWorker::TEvDrain());
-            return;
-        }
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
     }

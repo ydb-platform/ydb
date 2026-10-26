@@ -145,7 +145,7 @@ class TController::TTxIndexBuild: public TTxBase {
             const auto& record = ev->Get()->Record;
             const auto id = TWorkerId::Parse(record.GetWorker());
             const auto* target = Self->FindTarget(id);
-            if (!target || !target->IsIndexBuild() || (!Self->IsValidWorker(id) && !Self->DrainDeadlines.contains(id.ReplicationId())) || !record.HasProgress()) {
+            if (!target || !target->IsIndexBuild() || !Self->IsValidWorker(id) || !record.HasProgress()) {
                 continue;
             }
 
@@ -190,7 +190,7 @@ class TController::TTxIndexBuild: public TTxBase {
             const bool activeBuild = buildIt != Self->IndexBuilds.end() && !IsCancelledIndexBuild(buildIt->second);
             const bool activeTarget = target && target->GetDstState() != TReplication::EDstState::Removing;
             if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())
-                || Self->IsStoppedAfterSourceOffsetMismatch(id.ReplicationId()))
+                || Self->ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()))
             {
                 it = Self->PendingIndexTxIds.erase(it);
                 continue;
@@ -409,6 +409,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         Self->IndexBuildTxInFlight = false;
+        if (!Self->ReplicationsWithSourceOffsetMismatch.empty()) {
+            for (const auto& [txId, _] : Commits) {
+                Self->IndexCommits.erase(txId);
+            }
+            return;
+        }
         for (auto& [node, ev] : Checkpoints) {
             ctx.Send(MakeReplicationServiceId(node), std::move(ev));
         }
@@ -419,9 +425,6 @@ public:
             ctx.Send(MakeTxProxyID(), MakeCommitProposal(txId, paths).Release(), 0, txId);
         }
         for (const auto& [key, build] : Self->IndexBuilds) {
-            if (Self->ReplicationsWithSourceOffsetMismatch.contains(key.first)) {
-                continue;
-            }
             if (build.GetPhase() == TBuild::CANCELLING) {
                 auto replication = Self->Find(key.first);
                 auto* target = replication ? replication->FindTarget(key.second) : nullptr;

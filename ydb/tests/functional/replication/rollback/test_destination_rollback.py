@@ -236,7 +236,7 @@ def test_destination_disk_rollback_stops_replication():
             result = destination.replication()
             return result if result.WhichOneof("state") == "error" else None
 
-        error = wait_for("rollback detection and GLOBAL drain", stopped)
+        error = wait_for("rollback detection", stopped)
         assert "Source consumer committed next offset" in str(error), error
         assert "destination processed source offset" in str(error), error
         stopped_offset, _ = source.consumer(topic)

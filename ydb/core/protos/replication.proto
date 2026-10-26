@@ -311,16 +311,11 @@ message TEvStatus {
 }
 
 message TEvSourceOffsetReport {
-    optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
     optional uint64 NextOffset = 3;
-    optional NKikimrProto.TRowVersion Heartbeat = 4;
-    optional bool Drained = 5 [default = false];
 }
 
-message TEvSourceOffsetResult {
-    optional bool Stop = 1 [default = false];
-}
+message TEvSourceOffsetResult {}
 
 message TRemoteTopicReaderSettings {
     optional TConnectionParams ConnectionParams = 1;
@@ -405,7 +400,6 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
-    optional bool Drain = 3 [default = false];
 }
 
 

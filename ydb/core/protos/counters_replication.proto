@@ -66,5 +66,4 @@ enum ETxTypes {
     TXTYPE_PREPARE_ATTACH_DST = 24 [(TxTypeOpts) = {Name: "TxPrepareAttachDst"}];
     TXTYPE_INDEX_BUILD = 25 [(TxTypeOpts) = {Name: "TxIndexBuild"}];
     TXTYPE_SOURCE_OFFSET_REPORT = 26 [(TxTypeOpts) = {Name: "TxSourceOffsetReport"}];
-    TXTYPE_FINISH_DRAIN = 27 [(TxTypeOpts) = {Name: "TxFinishDrain"}];
 }

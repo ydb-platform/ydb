@@ -52,8 +52,6 @@ public:
     bool HasHeartbeat() const;
     const TRowVersion& GetHeartbeat() const;
 
-    bool DrainPending = false;
-
 private:
     THolder<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;

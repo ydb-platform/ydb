@@ -63,9 +63,6 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
-            if (const auto deadline = rowset.GetValueOrDefault<Schema::Replications::DrainDeadline>(0)) {
-                Self->DrainDeadlines[rid] = TInstant::MilliSeconds(deadline);
-            }
             if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
                 Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
             }
@@ -265,7 +262,6 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->DrainPending = rowset.GetValueOrDefault<Schema::Workers::DrainPending>(false);
             // Zero denotes a registered worker that has not reported a
             // heartbeat yet and must not join a recovered heartbeat quorum.
             if (version != TRowVersion::Min() && Self->IsHeartbeatParticipant(id)) {

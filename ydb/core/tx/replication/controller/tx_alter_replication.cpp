@@ -77,7 +77,6 @@ class TController::TTxAlterReplication: public TTxBase {
     THolder<TEvController::TEvAlterReplicationResult> Result;
     TReplication::TPtr Replication;
     bool ResetFailedSchemaBarriers = false;
-    bool WaitForDrain = false;
     TVector<std::pair<ui64, ui64>> AlterersToStop;
     THashSet<TWorkerId> BarrierWorkersToRestart;
 
@@ -248,12 +247,6 @@ public:
             return true;
         }
 
-        if (Self->DrainDeadlines.contains(Replication->GetId())) {
-            // Keep membership unchanged while admitted writes drain.
-            WaitForDrain = true;
-            return true;
-        }
-
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
@@ -410,10 +403,6 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (WaitForDrain) {
-            ctx.Schedule(DrainCheckInterval, std::unique_ptr<IEventHandle>(Ev.Release()));
-            return;
-        }
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 

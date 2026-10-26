@@ -50,13 +50,10 @@ struct TEvWorker {
         EvStatsWakeup,
         EvSchemaChange,
         EvSchemaChangeApplied,
-        EvDrain,
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
-
-    struct TEvDrain: public TEventLocal<TEvDrain, EvDrain> {};
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
 

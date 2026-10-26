@@ -228,11 +228,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
             {"selfId", SelfId()});
     }
 
-    THolder<NKikimrReplication::TEvSourceOffsetReport> MakeSourceOffsetReport() {
-        ++SourceOffsetReportId;
-        return MakeHolder<NKikimrReplication::TEvSourceOffsetReport>();
-    }
-
     void SendSourceOffsetReport(const NKikimrReplication::TEvSourceOffsetReport& request) {
         auto ev = MakeHolder<TEvService::TEvSourceOffsetReport>();
         ev->Record.CopyFrom(request);
@@ -244,17 +239,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void ProcessSourceActions() {
-        if (Draining) {
-            SourceActions.clear();
-            return MaybeDrained();
-        }
         if (TrackSourceOffsets && (!Reader || !IsReaderValidated() || SourceOffsetReport)) {
             return;
         }
         while (!SourceActions.empty()) {
             auto& action = SourceActions.front();
             if (TrackSourceOffsets && action.Offset && (!AuthorizedSourceOffset || *AuthorizedSourceOffset < *action.Offset)) {
-                SourceOffsetReport = MakeSourceOffsetReport();
+                SourceOffsetReport = MakeHolder<NKikimrReplication::TEvSourceOffsetReport>();
+                ++SourceOffsetReportId;
                 SourceOffsetReport->SetNextOffset(*action.Offset);
                 SendSourceOffsetReport(*SourceOffsetReport);
                 return;
@@ -267,14 +259,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
-    void AdvanceProcessedSourceOffset(ui64 offset) {
-        ProcessedSourceOffset = Max(ProcessedSourceOffset.GetOrElse(0), offset);
-    }
-
     void AuthorizeSource(TMaybe<ui64> offset, THolder<IEventBase> event) {
-        if (offset) {
-            AdvanceProcessedSourceOffset(*offset);
-        }
         SourceActions.push_back({offset, std::move(event)});
         ProcessSourceActions();
     }
@@ -304,7 +289,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void StartValidatedReader() {
-        if (!Reader || !IsReaderValidated() || Draining) {
+        if (!Reader || !IsReaderValidated()) {
             return;
         }
         if (RecoveredCompletionSchema && ReaderCommittedOffset
@@ -323,65 +308,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvService::TEvSourceOffsetResult::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
         if (!SourceOffsetReport || ev->Cookie != SourceOffsetReportId) {
             return;
         }
-        const bool drained = SourceOffsetReport->GetDrained();
-        if (!record.GetStop() && SourceOffsetReport->HasNextOffset()) {
-            AuthorizedSourceOffset = SourceOffsetReport->GetNextOffset();
-        }
+        AuthorizedSourceOffset = SourceOffsetReport->GetNextOffset();
         SourceOffsetReport.Reset();
-        if (drained) {
-            return PassAway();
-        }
-        if (record.GetStop()) {
-            BeginDrain();
-        }
         ProcessSourceActions();
-    }
-
-    void BeginDrain() {
-        if (!Draining) {
-            Draining = true;
-            SourceActions.clear();
-            Send(Reader, new TEvents::TEvPoison());
-            if (PendingSchemaChange) {
-                // The writer is parked after draining the old-schema prefix.
-                InFlightData.Reset();
-                PendingSchemaChange.Reset();
-                Send(Writer, new TEvents::TEvPoison());
-            }
-        }
-        MaybeDrained();
-    }
-
-    void Handle(TEvWorker::TEvDrain::TPtr&) {
-        BeginDrain();
-    }
-
-    void MaybeDrained() {
-        AFL_VERIFY(Draining);
-        if (InFlightData || PendingBuildProgress || SourceOffsetReport) {
-            return;
-        }
-        SourceOffsetReport = MakeSourceOffsetReport();
-        SourceOffsetReport->SetDrained(true);
-        if (ProcessedSourceOffset) {
-            SourceOffsetReport->SetNextOffset(*ProcessedSourceOffset);
-        }
-        if (LastHeartbeat) {
-            LastHeartbeat->ToProto(SourceOffsetReport->MutableHeartbeat());
-        }
-        SendSourceOffsetReport(*SourceOffsetReport);
-    }
-
-    void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
-        if (ev->Sender != Writer) {
-            return;
-        }
-        LastHeartbeat = TRowVersion::FromProto(ev->Get()->Record.GetVersion());
-        Forward(ev);
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
@@ -413,9 +345,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 Send(Writer, std::move(progress));
             }
 
-            if (Draining && !InFlightData) {
-                return MaybeDrained();
-            }
             if (InFlightData) {
                 Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             } else if (TerminateWriter) {
@@ -460,12 +389,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         LastBuildProgress = std::move(PendingBuildProgress);
         Send(ev->Forward(Writer));
         const auto offset = LastBuildProgress->GetOffset();
-        if (Draining) {
-            AdvanceProcessedSourceOffset(offset);
-            InFlightData.Reset();
-            Send(Writer, new TEvents::TEvPoison());
-            return MaybeDrained();
-        }
         UpdateLag();
         auto& records = InFlightData->Records;
         const auto firstNew = FindIf(records, [offset](const auto& record) { return record.GetOffset() >= offset; });
@@ -500,7 +423,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         InFlightData.Reset();
         TerminateWriter.Reset();
-        if (Reader || Draining) {
+        if (Reader) {
             PollSource(ev->Get()->SkipCommit);
         }
     }
@@ -520,7 +443,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             PendingWriterCheckpoint = offset;
         }
 
-        if (Reader || Draining) {
+        if (Reader) {
             CommitSource(*PendingWriterCheckpoint);
         }
     }
@@ -536,14 +459,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         const auto offset = ev->Get()->Offset;
-        if (Draining) {
-            // Drain only the prefix before the schema record.
-            InFlightData.Reset();
-            PendingSchemaChange.Reset();
-            AdvanceProcessedSourceOffset(offset);
-            Send(Writer, new TEvents::TEvPoison());
-            return MaybeDrained();
-        }
         if (PendingSchemaChange) {
             if (PendingSchemaChange->Offset != offset || !IsSameSchemaChange(PendingSchemaChange->Schema, ev->Get()->Schema)) {
                 YDB_LOG_WARN("Conflicting schema change from writer",
@@ -580,9 +495,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvCommitResult::TPtr& ev) {
-        if (Draining) {
-            return;
-        }
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -638,9 +550,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
-        if (Draining) {
-            return;
-        }
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -846,9 +755,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         ReadRequested = false;
-        if (Draining) {
-            return;
-        }
         if (TrackSourceOffsets && !IsReaderValidated()) {
             return;
         }
@@ -884,9 +790,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvReaderStarted::TPtr& ev) {
-        if (Draining) {
-            return;
-        }
         if (ev->Sender != Reader) {
             YDB_LOG_WARN("Reader start from unknown actor",
                 {"sender", ev->Sender});
@@ -948,9 +851,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
             }
             ReaderSessionStarted = false;
             ReadRequested = false;
-            if (Draining) {
-                return MaybeDrained();
-            }
             MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
             YDB_LOG_INFO("Writer has gone",
@@ -962,10 +862,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 // rebuilt and applied its own schema barrier.
                 SchemaApplied = false;
                 WriterHasSchemaBarrier = false;
-            }
-            if (Draining) {
-                // Keep the failed writer pending until the drain deadline.
-                return;
             }
             MaybeRecreateActor(ev, Writer);
         } else {
@@ -1042,7 +938,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void ReportLag() {
-        if (!SourceOffsetMismatch.empty() && !Draining) {
+        if (!SourceOffsetMismatch.empty()) {
             ReportSourceOffsetMismatch();
         }
         if (SourceOffsetReport) {
@@ -1130,7 +1026,6 @@ public:
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
-            hFunc(TEvWorker::TEvDrain, Handle);
             hFunc(TEvService::TEvSourceOffsetResult, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvCommit, Handle);
@@ -1145,7 +1040,7 @@ public:
             hFunc(TEvWorker::TEvStatus, Handle);
             hFunc(TEvService::TEvGetTxId, Forward);
             hFunc(TEvService::TEvTxIdResult, Handle);
-            hFunc(TEvService::TEvHeartbeat, Handle);
+            hFunc(TEvService::TEvHeartbeat, Forward);
             hFunc(TEvService::TEvIndexBuildProgress, Handle);
             hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
@@ -1190,12 +1085,9 @@ private:
     bool ReaderSessionStarted = false;
     const bool TrackSourceOffsets;
     bool ReadRequested = false;
-    bool Draining = false;
     ui64 SourceOffsetReportId = 0;
     TMaybe<ui64> AuthorizedSourceOffset;
     TMaybe<ui64> BatchEnd;
-    TMaybe<ui64> ProcessedSourceOffset;
-    TMaybe<TRowVersion> LastHeartbeat;
     TDeque<TSourceAction> SourceActions;
     TString SourceOffsetMismatch;
     THolder<NKikimrReplication::TEvSourceOffsetReport> SourceOffsetReport;

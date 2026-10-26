@@ -34,8 +34,6 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
-        // Deadline in milliseconds; zero means draining has finished.
-        struct DrainDeadline: Column<13, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<Id>;
@@ -52,7 +50,6 @@ struct TControllerSchema: NIceDb::Schema {
             DeferredAlter,
             CommittedStep,
             CommittedTxId,
-            DrainDeadline,
             SourceOffsetMismatch
         >;
     };
@@ -158,10 +155,8 @@ struct TControllerSchema: NIceDb::Schema {
         struct HeartbeatVersionStep: Column<4, NScheme::NTypeIds::Uint64> {};
         struct HeartbeatVersionTxId: Column<5, NScheme::NTypeIds::Uint64> {};
 
-        struct DrainPending: Column<6, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
-
         using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId, DrainPending>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
     };
 
     // Freeze membership at the first schema report until every partition has

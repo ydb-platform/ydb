@@ -115,7 +115,6 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvIndexBuildProgress, Handle);
         HFunc(TEvService::TEvSchemaChangeReport, Handle);
         HFunc(TEvService::TEvSourceOffsetReport, Handle);
-        HFunc(TEvPrivate::TEvCheckDrain, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -204,9 +203,6 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         }
     }
     Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
-    for (const auto& [id, _] : DrainDeadlines) {
-        Schedule(DrainCheckInterval, new TEvPrivate::TEvCheckDrain(id));
-    }
 
     for (const auto& [key, barrier] : SchemaBarriers) {
         if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
@@ -228,7 +224,6 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 void TController::Reset() {
     SysParams.Reset();
     ProcessedSourceOffsets.clear();
-    DrainDeadlines.clear();
     ReplicationsWithSourceOffsetMismatch.clear();
     Replications.clear();
     ReplicationsByPathId.clear();
@@ -574,13 +569,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
     for (const auto& protoId : ev->Get()->Record.GetWorkers()) {
         const auto id = TWorkerId::Parse(protoId);
-        auto* saved = Workers.FindPtr(id);
-        if (saved && DrainDeadlines.contains(id.ReplicationId())) {
-            session.AttachWorker(id);
-            saved->AttachSession(nodeId);
-            StopQueue.emplace(id, nodeId);
-            continue;
-        }
         // Storage rollback requires restarting destination processes.
         if (!IsValidWorker(id)
             || (ProcessedSourceOffsets.contains(id) && !session.SupportsSourceOffsets))
@@ -1004,14 +992,9 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     controller.SetTabletId(TabletID());
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
-    const auto* worker = Workers.FindPtr(id);
-    const bool drain = DrainDeadlines.contains(id.ReplicationId()) && worker && worker->DrainPending;
-    record.SetDrain(drain && session.SupportsSourceOffsets);
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
-    if (!drain) {
-        session.DetachWorker(id);
-    }
+    session.DetachWorker(id);
 }
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
@@ -1068,7 +1051,7 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         return;
     }
 
-    if (IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
+    if (ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
         return;
     }
     const auto& config = replication->GetConfig().GetConsistencySettings();
@@ -1114,11 +1097,7 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    if (!HasWorkerSession(id, nodeId)) {
-        return;
-    }
-    const auto replication = Find(id.ReplicationId());
-    if (!replication || IsStoppedAfterSourceOffsetMismatch(id.ReplicationId())) {
+    if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
         return;
     }
     const auto version = TRowVersion::FromProto(record.GetVersion());
@@ -1226,7 +1205,6 @@ void TController::Remove(ui64 id) {
     }
 
     ReplicationsWithSourceOffsetMismatch.erase(id);
-    DrainDeadlines.erase(id);
     ReplicationsByPathId.erase(it->second->GetPathId());
     Replications.erase(it);
 }

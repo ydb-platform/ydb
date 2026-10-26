@@ -82,7 +82,7 @@ bool CheckReplicationMode(
     return table.GetReplicationConfig().GetMode() == mode;
 }
 
-bool IsReplica(const NKikimrSchemeOp::TTableDescription& table) {
+bool IsReadOnlyTable(const NKikimrSchemeOp::TTableDescription& table) {
     return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
 }
 
@@ -556,7 +556,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     }
                 }
             }
-            if (CanResumeReplica(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
+            if (CanUseReadOnlyTable(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
                 return Success();
             }
             if (InitialScan) {
@@ -567,7 +567,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
             AssignOwner = desc.GetTable().GetReplicationConfig().HasOwner()
-                || (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership() && !IsReplica(desc.GetTable()));
+                || (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership() && !IsReadOnlyTable(desc.GetTable()));
             Attaching = true;
             return PrepareAttachment();
         }
@@ -618,15 +618,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
     }
 
-    bool CanResumeReplica(const NKikimrSchemeOp::TTableDescription& table) const {
+    bool CanUseReadOnlyTable(const NKikimrSchemeOp::TTableDescription& table) const {
         const auto& config = table.GetReplicationConfig();
         // Ownerless replicas retain legacy behavior and remain unclaimed.
-        return IsReplica(table) && (!config.HasOwner()
+        return IsReadOnlyTable(table) && (!config.HasOwner()
             || TPathId::FromProto(config.GetOwner()) == PathId);
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        const bool needsConfig = InitialScan || Attaching || IsReplica(got);
+        const bool needsConfig = InitialScan || Attaching || IsReadOnlyTable(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
@@ -875,7 +875,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
-        if (Kind == TReplication::ETargetKind::IndexTable && !CanResumeReplica(desc.GetPathDescription().GetTable())) {
+        if (Kind == TReplication::ETargetKind::IndexTable && !CanUseReadOnlyTable(desc.GetPathDescription().GetTable())) {
             return Error(NKikimrScheme::StatusPreconditionFailed, "Index table is not owned by this replication");
         }
         DstPathId = ev->Get()->PathId;

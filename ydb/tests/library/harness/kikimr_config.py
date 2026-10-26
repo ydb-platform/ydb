@@ -162,6 +162,7 @@ class KikimrConfigGenerator(object):
             bs_cache_file_path=None,
             yq_tenant=None,
             use_legacy_pq=False,
+            pq_check_acl=None,
             dc_mapping={},
             enable_alter_database_create_hive_first=False,
             overrided_actor_system_config=None,
@@ -400,6 +401,8 @@ class KikimrConfigGenerator(object):
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
         self.yaml_config['pqconfig']['enabled'] = enable_pq
+        if pq_check_acl is not None:
+            self.yaml_config['pqconfig']['check_acl'] = pq_check_acl
         self.yaml_config['pqconfig']['enable_proto_source_id_info'] = True
         self.yaml_config['pqconfig']['max_storage_node_port'] = 65535
         # NOTE(shmel1k@): KIKIMR-14221

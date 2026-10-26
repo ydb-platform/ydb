@@ -19,7 +19,8 @@ inline bool BasicCheck(const NKikimrClient::TResponse& response, TString& error,
 
     if (response.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         error = TStringBuilder() << "Error code is not ok"
-            << ": code# " << static_cast<ui32>(response.GetErrorCode());
+            << ": code# " << static_cast<ui32>(response.GetErrorCode())
+            << " " << response.GetErrorReason();
         return false;
     }
 

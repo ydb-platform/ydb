@@ -416,7 +416,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     }
 
     // Check before expanding DROP into operations on the table and its indexes.
-    if (tx.HasExpectedReplicationOwner() && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+    if (tx.HasExpectedReplicationOwner()) {
         const auto& config = context.SS->Tables.at(table->PathId)->ReplicationConfig();
         if (config.HasOwner()
             && TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())) {

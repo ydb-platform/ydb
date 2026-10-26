@@ -2,7 +2,6 @@
 #include "logging.h"
 #include "private_events.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -48,7 +47,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
-        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (ReplicationPathId) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
         }
 

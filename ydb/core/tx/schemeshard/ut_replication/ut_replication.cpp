@@ -2,6 +2,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -509,11 +510,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
     }
 
-    Y_UNIT_TEST(OwnerCanChangeOnlyAfterReplicationDropCompletes) {
+    Y_UNIT_TEST_TWIN(OwnerCanChangeOnlyAfterReplicationDropCompletes, TableOwnership) {
         using NKikimr::TPathId;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
         ui64 txId = 100;
         auto createOwner = [&](const TString& name) {
             TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme(name));
@@ -575,10 +576,10 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         UNIT_ASSERT_VALUES_EQUAL(config().GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
-    Y_UNIT_TEST(CannotClaimLegacyReplicaWithoutOwner) {
+    Y_UNIT_TEST_TWIN(CannotClaimLegacyReplicaWithoutOwner, TableOwnership) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
         ui64 txId = 100;
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"

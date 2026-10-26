@@ -702,7 +702,7 @@ public:
         const auto& replicationConfig = table->ReplicationConfig();
         const auto owner = replicationConfig.HasOwner()
             ? TPathId::FromProto(replicationConfig.GetOwner()) : TPathId{};
-        if (alter.HasReplicationConfig() && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (alter.HasReplicationConfig()) {
             const auto& config = alter.GetReplicationConfig();
             const auto newOwner = config.HasOwner() ? TPathId::FromProto(config.GetOwner()) : TPathId{};
             if (owner && owner != newOwner && !Transaction.HasExpectedReplicationOwner()) {
@@ -1224,7 +1224,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     // Fence cleanup before creating sub-operations for an index table.
-    if (tx.HasExpectedReplicationOwner() && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+    if (tx.HasExpectedReplicationOwner()) {
         const auto checks = path.Check().NotUnderOperation();
         if (!checks) {
             return {CreateReject(id, checks.GetStatus(), checks.GetError())};

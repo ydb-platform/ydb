@@ -143,6 +143,7 @@ ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/bridge test_pile_ops.py.TestBridgePileOps.test_convert_add_switch_remove
+ydb/tests/functional/bridge test_state_storage_selfheal_piles.py.TestBridgeStateStorageSelfHealPileTransitions.test_primary_failure_during_selfheal[full-reconfiguration]
 ydb/tests/functional/bridge test_three_piles.py.TestBridgeThreePiles.test_discovery
 ydb/tests/functional/bridge/chaos test_bridge_chaos.py.TestBridgeChaos.test_bridge_chaos
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_ranges_rp.sql-result_sets]

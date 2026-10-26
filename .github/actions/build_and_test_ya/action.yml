@@ -131,7 +131,8 @@ runs:
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
-        increment: ${{ inputs.increment }}
+        # Temporary comparison PR: run every small/medium suite selected by PR-check.
+        increment: false
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}

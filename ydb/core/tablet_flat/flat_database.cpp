@@ -903,7 +903,7 @@ void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxK
 }
 
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
-                                TMemGlobs annex)
+                                TMemGlobs annex, IRedoObserver* observer)
 {
     Y_ENSURE(!annex || redo, "Annex have to be rolled up with redo log");
 
@@ -919,7 +919,7 @@ TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRe
 
     if (redo) {
         DatabaseImpl->Assign(std::move(annex));
-        DatabaseImpl->ApplyRedo(redo);
+        DatabaseImpl->ApplyRedo(redo, observer);
         DatabaseImpl->GrabAnnex();
     }
 

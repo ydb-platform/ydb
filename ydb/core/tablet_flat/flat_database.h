@@ -23,6 +23,7 @@ namespace NTable {
     class TRowState;
     struct TChange;
     class TDatabaseImpl;
+    struct IRedoObserver;
     class TAnnex;
     class TTable;
     class TKeyRangeCache;
@@ -286,7 +287,7 @@ public:
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
-    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
+    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex, IRedoObserver* observer = nullptr);
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 

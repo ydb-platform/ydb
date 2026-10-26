@@ -13,7 +13,6 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/library/persqueue
-    ydb/library/testlib
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     ydb/public/sdk/cpp/src/library/kafka
 )

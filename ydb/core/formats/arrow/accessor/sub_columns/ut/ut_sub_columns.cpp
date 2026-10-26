@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
         const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
         auto array = BuildArrayWithStoredPaths(columns, otherName, otherValue);
-        auto accessorResult = array->GetPathAccessor(path, 1);
+        auto accessorResult = array->GetPathAccessor(NSubColumns::ParseJsonPath(path).DetachResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([expected](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, expected);
@@ -773,7 +773,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
         partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":{"c":"value"}})"));
 
-        auto accessorResult = partial.GetPathAccessor("$.a.b.c", 1);
+        auto parsedPath = NSubColumns::ParseJsonPath("$.a.b.c");
+        UNIT_ASSERT_C(parsedPath.IsSuccess(), parsedPath.GetErrorMessage());
+        auto accessorResult = partial.GetPathAccessor(parsedPath.GetResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, "value");
@@ -792,7 +794,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(JsonPathAccessorReturnsNullForMissingPath) {
         auto array = BuildArrayWithStoredPaths({ { R"("a")", R"("columns")" } }, R"("b")", R"("others")");
-        auto accessorResult = array->GetPathAccessor("$.missing", 1);
+        auto accessorResult = array->GetPathAccessor(NSubColumns::ParseJsonPath("$.missing").DetachResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT(!value);
@@ -802,7 +804,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } }), NSubColumns::TDictStats::BuildEmpty(),
             NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
-        accessorResult = partial.GetPathAccessor("$.missing", 1);
+        auto parsedPath = NSubColumns::ParseJsonPath("$.missing");
+        UNIT_ASSERT_C(parsedPath.IsSuccess(), parsedPath.GetErrorMessage());
+        accessorResult = partial.GetPathAccessor(parsedPath.GetResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT(!value);

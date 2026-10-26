@@ -33,6 +33,7 @@ ui32 TNodeStatusComputer::GetCurrentNodeState() const {
 
 bool TNodeStatusComputer::Compute() {
     if (DefinitelyBad() || DefinitelyGood()) {
+        HasObservedState = true;
         if (ActualState != CurrentState) {
             ActualState = CurrentState;
             return true;
@@ -1355,7 +1356,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         SendDistconfRequest();
     }
 
-    void SendDistconfRequest() {
+    std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> MakeDistconfRequest() const {
         const auto& config = Config.StateStorageSelfHealConfig;
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
@@ -1368,10 +1369,31 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         updateRequest.SetReplicasSpecificVolume(config.ReplicasSpecificVolume);
 
         for (auto& [nodeId, node] : SentinelState->Nodes) {
-            SentinelState->NeedSelfHealStateStorage |= node.Compute();
             auto& nodeState = *updateRequest.AddNodesState();
             nodeState.SetNodeId(nodeId);
             nodeState.SetState(node.GetCurrentNodeState());
+        }
+
+        return request;
+    }
+
+    void Handle(NStorage::TEvNodeConfigGetSelfHealState::TPtr& ev) {
+        // ActualState starts as GOOD. Do not expose it before whiteboard
+        // observations have passed the configured good/bad thresholds.
+        if (SentinelState->Nodes.empty() || !AllOf(SentinelState->Nodes, [](const auto& entry) {
+                return entry.second.IsReady();
+            })) {
+            return; // The current distconf root will retry if Sentinel is warming up.
+        }
+        SentinelState->NeedSelfHealStateStorage = false;
+        SentinelState->LastStateStorageSelfHeal = Now();
+        Send(ev->Sender, MakeDistconfRequest(), 0, ev->Cookie);
+    }
+
+    void SendDistconfRequest() {
+        const auto& config = Config.StateStorageSelfHealConfig;
+        for (auto& [nodeId, node] : SentinelState->Nodes) {
+            SentinelState->NeedSelfHealStateStorage |= node.Compute();
         }
 
         if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
@@ -1385,7 +1407,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             YDB_LOG_DEBUG("Sending self heal request",
                 {"name", Name()});
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), std::move(request));
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), MakeDistconfRequest());
         }
     }
 
@@ -1702,6 +1724,7 @@ public:
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
+            hFunc(NStorage::TEvNodeConfigGetSelfHealState, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
             sFunc(TEvents::TEvWakeup, OnRetry);

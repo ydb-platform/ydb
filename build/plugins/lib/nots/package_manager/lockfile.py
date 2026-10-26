@@ -16,7 +16,6 @@ except Exception:
 LOCKFILE_VERSION = "lockfileVersion"
 IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)
 WS_PREFIX = "workspace:"
-TIER0_REGISTRY = load_tier0_settings()["pnpm"]["defaults"]["registry"]
 
 
 class LockfilePackageMetaInvalidError(RuntimeError):
@@ -507,7 +506,8 @@ def _tarball_url_from_package_key(key):
 
     package_path = name.replace("/", "%2f")
     filename = f"{name.rsplit('/', 1)[-1]}-{version}.tgz"
-    return f"{TIER0_REGISTRY.rstrip('/')}/{package_path}/-/{filename}"
+    registry = load_tier0_settings()["pnpm"]["defaults"]["registry"].rstrip("/")
+    return f"{registry}/{package_path}/-/{filename}"
 
 
 def _parse_tarball_url(tarball_url, allow_file_protocol):

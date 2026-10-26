@@ -83,7 +83,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"issues", result.GetIssues().ToOneLineString()},
                 {"iteration", Backoff.GetIteration()});
 
-            if (IsRetryableError(result) && Backoff.HasMore()) {
+            if (IsRetryableError(result, Backoff)) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -152,7 +152,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
 
-            if (IsRetryableError(result) && Backoff.HasMore()) {
+            if (IsRetryableError(result, Backoff)) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -200,7 +200,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
 
-            if (IsRetryableError(result) && Backoff.HasMore()) {
+            if (IsRetryableError(result, Backoff)) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
@@ -292,7 +292,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
 
-            if (IsRetryableError(result) && Backoff.HasMore()) {
+            if (IsRetryableError(result, Backoff)) {
                 return RetryListing(it->first);
             } else {
                 Failed.emplace_back(path.first, result);

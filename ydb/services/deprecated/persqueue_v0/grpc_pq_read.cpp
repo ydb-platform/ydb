@@ -3,6 +3,8 @@
 #include "grpc_pq_session.h"
 #include "ydb/core/client/server/grpc_proxy_status.h"
 
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_select.h>
+
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
@@ -26,7 +28,7 @@ void TPQReadService::TSession::OnCreated() {
         return;
     }
     // Create actor for current session.
-    auto clusters = Proxy->GetClusters(GetAuthority());
+    auto clusters = Proxy->GetReadClusters(NKikimr::NPQ::NClusterTracker::AccountNameFromDatabase(GetDatabase()));
     auto localCluster = Proxy->GetLocalCluster();
     if (NeedDiscoverClusters && (localCluster.empty() || !Proxy->HasClustersList())) {
         //TODO: inc sli errors counter

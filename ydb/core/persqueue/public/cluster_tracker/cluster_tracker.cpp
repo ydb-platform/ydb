@@ -42,6 +42,7 @@ private:
         MigrateCreateVersions,
         ListClusters,
         ListBalancers,
+        ListAccounts,
     };
 
     void AddSubscriber(const TActorId subscriberId) {
@@ -84,6 +85,21 @@ private:
 
     TString GetBalancerTablePath() const {
         return BalancerTablePathFromClusterTable(Cfg().GetClusterTablePath());
+    }
+
+    TString GetAccountTablePath() const {
+        return AccountTablePathFromClusterTable(Cfg().GetClusterTablePath());
+    }
+
+    void StartListAccounts() {
+        QueryInFlight = true;
+        CurrentQuery = EQueryKind::ListAccounts;
+        SendDml(MakeListAccountsQuery(GetAccountTablePath(), Cfg().GetVersionTablePath()));
+    }
+
+    void ApplyCachedAccounts(TClustersList& clustersList) const {
+        clustersList.Accounts = LastAccounts;
+        clustersList.AccountVersion = LastAccountVersion;
     }
 
     STATEFN(Working) {
@@ -308,7 +324,7 @@ private:
                         UpdateBalancersList(parser);
                     } else if (PendingClustersList) {
                         RememberBalancers(*PendingClustersList);
-                        FinishClustersList(std::move(PendingClustersList));
+                        StartListAccounts();
                     }
                     return;
                 }
@@ -329,6 +345,7 @@ private:
                     if (PendingClustersList) {
                         PendingClustersList->BalancerVersion = LastBalancerVersion;
                         PendingClustersList->Balancers = LastBalancers;
+                        ApplyCachedAccounts(*PendingClustersList);
                         FinishClustersList(std::move(PendingClustersList));
                     } else {
                         FailAndRetry();
@@ -338,6 +355,39 @@ private:
                         BeginDdl(EQueryKind::MigrateCreateBalancer, MakeCreateBalancerQuery(GetBalancerTablePath()));
                     }
                 }
+                return;
+
+            case EQueryKind::ListAccounts:
+                if (!PendingClustersList) {
+                    FailAndRetry();
+                    return;
+                }
+                if (success) {
+                    if (record.GetResponse().YdbResultsSize() > 0) {
+                        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+                        UpdateAccountsList(parser);
+                    } else {
+                        PendingClustersList->Accounts.clear();
+                        PendingClustersList->AccountVersion = 0;
+                        RememberAccounts(*PendingClustersList);
+                        FinishClustersList(std::move(PendingClustersList));
+                    }
+                    return;
+                }
+                if (IssuesLookLikeMissingAccountTable(issues)) {
+                    YDB_LOG_DEBUG_CTX(Ctx(), "Account table is absent, account cluster lists are empty",
+                        {"record", record});
+                    PendingClustersList->Accounts.clear();
+                    PendingClustersList->AccountVersion = 0;
+                    LastAccounts.clear();
+                    LastAccountVersion = 0;
+                    FinishClustersList(std::move(PendingClustersList));
+                    return;
+                }
+                YDB_LOG_ERROR_CTX(Ctx(), "Failed to list accounts, publish clusters with last account cache",
+                    {"record", record});
+                ApplyCachedAccounts(*PendingClustersList);
+                FinishClustersList(std::move(PendingClustersList));
                 return;
 
             case EQueryKind::None:
@@ -350,7 +400,7 @@ private:
     void FinishClustersList(TIntrusivePtr<TClustersList> clustersList) {
         AFL_ENSURE(clustersList);
         AFL_ENSURE(clustersList->Clusters.size());
-        clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion;
+        clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->AccountVersion;
         clustersList->MarkFnxFromBalancers();
         clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
@@ -417,7 +467,47 @@ private:
         }
 
         RememberBalancers(*clustersList);
+        PendingClustersList = std::move(clustersList);
+        StartListAccounts();
+    }
+
+    template<typename TProtoRecord>
+    void UpdateAccountsList(TProtoRecord& parser) {
+        auto clustersList = PendingClustersList;
+        PendingClustersList = nullptr;
+        if (!clustersList) {
+            FailAndRetry();
+            return;
+        }
+
+        while (parser.TryNextRow()) {
+            TString name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            name.to_lower();
+            if (name.empty()) {
+                continue;
+            }
+            TClustersList::TAccountClusters spec;
+            spec.Read = ParseFnxClusterCsv(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
+            spec.Write = ParseFnxClusterCsv(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
+            for (auto& clusterName : spec.Read) {
+                clusterName.to_lower();
+            }
+            for (auto& clusterName : spec.Write) {
+                clusterName.to_lower();
+            }
+            clustersList->Accounts[name] = std::move(spec);
+            clustersList->AccountVersion = std::max<i64>(
+                clustersList->AccountVersion,
+                parser.ColumnParser(3).GetOptionalInt64().value_or(0));
+        }
+
+        RememberAccounts(*clustersList);
         FinishClustersList(std::move(clustersList));
+    }
+
+    void RememberAccounts(const TClustersList& clustersList) {
+        LastAccountVersion = clustersList.AccountVersion;
+        LastAccounts = clustersList.Accounts;
     }
 
     void RememberBalancers(const TClustersList& clustersList) {
@@ -439,6 +529,8 @@ private:
     EQueryKind CurrentQuery = EQueryKind::None;
     i64 LastBalancerVersion = 0;
     absl::flat_hash_map<TString, TVector<TString>> LastBalancers;
+    i64 LastAccountVersion = 0;
+    absl::flat_hash_map<TString, TClustersList::TAccountClusters> LastAccounts;
 };
 
 NActors::IActor* CreateClusterTracker() {

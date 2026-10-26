@@ -10,12 +10,17 @@ namespace NKikimr::NPQ::NClusterTracker {
 
 TString NormalizeDiscoveryHost(TStringBuf authority);
 
+// Last path component of an x-ydb-database value. `/Root` and an empty path have no account.
+TString AccountNameFromDatabase(TStringBuf database);
+
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv);
 
 TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath);
+TString AccountTablePathFromClusterTable(TStringBuf clusterTablePath);
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath);
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath);
+TString MakeListAccountsQuery(TStringBuf accountTablePath, TStringBuf versionTablePath);
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath);
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath);
 TString MakeCreateVersionsQuery(TStringBuf versionTablePath);
@@ -25,5 +30,6 @@ bool IssuesLookLikeMissingTable(TStringBuf issues);
 bool IssuesLookLikeMissingColumn(TStringBuf issues);
 bool IssuesLookLikeMissingVersionsTable(TStringBuf issues);
 bool IssuesLookLikeClusterSchemaGone(TStringBuf issues);
+bool IssuesLookLikeMissingAccountTable(TStringBuf issues);
 
 } // namespace NKikimr::NPQ::NClusterTracker

@@ -37,4 +37,40 @@ void TClustersList::BuildVisibleClusters() {
     }
 }
 
+TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf account) const {
+    TString key(account);
+    key.to_lower();
+    const TAccountClusters* spec = nullptr;
+    if (const auto it = Accounts.find(key); it != Accounts.end()) {
+        spec = &it->second;
+    }
+
+    THashSet<TString> readNames;
+    THashSet<TString> accountFnx;
+    if (spec) {
+        readNames.insert(spec->Read.begin(), spec->Read.end());
+        if (!spec->Write.empty()) {
+            THashSet<TString> writeNames(spec->Write.begin(), spec->Write.end());
+            for (const auto& cluster : Clusters) {
+                if (cluster.IsFnx && writeNames.contains(cluster.Name)) {
+                    accountFnx.insert(cluster.Name);
+                }
+            }
+        }
+    }
+
+    TVector<TCluster> visible;
+    visible.reserve(Clusters.size());
+    for (const auto& cluster : Clusters) {
+        const bool hasReadList = spec && !spec->Read.empty();
+        const bool listed = hasReadList && readNames.contains(cluster.Name);
+        const bool assignedFnx = cluster.IsFnx && accountFnx.contains(cluster.Name);
+        const bool everyCommunal = !hasReadList && !cluster.IsFnx;
+        if (listed || assignedFnx || everyCommunal) {
+            visible.push_back(cluster);
+        }
+    }
+    return visible;
+}
+
 } // namespace NKikimr::NPQ::NClusterTracker

@@ -41,14 +41,29 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TString DebugString() const;
 
     const TVector<TCluster>& GetClusters(TStringBuf authority) const;
+    // Read clusters for an account. Unknown account or an empty read list: every non-FNX
+    // cluster plus FNX clusters assigned to the account (writeClusters). A non-empty read
+    // list: only those clusters, plus the same assigned FNX clusters.
+    TVector<TCluster> GetReadClusters(TStringBuf account) const;
     void MarkFnxFromBalancers();
     void BuildVisibleClusters();
+
+    struct TAccountClusters {
+        TVector<TString> Read;
+        TVector<TString> Write;
+
+        bool operator==(const TAccountClusters& rhs) const {
+            return Read == rhs.Read && Write == rhs.Write;
+        }
+    };
 
     TVector<TCluster> Clusters;
     const TCluster* LocalCluster = nullptr;
 
     // Balancer.name -> FNX cluster names from Balancer.clusters (CM table).
     absl::flat_hash_map<TString, TVector<TString>> Balancers;
+    // Account name -> read/write cluster names from PQ/Config/V2/Account.
+    absl::flat_hash_map<TString, TAccountClusters> Accounts;
     // Non-FNX clusters: empty or unknown :authority.
     TVector<TCluster> DefaultVisibleClusters;
     // Balancer.name -> clusters visible for that host. Filled by BuildVisibleClusters().
@@ -57,6 +72,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     i64 Version = 0;
     i64 ClusterVersion = 0;
     i64 BalancerVersion = 0;
+    i64 AccountVersion = 0;
 };
 
 struct TEvClusterTracker {

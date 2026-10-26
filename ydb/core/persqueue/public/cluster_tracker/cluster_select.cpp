@@ -18,7 +18,7 @@ bool TClustersList::TCluster::operator==(const TCluster& rhs) const {
 }
 
 bool TClustersList::operator==(const TClustersList& rhs) const {
-    return Clusters == rhs.Clusters && Balancers == rhs.Balancers && Version == rhs.Version;
+    return Clusters == rhs.Clusters && Balancers == rhs.Balancers && Accounts == rhs.Accounts && Version == rhs.Version;
 }
 
 TString TClustersList::DebugString() const {
@@ -61,6 +61,25 @@ TString NormalizeDiscoveryHost(TStringBuf authority) {
     return host;
 }
 
+TString AccountNameFromDatabase(TStringBuf database) {
+    while (database.ChopSuffix("/")) {
+    }
+    if (database.empty() || database == "/Root" || database == "Root") {
+        return {};
+    }
+    const auto slash = database.rfind('/');
+    const TStringBuf account = slash == TStringBuf::npos ? database : database.substr(slash + 1);
+    if (account.empty()) {
+        return {};
+    }
+    TString name(account);
+    name.to_lower();
+    if (name == "root") {
+        return {};
+    }
+    return name;
+}
+
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv) {
     TVector<TString> names;
     StringSplitter(csv).SplitBySet(",;").SkipEmpty().Collect(&names);
@@ -89,6 +108,14 @@ TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath) {
     return TString(clusterTablePath) + "Balancer";
 }
 
+TString AccountTablePathFromClusterTable(TStringBuf clusterTablePath) {
+    static constexpr TStringBuf suffix = "/Cluster";
+    if (clusterTablePath.EndsWith(suffix)) {
+        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size())) + "/Account";
+    }
+    return TString(clusterTablePath) + "Account";
+}
+
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath) {
     // By-name parsing: an absent column (e.g. `available`, LOGBROKER-10701) reads as default
     return Sprintf(
@@ -98,6 +125,16 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
                CROSS JOIN
                (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
             )", TString(clusterTablePath).c_str(), TString(versionTablePath).c_str());
+}
+
+TString MakeListAccountsQuery(TStringBuf accountTablePath, TStringBuf versionTablePath) {
+    return Sprintf(
+        R"(
+               --!syntax_v1
+               SELECT A.name, A.readClusters, A.writeClusters, V.version FROM `%s` AS A
+               CROSS JOIN
+               (SELECT MAX(version) AS version FROM `%s` WHERE name == 'Account') AS V;
+            )", TString(accountTablePath).c_str(), TString(versionTablePath).c_str());
 }
 
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath) {
@@ -189,6 +226,11 @@ bool IssuesLookLikeMissingVersionsTable(TStringBuf issues) {
 
 bool IssuesLookLikeClusterSchemaGone(TStringBuf issues) {
     return IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues);
+}
+
+bool IssuesLookLikeMissingAccountTable(TStringBuf issues) {
+    return issues.Contains("Account")
+        && (IssuesLookLikeMissingTable(issues) || issues.Contains("Member not found"));
 }
 
 } // namespace NKikimr::NPQ::NClusterTracker

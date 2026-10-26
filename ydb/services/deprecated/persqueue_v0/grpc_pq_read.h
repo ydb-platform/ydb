@@ -94,6 +94,19 @@ public:
         return AtomicGet(ShuttingDown_);
     }
 
+    TVector<TString> GetReadClusters(TStringBuf account) const {
+        auto g(Guard(Lock));
+        if (ClustersList) {
+            const auto& selected = ClustersList->GetReadClusters(account);
+            TVector<TString> names;
+            names.reserve(selected.size());
+            for (const auto& cluster : selected) {
+                names.push_back(cluster.Name);
+            }
+            return names;
+        }
+        return {};
+    }
     TVector<TString> GetClusters(TStringBuf authority) const {
         auto g(Guard(Lock));
         if (ClustersList) {

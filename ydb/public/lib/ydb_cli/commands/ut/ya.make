@@ -7,7 +7,6 @@ PEERDIR(
 SRCS(
     oidc_credentials_ut.cpp
     completion_ut.cpp
-    relative_database_ut.cpp
 )
 
 END()

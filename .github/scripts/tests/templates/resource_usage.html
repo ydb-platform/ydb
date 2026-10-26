@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Test CPU and disk I/O by area</title>
+  <title>Test CPU, disk I/O and binary size by area</title>
   <style>
     body { font: 14px system-ui, sans-serif; margin: 24px; color: #202934; background: #f8fafc; }
     a { color: #185ca0; }
@@ -29,14 +29,15 @@
 </head>
 <body>
 <p><a href="../ya-test.html">← Test results for this try</a> · <a href="suites.csv">Suites CSV</a> · <a href="areas.csv">Areas CSV</a> · <a href="usage.json">JSON</a></p>
-<h1>Test CPU and disk I/O by area</h1>
-<p class="notes">Resource consumption in this try, summed over test chunks. All statuses are included, including failed and muted tests.
+<h1>Test CPU, disk I/O and binary size by area</h1>
+<p class="notes">CPU and I/O in this try are summed over test chunks; binary sizes are counted once per suite. All statuses are included, including failed and muted tests.
   Retries in other <code>try_N</code> reports are separate. Click an area to see its suites; click a column heading to sort.</p>
 <div class="cards">
   <div class="card">Suites / chunks<strong>{{ totals.suites }} / {{ totals.chunks }}</strong></div>
   <div class="card">CPU · hours<strong>{{ format_usage(totals, 'cpu_seconds') }}</strong></div>
   <div class="card">Read · GiB<strong>{{ format_usage(totals, 'read_bytes') }}</strong></div>
   <div class="card">Written · GiB<strong>{{ format_usage(totals, 'write_bytes') }}</strong></div>
+  <div class="card">Test binaries · GiB<strong>{{ format_usage(totals, 'binary_bytes') }}</strong></div>
 </div>
 <details class="notes">
   <summary>What is measured / coverage</summary>
@@ -46,6 +47,11 @@
       (<a href="https://github.com/torvalds/linux/blob/master/include/linux/task_io_accounting_ops.h">kernel accounting</a>).
       They are not log sizes, syscall byte counts, or exact physical device traffic. Cached reads do not count as storage reads.</li>
     <li>These are the processes accounted for by the test runner; external services, compilation, linking and later CI artifact processing are not attributed to suites here.</li>
+    <li>Binary size is the logical file size of each suite's own ELF executable outputs, including debug information, without stripping.
+      Dependencies (such as ydbd), shared libraries and test logs are excluded. Aliases of the same file within a suite are counted once, regardless of chunk count.
+      These are per-suite sizes, not physical filesystem allocation across suites.</li>
+    <li>Binaries found for {{ totals.binary_bytes_suites }} / {{ totals.suites }} suites.
+      “—” means no own ELF executable was found or its output was unavailable, not a zero-byte binary. Binary paths are included in CSV/JSON.</li>
     <li>Only chunk records are summed, never case or suite summary records. Missing metrics appear as “—”; “†” means a partial sum.
       Measured chunks (CPU / read / write): {{ totals.cpu_seconds_chunks }} / {{ totals.read_bytes_chunks }} / {{ totals.write_bytes_chunks }} out of {{ totals.chunks }}.</li>
     <li>Areas use the same TESTOWNERS matching as the test report and <code>owner_area_mapping.json</code>.
@@ -56,7 +62,7 @@
 </details>
 {% macro pct(value) -%}{{ '%.1f%%'|format(value) if value is not none else '—' }}{%- endmacro %}
 {% macro metric_cells(row, key, suite=false) %}
-  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured chunks: {{ row[key + '_chunks'] }} / {{ row.chunks }}">{{ format_usage(row, key) }}</td>
+  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured {{ 'suites' if key == 'binary_bytes' else 'chunks' }}: {{ row[coverage_key(key)] }} / {{ row.get('suites', 1) if key == 'binary_bytes' else row.chunks }}">{{ format_usage(row, key) }}</td>
   <td data-sort="{{ row[key + '_pct_total'] if row[key + '_pct_total'] is not none else '' }}">{{ pct(row[key + '_pct_total']) }}{% if suite %} / {{ pct(row[key + '_pct_area']) }}{% endif %}</td>
 {% endmacro %}
 <h2>Areas</h2>
@@ -66,10 +72,12 @@
     <th><button type="button">CPU · h ↕</button></th><th><button type="button">% of CPU ↕</button></th>
     <th><button type="button">Read · GiB ↕</button></th><th><button type="button">% of reads ↕</button></th>
     <th><button type="button">Written · GiB ↕</button></th><th><button type="button">% of writes ↕</button></th>
+    <th><button type="button">Binaries · GiB ↕</button></th><th><button type="button">% of binaries ↕</button></th>
   </tr></thead>
   <tbody>{% for row in areas %}<tr>
     <td><button class="area-filter" data-area="{{ row.area }}">{{ row.area }}</button></td><td data-sort="{{ row.suites }}">{{ row.suites }}</td>
     {{ metric_cells(row, 'cpu_seconds') }}{{ metric_cells(row, 'read_bytes') }}{{ metric_cells(row, 'write_bytes') }}
+    {{ metric_cells(row, 'binary_bytes') }}
   </tr>{% endfor %}</tbody>
 </table></div>
 <h2 id="suite-heading">Suites</h2>
@@ -78,7 +86,7 @@
   <label>Suite <input id="search" type="search" placeholder="Filter by path"></label>
   <span id="count" class="muted">{{ suites|length }} suites</span>
 </div>
-<p class="muted">Shares: % of all suites / % of own area. † Partial measurement; hover over a value for chunk coverage.</p>
+<p class="muted">Shares: % of all suites / % of own area. † Partial measurement; hover over a value for coverage.</p>
 <div class="scroll"><table id="suites">
   <thead><tr>
     <th><button type="button" data-text>Suite ↕</button></th><th><button type="button" data-text>Area ↕</button></th>
@@ -86,10 +94,12 @@
     <th><button type="button">CPU · h ↕</button></th><th><button type="button">CPU share ↕</button></th>
     <th><button type="button">Read · GiB ↕</button></th><th><button type="button">Read share ↕</button></th>
     <th><button type="button">Written · GiB ↕</button></th><th><button type="button">Write share ↕</button></th>
+    <th><button type="button">Binaries · GiB ↕</button></th><th><button type="button">Binary share ↕</button></th>
   </tr></thead>
   <tbody>{% for row in suites %}<tr data-area="{{ row.area }}" data-path="{{ row.suite_folder }}">
     <td class="suite">{{ row.suite_folder }}</td><td>{{ row.area }}</td><td data-sort="{{ row.chunks }}">{{ row.chunks }}</td>
     {{ metric_cells(row, 'cpu_seconds', true) }}{{ metric_cells(row, 'read_bytes', true) }}{{ metric_cells(row, 'write_bytes', true) }}
+    {{ metric_cells(row, 'binary_bytes', true) }}
   </tr>{% endfor %}</tbody>
 </table></div>
 {% if not suites %}<p>No test chunk resource records in this try.</p>{% endif %}

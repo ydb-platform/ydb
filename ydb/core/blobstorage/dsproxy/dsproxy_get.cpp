@@ -501,7 +501,9 @@ public:
 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
-        GetImpl.GenerateInitialRequests(LogCtx, vGets);
+        if (auto result = GetImpl.GenerateInitialRequests(LogCtx, vGets)) {
+            return SendReplyAndDie(result);
+        }
         SendVGetsAndVPuts(vGets, vPuts);
         TryScheduleGetAcceleration();
 

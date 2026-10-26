@@ -4,8 +4,7 @@
 #include "dsproxy_strategy_base.h"
 #include "dsproxy_blackboard.h"
 
-#include "dsproxy_strategy_get_m3dc_basic.h"
-#include "dsproxy_strategy_get_m3dc_restore.h"
+#include "dsproxy_strategy_get_mirror3dc.h"
 #include "dsproxy_strategy_get_m3of4.h"
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_get_bold.h"
@@ -83,6 +82,13 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
+                        const bool mirror3dc = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
+                        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+                        const auto realmState = mirror3dc
+                            ? Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm) : R::N0;
+                        if (mirror3dc && realmState == R::F) {
+                            continue;
+                        }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                             bool possible;
                             switch (Info->Type.GetErasure()) {
@@ -107,6 +113,10 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                                         << " State# " << blobState.ToString());
                                     [[fallthrough]];
                                 case TBlobState::ESituation::Error:
+                                    if (mirror3dc && realmState == R::R) {
+                                        break;
+                                    }
+                                    [[fallthrough]];
                                 case TBlobState::ESituation::Present:
                                 case TBlobState::ESituation::Sent:
                                     possiblyPresent.AddItem(idxInSubgroup, partIdx, Info->Type);
@@ -121,8 +131,11 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                     }
 
                     const TBlobStorageGroupInfo::TSubgroupVDisks zero(&Info->GetTopology());
-                    const auto& checker = Info->GetQuorumChecker();
-                    const bool canBeRestored = checker.GetBlobState(possiblyPresent, zero) != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+                    const auto mirror3dcChecker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, query.Id.Hash());
+                    const auto state = mirror3dcChecker
+                        ? mirror3dcChecker->GetBlobState(possiblyPresent, zero)
+                        : Info->GetQuorumChecker().GetBlobState(possiblyPresent, zero);
+                    const bool canBeRestored = state != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
                     if (canBeRestored) {
                         okay = false; // there is a slight chance that we can restore that blob
                     }
@@ -245,7 +258,7 @@ TString TGetImpl::DumpFullState() const {
     return str.Str();
 }
 
-void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
+TAutoPtr<TEvBlobStorage::TEvGetResult> TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
     Y_ABORT_UNLESS(QuerySize != 0, "internal consistency error");
 
     // TODO(cthulhu): query politics
@@ -265,8 +278,8 @@ void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_p
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> outVPuts;
     bool workDone = Step(logCtx, outVGets, outVPuts, getResult);
     Y_ABORT_UNLESS(outVPuts.empty());
-    Y_ABORT_UNLESS(getResult.Get() == nullptr);
-    Y_ABORT_UNLESS(workDone);
+    Y_ABORT_UNLESS(getResult || workDone);
+    return getResult;
 }
 
 void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
@@ -345,9 +358,8 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
-    return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
+    return Blackboard.RunStrategy(logCtx,
+        TMirror3dcGetStrategy(NodeLayout, PhantomCheck, MustRestoreFirst, AcceleratingPut), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {

@@ -104,6 +104,23 @@ struct TTest {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
+    Y_UNIT_TEST(WrittenQuorumUsesCurrentLayoutAndExcludesExpiredDisks) {
+        for (ui32 cookie = 0; cookie < 3; ++cookie) {
+            TTest t({R::N1, R::F, R::F}, cookie);
+            t.Set({2, 3, 3}, S::Present);
+            TBlobStorageGroupInfo::TGroupVDisks expired(&t.Info->GetTopology());
+            const auto& state = t.Blackboard[t.Id];
+            UNIT_ASSERT(state.HasWrittenQuorum(*t.Info, expired));
+            for (ui32 disk = 0; disk < 3; ++disk) {
+                if (t.Realm(disk) == 0) {
+                    expired += TBlobStorageGroupInfo::TGroupVDisks(&t.Info->GetTopology(),
+                        t.Info->GetVDiskId(state.Disks[disk].OrderNumber));
+                }
+            }
+            UNIT_ASSERT(!state.HasWrittenQuorum(*t.Info, expired));
+        }
+    }
+
     Y_UNIT_TEST(NormalInitialAndPartialRepliesMatchLegacy) {
         for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {

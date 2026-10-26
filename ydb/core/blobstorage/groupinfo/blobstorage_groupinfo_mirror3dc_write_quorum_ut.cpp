@@ -89,6 +89,50 @@ void CheckBlobStateCase(const TStates& states, const TCopies& copies, const TCop
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
+    Y_UNIT_TEST(NormalGroupFailuresMatchLegacy) {
+        const auto info = MakeInfo({R::N0, R::N0, R::N0});
+        const auto& legacy = info.GetTopology().GetQuorumChecker();
+        for (ui32 mask = 0; mask < (1u << info.GetTotalVDisksNum()); ++mask) {
+            const auto failed = G::TGroupVDisks::CreateFromMask(&info.GetTopology(), mask);
+            UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, failed),
+                legacy.CheckFailModelForGroup(failed));
+        }
+    }
+
+    Y_UNIT_TEST(GroupFailuresUseEnsuredAndNormalRealmsOnly) {
+        struct TCase {
+            TStates States;
+            TCopies Failures;
+            bool Expected;
+        };
+        const TCase cases[] = {
+            {{R::N1, R::F, R::F}, {0, 4, 4}, true},
+            {{R::N1, R::F, R::F}, {1, 0, 0}, false},
+            {{R::N2, R::F, R::F}, {1, 4, 4}, true},
+            {{R::N2, R::F, R::F}, {2, 0, 0}, false},
+            {{R::N2, R::N2, R::R}, {1, 1, 4}, true},
+            {{R::N2, R::N2, R::R}, {2, 2, 0}, false},
+            {{R::N0, R::F, R::F}, {}, false},
+            {{R::F, R::F, R::F}, {}, false},
+        };
+        for (const auto& test : cases) {
+            std::array<ui32, 3> permutation = {0, 1, 2};
+            do {
+                const auto info = MakeInfo({test.States[permutation[0]], test.States[permutation[1]],
+                    test.States[permutation[2]]});
+                G::TGroupVDisks failed(&info.GetTopology());
+                for (const auto& disk : info.GetVDisks()) {
+                    const auto id = info.GetVDiskId(disk.OrderNumber);
+                    if (id.FailDomain < test.Failures[permutation[id.FailRealm]]) {
+                        failed += G::TGroupVDisks(&info.GetTopology(), id);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(info, failed),
+                    test.Expected);
+            } while (std::next_permutation(permutation.begin(), permutation.end()));
+        }
+    }
+
     Y_UNIT_TEST(NormalMatchesLegacyQuorum) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});
         // MakeInfo explicitly uses ErasureMirror3dc. Take its topology checker directly,

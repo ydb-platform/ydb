@@ -109,6 +109,37 @@ class TMirror3dcWriteQuorumChecker {
     }
 
 public:
+    static bool CheckFailModelForGroup(const TBlobStorageGroupInfo& info,
+            const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
+        using G = TBlobStorageGroupInfo;
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const auto& topology = info.GetTopology();
+        if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                || topology.GetTotalFailRealmsNum() != 3 || failedDisks.GetTopology() != &topology) {
+            return false;
+        }
+        const std::array<EMirror3dcFailRealmState, 3> realms = {
+            info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2)};
+        const auto state = GetMirror3dcGroupState(realms[0], realms[1], realms[2]);
+        if (!state) {
+            return false;
+        }
+        const auto layouts = *GetMirror3dcGroupLayouts(*state);
+        const TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, layouts.Ensured);
+        const auto failedDomains = G::TGroupFailDomains::CreateFromGroupDiskSet(
+            failedDisks, G::TGroupFailDomains::EDiskCondition::ANY);
+        std::array<ui32, 3> uncertain{};
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            if (realms[realm] != R::R && realms[realm] != R::F) {
+                for (const auto& domain : topology.FailRealms[realm].FailDomains) {
+                    uncertain[realm] += failedDomains[domain.FailDomainOrderNumber];
+                }
+            }
+        }
+        // A range is complete only if no blob's ensured layout can hide in failed domains.
+        return !checker.CheckCounts(uncertain, layouts.Ensured);
+    }
+
     EMirror3dcLayout GetWriteLayout() const {
         return WriteLayout;
     }

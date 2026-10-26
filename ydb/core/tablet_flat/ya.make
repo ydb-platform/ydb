@@ -82,6 +82,8 @@ SRCS(
     flat_table_observer.h
     flat_table_committed.cpp
     flat_table_committed.h
+    flat_tier_policy.cpp
+    flat_tier_policy.h
     flat_tier_predicate.cpp
     flat_tier_predicate.h
     flat_update_op.h

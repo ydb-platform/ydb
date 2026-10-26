@@ -3,6 +3,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <util/generic/maybe.h>
 #include <util/string/cast.h>
 #include <util/system/byteorder.h>
 
@@ -290,10 +291,21 @@ namespace {
 
 } // namespace
 
+    void TTierPredicate::ValidateColumn(const TTieringPolicy& policy, const NScheme::TTypeInfo& type) {
+        Y_ENSURE(IsSupportedType(type), "Unsupported tiering column type " << type.GetTypeId());
+        Y_ENSURE(!IsUnitRequired(type) || IsKnownUnit(policy.Unit),
+            "Tiering column of type " << type.GetTypeId() << " requires a unit");
+    }
+
     void TTierPredicate::Validate(const TTieringPolicy& policy) {
+        // No tiering is expressed by the absence of a policy
+        Y_ENSURE(!policy.Rules.empty(), "Tiering policy has no rules");
+
         std::optional<bool> relative;
         for (const auto& rule : policy.Rules) {
             Y_ENSURE(rule.TierId != Max<ui32>(), "Invalid tier id");
+            // Rows that match no rule stay in the default tier anyway
+            Y_ENSURE(rule.TierId != DefaultTierId, "Tiering rule cannot target the default tier");
             Y_ENSURE(!rule.Ranges.empty(), "Tiering rule for tier " << rule.TierId << " has no ranges");
 
             for (const auto& range : rule.Ranges) {
@@ -359,9 +371,7 @@ namespace {
         // so a predicate is valid only for the scheme it was created with
         const auto* info = scheme.ColInfo(Policy.ColumnTag);
         Y_ENSURE(info, "Tiering column " << Policy.ColumnTag << " is not found");
-        Y_ENSURE(IsSupportedType(info->TypeInfo), "Unsupported tiering column type " << info->TypeInfo.GetTypeId());
-        Y_ENSURE(!IsUnitRequired(info->TypeInfo) || IsKnownUnit(Policy.Unit),
-            "Tiering column of type " << info->TypeInfo.GetTypeId() << " requires a unit");
+        ValidateColumn(Policy, info->TypeInfo);
 
         Type = info->TypeInfo;
         Pos = info->Pos;

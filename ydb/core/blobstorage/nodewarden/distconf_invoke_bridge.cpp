@@ -295,7 +295,7 @@ namespace NKikimr::NStorage {
         StartProposition(&config, /*mindPrev=*/ false);
     }
 
-    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& /*cmd*/) {
+    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& cmd) {
         RunCommonChecks();
 
         if (!Self->SelfManagementEnabled) {
@@ -314,9 +314,11 @@ namespace NKikimr::NStorage {
         for (const auto& node : Self->StorageConfig->GetAllNodes()) {
             requiredNodeIds.insert(node.GetNodeId());
         }
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this] {
+        const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
+        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
+            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
+                    skipStoragePoolConversion)) {
                 throw TExError() << *error;
             }
             StartProposition(&config);

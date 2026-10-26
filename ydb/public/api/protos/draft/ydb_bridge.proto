@@ -64,10 +64,14 @@ message UpdateClusterStateResult {
 }
 
 // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes of the cluster must already
-// run with a single-pile bridge config. Storage groups are converted in the background after the call succeeds; see
-// GetClusterStateResult.conversion_in_progress.
+// run with a single-pile bridge config. By default, existing storage pools and their groups are converted in the
+// background after the call succeeds; see GetClusterStateResult.conversion_in_progress.
 message ConvertToBridgeRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Leave existing storage pools and their groups non-bridged; they are not replicated to added piles until converted
+    // separately. Static storage groups are still converted to bridge mode. The bridge config must enable non-uniform
+    // storage, which gets activated along with the conversion.
+    bool skip_storage_pool_conversion = 2;
 }
 
 message ConvertToBridgeResponse {

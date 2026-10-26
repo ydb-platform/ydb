@@ -3255,7 +3255,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
         // Unsafe truncate runs in a separate executer and has no DQ execution plan.
-        if (tx.Stages().Empty() || GetTableTruncateSettings(tx)) {
+        if (GetTableTruncateSettings(tx)) {
             return;
         }
 

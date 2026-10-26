@@ -1207,11 +1207,7 @@ public:
                 }
             }
 
-            // A scheme tx has no stages either, and it is never mixed with anything else.
-            const bool buildsTasksGraph = !txs.empty()
-                && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME;
-
-            if (buildsTasksGraph && isValidParams) {
+            if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
                 auto tasksGraph = TKqpTasksGraph(
                     Settings.Database, txs, txAlloc,
                     Settings.TableService.GetResourceManager(),
@@ -1628,7 +1624,7 @@ public:
         }
 
         // Scheme operations and unsafe truncate do not use the regular table write sinks.
-        auto checkNoSinkTx = [&]() {
+        auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
                 if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && !FindTableTruncateSink(tx)) {
                     return false;
@@ -1647,7 +1643,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkNoSinkTx());
+            AFL_ENSURE(checkSchemeTx());
         }
 
         if (phyQuery.HasEnableHtapTx()) {
@@ -1660,7 +1656,7 @@ public:
                 return false;
             }
         } else {
-            AFL_ENSURE(checkNoSinkTx());
+            AFL_ENSURE(checkSchemeTx());
         }
 
         // Only modes that promise repeatable reads are aborted: the rest are documented to
@@ -2108,6 +2104,8 @@ public:
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
+        } else if (tx && tx->HasUnsafeTruncate()) {
+            ExecuteUnsafeTruncate(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
@@ -2155,6 +2153,18 @@ public:
         QueryState->CurrentTx += 1;
     }
 
+    void ExecuteUnsafeTruncate(const TKqpPhyTxHolder::TConstPtr& tx) {
+        // Unsafe truncate runs in its own distributed transaction, applied
+        // immediately and never rolled back with the surrounding user transaction.
+        if (QueryState->TxCtx->Readonly) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
+        }
+
+        YQL_ENSURE(tx->StagesSize() == 1);
+        SendToUnsafeTruncateExecuter(tx);
+    }
+
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
         YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
 
@@ -2199,22 +2209,8 @@ public:
                     SendToSchemeExecuter(tx);
                     return false;
 
-                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                    if (tx->HasUnsafeTruncate()) {
-                        // Unsafe truncate runs in its own distributed transaction, applied
-                        // immediately and never rolled back with the surrounding user transaction.
-                        if (QueryState->TxCtx->Readonly) {
-                            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                                "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
-                            return true;
-                        }
-                        YQL_ENSURE(tx->StagesSize() == 1);
-                        SendToUnsafeTruncateExecuter(tx);
-                        return false;
-                    }
-                    [[fallthrough]];
-
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
                     if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Data operations cannot be executed outside of transaction");

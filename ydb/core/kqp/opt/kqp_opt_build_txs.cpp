@@ -698,9 +698,8 @@ public:
 
         if (auto truncate = GetUnsafeTruncate(query)) {
             // The truncate must be the only effect so that no other operations are discarded.
-            YQL_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
-                "Unsafe truncate block must contain only the truncate effect, got "
-                    << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
+            AFL_ENSURE(query.Results().Empty() && query.Effects().Size() == 1)
+                ("results", query.Results().Size())("effects", query.Effects().Size());
 
             const auto effects = Build<TExprList>(ctx, query.Pos())
                 .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))

@@ -1,12 +1,21 @@
 #include "../defaults.h"
+#include "../gen_restarts.h"
 #include <ydb/core/blobstorage/ut_vdisk/lib/setup.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_dbstat.h>
+#include <ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_many.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
+#define SMALL_TEST
+#ifdef SMALL_TEST
+#define LARGE_MSG_NUM   500
+#else
+#define LARGE_MSG_NUM   5000
+#endif
 
 namespace NKikimr {
 namespace NPDisk {

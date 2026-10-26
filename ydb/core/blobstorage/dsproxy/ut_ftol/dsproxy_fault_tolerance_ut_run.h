@@ -2,6 +2,9 @@
 
 #include "dsproxy_fault_tolerance_ut_runtime.h"
 
+#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/core/actor_coroutine.h>
+
 using namespace NActors;
 using namespace NKikimr;
 

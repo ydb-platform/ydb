@@ -302,6 +302,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         has_fail_tests = False
         suite_logsdirs = set()
         results_with_logsdir = []
+        not_launched_with_logsdir = []
         processed_files_cache = {}
         results_file_links = []
 
@@ -375,6 +376,8 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 if not isinstance(paths, list):
                     continue
                 if link_type == "logsdir":
+                    if result.get("error_type") == "NOT_LAUNCHED":
+                        not_launched_with_logsdir.append((result, paths))
                     # Select before muting so muted failures retain their chunk logs.
                     # Passed results must not pull unrelated chunks into the suite ZIP.
                     for file_path in paths:
@@ -442,6 +445,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             result["links"][link_type] = [url]
         save_log_time = time.time() - save_log_start
         total_save_log_time += save_log_time
+
+        # Link unlaunched tests to their archived chunk without selecting extra chunks.
+        for result, paths in not_launched_with_logsdir:
+            if any(path in suite_logsdirs for path in paths):
+                results_with_logsdir.append(result)
 
         # Queue ZIP archives; compress independent suites together below.
         if has_fail_tests and suite_logsdirs:

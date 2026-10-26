@@ -1002,12 +1002,18 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void Timeout() {
+        if (!Replied) {
+            Reply(AggregatedStatus);
+        }
         PassAway();
     }
 
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
         RingGroupPassAwayCounter++;
         if (RingGroupPassAwayCounter >= RingGroupActors.size()) {
+            if (!Replied) {
+                Reply(AggregatedStatus);
+            }
             PassAway();
         }
     }

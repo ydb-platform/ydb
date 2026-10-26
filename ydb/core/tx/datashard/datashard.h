@@ -1351,11 +1351,13 @@ namespace TEvDataShard {
         TActorId ReplyTo;
         ui64 TxId;
         TString UploadId;
+        bool ReplaceExisting;
 
-        explicit TEvStoreS3UploadId(const TActorId& replyTo, ui64 txId, const TString& uploadId)
+        explicit TEvStoreS3UploadId(const TActorId& replyTo, ui64 txId, const TString& uploadId, bool replaceExisting = false)
             : ReplyTo(replyTo)
             , TxId(txId)
             , UploadId(uploadId)
+            , ReplaceExisting(replaceExisting)
         {
         }
     };

@@ -3122,7 +3122,7 @@ partitioning_settings {
         CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::AccessDenied);
     }
 
-    Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
+    void CheckRestartUpload(const TString& exceptionName) {
         Env(); // Init test env
         ui64 txId = 100;
 
@@ -3138,11 +3138,14 @@ partitioning_settings {
         UpdateRow(Runtime(), "Table", 2, "valueB");
         Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
-        // Reject the first 'CompleteMultipartUpload' the way s3 does when the stored etags do not
-        // match the parts it holds. The request is dropped, so the upload is still there and its
-        // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
-        // as UNKNOWN with the exception name set and without the retryable flag.
+        // Reject completion while leaving the old multipart upload in S3. The retry must
+        // create a new upload, persist its id and send all parts to the new session.
         THolder<IEventHandle> injectResult;
+        bool completionRejected = false;
+        ui32 createRequests = 0;
+        ui32 completeRequests = 0;
+        ui32 replacementParts = 0;
+        TString firstUploadId;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
@@ -3163,14 +3166,31 @@ partitioning_settings {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
+                case NWrappers::NExternalStorage::EvCreateMultipartUploadRequest:
+                    ++createRequests;
+                    return TTestActorRuntime::EEventAction::PROCESS;
+
+                case NWrappers::NExternalStorage::EvUploadPartRequest: {
+                    const auto& request = ev->Get<NWrappers::TEvExternalStorage::TEvUploadPartRequest>()->Request;
+                    if (completionRejected) {
+                        UNIT_ASSERT_VALUES_UNEQUAL(TString(request.GetUploadId().c_str()), firstUploadId);
+                        UNIT_ASSERT_VALUES_EQUAL(request.GetPartNumber(), ++replacementParts);
+                    }
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
                 case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
-                    if (injectResult) {
+                    const auto& request = ev->Get<NWrappers::TEvExternalStorage::TEvCompleteMultipartUploadRequest>()->Request;
+                    ++completeRequests;
+                    if (completionRejected) {
+                        UNIT_ASSERT_VALUES_UNEQUAL(TString(request.GetUploadId().c_str()), firstUploadId);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
 
-                    Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::UNKNOWN, "InvalidPart",
-                        "Unable to parse ExceptionName: InvalidPart Message: One or more of the specified"
-                        " parts could not be found.", false);
+                    completionRejected = true;
+                    firstUploadId = request.GetUploadId().c_str();
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::UNKNOWN,
+                        exceptionName.c_str(), "Multipart completion failed", false);
                     // Without the response code the error defaults to REQUEST_NOT_MADE, which is retryable
                     error.SetResponseCode(Aws::Http::HttpResponseCode::BAD_REQUEST);
 
@@ -3209,15 +3229,31 @@ partitioning_settings {
             Runtime().DispatchEvents(opts);
         }
 
-        Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(injectResult.Release(), 0, true);
 
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot");
+        Runtime().SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+        UNIT_ASSERT_VALUES_EQUAL(completeRequests, 2);
+        UNIT_ASSERT_VALUES_EQUAL(replacementParts, 2);
 
         const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
         UNIT_ASSERT(data);
         UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
+        CheckRestartUpload("InvalidPart");
+    }
+
+    Y_UNIT_TEST(ShouldRestartUploadOnInvalidPartOrder) {
+        CheckRestartUpload("InvalidPartOrder");
+    }
+
+    Y_UNIT_TEST(ShouldRestartUploadOnFsCompleteMultipartUploadFailed) {
+        CheckRestartUpload("FsCompleteMultipartUploadFailed");
     }
 
     void CheckMissingMultipartUpload(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,

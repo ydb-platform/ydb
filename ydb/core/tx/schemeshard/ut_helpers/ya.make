@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
+    ydb/core/wrappers
     ydb/public/lib/scheme_types
     yql/essentials/public/issue
     ydb/public/lib/deprecated/kicli

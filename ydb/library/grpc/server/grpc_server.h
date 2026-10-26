@@ -391,6 +391,12 @@ public:
 
     const TVector<IGRpcServicePtr>& GetServices() const;
 
+    // Total number of request contexts registered in the services. When it is
+    // zero after Stop(), no request context can dereference this server
+    // anymore: DeregisterRequestCtx() is the last touch of the server in a
+    // request context lifecycle.
+    size_t RequestsInProgress() const;
+
 private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 

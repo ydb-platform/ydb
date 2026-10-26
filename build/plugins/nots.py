@@ -310,7 +310,7 @@ def _create_erm_json(unit: ymake.Unit):
 
 
 def _get_source_path(unit: ymake.Unit) -> str:
-    sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
+    sources_path = unit.get("TS_FOR_DIR") if unit.get("TS_FOR") else unit.path()
     return sources_path
 
 
@@ -318,7 +318,7 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
     from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
-    module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
+    module_path = unit.get("TS_FOR_PATH") if unit.get("TS_FOR") else unit.get("MODDIR")
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
@@ -416,9 +416,15 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
-            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
-                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+            if nodejs_version.major >= 25:
+                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
+                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
+                if target_needs_libatomic or host_needs_libatomic:
+                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                if target_needs_libatomic:
+                    unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
+                if host_needs_libatomic:
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -438,6 +444,43 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     if dirs:
         unit.onpeerdir(dirs)
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bool = False) -> None:
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"NODEJS_BINARY_FOR should be for another module but got path '{for_mod}'")
+        return
+
+    if not RELATIVE and for_mod.startswith("."):
+        ymake.report_configure_error(
+            "You are using a relative path for a module. "
+            f"You have to add RELATIVE key, like NODEJS_BINARY_FOR(RELATIVE {for_mod})"
+        )
+        return
+
+    root = unit.path() if RELATIVE else "$S"
+    _SET_TS_FOR_VARS(unit, f"{root}/{for_mod}")
+
+    package_json_path = os.path.join(unit.resolve(unit.get("TS_FOR_DIR")), "package.json")
+    if not os.path.isfile(package_json_path):
+        ymake.report_configure_error(
+            f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
+        )
+        return
+
+    _PEERDIR_TS_RESOURCE(unit, "nodejs")
+
+    # _PEERDIR_TS_RESOURCE marks the target's libatomic requirement separately from the host environment.
+    # Use this marker to avoid duplicating its Node.js version and platform checks.
+    if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
+        unit.set(
+            [
+                "COPY_LIBATOMIC_CMD",
+                '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+            ]
+        )
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -749,6 +792,9 @@ def _set_resource_vars(
 
     unit.set(["{}_ROOT".format(resource_name), "${}".format(yamake_resource_var)])
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
+
+    if tool == "nodejs":
+        unit.set(["WITH_NODEJS_ROOT", "$WITH_{}".format(yamake_resource_var)])
 
 
 def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':
@@ -1180,7 +1226,7 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
             )
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-        if not unit.get("TS_TEST_FOR"):
+        if not unit.get("TS_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
         lf = pm.load_lockfile_from_dir(pm.sources_path)
@@ -1275,7 +1321,7 @@ def _TS_TEST_FOR_CONFIGURE(unit: ymake.Unit, test_runner: str, default_config: s
     if deps:
         unit.ondepends(deps)
 
-    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+    flat_args = (test_runner, "TS_FOR_PATH")
     spec_args = {'erm_json': _create_erm_json(unit)}
 
     dart_record = create_dart_record(
@@ -1327,10 +1373,10 @@ def _VALIDATE_TS_TEST_FOR_ARGS(unit: ymake.Unit, for_mod: str, root: str) -> Non
 
 @ymake.macro
 @_with_report_configure_error
-def _SET_TS_TEST_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
-    unit.set(["TS_TEST_FOR", "yes"])
-    unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
-    unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
+def _SET_TS_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
+    unit.set(["TS_FOR", "yes"])
+    unit.set(["TS_FOR_DIR", unit.resolve_arc_path(for_mod)])
+    unit.set(["TS_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
 def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -> None:
@@ -1383,7 +1429,7 @@ def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
 @_with_report_configure_error
 def _DEPENDS_ON_MOD(unit: ymake.Unit) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
-        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        for_mod_path = unit.get("TS_FOR_PATH")
         unit.ondepends([for_mod_path])
 
 
@@ -1449,7 +1495,7 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
-    test_mod = unit.get("TS_TEST_FOR_PATH")
+    test_mod = unit.get("TS_FOR_PATH")
     unit.onpeerdir([test_mod])
 
 

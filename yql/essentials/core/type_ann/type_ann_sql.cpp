@@ -1230,16 +1230,17 @@ const TItemExprType* RenameOnOrder(TExprContext& ctx, TColumnOrder& order, const
 
 bool UpdateUsingColumnTypes(
     const TItemExprType* item,
-    TStringBuf alias,
+    const TInput& input,
     bool isVirtual,
+    bool ansiUsing,
     TVector<const TItemExprType*>& items,
     const TUsingColumns& usedInUsing,
     THashSet<TString>& present,
     TExprContext& ctx)
 {
-    TString lower = to_lower(TString(item->GetCleanName(isVirtual)));
-
-    const auto* column = FindUsingColumn(usedInUsing, lower, alias, item->GetCleanName(isVirtual));
+    const TString inputPhysicalName(item->GetCleanName(isVirtual));
+    const auto logicalName = ansiUsing && input.Order ? input.Order->Find(inputPhysicalName) : inputPhysicalName;
+    const auto* column = FindUsingColumn(usedInUsing, logicalName, input.Alias, inputPhysicalName);
     if (!column) {
         return false;
     }
@@ -1282,6 +1283,7 @@ void AddColumns(
     THashSet<TString> usedAliases;
     THashSet<TString> present;
     TColumnOrder order;
+    const bool ansiUsing = AnyOf(usedInUsing, [](const auto& entry) { return !entry.second.InputColumns.empty(); });
     for (const auto& [key, column] : usedInUsing) {
         if (column.Type && ((hasStar && *hasStar) || refs.contains(column.Name))) {
             items.push_back(ctx.MakeType<TItemExprType>(column.PhysicalName, column.Type));
@@ -1302,7 +1304,7 @@ void AddColumns(
                 for (ui32 i = 0; i < x.Type->GetSize(); ++i) {
                     auto item = x.Type->GetItems()[i];
                     if (!item->GetName().StartsWith("_yql_")) {
-                        if (UpdateUsingColumnTypes(item, x.Alias, /*isVirtual=*/false, items, usedInUsing, present, ctx)) {
+                        if (UpdateUsingColumnTypes(item, x, /*isVirtual=*/false, ansiUsing, items, usedInUsing, present, ctx)) {
                             continue;
                         }
 
@@ -1323,7 +1325,7 @@ void AddColumns(
                 auto pos = x.FindColumn(ref, &isVirtual);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
-                    UpdateUsingColumnTypes(item, x.Alias, isVirtual, items, usedInUsing, present, ctx);
+                    UpdateUsingColumnTypes(item, x, isVirtual, ansiUsing, items, usedInUsing, present, ctx);
                     item = AddAlias(x.Alias, item, ctx);
                     items.push_back(item);
                     usedRefs.insert(TString(item->GetCleanName(isVirtual)));
@@ -1520,7 +1522,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                     const auto& column = usedInUsing.at(key);
                     const auto offset = Min(column.Order, aliasedRightUsingOrder.size());
                     aliasedRightUsingOrder.insert(aliasedRightUsingOrder.begin() + offset,
-                        TStarColumn{{}, column.Name, column.PhysicalName, &column});
+                        TStarColumn{.Alias = {}, .Name = column.Name, .PhysicalName = column.PhysicalName, .Using = &column});
                 }
             }
             aliased = std::move(aliasedRightUsingOrder);
@@ -4144,7 +4146,19 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
-                        else if (!isYql) {
+                        else if (isYql) {
+                            if (data.GetTypeAnn()->HasUniversal()) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
+
+                            if (!IsBoolLike(*data.GetTypeAnn())) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
+                                    "Expected bool type, but got: " << *data.GetTypeAnn()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                        else {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
                                 "Expected pg type, but got: " << data.GetTypeAnn()->GetKind()));
                             return IGraphTransformer::TStatus::Error;

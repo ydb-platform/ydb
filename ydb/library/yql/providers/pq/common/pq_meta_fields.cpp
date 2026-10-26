@@ -1,4 +1,5 @@
 #include "pq_meta_fields.h"
+
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <unordered_map>
@@ -16,7 +17,8 @@ public:
     explicit TPqMetadataField(const EMetaFieldType& type, bool transparent = false)
         : Type(type)
         , Transparent(transparent)
-    {}
+    {
+    }
 
     TString GetSysColumnName(const TString& key, bool addTransparentPrefix) const {
         auto systemPrefix = TStringBuilder() << SYS_PREFIX;
@@ -53,17 +55,17 @@ public:
 };
 
 const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
-    {"create_time", TPqMetadataField(EMetaFieldType::Timestamp)},
-    {"write_time", TPqMetadataField(EMetaFieldType::Timestamp, /* transparent */ true)},
-    {"partition_id", TPqMetadataField(EMetaFieldType::Uint64, /* transparent */ true)},
-    {"offset", TPqMetadataField(EMetaFieldType::Uint64)},
-    {"message_group_id", TPqMetadataField(EMetaFieldType::String)},
-    {"seq_no", TPqMetadataField(EMetaFieldType::Uint64)},
-    {"user_attributes", TPqMetadataField(EMetaFieldType::DictStringString)},
-    {"cluster", TPqMetadataField(EMetaFieldType::String, /* transparent */ true)},
+    { "create_time", TPqMetadataField(EMetaFieldType::Timestamp) },
+    { "write_time", TPqMetadataField(EMetaFieldType::Timestamp, /* transparent */ true) },
+    { "partition_id", TPqMetadataField(EMetaFieldType::Uint64, /* transparent */ true) },
+    { "offset", TPqMetadataField(EMetaFieldType::Uint64) },
+    { "message_group_id", TPqMetadataField(EMetaFieldType::String) },
+    { "seq_no", TPqMetadataField(EMetaFieldType::Uint64) },
+    { "user_attributes", TPqMetadataField(EMetaFieldType::DictStringString) },
+    { "cluster", TPqMetadataField(EMetaFieldType::String, /* transparent */ true) },
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent) {
     TStringBuf keyBuf(sysColumn);
@@ -89,11 +91,7 @@ std::optional<TString> SkipYdbSystemPrefix(const TString& sysColumn) {
 }
 
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
-    const TString& key,
-    bool addTransparentPrefix,
-    bool includeUserAttributes,
-    bool forbidYqlSysColumnsAndSystemMetadata
-) {
+    const TString& key, bool addTransparentPrefix, bool includeUserAttributes, bool forbidYqlSysColumnsAndSystemMetadata) {
     if (!includeUserAttributes && key == "user_attributes") {
         return std::nullopt;
     }
@@ -102,14 +100,10 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
         return std::nullopt;
     }
 
-    return forbidYqlSysColumnsAndSystemMetadata
-        ? it->second.GetYdbDescriptor(key)
-        : it->second.GetDescriptor(key, addTransparentPrefix);
+    return forbidYqlSysColumnsAndSystemMetadata ? it->second.GetYdbDescriptor(key) : it->second.GetDescriptor(key, addTransparentPrefix);
 }
 
-std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
-    const TString& sysColumn,
-    bool includeUserAttributes)
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(const TString& sysColumn, bool includeUserAttributes)
 {
     // Try the __ydb_ prefix first
     if (auto ydbDescriptor = GetPqMetaFieldDescriptorByYdbSysColumn(sysColumn, includeUserAttributes)) {
@@ -139,9 +133,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
     return metadata.GetDescriptor(*key, transparent);
 }
 
-std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByYdbSysColumn(
-    const TString& sysColumn,
-    bool includeUserAttributes)
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByYdbSysColumn(const TString& sysColumn, bool includeUserAttributes)
 {
     const auto key = SkipYdbSystemPrefix(sysColumn);
     if (!key) {
@@ -174,7 +166,11 @@ std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool 
     return res;
 }
 
-std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes) {
+std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes, bool allowYdbSysColumns) {
+    if (!allowYdbSysColumns) {
+        return {};
+    }
+
     std::vector<TString> res;
     res.reserve(PqMetaFields.size());
 
@@ -202,4 +198,4 @@ std::optional<TString> YdbSysColumnToOldSysColumn(const TString& ydbColumn, bool
     return it->second.GetSysColumnName(*key, addTransparentPrefix);
 }
 
-} // namespace NYql
+}   // namespace NYql

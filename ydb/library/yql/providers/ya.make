@@ -5,9 +5,11 @@ RECURSE(
     dq
     function
     generic
+    native
     pq
     s3
     solomon
     ydb
+    ydb_external
     yt
 )

@@ -9,6 +9,7 @@ PEERDIR(
 TEST_SRCS(
     test_workload_run_result.py
     test_errors_report.py
+    test_ydb_cli.py
 )
 
 END()

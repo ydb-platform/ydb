@@ -1248,6 +1248,22 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateReject(id, NKikimrScheme::EStatus::StatusPreconditionFailed, "Cannot alter migrated index")};
     }
 
+    // Reject overlapping impl-table ALTERs before proposing the index part:
+    // it creates the next index version before the table part checks its path.
+    for (const auto& alterPath : {parent, path}) {
+        const auto checks = alterPath.Check();
+        checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved()
+            .NotDeleted().NotUnderDeleting().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+    }
+    if (context.SS->Indexes.at(parent.Base()->PathId)->AlterData
+        || context.SS->Tables.at(path.Base()->PathId)->AlterData)
+    {
+        return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another index table Alter in flight")};
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     {

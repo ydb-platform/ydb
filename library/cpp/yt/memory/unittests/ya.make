@@ -15,7 +15,6 @@ SRCS(
     exact_ref_counted_cast_ut.cpp
     free_list_ut.cpp
     function_view_ut.cpp
-    immortal_ut.cpp
     intrusive_ptr_ut.cpp
     non_null_ptr_ut.cpp
     ref_ut.cpp

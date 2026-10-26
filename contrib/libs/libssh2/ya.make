@@ -5,17 +5,18 @@ LIBRARY()
 LICENSE(
     BSD-2-Clause AND
     BSD-3-Clause AND
-    BSD-4-Clause AND
     ISC AND
+    MIT AND
     Public-Domain AND
+    SAX-PD-2.0 AND
     SSH-short
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.10.0)
+VERSION(1.11.1)
 
-ORIGINAL_SOURCE(https://github.com/libssh2/libssh2/archive/libssh2-1.10.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libssh2/libssh2/archive/libssh2-1.11.1.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl
@@ -53,12 +54,13 @@ CFLAGS(
 
 SRCS(
     src/agent.c
-    src/agent_win.c
     src/bcrypt_pbkdf.c
-    src/blowfish.c
+    src/chacha.c
     src/channel.c
+    src/cipher-chachapoly.c
     src/comp.c
     src/crypt.c
+    src/crypto.c
     src/global.c
     src/hostkey.c
     src/keepalive.c
@@ -66,15 +68,16 @@ SRCS(
     src/knownhost.c
     src/mac.c
     src/misc.c
-    src/openssl.c
     src/packet.c
     src/pem.c
+    src/poly1305.c
     src/publickey.c
     src/scp.c
     src/session.c
     src/sftp.c
     src/transport.c
     src/userauth.c
+    src/userauth_kbd_packet.c
     src/version.c
 )
 

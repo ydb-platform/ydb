@@ -3132,10 +3132,13 @@ public:
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && it->Tag == ETags::GroupState) {
                     if (it->IssueLog.reason_size() == 1) {
                         const auto& reason = issueById[it->IssueLog.reason(0)]->IssueLog;
-                        if (message.find("in pile") == std::string::npos) {
+                        const auto& pile = reason.location().storage().pool().group().pile();
+                        if (!pile.name().empty() && message.find("in pile") == std::string::npos) {
                             message = TStringBuilder() << reason.message() <<  " in pile " << reason.location().storage().pool().group().pile().name();
                         }
-                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(reason.location().storage().pool().group().pile());
+                        if (!pile.name().empty()) {
+                            it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(pile);
+                        }
                     }
                 }
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && (it->Tag == ETags::PoolState || it->Tag == ETags::StorageState)) {
@@ -3455,8 +3458,11 @@ public:
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
-                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
+                const TBridgeInfo *bridgeInfo = NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
+                    ? NodeWardenStorageConfig->Get()->BridgeInfo.get()
+                    : nullptr;
+                if (bridgeInfo && group->BridgePileId && group->BridgePileId.GetPileIndex() < bridgeInfo->Piles.size()) {
+                    const auto& pileName = bridgeInfo->GetPile(group->BridgePileId)->Name;
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());

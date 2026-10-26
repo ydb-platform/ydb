@@ -12,7 +12,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/generic/set.h>
 #include <util/generic/algorithm.h>

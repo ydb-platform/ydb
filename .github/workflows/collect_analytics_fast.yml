@@ -1,7 +1,7 @@
 name: Collect-analytics-fast-run
 on:
   schedule:
-    - cron: "*/30 * * * *"  # Every 30 min
+    - cron: "0 * * * *"  # Once an hour
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -11,6 +11,10 @@ on:
         description: "GitHub job metrics: all or a comma-separated workflow file list"
         type: string
         default: "all"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -146,7 +150,7 @@ jobs:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
-      run: python3 -m pip install ydb ydb[yc]
+      run: python3 -m pip install ydb ydb[yc] PyYAML PyJWT cryptography
     - name: Provision CI metrics tables
       run: python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
     - name: Export GitHub job metrics
@@ -154,3 +158,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         CI_METRICS_WORKFLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.workflow || 'all' }}
       run: python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2
+    - name: Export runner capacity
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: python3 .github/scripts/utils/analytics/github_actions/export_runner_capacity.py

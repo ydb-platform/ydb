@@ -6,6 +6,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
@@ -37,10 +38,10 @@ NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues) 
     for (const auto& issue : issues) {
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
-    return {rootIssue};
+    return { rootIssue };
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 //// TTxControl
 
@@ -77,7 +78,8 @@ TQueryBase::TEvQueryBasePrivate::TEvStreamQueryResultPart::TEvStreamQueryResultP
     : Status(response.status())
     , Issues(IssuesFromProtoMessage(response))
     , ResultSet(std::move(*response.mutable_result()->mutable_result_set()))
-{}
+{
+}
 
 TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(Table::CreateSessionResponse&& response)
     : Status(response.operation().status())
@@ -91,29 +93,33 @@ TQueryBase::TEvQueryBasePrivate::TEvCreateSessionResult::TEvCreateSessionResult(
 TQueryBase::TEvQueryBasePrivate::TEvDeleteSessionResponse::TEvDeleteSessionResponse(Table::DeleteSessionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
-{}
+{
+}
 
 TQueryBase::TEvQueryBasePrivate::TEvRollbackTransactionResponse::TEvRollbackTransactionResponse(Table::RollbackTransactionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
-{}
+{
+}
 
 TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransactionResponse(Table::CommitTransactionResponse&& response)
     : Status(response.operation().status())
     , Issues(IssuesFromProtoMessage(response.operation()))
-{}
+{
+}
 
 //// TQueryBase
 
-TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser, bool isStreamingMode,
-    TMaybe<TString> userToken)
+TQueryBase::TQueryBase(
+    ui64 logComponent, TString sessionId, TString database, bool isSystemUser, bool isStreamingMode, TMaybe<TString> userToken)
     : LogComponent(logComponent)
     , Database(std::move(database))
     , SessionId(std::move(sessionId))
     , IsSystemUser(isSystemUser)
     , IsStreamingMode(isStreamingMode)
     , UserToken(std::move(userToken))
-{}
+{
+}
 
 void TQueryBase::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
     TBase::Registered(sys, owner);
@@ -162,7 +168,8 @@ void TQueryBase::RunCreateSession() const {
     using TCreateSessionRequest = TGrpcRequestOperationCall<Table::CreateSessionRequest, Table::CreateSessionResponse>;
 
     Table::CreateSessionRequest request;
-    Subscribe<Table::CreateSessionResponse, TEvQueryBasePrivate::TEvCreateSessionResult>(DoLocalRpc<TCreateSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
+    Subscribe<Table::CreateSessionResponse, TEvQueryBasePrivate::TEvCreateSessionResult>(
+        DoLocalRpc<TCreateSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
@@ -195,7 +202,8 @@ void TQueryBase::RunDeleteSession() const {
 
     Table::DeleteSessionRequest request;
     request.set_session_id(SessionId);
-    Subscribe<Table::DeleteSessionResponse, TEvQueryBasePrivate::TEvDeleteSessionResponse>(DoLocalRpc<TDeleteSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
+    Subscribe<Table::DeleteSessionResponse, TEvQueryBasePrivate::TEvDeleteSessionResponse>(
+        DoLocalRpc<TDeleteSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResponse::TPtr& ev) {
@@ -214,7 +222,7 @@ void TQueryBase::RunQuery() {
     try {
         OnRunQuery();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to run query", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to run query", NYql::TIssues{ NYql::TIssue{ ex.what() } }));
     }
 }
 
@@ -294,7 +302,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         try {
             (this->*QueryResultHandler)();
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{ NYql::TIssue{ ex.what() } }));
         }
         Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit || IsStreamingMode);
     } else {
@@ -329,7 +337,8 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, token, RequestType, ActorContext(), true, channelBufferSize);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(
+        std::move(request), Database, token, RequestType, ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 
@@ -382,7 +391,8 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         try {
             (this->*StreamResultHandler)(std::move(resultSet));
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result part", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+            Finish(StatusIds::INTERNAL_ERROR,
+                AddRootIssue("Failed to process stream query result part", NYql::TIssues{ NYql::TIssue{ ex.what() } }));
             return;
         }
     }
@@ -422,7 +432,7 @@ void TQueryBase::FinishStreamRequest() {
     try {
         (this->*QueryResultHandler)();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result", NYql::TIssues{ NYql::TIssue{ ex.what() } }));
     }
     Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
 }
@@ -438,7 +448,7 @@ void TQueryBase::Finish() {
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, const TString& message, bool rollbackOnError) {
-    Finish(status, {TIssue(message)}, rollbackOnError);
+    Finish(status, { TIssue(message) }, rollbackOnError);
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, TIssues&& issues, bool rollbackOnError) {
@@ -497,7 +507,8 @@ void TQueryBase::CommitTransaction() {
     Table::CommitTransactionRequest request;
     request.set_session_id(SessionId);
     request.set_tx_id(TxId);
-    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(DoLocalRpc<TCommitTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
+    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(
+        DoLocalRpc<TCommitTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {
@@ -529,7 +540,8 @@ void TQueryBase::RollbackTransaction() const {
     Table::RollbackTransactionRequest request;
     request.set_session_id(SessionId);
     request.set_tx_id(TxId);
-    Subscribe<Table::RollbackTransactionResponse, TEvQueryBasePrivate::TEvRollbackTransactionResponse>(DoLocalRpc<TRollbackTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
+    Subscribe<Table::RollbackTransactionResponse, TEvQueryBasePrivate::TEvRollbackTransactionResponse>(
+        DoLocalRpc<TRollbackTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvRollbackTransactionResponse::TPtr& ev) {
@@ -575,7 +587,7 @@ TString TQueryBase::LogPrefix() const {
 }
 
 TQueryBase::TLogInfo TQueryBase::GetLogInfo() const {
-    return {.LogComponent = LogComponent, .OperationName = OperationName, .TraceId = TraceId};
+    return { .LogComponent = LogComponent, .OperationName = OperationName, .TraceId = TraceId };
 }
 
 void TQueryBase::ClearTimeInfo() {
@@ -616,21 +628,16 @@ ERetryErrorClass TQueryRetryActorBase::Retryable(Ydb::StatusIds::StatusCode stat
         return ERetryErrorClass::NoRetry;
     }
 
-    if (status == Ydb::StatusIds::INTERNAL_ERROR
-        || status == Ydb::StatusIds::UNAVAILABLE
-        || status == Ydb::StatusIds::BAD_SESSION
-        || status == Ydb::StatusIds::SESSION_EXPIRED
-        || status == Ydb::StatusIds::SESSION_BUSY
-        || status == Ydb::StatusIds::ABORTED) {
+    if (status == Ydb::StatusIds::INTERNAL_ERROR || status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::BAD_SESSION ||
+        status == Ydb::StatusIds::SESSION_EXPIRED || status == Ydb::StatusIds::SESSION_BUSY || status == Ydb::StatusIds::ABORTED) {
         return ERetryErrorClass::ShortRetry;
     }
 
-    if (status == Ydb::StatusIds::OVERLOADED
-        || status == Ydb::StatusIds::UNDETERMINED) {
+    if (status == Ydb::StatusIds::OVERLOADED || status == Ydb::StatusIds::UNDETERMINED) {
         return ERetryErrorClass::LongRetry;
     }
 
     return ERetryErrorClass::NoRetry;
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

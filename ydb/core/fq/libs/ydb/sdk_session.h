@@ -6,4 +6,4 @@ namespace NFq {
 
 ISession::TPtr CreateSdkSession(NYdb::NTable::TSession session);
 
-} // namespace NFq
+}   // namespace NFq

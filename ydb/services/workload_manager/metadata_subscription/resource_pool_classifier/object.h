@@ -9,10 +9,9 @@ namespace NYql {
 class TFeaturesExtractor;
 }
 
-
 namespace NKikimr::NWorkloadManager {
 
-class TResourcePoolClassifierConfig : public NMetadata::NModifications::TObject<TResourcePoolClassifierConfig> {
+class TResourcePoolClassifierConfig: public NMetadata::NModifications::TObject<TResourcePoolClassifierConfig> {
     using TBase = NMetadata::NModifications::TObject<TResourcePoolClassifierConfig>;
 
     YDB_ACCESSOR_DEF(TString, Database);
@@ -31,7 +30,7 @@ public:
     static inline const TString JSON_KEY_HAS_STREAM = "has_stream";
     static inline const TString JSON_KEY_ACTION = "action";
 
-    class TDecoder : public NMetadata::NInternal::TDecoderBase {
+    class TDecoder: public NMetadata::NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, DatabaseIdx, -1);
         YDB_READONLY(i32, NameIdx, -1);
@@ -50,15 +49,19 @@ public:
     virtual NMetadata::NModifications::IColumnValuesMerger::TPtr BuildMerger(const TString& columnName) const override;
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData);
+
     i64 GetRank() const {
         return Settings.Rank;
     }
+
     void SetRank(i64 rank) {
         Settings.Rank = rank;
     }
+
     const NResourcePool::TClassifierSettings& GetClassifierSettings() const {
         return Settings;
     }
+
     void SetClassifierSettings(const NResourcePool::TClassifierSettings& settings) {
         Settings = settings;
     }
@@ -85,9 +88,7 @@ public:
     // Parse TClassifierSettings from features extractor (DDL properties).
     // Returns std::nullopt on success (settings filled in *result).
     // Returns error string on failure.
-    static std::optional<TString> ParseFromFeaturesExtractor(
-        NYql::TFeaturesExtractor& featuresExtractor,
-        TParseResult* result);
+    static std::optional<TString> ParseFromFeaturesExtractor(NYql::TFeaturesExtractor& featuresExtractor, TParseResult* result);
 };
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

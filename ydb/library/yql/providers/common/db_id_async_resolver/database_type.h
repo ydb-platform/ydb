@@ -28,6 +28,7 @@ enum class EDatabaseType {
     Prometheus,
     MongoDB,
     OpenSearch,
+    YdbExternal,
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();
@@ -54,4 +55,4 @@ TString DatabaseTypeLowercase(EDatabaseType databaseType);
 // TODO: remove this function after /kikimr/yq/tests/control_plane_storage is moved to /ydb.
 TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType);
 
-} // NYql
+}   // namespace NYql

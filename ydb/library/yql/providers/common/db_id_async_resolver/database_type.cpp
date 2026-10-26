@@ -57,7 +57,7 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
         case NYql::EGenericDataSourceKind::MONGO_DB:
             return EDatabaseType::MongoDB;
         case NYql::EGenericDataSourceKind::OPENSEARCH:
-            return EDatabaseType::OpenSearch; 
+            return EDatabaseType::OpenSearch;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -90,7 +90,7 @@ NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType database
         case EDatabaseType::MongoDB:
             return NYql::EGenericDataSourceKind::MONGO_DB;
         case EDatabaseType::OpenSearch:
-            return NYql::EGenericDataSourceKind::OPENSEARCH;    
+            return NYql::EGenericDataSourceKind::OPENSEARCH;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }
@@ -115,4 +115,4 @@ std::optional<EDatabaseType> DatabaseTypeFromString(const TString& type) {
     return databaseType;
 }
 
-} // NYql
+}   // namespace NYql

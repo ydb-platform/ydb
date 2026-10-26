@@ -7,4 +7,4 @@ namespace NFq {
 
 IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters = {});
 
-} // namespace NFq
+}   // namespace NFq

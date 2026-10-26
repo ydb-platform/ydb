@@ -3,12 +3,16 @@
 
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
+#include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -24,12 +28,13 @@ namespace {
  * Create and initialize the Tablet Counters Aggregator actor.
  *
  * @param[in] runtime The test runtime
+ * @param[in] follower Whether to create the aggregator of the followers
  *
  * @return The ID of the Tablet Counters Aggregator actor
  */
-TActorId InitializeTabletCountersAggregator(TTestBasicRuntime& runtime) {
+TActorId InitializeTabletCountersAggregator(TTestBasicRuntime& runtime, bool follower = false) {
     // Register the Tablet Counters Aggregator actor
-    TActorId aggregatorId = runtime.Register(CreateTabletCountersAggregator(false /* follower */));
+    TActorId aggregatorId = runtime.Register(CreateTabletCountersAggregator(follower));
     runtime.EnableScheduleForActor(aggregatorId);
 
     // Wait for the TEvBootstrap event to be processed, after this the actor is ready
@@ -72,13 +77,15 @@ void ForceCounterRecalculation(
  * @param[in] edgeActorId The ID of the edge actor used for sending all messages
  * @param[in] tabletId The ID of the DataShard tablet
  * @param[in] cpuLoadPercentage The CPU load percentage to report for this tablet
+ * @param[in] followerId The follower ID of the tablet (0 = leader)
  */
 void SendDataShardMetrics(
     TTestBasicRuntime& runtime,
     const TActorId& aggregatorId,
     const TActorId& edgeActorId,
     ui64 tabletId,
-    ui32 cpuLoadPercentage
+    ui32 cpuLoadPercentage,
+    ui32 followerId = 0
 ) {
     // Populate executor counters with some fake values
     auto executorCounters = MakeHolder<TExecutorCounters>();
@@ -122,7 +129,8 @@ void SendDataShardMetrics(
                 TTabletTypes::DataShard,
                 TPathId(1113, 1001),
                 executorCounters->MakeDiffForAggr(*executorCountersBaseline),
-                tabletCounters->MakeDiffForAggr(*tabletCountersBaseline)
+                tabletCounters->MakeDiffForAggr(*tabletCountersBaseline),
+                followerId
             )
         )
     );
@@ -130,7 +138,7 @@ void SendDataShardMetrics(
     // NOTE: Tablet Counters Aggregator automatically differentiates cumulative
     //       counters and uses the differential to update the associated histograms
     //       (if present). It uses the time between consecutive TEvTabletAddCounters
-    //       messages (per tablet ID) to calculate the differential.
+    //       messages (per tablet ID and follower ID) to calculate the differential.
     //
     //       The code here sends the main update with all counters as needed,
     //       but the CPU consumption value is set to zero. Then the time is moved
@@ -154,7 +162,8 @@ void SendDataShardMetrics(
                 TTabletTypes::DataShard,
                 TPathId(1113, 1001),
                 executorCounters->MakeDiffForAggr(*executorCountersBaseline),
-                tabletCounters->MakeDiffForAggr(*tabletCountersBaseline)
+                tabletCounters->MakeDiffForAggr(*tabletCountersBaseline),
+                followerId
             )
         )
     );
@@ -847,6 +856,94 @@ R"json(
     }
 
     /**
+     * Verify that the "ydb" group and the per-database counters sum the leader and every
+     * follower of a tablet, while the LeaderOnly metrics come from the leader alone.
+     */
+    Y_UNIT_TEST(DataShardMetricsWithFollowers) {
+        TTestBasicRuntime runtime(1);
+        TAppPrepare app;
+        app.SetEnableDbCounters(true);
+        runtime.Initialize(app.Unwrap());
+
+        // Sinks for the per-database counters and the database watches
+        runtime.RegisterService(NSysView::MakeSysViewServiceID(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
+        runtime.RegisterService(MakeSchemeCacheID(), runtime.AllocateEdgeActor());
+
+        TActorId leaderAggregatorId = InitializeTabletCountersAggregator(runtime);
+        TActorId followerAggregatorId = InitializeTabletCountersAggregator(runtime, true /* follower */);
+        TActorId edgeActorId = runtime.AllocateEdgeActor();
+
+        // The leader and two followers of the same tablet
+        SendDataShardMetrics(runtime, leaderAggregatorId, edgeActorId, 1, 20);
+        SendDataShardMetrics(runtime, followerAggregatorId, edgeActorId, 1, 40, 1);
+        SendDataShardMetrics(runtime, followerAggregatorId, edgeActorId, 1, 60, 2);
+
+        // The leader aggregator reads the follower one, so it goes last
+        ForceCounterRecalculation(runtime, followerAggregatorId, edgeActorId);
+        ForceCounterRecalculation(runtime, leaderAggregatorId, edgeActorId);
+
+        auto ydbCounters = runtime.GetAppData(0).Counters->FindSubgroup("counters", "ydb");
+        UNIT_ASSERT(ydbCounters);
+        auto value = [](const NMonitoring::TDynamicCounterPtr& group, const TString& name, const TString& label = "name") {
+            auto counter = group->FindNamedCounter(label, name);
+            UNIT_ASSERT_C(counter, name);
+            return counter->Val();
+        };
+
+        // 3 * ((10007000 + 1) + (20008000 + 1))
+        UNIT_ASSERT_VALUES_EQUAL(value(ydbCounters, "table.datashard.read.rows"), 90045006);
+        // LeaderOnly
+        UNIT_ASSERT_VALUES_EQUAL(value(ydbCounters, "table.datashard.row_count"), 1001);
+        UNIT_ASSERT_VALUES_EQUAL(value(ydbCounters, "table.datashard.write.rows"), 5001);
+
+        // One CPU sample per (tabletId, followerId)
+        auto cpu = ydbCounters->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        UNIT_ASSERT(cpu);
+        auto snapshot = cpu->Snapshot();
+        ui64 samples = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            samples += snapshot->Value(i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(samples, 3);
+
+        // Per-database counters: one registration per role
+        THashMap<NKikimrSysView::EDbCountersService, TIntrusivePtr<NSysView::IDbCounters>> registered;
+        for (int i = 0; i < 2; ++i) {
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = runtime.GrabEdgeEvent<NSysView::TEvSysView::TEvRegisterDbCounters>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->PathId, TPathId(1113, 1001));
+            registered[ev->Service] = ev->Counters;
+        }
+        UNIT_ASSERT(registered.contains(NKikimrSysView::TABLETS));
+        UNIT_ASSERT(registered.contains(NKikimrSysView::TABLETS_FOLLOWERS));
+
+        // The processor side: the followers first, then the leaders, which map both roles
+        auto external = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto followers = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto transfer = [&](NKikimrSysView::EDbCountersService service, TIntrusivePtr<NSysView::IDbCounters> target) {
+            NSysView::TDbServiceCounters counters;
+            registered[service]->ToProto(counters);
+            target->FromProto(counters);
+        };
+        transfer(NKikimrSysView::TABLETS_FOLLOWERS,
+            CreateTabletDbCounters(nullptr, followers, MakeHolder<TExecutorCounters>()));
+        transfer(NKikimrSysView::TABLETS,
+            CreateTabletDbCounters(external, MakeIntrusive<NMonitoring::TDynamicCounters>(),
+                MakeHolder<TExecutorCounters>(), followers));
+
+        UNIT_ASSERT_VALUES_EQUAL(value(external, "table.datashard.read.rows"), 90045006);
+        UNIT_ASSERT_VALUES_EQUAL(value(external, "table.datashard.row_count"), 1001);
+
+        // Both followers of the tablet count: 2 * 1001
+        auto followerDataShard = followers->FindSubgroup("type", "DataShard");
+        UNIT_ASSERT(followerDataShard);
+        auto followerExecutor = followerDataShard->FindSubgroup("category", "executor");
+        UNIT_ASSERT(followerExecutor);
+        UNIT_ASSERT_VALUES_EQUAL(value(followerExecutor, "SUM(DbUniqueRowsTotal)", "sensor"), 2002);
+    }
+
+    /**
      * Verify that MakeYdbMetricName correctly transforms metric names for Aggregate scope.
      */
     Y_UNIT_TEST(MakeYdbMetricNameAggregate) {
@@ -963,6 +1060,12 @@ R"json(
         // Verify that NO targets exist under Aggregate names (only Partition)
         UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.row_count"));
         UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.consumed_cpu_us"));
+
+        // An app counter reported late is still mapped
+        appGroup->GetNamedCounter("sensor", "DataShard/EngineHostRowReads", true)->Set(7);
+        mapper->TransferCounterValues();
+        UNIT_ASSERT_VALUES_EQUAL(
+            targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.read.rows")->Val(), 7);
     }
 
     /**

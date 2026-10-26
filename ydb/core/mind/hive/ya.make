@@ -7,6 +7,7 @@ SRCS(
     data_center_info.h
     domain_info.h
     drain.h
+    event_history.h
     hive.h
     hive_domains.h
     hive_events.h
@@ -137,6 +138,7 @@ JOIN_SRCS(
     tx__lock_tablet.cpp
     monitoring.cpp
     move_data_actor.cpp
+    event_history.cpp
     node_info.cpp
     tx__register_node.cpp
     tx__response_tablet_seq.cpp

@@ -2386,6 +2386,111 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
+    // A second UpdateVolumeConfig before the first allocation reply is applied
+    // sends a second InitialAllocation. Hold only the replies already
+    // forwarded to the partition, so the proxy goes idle and the second send
+    // also returns OK. Start() must still run once.
+    Y_UNIT_TEST(ShouldStartOnceOnRepeatedInitialAllocation)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 allocationSends = 0;
+        ui32 fastPathReadyCount = 0;
+        bool holdPartitionResults = true;
+        TVector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldResults;
+
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                const auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.QueriesSize() > 0) {
+                    ++allocationSends;
+                }
+            }
+
+            // The proxy forwards the BSC result to the partition. Results
+            // still addressed to the proxy must pass, or the proxy stays
+            // busy and the second send is only a TRYLATER.
+            if (holdPartitionResults &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                if (auto* actor = runtime->GetActor(ev->GetRecipientRewrite()))
+                {
+                    if (dynamic_cast<TPartitionActor*>(actor)) {
+                        heldResults.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                }
+            }
+
+            if (type ==
+                TEvPartitionDirectPrivate::TEvFastPathServiceReady::EventType)
+            {
+                ++fastPathReadyCount;
+            }
+
+            return true;
+        };
+
+        WaitForTabletBoot(env);
+
+        const auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
+        const auto first = SendUpdateVolumeConfig(env, volumeConfig, 1);
+        UNIT_ASSERT(first.GetStatus() == NKikimrBlockStore::OK);
+        if (heldResults.size() < 1) {
+            env.Sim(TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(1u, heldResults.size());
+        UNIT_ASSERT_VALUES_EQUAL(1u, allocationSends);
+
+        const auto second = SendUpdateVolumeConfig(env, volumeConfig, 2);
+        UNIT_ASSERT(second.GetStatus() == NKikimrBlockStore::OK);
+        if (heldResults.size() < 2) {
+            env.Sim(TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(2u, allocationSends);
+        UNIT_ASSERT_VALUES_EQUAL(2u, heldResults.size());
+        for (const auto& [nodeId, ev]: heldResults) {
+            Y_UNUSED(nodeId);
+            const auto* msg = ev->Get<
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>();
+            UNIT_ASSERT_VALUES_EQUAL(
+                NKikimrProto::EReplyStatus::OK,
+                msg->Record.GetStatus());
+        }
+
+        holdPartitionResults = false;
+        for (auto& [nodeId, ev]: heldResults) {
+            runtime->Schedule(TDuration::Zero(), ev.release(), nullptr, nodeId);
+        }
+        heldResults.clear();
+
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, fastPathReadyCount);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, PartitionTabletId, edge);
+    }
+
     // Test implementation for IndirectWrite write mode
     Y_UNIT_TEST(WriteToManyPBuffersFallback)
     {

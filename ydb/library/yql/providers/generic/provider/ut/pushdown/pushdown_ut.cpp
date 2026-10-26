@@ -4,10 +4,14 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
+#include <fmt/format.h>
+#include <google/protobuf/text_format.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
@@ -23,13 +27,6 @@
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/random_provider/random_provider.h>
-
-#include <google/protobuf/text_format.h>
-
-#include <fmt/format.h>
 
 using namespace NYql;
 using namespace NNodes;
@@ -74,25 +71,26 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
     }
 };
 
-
 class TListSplitsIteratorMock: public NConnector::IListSplitsStreamIterator {
 public:
-    TListSplitsIteratorMock() {}
+    TListSplitsIteratorMock() {
+    }
 
     NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse> ReadNext() override {
         NConnector::TResult<NConnector::NApi::TListSplitsResponse> result;
 
         if (!Responded_) {
-            result.Status = NYdbGrpc::TGrpcStatus(); // OK
-            result.Response = NConnector::NApi::TListSplitsResponse(); 
+            result.Status = NYdbGrpc::TGrpcStatus();   // OK
+            result.Response = NConnector::NApi::TListSplitsResponse();
             result.Response->add_splits();
-            Responded_ = true;  
+            Responded_ = true;
         } else {
             result.Status = NYdbGrpc::TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
         return NThreading::MakeFuture<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>(std::move(result));
     }
+
 private:
     bool Responded_ = false;
 };
@@ -188,7 +186,8 @@ struct TFakeGenericClient: public NConnector::IClient {
 
 class TBuildDqSourceSettingsTransformer: public TOptimizeTransformerBase {
 public:
-    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
+    explicit TBuildDqSourceSettingsTransformer(
+        TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
         : TOptimizeTransformerBase(types, NLog::EComponent::ProviderGeneric, {})
         , DqSourceSettings_(dqSourceSettings)
         , DqSourceSettingsWereBuilt_(dqSourceSettingsWereBuilt)
@@ -216,12 +215,7 @@ public:
         // Hack: we need DqSource to build settings:
         // build node, call DqSourceWrap and throw it away
         TDqSourceWrap wrap(read);
-        auto dqSourceNode =
-            Build<TDqSource>(ctx, read->Pos())
-                .DataSource(wrap.DataSource())
-                .Settings(wrap.Input())
-                .Done()
-                .Ptr();
+        auto dqSourceNode = Build<TDqSource>(ctx, read->Pos()).DataSource(wrap.DataSource()).Settings(wrap.Input()).Done().Ptr();
         ::google::protobuf::Any settings;
         TString sourceType;
         dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
@@ -289,12 +283,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         }
 
         GenericState = MakeIntrusive<TGenericState>(
-            TypesCtx.Get(),
-            FunctionRegistry.Get(),
-            DatabaseResolver,
-            nullptr,
-            GenericClient,
-            GatewaysCfg.GetGeneric());
+            TypesCtx.Get(), FunctionRegistry.Get(), DatabaseResolver, nullptr, GenericClient, GatewaysCfg.GetGeneric());
 
         GenericDataSource = CreateGenericDataSource(GenericState);
         GenericDataSink = CreateGenericDataSink(GenericState);
@@ -303,9 +292,11 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         TypesCtx->AddDataSink(GenericProviderName, GenericDataSink);
 
         {
-            auto writerFactory = []() { return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
-            auto cfg = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FunctionRegistry, IDataProvider::EResultFormat::Yson,
-                                                            ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
+            auto writerFactory = []() {
+                return CreateYsonResultWriter(NYson::EYsonFormat::Binary);
+            };
+            auto cfg = MakeIntrusive<TResultProviderConfig>(
+                *TypesCtx, *FunctionRegistry, IDataProvider::EResultFormat::Yson, ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
             auto resultProvider = CreateResultProvider(cfg);
             TypesCtx->AddDataSink(ResultProviderName, resultProvider);
         }
@@ -323,12 +314,14 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
                           .Add(TExprLogTransformer::Sync("Optimized expr", NLog::EComponent::Core, NLog::ELevel::DEBUG), "LogExpr")
                           .Build();
 
-        TAutoPtr<IGraphTransformer> buildTransformer = new TBuildDqSourceSettingsTransformer(TypesCtx.Get(), &DqSourceSettings, &DqSourceSettingsWereBuilt);
-        BuildDqSourceSettingsTransformer = TTransformationPipeline(TypesCtx)
-                                               .AddServiceTransformers()
-                                               .Add(buildTransformer, "BuildDqSourceSettings")
-                                               .Add(TExprLogTransformer::Sync("Built settings", NLog::EComponent::Core, NLog::ELevel::DEBUG), "LogExpr")
-                                               .Build();
+        TAutoPtr<IGraphTransformer> buildTransformer =
+            new TBuildDqSourceSettingsTransformer(TypesCtx.Get(), &DqSourceSettings, &DqSourceSettingsWereBuilt);
+        BuildDqSourceSettingsTransformer =
+            TTransformationPipeline(TypesCtx)
+                .AddServiceTransformers()
+                .Add(buildTransformer, "BuildDqSourceSettings")
+                .Add(TExprLogTransformer::Sync("Built settings", NLog::EComponent::Core, NLog::ELevel::DEBUG), "LogExpr")
+                .Build();
 
         NLog::YqlLogger().ResetBackend(CreateLogBackend("cerr"));
         NLog::YqlLogger().SetComponentLevel(NLog::EComponent::Core, NLog::ELevel::TRACE);
@@ -337,8 +330,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     }
 
     void Transform(const TString& program) {
-        Cerr << "Initial program:\n"
-             << program << Endl;
+        Cerr << "Initial program:\n" << program << Endl;
         TAstParseResult astRes = ParseAst(program);
         UNIT_ASSERT_C(astRes.IsOk(), astRes.Issues.ToString());
         UNIT_ASSERT_C(CompileExpr(*astRes.Root, InitialExprRoot, Ctx, nullptr, nullptr), astRes.Issues.ToString());
@@ -353,8 +345,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         auto status = SyncTransform(*BuildDqSourceSettingsTransformer, root, Ctx);
         UNIT_ASSERT_C(status == IGraphTransformer::TStatus::Ok, Ctx.IssueManager.GetIssues().ToString());
         UNIT_ASSERT(DqSourceSettingsWereBuilt);
-        Cerr << "Dq source filter settings:\n"
-             << DqSourceSettings.select().where().Utf8DebugString() << Endl;
+        Cerr << "Dq source filter settings:\n" << DqSourceSettings.select().where().Utf8DebugString() << Endl;
     }
 
     const NConnector::NApi::TPredicate& BuildProtoFilterFromProgram(const TString& program) {
@@ -364,9 +355,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     }
 
     static TString ProgramFromLambda(const TString& lambdaText) {
-        return fmt::format(
-            ProgramTemplate,
-            "lambda_text"_a = lambdaText);
+        return fmt::format(ProgramTemplate, "lambda_text"_a = lambdaText);
     }
 
     const NConnector::NApi::TPredicate& BuildProtoFilterFromLambda(const TString& lambdaText) {
@@ -388,31 +377,24 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
 Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     Y_UNIT_TEST(NoFilter) {
-        AssertNoPush(R"ast((Bool '"true"))ast"); // Note that R"ast()ast" is empty string!
+        AssertNoPush(R"ast((Bool '"true"))ast");   // Note that R"ast()ast" is empty string!
     }
 
     Y_UNIT_TEST(Equal) {
         AssertFilter(
             // Note that R"ast()ast" is empty string!
-            R"ast((== (Member $row '"col_int16") (Int16 '42)))ast",
-            R"proto(
+            R"ast((== (Member $row '"col_int16") (Int16 '42)))ast", R"pb(
                 comparison {
-                    operation: EQ
-                    left_value {
-                        column: "col_int16"
+                  operation: EQ
+                  left_value { column: "col_int16" }
+                  right_value {
+                    typed_value {
+                      type { type_id: INT16 }
+                      value { int32_value: 42 }
                     }
-                    right_value {
-                        typed_value {
-                            type {
-                                type_id: INT16
-                            }
-                            value {
-                                int32_value: 42
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(NotEqualInt32Int64) {
@@ -423,18 +405,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
                     (Bool '"false")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: NE
-                    left_value {
-                        column: "col_optional_uint64"
-                    }
-                    right_value {
-                        column: "col_uint32"
-                    }
+                  operation: NE
+                  left_value { column: "col_optional_uint64" }
+                  right_value { column: "col_uint32" }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(TrueCoalesce) {
@@ -445,36 +422,27 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
                     (Bool '"true")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 coalesce {
-                    operands {
-                        comparison {
-                            operation: NE
-                            left_value {
-                                column: "col_optional_uint64"
-                            }
-                            right_value {
-                                column: "col_uint32"
-                            }
-                        }
+                  operands {
+                    comparison {
+                      operation: NE
+                      left_value { column: "col_optional_uint64" }
+                      right_value { column: "col_uint32" }
                     }
-                    operands {
-                        bool_expression {
-                            value {
-                                typed_value {
-                                    type {
-                                        type_id: BOOL
-                                    }
-                                    value {
-                                        bool_value: true
-                                    }
-                                }
-                            }
+                  }
+                  operands {
+                    bool_expression {
+                      value {
+                        typed_value {
+                          type { type_id: BOOL }
+                          value { bool_value: true }
                         }
+                      }
                     }
+                  }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(CmpInt16AndInt32) {
@@ -482,18 +450,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (<= (Member $row '"col_int32") (Member $row '"col_int16"))
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: LE
-                    left_value {
-                        column: "col_int32"
-                    }
-                    right_value {
-                        column: "col_int16"
-                    }
+                  operation: LE
+                  left_value { column: "col_int32" }
+                  right_value { column: "col_int16" }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(PartialAnd) {
@@ -512,85 +475,56 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 conjunction {
-                    operands {
-                        disjunction {
-                            operands {
-                                negation {
-                                    operand {
-                                        bool_expression: {
-                                            value {
-                                                column: "col_bool"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            operands {
-                                comparison {
-                                    operation: EQ
-                                    left_value {
-                                        arithmetical_expression {
-                                            operation: MUL
-                                            left_value {
-                                                column: "col_int64"
-                                            }
-                                            right_value {
-                                                column: "col_int32"
-                                            }
-                                        }
-                                    }
-                                    right_value {
-                                        typed_value {
-                                            type {
-                                                type_id: INT64
-                                            }
-                                            value {
-                                                int64_value: 42
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    operands {
+                  operands {
+                    disjunction {
+                      operands { negation { operand { bool_expression: { value { column: "col_bool" } } } } }
+                      operands {
                         comparison {
-                            operation: GE
-                            left_value {
-                                column: "col_uint32"
+                          operation: EQ
+                          left_value {
+                            arithmetical_expression {
+                              operation: MUL
+                              left_value { column: "col_int64" }
+                              right_value { column: "col_int32" }
                             }
-                            right_value {
-                                arithmetical_expression {
-                                    operation: SUB
-                                    left_value {
-                                        typed_value {
-                                            type {
-                                                type_id: UINT32
-                                            }
-                                            value {
-                                                uint32_value: 15
-                                            }
-                                        }
-                                    }
-                                    right_value {
-                                        typed_value {
-                                            type {
-                                                type_id: UINT32
-                                            }
-                                            value {
-                                                uint32_value: 1
-                                            }
-                                        }
-                                    }
-                                }
+                          }
+                          right_value {
+                            typed_value {
+                              type { type_id: INT64 }
+                              value { int64_value: 42 }
                             }
+                          }
                         }
+                      }
                     }
+                  }
+                  operands {
+                    comparison {
+                      operation: GE
+                      left_value { column: "col_uint32" }
+                      right_value {
+                        arithmetical_expression {
+                          operation: SUB
+                          left_value {
+                            typed_value {
+                              type { type_id: UINT32 }
+                              value { uint32_value: 15 }
+                            }
+                          }
+                          right_value {
+                            typed_value {
+                              type { type_id: UINT32 }
+                              value { uint32_value: 1 }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(PartialAndOneBranchPushdownable) {
@@ -606,25 +540,18 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: GE
-                    left_value {
-                        column: "col_uint32"
+                  operation: GE
+                  left_value { column: "col_uint32" }
+                  right_value {
+                    typed_value {
+                      type { type_id: UINT32 }
+                      value { uint32_value: 15 }
                     }
-                    right_value {
-                        typed_value {
-                            type {
-                                type_id: UINT32
-                            }
-                            value {
-                                uint32_value: 15
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto");
+            )pb");
     }
 
     Y_UNIT_TEST(NotNull) {
@@ -634,14 +561,9 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 (Exists
                     (Member $row '"col_optional_utf8")
                 )
-                )ast",
-            R"proto(
-                is_not_null {
-                    value {
-                        column: "col_optional_utf8"
-                    }
-                }
-            )proto");
+                )ast", R"pb(
+                is_not_null { value { column: "col_optional_utf8" } }
+            )pb");
     }
 
     Y_UNIT_TEST(NotNullForDatetime) {
@@ -651,14 +573,9 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 (Exists
                     (Member $row '"col_optional_tz_datetime")
                 )
-                )ast",
-            R"proto(
-                is_not_null {
-                    value {
-                        column: "col_optional_tz_datetime"
-                    }
-                }
-            )proto");
+                )ast", R"pb(
+                is_not_null { value { column: "col_optional_tz_datetime" } }
+            )pb");
     }
 
     Y_UNIT_TEST(IsNull) {
@@ -670,14 +587,9 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (Member $row '"col_optional_utf8")
                     )
                 )
-                )ast",
-            R"proto(
-                is_null {
-                    value {
-                        column: "col_optional_utf8"
-                    }
-                }
-            )proto");
+                )ast", R"pb(
+                is_null { value { column: "col_optional_utf8" } }
+            )pb");
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported) {
@@ -691,19 +603,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: EQ
-                    left_value {
-                        column: "col_utf8"
-                    }
-                    right_value {
-                        column: "col_optional_utf8"
-                    }
+                  operation: EQ
+                  left_value { column: "col_utf8" }
+                  right_value { column: "col_optional_utf8" }
                 }
-            )proto"
-        );
+            )pb");
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported2) {
@@ -714,26 +620,18 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     (Member $row '"col_string")
                     (String '"value")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: NE
-                    left_value {
-                        column: "col_string"
+                  operation: NE
+                  left_value { column: "col_string" }
+                  right_value {
+                    typed_value {
+                      type { type_id: STRING }
+                      value { bytes_value: "value" }
                     }
-                    right_value {
-                        typed_value {
-                            type {
-                                type_id: STRING
-                            }
-                            value {
-                                bytes_value: "value"
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto"
-        );
+            )pb");
     }
 
     Y_UNIT_TEST(RegexpPushdown) {
@@ -764,25 +662,17 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 regexp {
-                    value {
-                        column: "col_string"
+                  value { column: "col_string" }
+                  pattern {
+                    typed_value {
+                      type { type_id: STRING }
+                      value { bytes_value: "\\\\d+" }
                     }
-                    pattern {
-                        typed_value {
-                            type {
-                                type_id: STRING
-                            }
-                            value {
-                                bytes_value: "\\\\d+"
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto"
-        );
+            )pb");
     }
 
     Y_UNIT_TEST(DecimalPushdownPrecision10Scale0) {
@@ -792,29 +682,18 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     (Member $row '"col_decimal_precision10_scale0")
                     (Decimal '"1" '"10" '"0")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: EQ
-                    left_value {
-                        column: "col_decimal_precision10_scale0"
+                  operation: EQ
+                  left_value { column: "col_decimal_precision10_scale0" }
+                  right_value {
+                    typed_value {
+                      type { decimal_type { precision: 10 scale: 0 } }
+                      value { bytes_value: "\001\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" }
                     }
-                    right_value {
-                        typed_value {
-                            type {
-                                decimal_type {
-                                    precision: 10
-                                    scale: 0
-                                }
-                            }
-                            value {
-                                bytes_value: "\001\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto"
-        );
+            )pb");
     }
 
     Y_UNIT_TEST(DecimalPushdownPrecesion4Scale2) {
@@ -825,60 +704,38 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     (Member $row '"col_decimal_precision4_scale2")
                     (Decimal '"-22.22" '"4" '"2")
                 )
-                )ast",
-            R"proto(
+                )ast", R"pb(
                 comparison {
-                    operation: EQ
-                    left_value {
-                        column: "col_decimal_precision4_scale2"
+                  operation: EQ
+                  left_value { column: "col_decimal_precision4_scale2" }
+                  right_value {
+                    typed_value {
+                      type { decimal_type { precision: 4 scale: 2 } }
+                      value { bytes_value: "R\367\377\377\377\377\377\377\377\377\377\377\377\377\377\377" }
                     }
-                    right_value {
-                        typed_value {
-                            type {
-                                decimal_type {
-                                    precision: 4
-                                    scale: 2
-                                }
-                            }
-                            value {
-                                bytes_value: "R\367\377\377\377\377\377\377\377\377\377\377\377\377\377\377"
-                            }
-                        }
-                    }
+                  }
                 }
-            )proto"
-        );
+            )pb");
     }
 
     Y_UNIT_TEST(FormatUuidPredicate) {
-        const auto& filter = BuildProtoFilterFromLambda(
-            R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast");
-        UNIT_ASSERT_STRINGS_EQUAL(FormatPredicate(filter),
-            R"sql((`col_uuid` = Uuid("33323130-3534-3736-3839-616263646566")))sql");
+        const auto& filter = BuildProtoFilterFromLambda(R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatPredicate(filter), R"sql((`col_uuid` = Uuid("33323130-3534-3736-3839-616263646566")))sql");
     }
 
     Y_UNIT_TEST(EqualUuid) {
         // Literal "0123456789abcdef" is 16 bytes = low_128 LE + high_128 LE.
-        AssertFilter(
-            R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast",
-            R"proto(
-                comparison {
-                    operation: EQ
-                    left_value {
-                        column: "col_uuid"
-                    }
-                    right_value {
-                        typed_value {
-                            type {
-                                type_id: UUID
-                            }
-                            value {
-                                low_128: 3978425819141910832
-                                high_128: 7378413942531504440
-                            }
-                        }
-                    }
+        AssertFilter(R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast", R"pb(
+            comparison {
+              operation: EQ
+              left_value { column: "col_uuid" }
+              right_value {
+                typed_value {
+                  type { type_id: UUID }
+                  value { low_128: 3978425819141910832 high_128: 7378413942531504440 }
                 }
-            )proto");
+              }
+            }
+        )pb");
     }
 }

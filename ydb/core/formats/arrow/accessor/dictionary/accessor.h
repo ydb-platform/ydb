@@ -18,7 +18,6 @@ namespace NKikimr::NArrow::NAccessor {
 class TDictionaryArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    // If ArrayPositions has nulls,
     std::shared_ptr<arrow::Array> ArrayDictionary;
     std::shared_ptr<arrow::Array> ArrayPositions;
 
@@ -28,6 +27,10 @@ private:
 
     virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const override {
         visitor(ArrayDictionary);
+        // Defensive check for null positions even if the dictionary has no null entry.
+        if (ArrayPositions->null_count() && !ArrayDictionary->null_count()) {
+            visitor(NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(ArrayDictionary->type(), 1)));
+        }
     }
 
     ui32 GetIndexImpl(const ui32 index) const;
@@ -54,14 +57,27 @@ protected:
         // Outside the single-null case, positions do not reference null entries.
         return HasOnlyNullValue() ? GetRecordsCount() : ArrayPositions->null_count();
     }
+    virtual std::optional<bool> DoHasNulls() const override {
+        if ((HasOnlyNullValue() && GetRecordsCount()) || ArrayPositions->null_count()) {
+            return true;
+        }
+        if (ArrayDictionary->null_count()) {
+            return std::nullopt;
+        }
+        return false;
+    }
 
     virtual ui32 DoGetValueRawBytes() const override {
         return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
-        if (ArrayDictionary->length() == 1) {
+        if (ArrayDictionary->length() == 1 && (ArrayDictionary->IsNull(0) || !ArrayPositions->null_count())) {
             value = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(0));
+            return true;
+        }
+        if (ArrayPositions->length() && ArrayPositions->null_count() == ArrayPositions->length()) {
+            value = arrow::MakeNullScalar(ArrayDictionary->type());
             return true;
         }
         return false;

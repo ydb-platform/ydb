@@ -17,7 +17,7 @@ TWasmModuleArtifactPtr MakeDummyArtifact(const TString& moduleName) {
     return artifact;
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
     Y_UNIT_TEST(CatalogRegisterAndResolve) {
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
         catalog.Register(MakeDummyArtifact("ModA"));
         catalog.Register(MakeDummyArtifact("ModB"));
 
-        auto resolved = catalog.ResolveModules({"ModA", "ModB"});
+        auto resolved = catalog.ResolveModules({ "ModA", "ModB" });
         UNIT_ASSERT_VALUES_EQUAL(resolved.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resolved[0]->ModuleName, "ModA");
         UNIT_ASSERT_VALUES_EQUAL(resolved[1]->ModuleName, "ModB");
@@ -54,20 +54,18 @@ Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
         TWasmModuleCatalog catalog;
         catalog.Register(MakeDummyArtifact("ModA"));
 
-        const auto filtered = FilterLoadedWasmUdfModules(
-            {"String", "ModA", "Knn", "Missing"},
-            catalog);
+        const auto filtered = FilterLoadedWasmUdfModules({ "String", "ModA", "Knn", "Missing" }, catalog);
         UNIT_ASSERT_VALUES_EQUAL(filtered.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(filtered[0], "ModA");
     }
 
     Y_UNIT_TEST(WasmUdfModulesTaskParamRoundtrip) {
-        const TVector<TString> modules = {"LocalUdf", "Trie", "Md5"};
+        const TVector<TString> modules = { "LocalUdf", "Trie", "Md5" };
         const TString encoded = SerializeWasmUdfModulesTaskParam(modules);
         UNIT_ASSERT_VALUES_EQUAL(encoded, "LocalUdf\nTrie\nMd5");
         UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(encoded), modules);
-        UNIT_ASSERT(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({"Only"})).size() == 1);
-        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({"Only"}))[0], "Only");
+        UNIT_ASSERT(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({ "Only" })).size() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({ "Only" }))[0], "Only");
     }
 
     Y_UNIT_TEST(QueryCompartmentTlsGuard) {

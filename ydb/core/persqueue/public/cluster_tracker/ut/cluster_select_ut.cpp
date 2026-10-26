@@ -128,6 +128,13 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(fnx.DebugString().Contains("fnx"));
         UNIT_ASSERT(fnx.DebugString().Contains("disabled"));
         UNIT_ASSERT(fnx.DebugString().Contains("remote"));
+        UNIT_ASSERT(fnx.DebugString().Contains("available"));
+        fnx.IsAvailable = false;
+        UNIT_ASSERT(fnx.DebugString().Contains("unavailable"));
+
+        right.Clusters.front().IsAvailable = false;
+        UNIT_ASSERT(!(left == right));
+        right.Clusters.front().IsAvailable = true;
     }
 
     Y_UNIT_TEST(BalancerTablePathFromClusterTable) {
@@ -145,6 +152,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         const TString versions = "/Root/PQ/Config/V2/Versions";
 
         UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains(cluster));
+        UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains("C.*"));
         UNIT_ASSERT(!MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains(balancer));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
@@ -152,12 +160,10 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));
         UNIT_ASSERT(!MakeCreateClusterQuery(cluster).Contains("fnx"));
-        UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains(versions));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("version Int64"));
-        UNIT_ASSERT(MakeBackfillFnxQuery(cluster).Contains("fnx IS NULL"));
     }
 
     Y_UNIT_TEST(IssuesMatchers) {
@@ -174,7 +180,12 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(IssuesLookLikeMissingTable("path does not exist"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Unable to find table"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table `/x` does not exist"));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("table not exists: 123"));
         UNIT_ASSERT(!IssuesLookLikeMissingTable("column already exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("session not exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("IF NOT EXISTS"));
 
         UNIT_ASSERT(IssuesLookLikeMissingColumn("Member not found: fnx"));
         UNIT_ASSERT(IssuesLookLikeMissingColumn("column fnx not found"));
@@ -184,7 +195,9 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(!IssuesLookLikeMissingColumn("fnx is fine"));
 
         UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
         UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
+        UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Member not found: fnx"));

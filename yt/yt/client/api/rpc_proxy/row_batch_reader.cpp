@@ -28,11 +28,14 @@ TRowBatchReader::TRowBatchReader(
     YT_VERIFY(Underlying_);
 
     RowsFuture_ = GetRows();
+    StopWaitTimerOnReady(ReadyEvent_);
     ReadyEvent_.TrySetFrom(RowsFuture_);
 }
 
 IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& options)
 {
+    auto readTimerGuard = NProfiling::TTimerGuard(&ReadTimer_);
+
     StoredRows_.clear();
 
     if (!ReadyEvent_.IsSet() || !ReadyEvent_.GetOrCrash().IsOK()) {
@@ -41,6 +44,7 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 
     if (!Finished_) {
         ReadyEvent_ = NewPromise<void>();
+        StopWaitTimerOnReady(ReadyEvent_);
     }
 
     std::vector<TUnversionedRow> rows;
@@ -90,7 +94,12 @@ IUnversionedRowBatchPtr TRowBatchReader::Read(const TRowBatchReadOptions& option
 
 TFuture<void> TRowBatchReader::GetReadyEvent() const
 {
-    return ReadyEvent_;
+    auto readyEvent = ReadyEvent_.ToFuture();
+    auto guard = Guard(WaitTimerLock_);
+    if (!readyEvent.IsSet()) {
+        WaitTimer_.StartIfNotActive();
+    }
+    return readyEvent;
 }
 
 const TNameTablePtr& TRowBatchReader::GetNameTable() const
@@ -106,6 +115,8 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
             if (!this_) {
                 THROW_ERROR_EXCEPTION(NYT::EErrorCode::Canceled, "Reader destroyed");
             }
+
+            auto decodeTimerGuard = NProfiling::TTimerGuard(&DecodeTimer_);
 
             NProto::TRowsetDescriptor descriptor;
             NProto::TRowsetStatistics statistics;
@@ -144,6 +155,32 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
 
 void TRowBatchReader::ApplyStatistics(const NProto::TRowsetStatistics& /*statistics*/)
 { }
+
+TDuration TRowBatchReader::GetWaitTime() const
+{
+    auto guard = Guard(WaitTimerLock_);
+    return WaitTimer_.GetElapsedTime();
+}
+
+TDuration TRowBatchReader::GetReadTime() const
+{
+    return ReadTimer_.GetElapsedTime();
+}
+
+TDuration TRowBatchReader::GetDecodeTime() const
+{
+    return DecodeTimer_.GetElapsedTime();
+}
+
+void TRowBatchReader::StopWaitTimerOnReady(const TPromise<void>& readyEvent)
+{
+    readyEvent.ToFuture().Subscribe(BIND([weakThis = MakeWeak(this)] (const TError& /*error*/) {
+        if (auto this_ = weakThis.Lock()) {
+            auto guard = Guard(this_->WaitTimerLock_);
+            this_->WaitTimer_.Stop();
+        }
+    }));
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

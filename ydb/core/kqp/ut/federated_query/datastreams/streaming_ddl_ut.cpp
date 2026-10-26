@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
+
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,31 +18,75 @@
 
 namespace {
 
-struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+struct TMockMonHttpRequest: NMonitoring::IMonHttpRequest {
     TCgiParameters Params_;
 
     explicit TMockMonHttpRequest(const TString& params) {
         Params_.Scan(params);
     }
 
-    const TCgiParameters& GetParams() const override { return Params_; }
-    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
-    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
-    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
-    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
-    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
-    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
-    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
-    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
-    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetParams() const override {
+        return Params_;
+    }
+
+    IOutputStream& Output() override {
+        Y_ABORT("Not implemented");
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetPath() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetPathInfo() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetUri() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetPostContent() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetHeader(TStringBuf) const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TStringBuf GetCookie(TStringBuf) const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TString GetRemoteAddr() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    TString GetServiceTitle() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        Y_ABORT("Not implemented");
+    }
+
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        Y_ABORT("Not implemented");
+    }
 };
 
-} // namespace
+}   // namespace
 
 namespace NKikimr::NKqp {
 
@@ -55,28 +100,30 @@ using namespace NYdb::NConsoleClient::NAi;
 
 namespace {
 
-class THoppingWindowTestFixture : public TStreamingTestFixture {
+class THoppingWindowTestFixture: public TStreamingTestFixture {
 public:
+    const TString InputTopic = MakeExternalName("hoppingInput");
+    const TString OutputTopic = MakeExternalName("hoppingOutput");
+
     void Init(bool enabled, bool watermarks = false) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(enabled);
         config.MutableTableServiceConfig()->SetEnableWatermarks(watermarks);
         config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(watermarks);
-        CreateTopic("hoppingInput");
+        CreateTopic(InputTopic);
         CreatePqSource("hoppingSource");
     }
 
     void DropTopics() {
-        DropTopic("hoppingInput");
+        DropTopic(InputTopic);
     }
 
     void WriteEvent(i32 key, TInstant time) {
-        WriteTopicMessage("hoppingInput", fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
+        WriteTopicMessage(InputTopic, fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
     }
 
     void WaitCheckpoint() {
-        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")
-            ->GetCounter("CompletedCheckpoints", true);
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
         const auto initial = completed->Val();
         NTestUtils::WaitFor(TDuration::Seconds(15), "hopping state and source offsets checkpointed", [&](TString& error) {
             error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
@@ -89,7 +136,7 @@ public:
         Y_DEFER {
             DropTopics();
         };
-        CreateScopedTopic("hoppingOutput");
+        CreateScopedTopic(OutputTopic);
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1";
@@ -98,30 +145,28 @@ public:
                     {{ "tx": 0, "stage": 1, "tasks": 1 }}
                 ] @@;
                 $windows = SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
-                    FROM hoppingSource.hoppingInput WITH (
+                    FROM hoppingSource.`{input_topic}` WITH (
                         FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL) {}
                     )
                     GROUP BY {}, Key;
-                INSERT INTO hoppingSource.hoppingOutput
+                INSERT INTO hoppingSource.`{output_topic}`
                     SELECT Unwrap(CAST(Key AS String) || ":" || CAST(Count AS String) || ":" || CAST(Ts AS String))
                     FROM $windows;
             END DO
-        )", watermarks
-                ? R"(, WATERMARK = CAST(Ts AS Timestamp) - Interval("PT0S"), WATERMARK_IDLE_TIMEOUT = "PT1H")"
-                : "",
-            watermarks
-                ? R"(HoppingWindow(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S"))"
-                : R"(HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"))"));
+        )", watermarks ? R"(, WATERMARK = CAST(Ts AS Timestamp) - Interval("PT0S"), WATERMARK_IDLE_TIMEOUT = "PT1H")" : "",
+            watermarks ? R"(HoppingWindow(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S"))"
+                       : R"(HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"))", "input_topic"_a = InputTopic,
+            "output_topic"_a = OutputTopic));
 
         // Keep explicit event-time watermarks within the source's five-minute future limit.
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         const auto output = [&](i32 key, ui64 count, ui64 second) {
             return fmt::format("{}:{}:{}", key, count, (base + TDuration::Seconds(second)).ToStringUpToSeconds());
         };
-        std::vector<std::string> expected = {output(1, 1, 0)};
+        std::vector<std::string> expected = { output(1, 1, 0) };
         WriteEvent(1, base);
         WriteEvent(2, base + TDuration::Seconds(20));
-        ReadTopicMessages("hoppingOutput", expected);
+        ReadTopicMessages(OutputTopic, expected);
 
         // Key 1 has been removed after its window closed. Neither it nor a new
         // key may recreate a window behind the global event-time frontier.
@@ -129,7 +174,7 @@ public:
         WriteEvent(3, base);
         WriteEvent(2, base + TDuration::Seconds(40));
         expected.push_back(output(2, 1, 20));
-        ReadTopicMessages("hoppingOutput", expected);
+        ReadTopicMessages(OutputTopic, expected);
         WaitCheckpoint();
         ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = FALSE)");
         CheckScriptExecutionsCount(1, 0);
@@ -142,14 +187,14 @@ public:
         WriteEvent(2, base + TDuration::Seconds(60));
         ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = TRUE)");
         CheckScriptExecutionsCount(2, 1);
-        expected.push_back(output(2, 2, 40)); // The open aggregate must also survive the checkpoint.
-        ReadTopicMessages("hoppingOutput", expected);
+        expected.push_back(output(2, 2, 40));   // The open aggregate must also survive the checkpoint.
+        ReadTopicMessages(OutputTopic, expected);
         WaitCheckpoint();
-        EnsureTopicEndOffset("hoppingOutput", expected.size());
+        EnsureTopicEndOffset(OutputTopic, expected.size());
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysInOrdinaryQuery, Enabled, THoppingWindowTestFixture) {
@@ -162,19 +207,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteEvent(1, base);
             WriteEvent(2, base + TDuration::Days(day));
         }
-        const auto results = ExecQuery(R"(
+        const auto results = ExecQuery(fmt::format(R"(
             PRAGMA ydb.MaxTasksPerStage = "1";
             PRAGMA ydb.OverridePlanner = @@ [
-                { "tx": 0, "stage": 0, "tasks": 1 },
-                { "tx": 0, "stage": 1, "tasks": 1 }
+                {{ "tx": 0, "stage": 0, "tasks": 1 }},
+                {{ "tx": 0, "stage": 1, "tasks": 1 }}
             ] @@;
             SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
-            FROM hoppingSource.hoppingInput WITH (
+            FROM hoppingSource.`{input_topic}` WITH (
                 FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL)
             )
             GROUP BY HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"), Key
             ORDER BY Key, Ts;
-        )");
+        )", "input_topic"_a = InputTopic));
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         std::vector<std::pair<i32, TInstant>> expected;
         // With the flag disabled, preserve the old behavior, including reopening
@@ -198,20 +243,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckEvictedKeysAfterRestart(Watermarks);
     }
 
-    void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
+    void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture & self, ui64 memoryLimit) {
         auto& appConfig = self.SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
         appConfig.MutableFeatureFlags()->SetEnableSharedReadingStructuredJsonParsing(true);
         appConfig.MutableFeatureFlags()->SetEnableRowDispatcherMemoryLimiting(true);
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
-        resourceManager.SetQueryMemoryLimit(memoryLimit);
+        // The row dispatcher takes its memory from the resource manager, limited by the resource broker queue (the
+        // memory controller doesn't run in these tests). The memory of the query tasks is limited separately, by the
+        // compute scheduler - it doesn't matter here
         resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
-        // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
-        // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
-        resourceManager.SetExecutionUnitMemory(100);
-        resourceManager.SetMemoryArenaMinFreeSize(0);
-        resourceManager.SetMemoryArenaMaxFreeSize(0);
         auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
         queue->MutableLimit()->SetMemory(memoryLimit);
@@ -220,11 +262,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         resourceManager.SetChannelBufferSize(128_KB);
     }
 
-    void CreateRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
+    void CreateRowDispatcherMemoryLimitTopics(TStreamingTestFixture & self, const TString& inputTopic, const TString& outputTopic) {
         self.GetRuntime().SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
         self.ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-        self.CreateTopic("memoryLimitInput");
-        self.CreateTopic("memoryLimitOutput");
+        self.CreateTopic(inputTopic);
+        self.CreateTopic(outputTopic);
         self.ExecQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE memoryLimitSource WITH (
                 SOURCE_TYPE = "Ydb",
@@ -232,34 +274,52 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 DATABASE_NAME = "{database}",
                 AUTH_METHOD = "NONE",
                 SHARED_READING = "true"
-            );)",
-            "endpoint"_a = TStreamingTestFixture::YDB_ENDPOINT,
-            "database"_a = TStreamingTestFixture::YDB_DATABASE));
+            );)", "endpoint"_a = TStreamingTestFixture::YDB_ENDPOINT, "database"_a = TStreamingTestFixture::YDB_DATABASE));
     }
 
-    void DropRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
-        self.DropTopic("memoryLimitInput");
-        self.DropTopic("memoryLimitOutput");
+    void DropRowDispatcherMemoryLimitTopics(TStreamingTestFixture & self, const TString& inputTopic, const TString& outputTopic) {
+        self.DropTopic(inputTopic);
+        self.DropTopic(outputTopic);
     }
 
-    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& memoryName) {
+    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture & self, const TString& memoryName) {
         WaitFor(TDuration::Seconds(60), "Row Dispatcher memory limit", [&](TString& error) {
-            error = self.GetStreamingQueryIssues("memoryLimitQuery");
-            return error.contains("Row dispatcher memory limit exceeded")
-                && error.contains("bytes for " + memoryName) && error.contains("failed with code OVERLOADED");
+            const auto result = self.GetQueryClient()
+                                    ->ExecuteQuery(R"(
+                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/memoryLimitQuery";
+            )", TTxControl::NoTx())
+                                    .ExtractValueSync();
+            error = result.GetIssues().ToOneLineString();
+            // The diagnostic query shares the deliberately small node memory limit with
+            // streaming query startup and checkpoint metadata queries. Retry this planner
+            // rejection as well: the SDK does not retry PRECONDITION_FAILED.
+            if (result.GetStatus() == EStatus::PRECONDITION_FAILED &&
+                error.Contains("Not enough resources to execute query locally and no information about other nodes")) {
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, error);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            self.CheckScriptResult(result.GetResultSet(0), 1, 1, [&](TResultSetParser& resultSet) {
+                error = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            });
+            return error.contains("Row dispatcher memory limit exceeded") && error.contains("bytes for " + memoryName) &&
+                   error.contains("failed with code OVERLOADED");
         });
         UNIT_ASSERT_GT(self.GetCounters()->GetCounter("RM/NotEnoughMemory", true)->Val(), 0);
         self.ExecQuery("ALTER STREAMING QUERY memoryLimitQuery SET (RUN = FALSE);");
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
-        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
-        constexpr ui64 memoryLimit = 8_MB;
+        CheckpointPeriod = TDuration::Days(1);   // checkpoint queries would take the node total the test is tuned for
+        // the query tasks used to take about 1 MiB of the same limit, the parser still needs more than what is left
+        constexpr ui64 memoryLimit = 7_MB;
         ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
         const auto pqGateway = SetupMockPqGateway();
-        CreateRowDispatcherMemoryLimitTopics(*this);
+        const auto inputTopic = MakeExternalName("memoryLimitInput");
+        const auto outputTopic = MakeExternalName("memoryLimitOutput");
+        CreateRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         Y_DEFER {
-            DropRowDispatcherMemoryLimitTopics(*this);
+            DropRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         };
 
         TStringBuilder schema;
@@ -274,72 +334,77 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
-                INSERT INTO memoryLimitSource.memoryLimitOutput
+                INSERT INTO memoryLimitSource.`{output_topic}`
                 SELECT String::JoinFromList(AsList({columns}), "")
-                FROM memoryLimitSource.memoryLimitInput WITH (
+                FROM memoryLimitSource.`{input_topic}` WITH (
                     FORMAT = "json_each_row", SCHEMA ({schema})
                 );
-            END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema)));
+            END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema), "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic));
 
         WaitForRowDispatcherMemoryLimit(*this, "JsonParserAlloc");
         const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "json_each_row");
         UNIT_ASSERT(!formatCounters->FindCounter("ActiveFilters"));
-        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession(inputTopic));
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
-        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
+        CheckpointPeriod = TDuration::Days(1);   // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
         const auto pqGateway = SetupMockPqGateway();
-        CreateRowDispatcherMemoryLimitTopics(*this);
+        const auto inputTopic = MakeExternalName("memoryLimitInput");
+        const auto outputTopic = MakeExternalName("memoryLimitOutput");
+        CreateRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         Y_DEFER {
-            DropRowDispatcherMemoryLimitTopics(*this);
+            DropRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         };
-        ExecQuery(R"(
+        ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
-                INSERT INTO memoryLimitSource.memoryLimitOutput
-                SELECT Data FROM memoryLimitSource.memoryLimitInput;
+                INSERT INTO memoryLimitSource.`{output_topic}`
+                SELECT Data FROM memoryLimitSource.`{input_topic}`;
             END DO;
-        )");
+        )", "input_topic"_a = inputTopic, "output_topic"_a = outputTopic));
 
         WaitForRowDispatcherMemoryLimit(*this, "ReadSessionMemory");
         const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
         UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
-        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession(inputTopic));
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
-        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
+        CheckpointPeriod = TDuration::Days(1);   // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
-        CreateRowDispatcherMemoryLimitTopics(*this);
+        const auto inputTopic = MakeExternalName("memoryLimitInput");
+        const auto outputTopic = MakeExternalName("memoryLimitOutput");
+        CreateRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         Y_DEFER {
-            DropRowDispatcherMemoryLimitTopics(*this);
+            DropRowDispatcherMemoryLimitTopics(*this, inputTopic, outputTopic);
         };
-        ExecQuery(R"(
+        ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
-                INSERT INTO memoryLimitSource.memoryLimitOutput
-                SELECT value FROM memoryLimitSource.memoryLimitInput WITH (
+                INSERT INTO memoryLimitSource.`{output_topic}`
+                SELECT value FROM memoryLimitSource.`{input_topic}` WITH (
                     FORMAT = "json_each_row", SCHEMA (value String NOT NULL)
                 );
             END DO;
-        )");
+        )", "input_topic"_a = inputTopic, "output_topic"_a = outputTopic));
 
         WaitStreamingQueryStatus("memoryLimitQuery");
-        WriteTopicMessage("memoryLimitInput", R"({"value": "small"})");
+        WriteTopicMessage(inputTopic, R"({"value": "small"})");
         const auto readBytes = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetCounter("SessionDataRate", true);
         WaitFor(TDuration::Seconds(60), "Row Dispatcher receives the control message", [&] {
             return readBytes->Val() > 0;
         });
-        ReadTopicMessages("memoryLimitOutput", {"small"});
-        WriteTopicMessage("memoryLimitInput", "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
+        ReadTopicMessages(outputTopic, { "small" });
+        WriteTopicMessage(inputTopic, "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
         WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
     }
 
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const auto inputTopicName = MakeExternalName("createAndAlterStreamingQueryInputTopic");
+        const auto outputTopicName = MakeExternalName("createAndAlterStreamingQueryOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -362,15 +427,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     )
                 )
                 WHERE value REGEXP ".*v.*a.*l.*"
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         {
-            const auto tableDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/test_table1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto tableDesc = Navigate(
+                GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/test_table1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& table = tableDesc->ResultSet.at(0);
             UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
             UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
@@ -383,7 +445,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitCheckpointUpdate(checkpointId);
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
-        ReadTopicMessages(outputTopicName, {"key1value1"});
+        ReadTopicMessages(outputTopicName, { "key1value1" });
         WaitCheckpointUpdate(checkpointId);
 
         // Seeing the output only means the message was processed, not that its input offset
@@ -409,12 +471,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
@@ -424,20 +482,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
                 auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
                 auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
-                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount << ", expected both to be 1";
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount
+                                         << ", expected both to be 1";
                 return queryCount == 1 && runningCount == 1;
             });
         }
 
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
-        ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
+        ReadTopicMessages(outputTopicName, { "key1value1", "value2key2" });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(2, 0);
         {
@@ -489,23 +546,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
-        ReadTopicMessages(outputTopicName, {"key1value1"});
+        ReadTopicMessages(outputTopicName, { "key1value1" });
 
         ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(0, 0);
 
@@ -526,8 +577,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 10;
         constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
         constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
-        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount));
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
         CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -549,12 +599,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     )
                     WHERE time LIKE "%lunch%";
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -571,9 +617,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(
             R"sql(
                 ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
-            )sql",
-            "query_name"_a = queryName
-        ));
+            )sql", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(1, 0);
         Sleep(TDuration::MilliSeconds(500));
@@ -587,11 +631,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(
             R"sql(
                 ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);
-            )sql",
-            "query_name"_a = queryName
-        ));
+            )sql", "query_name"_a = queryName));
 
-        CheckScriptExecutionsCount(2, 1);  // 2 executions (initial + restarted), 1 lease (running)
+        CheckScriptExecutionsCount(2, 1);   // 2 executions (initial + restarted), 1 lease (running)
         std::vector<std::string> allExpected;
         for (const auto& s : firstBatch) {
             allExpected.push_back(s);
@@ -612,8 +654,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
-        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount));
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
         CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -638,12 +679,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         WATERMARK_IDLE_TIMEOUT = "PT5S"
                     );
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -670,7 +707,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(
-            R"sql(
+                      R"sql(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
                     PRAGMA pq.MaxPartitionReadSkew = "10s";
@@ -678,12 +715,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     INSERT INTO `{pq_source}`.`{output_topic}`
                     SELECT * FROM `{pq_source}`.`{input_topic}`;
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), NYdb::Dev::EStatus::GENERIC_ERROR, "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                      "output_topic"_a = outputTopicName), NYdb::Dev::EStatus::GENERIC_ERROR,
+            "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
@@ -708,23 +742,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
-        ReadTopicMessages(outputTopicName, {"key1value1"});
+        ReadTopicMessages(outputTopicName, { "key1value1" });
 
-        std::vector<std::string> messages = {"key1value1"};
+        std::vector<std::string> messages = { "key1value1" };
         messages.reserve(2 * executionsLimit + 1);
         for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
-            Sleep(TDuration::Seconds(2)); // Wait for checkpoint completion
+            Sleep(TDuration::Seconds(2));   // Wait for checkpoint completion
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
@@ -739,12 +769,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             value String NOT NULL
                         )
                     )
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "input_topic"_a = inputTopicName,
-                "output_topic"_a = outputTopicName
-            ));
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName));
 
             const ui64 id = i + 2;
             CheckScriptExecutionsCount(std::min(id, executionsLimit + 1), 1);
@@ -777,9 +803,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Data String NOT NULL,
                     PRIMARY KEY (Data)
                 );
-            )",
-            "table_name"_a = tableName
-        ));
+            )", "table_name"_a = tableName));
 
         constexpr char pqSourceName[] = "pqSourceName";
         if constexpr (!LocalTopics) {
@@ -824,14 +848,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO {pq_source}`{output_topic}` SELECT * FROM $processed;
 
                 UPSERT INTO `{table}` SELECT * FROM $processed;
-            END DO;)",
-            "query_name"_a = queryName,
+            END DO;)", "query_name"_a = queryName,
             "pq_source"_a = LocalTopics ? TStringBuilder() : TStringBuilder() << "`" << pqSourceName << "`.",
-            "first_input_topic"_a = firstInputTopicName,
-            "second_input_topic"_a = secondInputTopicName,
-            "output_topic"_a = outputTopicName,
-            "table"_a = tableName
-        ));
+            "first_input_topic"_a = firstInputTopicName, "second_input_topic"_a = secondInputTopicName, "output_topic"_a = outputTopicName,
+            "table"_a = tableName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -842,27 +862,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto disposition = TInstant::Now();
         WriteTopicMessage(firstInputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", /* partition */ 0, LocalTopics);
         WriteTopicMessage(firstInputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})", /* partition */ 1, LocalTopics);
-        ReadTopicMessages(outputTopicName, {"A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1"}, disposition, /* sort */ true, LocalTopics);
+        ReadTopicMessages(outputTopicName, { "A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1" }, disposition,
+            /* sort */ true, LocalTopics);
         WaitCheckpointUpdate(checkpointId);
 
         // Check table data (should be flushed on checkpoint)
         {
             const auto& results = ExecQuery(fmt::format(R"(
-                SELECT * FROM `{table_name}` ORDER BY Data;)",
-                "table_name"_a = tableName
-            ));
+                SELECT * FROM `{table_name}` ORDER BY Data;)", "table_name"_a = tableName));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
 
             ui64 index = 0;
-            const std::vector expected = {"A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1"};
+            const std::vector expected = { "A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1" };
             CheckScriptResult(results[0], 1, 2, [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Data").GetString(), expected[index++]);
             });
 
             ExecQuery(fmt::format(R"(
-                DELETE FROM `{table_name}`;)",
-                "table_name"_a = tableName
-            ));
+                DELETE FROM `{table_name}`;)", "table_name"_a = tableName));
         }
 
         // Checkpoints still works
@@ -877,9 +894,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Check table data (should be flushed on checkpoint)
         {
             const auto& results = ExecQuery(fmt::format(R"(
-                SELECT * FROM `{table_name}` ORDER BY Data;)",
-                "table_name"_a = tableName
-            ));
+                SELECT * FROM `{table_name}` ORDER BY Data;)", "table_name"_a = tableName));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
 
             CheckScriptResult(results[0], 1, 1, [](TResultSetParser& resultSet) {
@@ -915,24 +930,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE TABLE `{output_table}` (
                 Data String NOT NULL,
                 PRIMARY KEY (Data)
-            );)",
-            "output_table"_a = outputTableName
-        ));
+            );)", "output_table"_a = outputTableName));
 
-        constexpr char lookupTableName[] = "lookup";
+        const auto lookupTableName = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{lookup_table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            );)",
-            "lookup_table"_a = lookupTableName
-        ));
+            );)", "lookup_table"_a = lookupTableName));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{lookup_table}`;)",
-                "lookup_table"_a = lookupTableName
-            ));
+                DROP TABLE `{lookup_table}`;)", "lookup_table"_a = lookupTableName));
         };
 
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -941,30 +950,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = lookupTableName,
-                .Columns = columns,
-                .DescribeCount = 2,
-                .ListSplitsCount = 1
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(
+                connectorClient, { .TableName = lookupTableName, .Columns = columns, .DescribeCount = 2, .ListSplitsCount = 1 });
 
-            const std::vector<std::string> fqdnColumn = {"host1.example.com"};
-            const std::vector<std::string> payloadColumn = {"P1"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = lookupTableName,
-                .Columns = columns,
-                .NumberReadSplits = 2,
-                .ResultFactory = [&]() {
-                    return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                    );
-                }
-            });
+            const std::vector<std::string> fqdnColumn = { "host1.example.com" };
+            const std::vector<std::string> payloadColumn = { "P1" };
+            SetupMockConnectorTableData(
+                connectorClient, { .TableName = lookupTableName, .Columns = columns, .NumberReadSplits = 2, .ResultFactory = [&]() {
+                                      return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                                          MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                                  } });
         }
 
         constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
@@ -1028,18 +1024,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM $processed;
 
                 UPSERT INTO `{output_table}` SELECT * FROM $processed;
-            END DO;)",
-            "query_name"_a = queryName,
-            "checkpoint_interval"_a = CHECKPOINT_INTERVAL.Seconds(),
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "limited_input_topic"_a = limitedInputTopicName,
-            "aux_input_topic"_a = auxInputTopicName,
-            "main_input_topic"_a = mainInputTopicName,
-            "output_topic"_a = outputTopicName,
-            "output_table"_a = outputTableName,
-            "lookup_table"_a = lookupTableName
-        ));
+            END DO;)", "query_name"_a = queryName, "checkpoint_interval"_a = CHECKPOINT_INTERVAL.Seconds(), "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName, "limited_input_topic"_a = limitedInputTopicName, "aux_input_topic"_a = auxInputTopicName,
+            "main_input_topic"_a = mainInputTopicName, "output_topic"_a = outputTopicName, "output_table"_a = outputTableName,
+            "lookup_table"_a = lookupTableName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -1050,7 +1038,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             Cerr << TString(TStringBuilder() << "Ast:\n" << ast << "\n") << Flush;
         });
 
-        Sleep(TDuration::Seconds(1)); // Wait for zero checkpoint
+        Sleep(TDuration::Seconds(1));   // Wait for zero checkpoint
         const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
         const auto seqNo = GetLastCheckpointSeqNo(checkpointId);
         UNIT_ASSERT_VALUES_EQUAL(seqNo, 1);
@@ -1064,9 +1052,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Check table empty
         {
             const std::vector<TResultSet>& results = ExecQuery(fmt::format(R"(
-                SELECT * FROM `{table_name}` ORDER BY Data;)",
-                "table_name"_a = outputTableName
-            ));
+                SELECT * FROM `{table_name}` ORDER BY Data;)", "table_name"_a = outputTableName));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(results[0].RowsCount(), 0);
         }
@@ -1074,35 +1060,31 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         // After restart right side of map join is hanging
         connectorClient->LockReading();
-        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo); // No checkpoints expected
+        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo);   // No checkpoints expected
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         // Hit limit value and mark whole join as finished
         disposition = TInstant::Now();
         WriteTopicMessage(auxInputTopicName, "test_message1", /* partition */ 0);
         WriteTopicMessage(auxInputTopicName, "test_message2", /* partition */ 1);
-        ReadTopicMessages(outputTopicName, {"test_message1", "test_message2"}, disposition, /* sort */ true);
-        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo); // No checkpoints expected
+        ReadTopicMessages(outputTopicName, { "test_message1", "test_message2" }, disposition, /* sort */ true);
+        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo);   // No checkpoints expected
         Sleep(TDuration::Seconds(1));
 
         // Test that limit is reached
         disposition = TInstant::Now();
         WriteTopicMessage(auxInputTopicName, "test_lost_message", /* partition */ 0);
-        WriteTopicMessages(mainInputTopicName, {"test_message3", "test_message4"});
-        ReadTopicMessages(outputTopicName, {"test_message3", "test_message4"}, disposition, /* sort */ true);
-        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo); // No checkpoints expected
+        WriteTopicMessages(mainInputTopicName, { "test_message3", "test_message4" });
+        ReadTopicMessages(outputTopicName, { "test_message3", "test_message4" }, disposition, /* sort */ true);
+        UNIT_ASSERT_VALUES_EQUAL(GetLastCheckpointSeqNo(checkpointId), seqNo);   // No checkpoints expected
 
         // Unlock right joins side and wait checkpoint
         CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
@@ -1112,13 +1094,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Check table data (should be flushed on checkpoint)
         {
             const auto& results = ExecQuery(fmt::format(R"(
-                SELECT * FROM `{table_name}` ORDER BY Data;)",
-                "table_name"_a = outputTableName
-            ));
+                SELECT * FROM `{table_name}` ORDER BY Data;)", "table_name"_a = outputTableName));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
 
             ui64 index = 0;
-            const std::vector expected = {"test_message1", "test_message2", "test_message3", "test_message4"};
+            const std::vector expected = { "test_message1", "test_message2", "test_message3", "test_message4" };
             CheckScriptResult(results[0], 1, 4, [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Data").GetString(), expected[index++]);
             });
@@ -1143,7 +1123,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const IMockPqGateway::TPtr pqGateway = SetupMockPqGateway({
             .LockWritingByDefault = true,
-            .Topics = {{inputTopicName, {.PartitionCount = 2}}},
+            .Topics = { { inputTopicName, { .PartitionCount = 2 } } },
         });
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
@@ -1160,9 +1140,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Data String NOT NULL,
                     PRIMARY KEY (Data)
                 );
-            )",
-            "table_name"_a = tableName
-        ));
+            )", "table_name"_a = tableName));
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1208,15 +1186,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{second_output_topic}` SELECT * FROM $processed;
 
                 UPSERT INTO `{table}` SELECT * FROM $processed;
-            END DO;)",
-            "query_name"_a = queryName,
-            "checkpoint_interval"_a = CHECKPOINT_INTERVAL.Seconds(),
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "first_output_topic"_a = firstOutputTopicName,
-            "second_output_topic"_a = secondOutputTopicName,
-            "table"_a = tableName
-        ));
+            END DO;)", "query_name"_a = queryName, "checkpoint_interval"_a = CHECKPOINT_INTERVAL.Seconds(), "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName, "first_output_topic"_a = firstOutputTopicName, "second_output_topic"_a = secondOutputTopicName,
+            "table"_a = tableName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -1234,26 +1206,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         firstWriteSession->ExpectMessage("A-2025-08-24T00:00:00.000000Z-1");
 
         const auto secondWriteSession = pqGateway->WaitWriteSession(secondOutputTopicName);
-        secondWriteSession->LockAcks(); // One of sinks is hanging
+        secondWriteSession->LockAcks();   // One of sinks is hanging
         secondWriteSession->Unlock();
         secondWriteSession->ExpectMessage("A-2025-08-24T00:00:00.000000Z-1");
 
         // Hit limit and finish most part of the graph
         readSession1->AddDataReceivedEvent(2, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
-        firstWriteSession->ExpectMessages({"A-2025-08-25T00:00:00.000000Z-1", "A-2025-08-26T00:00:00.000000Z-1"});
-        secondWriteSession->ExpectMessages({"A-2025-08-25T00:00:00.000000Z-1", "A-2025-08-26T00:00:00.000000Z-1"});
+        firstWriteSession->ExpectMessages({ "A-2025-08-25T00:00:00.000000Z-1", "A-2025-08-26T00:00:00.000000Z-1" });
+        secondWriteSession->ExpectMessages({ "A-2025-08-25T00:00:00.000000Z-1", "A-2025-08-26T00:00:00.000000Z-1" });
 
         // Check table data (should be flushed on finish)
         {
             Sleep(TDuration::Seconds(1));
             const auto& results = ExecQuery(fmt::format(R"(
-                SELECT * FROM `{table_name}` ORDER BY Data;)",
-                "table_name"_a = tableName
-            ));
+                SELECT * FROM `{table_name}` ORDER BY Data;)", "table_name"_a = tableName));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
 
             ui64 index = 0;
-            const std::vector expected = {"A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1", "A-2025-08-26T00:00:00.000000Z-1"};
+            const std::vector expected = { "A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1",
+                "A-2025-08-26T00:00:00.000000Z-1" };
             CheckScriptResult(results[0], 1, 3, [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Data").GetString(), expected[index++]);
             });
@@ -1264,7 +1235,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Checkpoint will be injected into source stage and must pass all stages
 
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // Checkpoint creation is still blocked
+        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo);   // Checkpoint creation is still blocked
 
         const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
@@ -1302,7 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         newSeqNo = GetLastCheckpointSeqNo(checkpointId);
         secondWriteSession->UnlockAcks();
-        WaitCheckpointUpdate(checkpointId, std::pair(1, newSeqNo)); // Checkpoint should successfully finish
+        WaitCheckpointUpdate(checkpointId, std::pair(1, newSeqNo));   // Checkpoint should successfully finish
 
         readSession0->ExpectSessionClosed(TDuration::Seconds(1));
         readSession1->ExpectSessionClosed(TDuration::Seconds(1));
@@ -1310,12 +1281,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 0);
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 4));
-
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const auto inputTopicName = MakeExternalName("createAndAlterStreamingQueryInputTopic");
+        const auto outputTopicName = MakeExternalName("createAndAlterStreamingQueryOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -1338,18 +1308,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 END DEFINE;
 
                 DO $start_query("Add1")
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
-        ReadTopicMessages(outputTopicName, {"key1value1Add1"});
+        ReadTopicMessages(outputTopicName, { "key1value1Add1" });
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryMatchRecognize, TStreamingTestFixture) {
@@ -1388,27 +1354,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT UNWRAP(CAST(v1 AS String) || "-" || CAST(v4 AS String)) FROM $matches;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
-        WriteTopicMessages(inputTopicName, {
-            R"({"key": 1, "value": "value1"})",
-            R"({"key": 2, "value": "value2"})",
-            R"({"key": 4, "value": "value4"})",
-        });
-        ReadTopicMessages(outputTopicName, {"1-4"});
+        WriteTopicMessages(
+            inputTopicName, {
+                                R"({"key": 1, "value": "value1"})", R"({"key": 2, "value": "value2"})", R"({"key": 4, "value": "value4"})",
+                            });
+        ReadTopicMessages(outputTopicName, { "1-4" });
     }
 
     Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const auto inputTopicName = MakeExternalName("createAndAlterStreamingQueryInputTopic");
+        const auto outputTopicName = MakeExternalName("createAndAlterStreamingQueryOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -1424,16 +1385,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ] @@;
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                      "output_topic"_a = outputTopicName), EStatus::GENERIC_ERROR, "Invalid override planner settings");
 
         CheckScriptExecutionsCount(1, 0);
 
-        const auto streamingQueryDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), JoinPath({"Root", queryName}), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto streamingQueryDesc = Navigate(
+            GetRuntime(), GetRuntime().AllocateEdgeActor(), JoinPath({ "Root", queryName }), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
         UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
         UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
@@ -1447,12 +1405,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ] @@;
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
@@ -1482,19 +1436,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
-        ReadTopicMessages(outputTopicName, {"key1value1"});
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        ReadTopicMessages(outputTopicName, { "key1value1" });
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -1507,18 +1457,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
-        ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
+        ReadTopicMessages(outputTopicName, { "key1value1", "value2key2" });
     }
 
     Y_UNIT_TEST_F(StreamingQueryCreateOrReplaceFailure, TStreamingTestFixture) {
@@ -1536,19 +1482,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "key1value1");
-        ReadTopicMessages(outputTopicName, {"key1value1"});
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint
+        ReadTopicMessages(outputTopicName, { "key1value1" });
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -1558,12 +1500,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ] @@;
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                      "output_topic"_a = outputTopicName), EStatus::GENERIC_ERROR, "Invalid override planner settings");
 
         CheckScriptExecutionsCount(2, 0);
     }
@@ -1582,7 +1520,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         const TSolomonLocation soLocation = {
-            .ProjectId = "cloudId1",
+            .ProjectId = MakeExternalName("cloudId1"),
             .FolderId = "folderId1",
             .Service = "custom",
             .IsCloud = false,
@@ -1596,15 +1534,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     "test-solomon-insert" AS sensor,
                     Timestamp("2025-03-12T14:40:39Z") AS ts
                 FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "solomon_sink"_a = solomonSinkName,
-            "solomon_project"_a = soLocation.ProjectId,
-            "solomon_folder"_a = soLocation.FolderId,
-            "solomon_service"_a = soLocation.Service,
-            "input_topic"_a = inputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "solomon_sink"_a = solomonSinkName,
+            "solomon_project"_a = soLocation.ProjectId, "solomon_folder"_a = soLocation.FolderId, "solomon_service"_a = soLocation.Service,
+            "input_topic"_a = inputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
@@ -1633,7 +1565,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
         CleanupSolomon(soLocation);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
         Sleep(TDuration::Seconds(2));
@@ -1679,12 +1611,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ) SELECT
                     Data
                 FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "s3_sink"_a = s3SinkName,
-            "input_topic"_a = inputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "s3_sink"_a = s3SinkName, "input_topic"_a = inputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
@@ -1694,12 +1621,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "1234");
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
         Sleep(TDuration::Seconds(2));
 
-        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"12344321", "43211234"}, s3Data)) {
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({ "12344321", "43211234" }, s3Data)) {
             UNIT_FAIL("Unexpected S3 data: " << s3Data);
         }
 
@@ -1726,8 +1653,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 {"fqdn": "host3.example.com", "payload": "P3"})";
         CreateBucketWithObject(sourceBucket, "path/test_object.json", objectContent);
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -1763,28 +1690,23 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || payload) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "s3_source"_a = s3SourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "s3_source"_a = s3SourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
-            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
-            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
-            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            { 0, R"({"time": 0, "event": "A", "host": "host1.example.com"})" },
+            { 1, R"({"time": 1, "event": "B", "host": "host3.example.com"})" },
+            { 2, R"({"time": 2, "event": "A", "host": "host1.example.com"})" },
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        const std::vector<TString> sampleResult = { "A-P1", "B-P3", "A-P1" };
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
@@ -1799,8 +1721,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -1809,51 +1731,36 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
 
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 2,
-                // For stream queries type annotation is executed twice, but
-                // now List Split is done after type annotation optimization.
-                // That is why only single call to List Split is expected.
-                .ListSplitsCount = 1
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(
+                connectorClient, { .TableName = ydbTable,
+                                     .Columns = columns,
+                                     .DescribeCount = 2,   // For stream queries type annotation is executed twice, but
+                                     // now List Split is done after type annotation optimization.
+                                     // That is why only single call to List Split is expected.
+                                     .ListSplitsCount = 1 });
 
-            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-            const std::vector<std::string> payloadColumn = {"P1", "P2", "P3"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .NumberReadSplits = 2,
-                .ResultFactory = [&]() {
-                    return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                    );
-                }
-            });
+            const std::vector<std::string> fqdnColumn = { "host1.example.com", "host2.example.com", "host3.example.com" };
+            const std::vector<std::string> payloadColumn = { "P1", "P2", "P3" };
+            SetupMockConnectorTableData(
+                connectorClient, { .TableName = ydbTable, .Columns = columns, .NumberReadSplits = 2, .ResultFactory = [&]() {
+                                      return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                                          MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                                  } });
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -1877,29 +1784,23 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || payload) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
-            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
-            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
-            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            { 0, R"({"time": 0, "event": "A", "host": "host1.example.com"})" },
+            { 1, R"({"time": 1, "event": "B", "host": "host3.example.com"})" },
+            { 2, R"({"time": 2, "event": "A", "host": "host1.example.com"})" },
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        const std::vector<TString> sampleResult = { "A-P1", "B-P3", "A-P1" };
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
@@ -1924,34 +1825,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE TABLE `{table}` (
                 fqdn String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {{"fqdn", Ydb::Type::STRING}};
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 2,
-                .ListSplitsCount = 1
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(
+                connectorClient, { .TableName = ydbTable, .Columns = columns, .DescribeCount = 2, .ListSplitsCount = 1 });
 
-            const std::vector<std::string> fqdnColumn = {"host1", "host2"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .NumberReadSplits = 4, // Read from ydb source is not deduplicated because spilling is disabled for streaming queries
-                .ResultFactory = [&]() {
-                    return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
-                }
-            });
+            const std::vector<std::string> fqdnColumn = { "host1", "host2" };
+            SetupMockConnectorTableData(connectorClient,
+                { .TableName = ydbTable,
+                    .Columns = columns,
+                    .NumberReadSplits = 4,   // Read from ydb source is not deduplicated because spilling is disabled for streaming queries
+                    .ResultFactory = [&]() {
+                        return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
+                    } });
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -1964,36 +1856,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 FROM `{pq_source}`.`{input_topic}` AS p
                 CROSS JOIN `{ydb_source}`.`{ydb_table}` AS la
                 CROSS JOIN `{ydb_source}`.`{ydb_table}` AS lb
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(0, "data1");
 
-        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({
-            "data1-host1-host2",
-            "data1-host2-host1",
-            "data1-host1-host1",
-            "data1-host2-host2"
-        }, /* sort  */ true);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({ "data1-host1-host2", "data1-host2-host1", "data1-host1-host1",
+                                                                         "data1-host2-host2" }, /* sort  */ true);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "data2");
-        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({
-            "data2-host1-host2",
-            "data2-host2-host1",
-            "data2-host1-host1",
-            "data2-host2-host2"
-        }, /* sort  */ true);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({ "data2-host1-host2", "data2-host2-host1", "data2-host1-host1",
+                                                                         "data2-host2-host2" }, /* sort  */ true);
     }
 
     Y_UNIT_TEST_QUAD_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, WithFullscanFlag, TStreamingTestFixture) {
@@ -2013,8 +1891,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "sljInputTopicName";
-        constexpr char outputTopicName[] = "sljOutputTopicName";
+        const auto inputTopicName = MakeExternalName("sljInputTopicName");
+        const auto outputTopicName = MakeExternalName("sljOutputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -2023,58 +1901,44 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 2*combinations,
-                // 1 for table-vs-topic, 1 for compilation, doubled for *Bad query compilation
-                .ListSplitsCount = WithFeatureFlag ? (WithFullscanFlag ? 1 + 3 * 2 : 1 + 3 + 1) : 0,
-                // 1 for compilation (and another one for *Bad query compilation)
-                // 3 for lookups, doubled for fullscan mode
-                .ValidateListSplitsArgs = false
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(connectorClient,
+                { .TableName = ydbTable,
+                    .Columns = columns,
+                    .DescribeCount = 2 * combinations,   // 1 for table-vs-topic, 1 for compilation, doubled for *Bad query compilation
+                    .ListSplitsCount = WithFeatureFlag ? (WithFullscanFlag ? 1 + 3 * 2 : 1 + 3 + 1) : 0,
+                    // 1 for compilation (and another one for *Bad query compilation)
+                    // 3 for lookups, doubled for fullscan mode
+                    .ValidateListSplitsArgs = false });
 
             if (WithFeatureFlag) {
                 ui64 readSplitsCount = 0;
-                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-                SetupMockConnectorTableData(connectorClient, {
-                    .TableName = ydbTable,
-                    .Columns = columns,
-                    .NumberReadSplits = (WithFullscanFlag ? 3*2 : 3),
-                    .ValidateReadSplitsArgs = false,
-                    .ResultFactory = [&]() {
-                        readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount <= (WithFullscanFlag ? 4 : 2)
-                            ? std::vector<std::string>{"P1", "P2", "P3"}
-                            : std::vector<std::string>{"P4", "P5", "P6"};
+                const std::vector<std::string> fqdnColumn = { "host1.example.com", "host2.example.com", "host3.example.com" };
+                SetupMockConnectorTableData(
+                    connectorClient, { .TableName = ydbTable, .Columns = columns, .NumberReadSplits = (WithFullscanFlag ? 3 * 2 : 3),
+                                         .ValidateReadSplitsArgs = false,
+                                         .ResultFactory = [&]() {
+                                             readSplitsCount += 1;
+                                             const auto payloadColumn = readSplitsCount <= (WithFullscanFlag ? 4 : 2)
+                                                                            ? std::vector<std::string>{ "P1", "P2", "P3" }
+                                                                            : std::vector<std::string>{ "P4", "P5", "P6" };
 
-                        return MakeRecordBatch(
-                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                        );
-                    }
-                });
+                                             return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                                                 MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                                         } });
             }
         }
 
@@ -2099,16 +1963,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || payload) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ),
-        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
-        WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+                      "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR, WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
         if (!WithFeatureFlag) {
             return;
         }
@@ -2117,16 +1974,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
-            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
-            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
-            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            { 0, R"({"time": 0, "event": "A", "host": "host1.example.com"})" },
+            { 1, R"({"time": 1, "event": "B", "host": "host3.example.com"})" },
+            { 2, R"({"time": 2, "event": "A", "host": "host1.example.com"})" },
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        const std::vector<TString> sampleResult = { "A-P1", "B-P3", "A-P1" };
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(sampleMessages);
@@ -2135,9 +1992,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         Sleep(TDuration::Seconds(2));
         readSession->AddDataReceivedEvent(sampleMessages);
-        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
+        writeSession->ExpectMessages({ "A-P4", "B-P6", "A-P4" });
 
-        auto actorsAlive = GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
+        auto actorsAlive =
+            GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity",
+                "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
         WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
             auto val = actorsAlive->Val();
             error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 1";
@@ -2145,9 +2004,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
 
         CheckScriptExecutionsCount(1, 1);
-        const auto results = ExecQuery(
-            "SELECT ast_compressed FROM `.metadata/script_executions`;"
-        );
+        const auto results = ExecQuery("SELECT ast_compressed FROM `.metadata/script_executions`;");
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
@@ -2158,9 +2015,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(1, 0);
 
@@ -2192,16 +2047,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                     INSERT INTO `{pq_source}`.`{output_topic}`
                     SELECT Unwrap(event || "-" || payload) FROM $joined
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "ydb_source"_a = ydbSourceName,
-                "ydb_table"_a = ydbTable,
-                "input_topic"_a = inputTopicName,
-                "output_topic"_a = outputTopicName
-            ),
-            EStatus::GENERIC_ERROR,
-            "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+                          "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName), EStatus::GENERIC_ERROR,
+                "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
 
             CheckScriptExecutionsCount(2, 0);
         }
@@ -2222,11 +2070,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             NYql::NDq::EShuffleMode::Map,
         };
         ui64 maxTasks = 3;
-        ui64 combinations = (WithFeatureFlag ? maxPartitions*maxTasks*shuffleModes.size() : 1);
+        ui64 combinations = (WithFeatureFlag ? maxPartitions * maxTasks * shuffleModes.size() : 1);
         const auto connectorClient = SetupMockConnectorClient();
 
-        constexpr char inputTopicName[] = "sljShuffleInputTopicName";
-        constexpr char outputTopicName[] = "sljShuffleOutputTopicName";
+        const auto inputTopicName = MakeExternalName("sljShuffleInputTopicName");
+        const auto outputTopicName = MakeExternalName("sljShuffleOutputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -2235,61 +2083,45 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 2*(combinations + !WithFeatureFlag),
-                // 1 for table/topic discovery, 1 for LoadMeta
-                .ListSplitsCount = (1 + 2*2)*combinations + (!WithFeatureFlag),
-                // 1 for LoadMeta, (regular + fullscan) for each each of 2 lookups
-                // without feature flag, only one LoadMeta
-                .ValidateListSplitsArgs = false
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(
+                connectorClient, { .TableName = ydbTable,
+                                     .Columns = columns,
+                                     .DescribeCount = 2 * (combinations + !WithFeatureFlag),   // 1 for table/topic discovery, 1 for LoadMeta
+                                     .ListSplitsCount = (1 + 2 * 2) * combinations + (!WithFeatureFlag),
+                                     // 1 for LoadMeta, (regular + fullscan) for each each of 2 lookups
+                                     // without feature flag, only one LoadMeta
+                                     .ValidateListSplitsArgs = false });
 
             {
                 ui64 readSplitsCount = 0;
-                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-                SetupMockConnectorTableData(connectorClient, {
-                    .TableName = ydbTable,
-                    .Columns = columns,
-                    .NumberReadSplits = 4*combinations,
-                    .ValidateReadSplitsArgs = false,
-                    .ResultFactory = [&]() {
-                        readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount <= 2
-                            ? std::vector<std::string>{"P1", "P2", "P3"}
-                            : std::vector<std::string>{"P4", "P5", "P6"};
-                        if (readSplitsCount == 4) {
-                            readSplitsCount = 0;
-                        }
+                const std::vector<std::string> fqdnColumn = { "host1.example.com", "host2.example.com", "host3.example.com" };
+                SetupMockConnectorTableData(connectorClient,
+                    { .TableName = ydbTable, .Columns = columns, .NumberReadSplits = 4 * combinations, .ValidateReadSplitsArgs = false,
+                        .ResultFactory = [&]() {
+                            readSplitsCount += 1;
+                            const auto payloadColumn = readSplitsCount <= 2 ? std::vector<std::string>{ "P1", "P2", "P3" }
+                                                                            : std::vector<std::string>{ "P4", "P5", "P6" };
+                            if (readSplitsCount == 4) {
+                                readSplitsCount = 0;
+                            }
 
-                        return MakeRecordBatch(
-                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                        );
-                    }
-                });
+                            return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                                MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                        } });
             }
         }
 
@@ -2324,19 +2156,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                             INSERT INTO `{pq_source}`.`{output_topic}`
                             SELECT Unwrap(event || "-" || payload) FROM $joined
-                        END DO;)",
-                        "query_name"_a = queryName,
-                        "pq_source"_a = pqSourceName,
-                        "ydb_source"_a = ydbSourceName,
-                        "ydb_table"_a = ydbTable,
-                        "input_topic"_a = inputTopicName,
-                        "output_topic"_a = outputTopicName,
-                        "shuffle_mode"_a = ToString(shuffleMode),
-                        "ttl"_a = (tasks > 1 && partitions > 1 && shuffleMode != NYql::NDq::EShuffleMode::Off ? TDuration::Minutes(10) : TDuration::Seconds(1)).Seconds(),
-                        "tasks"_a = tasks
-                    ),
-                    expectedSuccess ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
-                    expectedSuccess ? TStringBuilder() : TStringBuilder() << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << shuffleMode);
+                        END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName,
+                                  "ydb_table"_a = ydbTable, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName,
+                                  "shuffle_mode"_a = ToString(shuffleMode),
+                                  "ttl"_a = (tasks > 1 && partitions > 1 && shuffleMode != NYql::NDq::EShuffleMode::Off ? TDuration::Minutes(10)
+                                                                                                                        : TDuration::Seconds(1))
+                                                .Seconds(), "tasks"_a = tasks), expectedSuccess ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+                        expectedSuccess
+                            ? TStringBuilder()
+                            : TStringBuilder() << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << shuffleMode);
                     if (!expectedSuccess) {
                         return;
                     }
@@ -2350,12 +2178,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         auto now = TInstant::Now();
                         Sleep(TDuration::Seconds(1));
                         WriteTopicMessages(inputTopicName, {
-                            R"({"time": 0, "event": "A", "host": "host1.example.com"})",
-                            R"({"time": 1, "event": "B", "host": "host3.example.com"})",
-                            R"({"time": 2, "event": "A", "host": "host1.example.com"})",
-                        });
+                                                               R"({"time": 0, "event": "A", "host": "host1.example.com"})",
+                                                               R"({"time": 1, "event": "B", "host": "host3.example.com"})",
+                                                               R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+                                                           });
 
-                        ReadTopicMessages(outputTopicName, {"A-P1", "B-P3", "A-P1"}, now, /*sort=*/ true);
+                        ReadTopicMessages(outputTopicName, { "A-P1", "B-P3", "A-P1" }, now, /*sort=*/true);
                     }
 
                     Sleep(TDuration::Seconds(1));
@@ -2363,30 +2191,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     {
                         auto now = TInstant::Now();
                         Sleep(TDuration::Seconds(1));
-                        WriteTopicMessages(inputTopicName, {
-                            R"({"time": 3, "event": "A", "host": "host1.example.com"})",
-                            R"({"time": 4, "event": "B", "host": "host3.example.com"})",
-                            R"({"time": 5, "event": "A", "host": "host1.example.com"})",
-                        }, partitions - 1);
+                        WriteTopicMessages(inputTopicName,
+                            {
+                                R"({"time": 3, "event": "A", "host": "host1.example.com"})",
+                                R"({"time": 4, "event": "B", "host": "host3.example.com"})",
+                                R"({"time": 5, "event": "A", "host": "host1.example.com"})",
+                            }, partitions - 1);
 
-                        ReadTopicMessages(outputTopicName, {"A-P4", "B-P6", "A-P4"}, now, /*sort=*/ true);
+                        ReadTopicMessages(outputTopicName, { "A-P4", "B-P6", "A-P4" }, now, /*sort=*/true);
                     }
 
                     CheckScriptExecutionsCount(1, 1);
 
-                    const auto results = ExecQuery(
-                        "SELECT ast_compressed FROM `.metadata/script_executions`;"
-                    );
+                    const auto results = ExecQuery("SELECT ast_compressed FROM `.metadata/script_executions`;");
                     UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
                     CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
                         const auto& ast = result.ColumnParser(0).GetOptionalString();
                         UNIT_ASSERT(ast);
                         UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
                     });
-                    ExecQuery(
-                        fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)",
-                        "query_name"_a = queryName
-                    ));
+                    ExecQuery(fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
                     Sleep(TDuration::Seconds(1));
                 }
             }
@@ -2417,55 +2241,42 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 1 + 1, // table/topic discovery and LoadMeta
-                .ListSplitsCount = 1 + 1*2, // LoadMeta and 2 lookups
-                .ValidateListSplitsArgs = false
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(connectorClient, { .TableName = ydbTable,
+                                                                    .Columns = columns,
+                                                                    .DescribeCount = 1 + 1,   // table/topic discovery and LoadMeta
+                                                                    .ListSplitsCount = 1 + 1 * 2,   // LoadMeta and 2 lookups
+                                                                    .ValidateListSplitsArgs = false });
 
             {
                 ui64 readSplitsCount = 0;
-                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-                SetupMockConnectorTableData(connectorClient, {
-                    .TableName = ydbTable,
-                    .Columns = columns,
-                    .NumberReadSplits = 2, // 2 lookups (initial + lru refresh)
-                    .ValidateReadSplitsArgs = false,
-                    .ResultFactory = [&]() {
-                        readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount <= 1
-                            ? std::vector<std::string>{"P1", "P2", "P3"}
-                            : std::vector<std::string>{"P4", "P5", "P6"};
+                const std::vector<std::string> fqdnColumn = { "host1.example.com", "host2.example.com", "host3.example.com" };
+                SetupMockConnectorTableData(
+                    connectorClient, { .TableName = ydbTable,
+                                         .Columns = columns,
+                                         .NumberReadSplits = 2,   // 2 lookups (initial + lru refresh)
+                                         .ValidateReadSplitsArgs = false,
+                                         .ResultFactory = [&]() {
+                                             readSplitsCount += 1;
+                                             const auto payloadColumn = readSplitsCount <= 1 ? std::vector<std::string>{ "P1", "P2", "P3" }
+                                                                                             : std::vector<std::string>{ "P4", "P5", "P6" };
 
-                        return MakeRecordBatch(
-                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                        );
-                    }
-                });
+                                             return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                                                 MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                                         } });
             }
         }
 
@@ -2496,17 +2307,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || payload) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "shuffle_mode"_a = ToString(shuffleMode),
-            "ttl"_a = TDuration::Seconds(1).Seconds(),
-            "tasks"_a = tasks
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName, "shuffle_mode"_a = ToString(shuffleMode),
+            "ttl"_a = TDuration::Seconds(1).Seconds(), "tasks"_a = tasks));
         // Hash shuffle: all messages with same key lands in one task,
         // single lookup is performed
 
@@ -2517,20 +2320,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         {
             auto now = TInstant::Now();
             Sleep(TDuration::Seconds(1));
-            WriteTopicMessages(inputTopicName, {
-                R"({"time": 0, "event": "A", "host": "host1.example.com"})",
-                R"({"time": 1, "event": "B", "host": "host1.example.com"})",
-                R"({"time": 2, "event": "A", "host": "host1.example.com"})",
-            }, /*partition=*/0);
-            WriteTopicMessages(inputTopicName, {
-                R"({"time": 0, "event": "a", "host": "host1.example.com"})",
-                R"({"time": 1, "event": "b", "host": "host1.example.com"})",
-                R"({"time": 2, "event": "a", "host": "host1.example.com"})",
-            }, partitions - 1);
+            WriteTopicMessages(inputTopicName,
+                {
+                    R"({"time": 0, "event": "A", "host": "host1.example.com"})", R"({"time": 1, "event": "B", "host": "host1.example.com"})",
+                    R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+                }, /*partition=*/0);
+            WriteTopicMessages(inputTopicName,
+                {
+                    R"({"time": 0, "event": "a", "host": "host1.example.com"})", R"({"time": 1, "event": "b", "host": "host1.example.com"})",
+                    R"({"time": 2, "event": "a", "host": "host1.example.com"})",
+                }, partitions - 1);
 
-            ReadTopicMessages(outputTopicName, {
-                "A-P1", "B-P1", "A-P1", "a-P1", "b-P1", "a-P1"
-            }, now, /*sort=*/ true);
+            ReadTopicMessages(outputTopicName, { "A-P1", "B-P1", "A-P1", "a-P1", "b-P1", "a-P1" }, now, /*sort=*/true);
         }
 
         Sleep(TDuration::Seconds(1));
@@ -2538,37 +2339,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         {
             auto now = TInstant::Now();
             Sleep(TDuration::Seconds(1));
-            WriteTopicMessages(inputTopicName, {
-                R"({"time": 0, "event": "A", "host": "host1.example.com"})",
-                R"({"time": 1, "event": "B", "host": "host1.example.com"})",
-                R"({"time": 2, "event": "A", "host": "host1.example.com"})",
-            }, /*partition=*/0);
-            WriteTopicMessages(inputTopicName, {
-                R"({"time": 3, "event": "a", "host": "host1.example.com"})",
-                R"({"time": 4, "event": "b", "host": "host1.example.com"})",
-                R"({"time": 5, "event": "a", "host": "host1.example.com"})",
-            }, partitions - 1);
+            WriteTopicMessages(inputTopicName,
+                {
+                    R"({"time": 0, "event": "A", "host": "host1.example.com"})", R"({"time": 1, "event": "B", "host": "host1.example.com"})",
+                    R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+                }, /*partition=*/0);
+            WriteTopicMessages(inputTopicName,
+                {
+                    R"({"time": 3, "event": "a", "host": "host1.example.com"})", R"({"time": 4, "event": "b", "host": "host1.example.com"})",
+                    R"({"time": 5, "event": "a", "host": "host1.example.com"})",
+                }, partitions - 1);
 
-            ReadTopicMessages(outputTopicName, {
-                "A-P4", "B-P4", "A-P4", "a-P4", "b-P4", "a-P4"
-            }, now, /*sort=*/ true);
+            ReadTopicMessages(outputTopicName, { "A-P4", "B-P4", "A-P4", "a-P4", "b-P4", "a-P4" }, now, /*sort=*/true);
         }
 
         CheckScriptExecutionsCount(1, 1);
 
-        const auto results = ExecQuery(
-            "SELECT ast_compressed FROM `.metadata/script_executions`;"
-        );
+        const auto results = ExecQuery("SELECT ast_compressed FROM `.metadata/script_executions`;");
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
-        ExecQuery(
-            fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+        ExecQuery(fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
         Sleep(TDuration::Seconds(1));
     }
 
@@ -2577,8 +2371,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
-        LogSettings
-            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
+        LogSettings.AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
@@ -2590,8 +2383,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "sljInputTopicName";
-        constexpr char outputTopicName[] = "sljOutputTopicName";
+        const auto inputTopicName = MakeExternalName("sljInputTopicName");
+        const auto outputTopicName = MakeExternalName("sljOutputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -2604,17 +2397,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 fqdn String NOT NULL,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ) {with_columns})",
-            "table"_a = ydbTable,
-            "with_columns"_a = WithColumns ? "WITH (STORE = COLUMN)" : ""
-        ));
+            ) {with_columns})", "table"_a = ydbTable, "with_columns"_a = WithColumns ? "WITH (STORE = COLUMN)" : ""));
 
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))",
-            "table"_a = ydbTable
-        ));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P3"))",
-            "table"_a = ydbTable
-        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))", "table"_a = ydbTable));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P3"))", "table"_a = ydbTable));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -2637,15 +2423,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || (payload ?? "NULL")) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ),
-        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
-        WithFeatureFlag ? "" : "local table lookups are disabled. Please contact your system administrator to enable it");
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_table"_a = ydbTable, "input_topic"_a = inputTopicName,
+                      "output_topic"_a = outputTopicName), WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+            WithFeatureFlag ? "" : "local table lookups are disabled. Please contact your system administrator to enable it");
         if (!WithFeatureFlag) {
             return;
         }
@@ -2654,17 +2434,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
-            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
-            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
-            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
-            {2, R"({"time": 2, "event": "C", "host": "host2.example.com"})"},
+            { 0, R"({"time": 0, "event": "A", "host": "host1.example.com"})" },
+            { 1, R"({"time": 1, "event": "B", "host": "host3.example.com"})" },
+            { 2, R"({"time": 2, "event": "A", "host": "host1.example.com"})" },
+            { 2, R"({"time": 2, "event": "C", "host": "host2.example.com"})" },
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1", "C-NULL"};
+        const std::vector<TString> sampleResult = { "A-P1", "B-P3", "A-P1", "C-NULL" };
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(sampleMessages);
@@ -2672,17 +2452,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         writeSession->ExpectMessages(sampleResult);
 
         Sleep(TDuration::Seconds(2));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P4"))",
-            "table"_a = ydbTable
-        ));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P5"))",
-            "table"_a = ydbTable
-        ));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P6"))",
-            "table"_a = ydbTable
-        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P4"))", "table"_a = ydbTable));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P5"))", "table"_a = ydbTable));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P6"))", "table"_a = ydbTable));
         readSession->AddDataReceivedEvent(sampleMessages);
-        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4", "C-P5"});
+        writeSession->ExpectMessages({ "A-P4", "B-P6", "A-P4", "C-P5" });
 
         {
             TMockMonHttpRequest monReq("force_shutdown=all");
@@ -2693,22 +2467,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
 
         Sleep(TDuration::Seconds(2));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))",
-            "table"_a = ydbTable
-        ));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))",
-            "table"_a = ydbTable
-        ));
-        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))",
-            "table"_a = ydbTable
-        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))", "table"_a = ydbTable));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))", "table"_a = ydbTable));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))", "table"_a = ydbTable));
         readSession->AddDataReceivedEvent(sampleMessages);
-        writeSession->ExpectMessages({"A-P7", "B-P9", "A-P7", "C-P8"});
+        writeSession->ExpectMessages({ "A-P7", "B-P9", "A-P7", "C-P8" });
 
         CheckScriptExecutionsCount(1, 1);
-        const auto results = ExecQuery(
-            "SELECT ast_compressed FROM `.metadata/script_executions`;"
-        );
+        const auto results = ExecQuery("SELECT ast_compressed FROM `.metadata/script_executions`;");
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
@@ -2745,11 +2511,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            );)", "oltp_streamlookup_table"_a = streamLookupTableName, "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{oltp_streamlookup_table}`(Key, Value)
@@ -2759,11 +2521,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             VALUES (1, "oltp1"), (2, "oltp2");
 
             INSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap1"), (2, "olap2");)",
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            VALUES (1, "olap1"), (2, "olap2");)", "oltp_streamlookup_table"_a = streamLookupTableName, "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -2783,28 +2542,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 LEFT JOIN `{oltp_streamlookup_table}` AS oltp_slj ON topic.Key = oltp_slj.Key
                 LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
                 LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "oltp_streamlookup_table"_a = streamLookupTableName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "oltp_streamlookup_table"_a = streamLookupTableName, "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
         ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         WriteTopicMessage(inputTopicName, R"({"Key": 2})");
@@ -2813,9 +2564,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "oltp_slj2-oltp2-olap2", disposition);
@@ -2845,20 +2594,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            );)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{oltp_table}`(Key, Value)
             VALUES (1, "oltp-1");
 
             INSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap-1");)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            VALUES (1, "olap-1");)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -2875,14 +2618,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ) AS topic
                 LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
                 LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -2895,12 +2632,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             VALUES (1, "oltp-2");
 
             UPSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap-2");)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            VALUES (1, "olap-2");)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, R"({"Key": 1})");
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("oltp-2-olap-2");
     }
@@ -2927,20 +2661,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            );)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{oltp_table}`(Key, Value)
             VALUES (1, "oltp-1");
 
             INSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap-1");)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            VALUES (1, "olap-1");)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -2957,37 +2685,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ) AS topic
                 LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
                 LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
         ReadTopicMessage(outputTopicName, "oltp-1-olap-1");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{oltp_table}`(Key, Value)
             VALUES (1, "oltp-2");
 
             UPSERT INTO `{olap_table}`(Key, Value)
-            VALUES (1, "olap-2");)",
-            "oltp_table"_a = oltpTableName,
-            "olap_table"_a = olapTableName
-        ));
+            VALUES (1, "olap-2");)", "oltp_table"_a = oltpTableName, "olap_table"_a = olapTableName));
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
@@ -2996,9 +2713,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "oltp-2-olap-2", disposition);
@@ -3020,17 +2735,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 Key Int32 NOT NULL,
                 Value String NOT NULL,
                 PRIMARY KEY (Key)
-            );)",
-            "table_name"_a = tableName
-        ));
+            );)", "table_name"_a = tableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{table_name}`
                 (Key, Value)
             VALUES
-                (1, "value-1");)",
-            "table_name"_a = tableName
-        ));
+                (1, "value-1");)", "table_name"_a = tableName));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -3042,19 +2753,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 SELECT
                     Unwrap(Data || "-" || $r)
                 FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "table_name"_a = tableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "table_name"_a = tableName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "message-1");
         ReadTopicMessage(outputTopicName, "message-1-value-1");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         const auto& result = ExecQuery("SELECT Plan, Ast FROM `.sys/streaming_queries`");
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -3078,18 +2784,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{table_name}`
                 (Key, Value)
             VALUES
-                (1, "value-2");)",
-            "table_name"_a = tableName
-        ));
+                (1, "value-2");)", "table_name"_a = tableName));
 
         WriteTopicMessage(inputTopicName, "message-2");
         const auto disposition = TInstant::Now();
@@ -3097,9 +2799,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "message-2-value-2", disposition);
@@ -3121,17 +2821,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 Key Int32 NOT NULL,
                 Value String NOT NULL,
                 PRIMARY KEY (Key)
-            );)",
-            "table_name"_a = tableName
-        ));
+            );)", "table_name"_a = tableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{table_name}`
                 (Key, Value)
             VALUES
-                (1, "value-1");)",
-            "table_name"_a = tableName
-        ));
+                (1, "value-1");)", "table_name"_a = tableName));
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -3143,13 +2839,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 SELECT
                     Unwrap(Data || "-" || $r)
                 FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "table_name"_a = tableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "table_name"_a = tableName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -3161,11 +2852,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UPSERT INTO `{table_name}`
                 (Key, Value)
             VALUES
-                (1, "value-2");)",
-            "table_name"_a = tableName
-        ));
+                (1, "value-2");)", "table_name"_a = tableName));
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "message-2");
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessage("message-2-value-2");
     }
@@ -3185,10 +2874,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "oltp_table_name"_a = oltpTableName,
-            "olap_table_name"_a = olapTableName
-        ));
+            );)", "oltp_table_name"_a = oltpTableName, "olap_table_name"_a = olapTableName));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{oltp_table_name}`
@@ -3200,10 +2886,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 (Key, Value)
             VALUES
                 (1, "value-1"),
-                (2, "value-1");)",
-            "oltp_table_name"_a = oltpTableName,
-            "olap_table_name"_a = olapTableName
-        ));
+                (2, "value-1");)", "oltp_table_name"_a = oltpTableName, "olap_table_name"_a = olapTableName));
 
         constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";
         constexpr char objectContent[] = R"(
@@ -3225,17 +2908,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 DATA_SOURCE = "{external_source}",
                 LOCATION = "path/test_object.json",
                 FORMAT = "json_each_row"
-            );)",
-            "external_table"_a = externalTableName,
-            "external_source"_a = s3SourceName
-        ));
+            );)", "external_table"_a = externalTableName, "external_source"_a = s3SourceName));
 
         constexpr char inputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesInputTopicName";
         constexpr char outputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesOutputTopicName";
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
-        for (const auto& sourceName : {oltpTableName, olapTableName, externalTableName}) {
+        for (const auto& sourceName : { oltpTableName, olapTableName, externalTableName }) {
             constexpr char queryName[] = "streamingQuery";
 
             ExecQuery(fmt::format(R"(
@@ -3249,13 +2929,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     SELECT
                         Unwrap(Data || $precompute_agg || $precompute_limit || ($empty_precompute ?? "<null>"))
                     FROM `{pq_source}`.`{input_topic}`;
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "precompute_source"_a = sourceName,
-                "input_topic"_a = inputTopicName,
-                "output_topic"_a = outputTopicName
-            ));
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "precompute_source"_a = sourceName,
+                "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
             Sleep(TDuration::Seconds(1));
 
@@ -3285,12 +2960,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
@@ -3311,14 +2982,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
 
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            ))",
-            "query_name"_a = queryName
-        ));
+            ))", "query_name"_a = queryName));
 
         {
             const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
@@ -3365,9 +3034,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     RUN = FALSE
-                ))",
-                "query_name"_a = queryName
-            ));
+                ))", "query_name"_a = queryName));
         };
 
         testNoAccess();
@@ -3398,13 +3065,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRAGMA pq.Consumer = "{consumer_name}";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "consumer_name"_a = consumerName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName, "consumer_name"_a = consumerName));
 
         WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
@@ -3424,15 +3086,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'test_consumer'")
-                || issues.contains("no consumer 'test_consumer' in topic");
+            return issues.contains("no read rule provided for consumer 'test_consumer'") ||
+                   issues.contains("no consumer 'test_consumer' in topic");
         });
 
         ExecExternalQuery(fmt::format(R"(
-            ALTER TOPIC `{input_topic}` ADD CONSUMER `{consumer_name}`;)",
-            "input_topic"_a = inputTopicName,
-            "consumer_name"_a = consumerName
-        ));
+            ALTER TOPIC `{input_topic}` ADD CONSUMER `{consumer_name}`;)", "input_topic"_a = inputTopicName, "consumer_name"_a = consumerName));
 
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
@@ -3450,14 +3109,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         const auto disposition = TInstant::Now();
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
@@ -3465,9 +3122,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
 
         ReadTopicMessage(outputTopicName, R"({"key": "key2", "value": "value2"})", disposition);
     }
@@ -3536,22 +3191,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || time || "-" || payload || "-" || count) FROM $grouped
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "s3_source"_a = s3SourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "s3_source"_a = s3SourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         // Fill HOP state for key A
         WriteTopicMessages(inputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
-        });
+                                               R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
+                                               R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
+                                           });
         ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
 
         Sleep(TDuration::Seconds(2));
@@ -3591,10 +3241,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         // Close the window and check both the restored HOP state for A and the replayed input for B.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
-        ReadTopicMessages(outputTopicName, {
-            "A-2025-08-25T00:00:00.000000Z-P1-1",
-            "B-2025-08-25T00:00:00.000000Z-P2-2"
-        }, readDisposition, /* sort */ true);
+        ReadTopicMessages(
+            outputTopicName, { "A-2025-08-25T00:00:00.000000Z-P1-1", "B-2025-08-25T00:00:00.000000Z-P2-2" }, readDisposition, /* sort */ true);
     }
 
     struct TTestInfo {
@@ -3605,13 +3253,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         TString QueryText;
     };
 
-    TTestInfo SetupCheckpointRecoveryTest(TStreamingTestFixture& self) {
-        TTestInfo info = {
-            .InputTopicName = TStringBuilder() << "inputTopicName" << self.Name_,
+    TTestInfo SetupCheckpointRecoveryTest(TStreamingTestFixture & self) {
+        TTestInfo info = { .InputTopicName = TStringBuilder() << "inputTopicName" << self.Name_,
             .OutputTopicName = TStringBuilder() << "outputTopicName" << self.Name_,
             .PqSourceName = "pqSourceName",
-            .QueryName = "streamingQuery"
-        };
+            .QueryName = "streamingQuery" };
         info.QueryText = fmt::format(R"(
             -- Test that offsets are recovered
             $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
@@ -3633,11 +3279,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 event;
 
             INSERT INTO `{pq_source}`.`{output_topic}`
-            SELECT Unwrap(event || "-" || time || "-" || count) FROM $grouped)",
-            "pq_source"_a = info.PqSourceName,
-            "input_topic"_a = info.InputTopicName,
-            "output_topic"_a = info.OutputTopicName
-        );
+            SELECT Unwrap(event || "-" || time || "-" || count) FROM $grouped)", "pq_source"_a = info.PqSourceName,
+            "input_topic"_a = info.InputTopicName, "output_topic"_a = info.OutputTopicName);
 
         self.CreateTopic(info.InputTopicName);
         self.CreateTopic(info.OutputTopicName);
@@ -3647,10 +3290,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 {query_text}
-            END DO;)",
-            "query_name"_a = info.QueryName,
-            "query_text"_a = info.QueryText
-        ));
+            END DO;)", "query_name"_a = info.QueryName, "query_text"_a = info.QueryText));
         self.CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -3664,19 +3304,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DropTopic(info.OutputTopicName);
         };
 
-        WriteTopicMessages(info.InputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
-        });
+        WriteTopicMessages(info.InputTopicName,
+            {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+            });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(1, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -3686,17 +3324,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
-        ReadTopicMessages(info.OutputTopicName, {
-            "A-2025-08-25T00:00:00.000000Z-1",
-            "B-2025-08-25T00:00:00.000000Z-1"
-        }, readDisposition, /* sort */ true);
+        ReadTopicMessages(
+            info.OutputTopicName, { "A-2025-08-25T00:00:00.000000Z-1", "B-2025-08-25T00:00:00.000000Z-1" }, readDisposition, /* sort */ true);
     }
 
     Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeBasic, TStreamingTestFixture) {
@@ -3706,12 +3340,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DropTopic(info.OutputTopicName);
         };
 
-        WriteTopicMessages(info.InputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
-        });
+        WriteTopicMessages(info.InputTopicName,
+            {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+            });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -3721,10 +3355,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 /* some comment */
                 {text}
-            END DO;)",
-            "query_name"_a = info.QueryName,
-            "text"_a = info.QueryText
-        ));
+            END DO;)", "query_name"_a = info.QueryName, "text"_a = info.QueryText));
         CheckScriptExecutionsCount(1, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -3734,9 +3365,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -3751,12 +3380,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DropTopic(info.OutputTopicName);
         };
 
-        WriteTopicMessages(info.InputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
-        });
+        WriteTopicMessages(info.InputTopicName,
+            {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+            });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
@@ -3765,10 +3394,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 /* some comment */
                 {text}
-            END DO;)",
-            "query_name"_a = info.QueryName,
-            "text"_a = info.QueryText
-        ));
+            END DO;)", "query_name"_a = info.QueryName, "text"_a = info.QueryText));
         CheckScriptExecutionsCount(1, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -3778,9 +3404,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -3795,12 +3419,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DropTopic(info.OutputTopicName);
         };
 
-        WriteTopicMessages(info.InputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
-        });
+        WriteTopicMessages(info.InputTopicName,
+            {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+            });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -3810,10 +3434,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 /* some comment */
                 {text}
-            END DO;)",
-            "query_name"_a = info.QueryName,
-            "text"_a = info.QueryText
-        ), EStatus::NOT_FOUND, "Resource pool unknown_pool not found or you don't have access permissions");
+            END DO;)", "query_name"_a = info.QueryName, "text"_a = info.QueryText), EStatus::NOT_FOUND,
+            "Resource pool unknown_pool not found or you don't have access permissions");
 
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
@@ -3822,9 +3444,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RESOURCE_POOL = "default"
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(3, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -3839,12 +3459,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DropTopic(info.OutputTopicName);
         };
 
-        WriteTopicMessages(info.InputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
-        });
+        WriteTopicMessages(info.InputTopicName,
+            {
+                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+            });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -3854,10 +3474,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 /* some comment */
                 {text}
-            END DO;)",
-            "query_name"_a = info.QueryName,
-            "text"_a = info.QueryText
-        ));
+            END DO;)", "query_name"_a = info.QueryName, "text"_a = info.QueryText));
         CheckScriptExecutionsCount(1, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -3867,22 +3484,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(2, 1);
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
         ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(2, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -3892,17 +3505,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckScriptExecutionsCount(3, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-27T00:00:00.000000Z", "event": "A"})");
-        ReadTopicMessages(info.OutputTopicName, {
-            "A-2025-08-26T00:00:00.000000Z-1",
-            "B-2025-08-26T00:00:00.000000Z-1"
-        }, readDisposition, /* sort */ true);
+        ReadTopicMessages(
+            info.OutputTopicName, { "A-2025-08-26T00:00:00.000000Z-1", "B-2025-08-26T00:00:00.000000Z-1" }, readDisposition, /* sort */ true);
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
@@ -3913,8 +3522,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
         const auto connectorClient = SetupMockConnectorClient();
 
-        constexpr char inputTopicName[] = "sljInputTopicName";
-        constexpr char outputTopicName[] = "sljOutputTopicName";
+        const auto inputTopicName = MakeExternalName("sljInputTopicName");
+        const auto outputTopicName = MakeExternalName("sljOutputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -3923,49 +3532,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 2,
-                .ListSplitsCount = 7,
-                .ValidateListSplitsArgs = false
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(connectorClient,
+                { .TableName = ydbTable, .Columns = columns, .DescribeCount = 2, .ListSplitsCount = 7, .ValidateListSplitsArgs = false });
 
-            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-            const std::vector<std::string> payloadColumn = std::vector<std::string>{"P1", "P2", "P3"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .NumberReadSplits = 6,
-                .ValidateReadSplitsArgs = false,
-                .ResultFactory = [&]() {
-                    return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                    );
-                }
-            });
+            const std::vector<std::string> fqdnColumn = { "host1.example.com", "host2.example.com", "host3.example.com" };
+            const std::vector<std::string> payloadColumn = std::vector<std::string>{ "P1", "P2", "P3" };
+            SetupMockConnectorTableData(connectorClient,
+                { .TableName = ydbTable, .Columns = columns, .NumberReadSplits = 6, .ValidateReadSplitsArgs = false, .ResultFactory = [&]() {
+                     return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                         MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary()));
+                 } });
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -3989,32 +3579,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(event || "-" || payload) FROM $joined
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "ydb_source"_a = ydbSourceName,
-            "ydb_table"_a = ydbTable,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "ydb_source"_a = ydbSourceName, "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
         ReadTopicMessage(outputTopicName, "A-P1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
-        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(2));   // wait for checkpoint commit
         const auto readDisposition = TInstant::Now();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         connectorClient->UnlockReading();
@@ -4022,9 +3604,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
@@ -4048,25 +3628,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{s3_sink}`.`test/` WITH (
                     FORMAT = raw
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "s3_sink"_a = s3SinkName,
-            "input_topic"_a = inputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "s3_sink"_a = s3SinkName, "input_topic"_a = inputTopicName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "data-1");
-        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(2));   // wait for checkpoint commit
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         WriteTopicMessage(inputTopicName, "data-2");
@@ -4074,22 +3647,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         Sleep(TDuration::Seconds(2));
-        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"data-1data-2", "data-2data-1"}, s3Data)) {
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({ "data-1data-2", "data-2data-1" }, s3Data)) {
             UNIT_FAIL("Unexpected S3 data: " << s3Data);
         }
     }
 
-    void CheckTable(TStreamingTestFixture& self, const std::string& tableName, const std::map<std::string, std::string>& rows) {
-        const auto results = self.ExecQuery(fmt::format(
-            "SELECT * FROM `{table}` ORDER BY Key",
-            "table"_a = tableName
-        ));
+    void CheckTable(TStreamingTestFixture & self, const std::string& tableName, const std::map<std::string, std::string>& rows) {
+        const auto results = self.ExecQuery(fmt::format("SELECT * FROM `{table}` ORDER BY Key", "table"_a = tableName));
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
 
         auto it = rows.begin();
@@ -4104,7 +3672,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSource";
         CreatePqSource(pqSourceName);
 
-        for (const bool rowTables : {true, false}) {
+        for (const bool rowTables : { true, false }) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbInputTopicName" << rowTables;
             CreateScopedTopic(inputTopicName);
 
@@ -4114,10 +3682,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Key String NOT NULL,
                     Value String NOT NULL,
                     PRIMARY KEY (Key)
-                ) {settings})",
-                "table"_a = ydbTable,
-                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
-            ));
+                ) {settings})", "table"_a = ydbTable, "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"));
 
             const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4131,28 +3696,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             Value String NOT NULL
                         )
                     )
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "input_topic"_a = inputTopicName,
-                "ydb_table"_a = ydbTable
-            ));
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable));
 
             CheckScriptExecutionsCount(1, 1);
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
-            Sleep(TDuration::Seconds(1)); // wait for checkpoit commit
-            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+            Sleep(TDuration::Seconds(1));   // wait for checkpoit commit
+            CheckTable(*this, ydbTable, { { "message1", "value1" } });
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     RUN = FALSE
-                );)",
-                "query_name"_a = queryName
-            ));
+                );)", "query_name"_a = queryName));
             CheckScriptExecutionsCount(1, 0);
-            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+            CheckTable(*this, ydbTable, { { "message1", "value1" } });
 
             Sleep(TDuration::Seconds(1));
             WriteTopicMessage(inputTopicName, R"({"Key": "message2", "Value": "value2"})");
@@ -4160,20 +3719,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     RUN = TRUE
-                );)",
-                "query_name"_a = queryName
-            ));
+                );)", "query_name"_a = queryName));
             CheckScriptExecutionsCount(2, 1);
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value3"})");
             Sleep(TDuration::Seconds(1));
-            CheckTable(*this, ydbTable, {{"message1", "value3"}, {"message2", "value2"}});
+            CheckTable(*this, ydbTable, { { "message1", "value3" }, { "message2", "value2" } });
 
-            ExecQuery(fmt::format(
-                "DROP STREAMING QUERY `{query_name}`",
-                "query_name"_a = queryName
-            ));
+            ExecQuery(fmt::format("DROP STREAMING QUERY `{query_name}`", "query_name"_a = queryName));
             CheckScriptExecutionsCount(0, 0);
         }
     }
@@ -4182,7 +3736,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSource";
         CreatePqSource(pqSourceName);
 
-        for (const bool rowTables : {true, false}) {
+        for (const bool rowTables : { true, false }) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
             CreateScopedTopic(inputTopicName);
 
@@ -4192,10 +3746,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Key String NOT NULL,
                     Value String NOT NULL,
                     PRIMARY KEY (Key)
-                ) {settings})",
-                "table"_a = ydbTable,
-                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
-            ));
+                ) {settings})", "table"_a = ydbTable, "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"));
 
             const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4210,27 +3761,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             Value String NOT NULL
                         )
                     ) LIMIT 1
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "input_topic"_a = inputTopicName,
-                "ydb_table"_a = ydbTable
-            ));
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable));
 
             CheckScriptExecutionsCount(1, 1);
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
             Sleep(TDuration::Seconds(1));
-            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+            CheckTable(*this, ydbTable, { { "message1", "value1" } });
 
             Sleep(TDuration::Seconds(1));
             CheckScriptExecutionsCount(1, 0);
 
-            ExecQuery(fmt::format(
-                "DROP STREAMING QUERY `{query_name}`",
-                "query_name"_a = queryName
-            ));
+            ExecQuery(fmt::format("DROP STREAMING QUERY `{query_name}`", "query_name"_a = queryName));
             CheckScriptExecutionsCount(0, 0);
         }
     }
@@ -4239,7 +3783,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSource";
         CreatePqSource(pqSourceName);
 
-        for (const bool rowTables : {true, false}) {
+        for (const bool rowTables : { true, false }) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
             CreateScopedTopic(inputTopicName);
 
@@ -4249,10 +3793,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Key String NOT NULL,
                     Value String NOT NULL,
                     PRIMARY KEY (Key)
-                ) {settings})",
-                "table"_a = ydbTable,
-                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
-            ));
+                ) {settings})", "table"_a = ydbTable, "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"));
 
             const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4267,27 +3808,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             Value String NOT NULL
                         )
                     ) LIMIT 1
-                END DO;)",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "input_topic"_a = inputTopicName,
-                "ydb_table"_a = ydbTable
-            ));
+                END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable));
 
             CheckScriptExecutionsCount(1, 1);
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
             Sleep(TDuration::Seconds(1));
-            CheckTable(*this, ydbTable, {{"message1x", "value1"}});
+            CheckTable(*this, ydbTable, { { "message1x", "value1" } });
 
             Sleep(TDuration::Seconds(1));
             CheckScriptExecutionsCount(1, 0);
 
-            ExecQuery(fmt::format(
-                "DROP STREAMING QUERY `{query_name}`",
-                "query_name"_a = queryName
-            ));
+            ExecQuery(fmt::format("DROP STREAMING QUERY `{query_name}`", "query_name"_a = queryName));
             CheckScriptExecutionsCount(0, 0);
         }
     }
@@ -4313,13 +3847,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 LOCATION = "{pq_location}",
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "NONE"
-            );)",
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "pq_source"_a = pqSourceName,
-            "pq_location"_a = GetKikimrRunner()->GetEndpoint(),
-            "pq_database_name"_a = "/Root"
-        ));
+            );)", "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName, "pq_source"_a = pqSourceName,
+            "pq_location"_a = GetKikimrRunner()->GetEndpoint(), "pq_database_name"_a = "/Root"));
 
         const auto queryName = "streamingQuery";
         ExecQuery(fmt::format(R"(
@@ -4331,12 +3860,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ] @@;
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         auto promise = NThreading::NewPromise();
         Y_DEFER {
@@ -4351,9 +3876,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(0, 0);
     }
@@ -4377,12 +3900,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(5));
 
@@ -4416,19 +3935,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
     }
 
-    class TConsumerRewindFixture : public TStreamingWithSchemaSecretsTestFixture {
+    class TConsumerRewindFixture: public TStreamingWithSchemaSecretsTestFixture {
     public:
+        const TString InputTopic = MakeExternalName("rewindInput");
+        const TString OutputTopic = MakeExternalName("rewindOutput");
+
         void DropTopics() {
-            DropTopic("rewindInput");
-            DropTopic("rewindOutput");
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
         }
+
         void InitConsumerRewind(bool sharedReading, bool enableReadFrom = true) {
             UsesSharedReading = sharedReading;
             auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
@@ -4436,8 +3956,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             featureFlags->SetEnableStreamingQueryReadFrom(enableReadFrom);
             featureFlags->SetEnableSharedReadingInStreamingQueries(true);
             ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-            CreateTopic("rewindInput");
-            CreateTopic("rewindOutput");
+            CreateTopic(InputTopic);
+            CreateTopic(OutputTopic);
             ExecQuery(fmt::format(R"(
                 CREATE EXTERNAL DATA SOURCE rewindSource WITH (
                     SOURCE_TYPE = "Ydb",
@@ -4445,15 +3965,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     DATABASE_NAME = "{database}",
                     AUTH_METHOD = "NONE",
                     SHARED_READING = "{shared_reading}"
-                );)",
-                "endpoint"_a = YDB_ENDPOINT,
-                "database"_a = YDB_DATABASE,
-                "shared_reading"_a = sharedReading ? "true" : "false"));
+                );)", "endpoint"_a = YDB_ENDPOINT, "database"_a = YDB_DATABASE, "shared_reading"_a = sharedReading ? "true" : "false"));
         }
 
         NYdb::NTopic::TPartitionConsumerStats GetConsumerStats() {
-            const auto result = GetTopicClient()->DescribeConsumer("rewindInput", "test_consumer",
-                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
+            const auto result = GetTopicClient()
+                                    ->DescribeConsumer(InputTopic, "test_consumer", NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true))
+                                    .GetValue(TEST_OPERATION_TIMEOUT);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             const auto& partitions = result.GetConsumerDescription().GetPartitions();
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -4462,8 +3980,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
 
         void CommitConsumer(ui64 offset) {
-            const auto result = GetTopicClient()->CommitOffset("rewindInput", 0, "test_consumer", offset)
-                .GetValue(TEST_OPERATION_TIMEOUT);
+            const auto result = GetTopicClient()->CommitOffset(InputTopic, 0, "test_consumer", offset).GetValue(TEST_OPERATION_TIMEOUT);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -4494,8 +4011,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY rewindQuery WITH (STREAMING_DISPOSITION = {disposition}) AS DO BEGIN
                     PRAGMA pq.Consumer = "test_consumer";
-                    INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
-                END DO;)", "disposition"_a = disposition));
+                    INSERT INTO rewindSource.`{output_topic}` SELECT Data FROM rewindSource.`{input_topic}`;
+                END DO;)", "disposition"_a = disposition, "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         }
 
         void StopConsumerQuery() {
@@ -4538,16 +4055,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Y_DEFER {
             DropTopics();
         };
-        WriteTopicMessage("rewindInput", "committed");
+        WriteTopicMessage(InputTopic, "committed");
         CommitConsumer(1);
 
         CreateConsumerQuery("OLDEST");
         CheckReadingMode(SharedReading);
         UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
-        WriteTopicMessage("rewindInput", "live");
-        ReadTopicMessages("rewindOutput", {"live"});
+        WriteTopicMessage(InputTopic, "live");
+        ReadTopicMessages(OutputTopic, { "live" });
         StopConsumerQuery();
-        EnsureTopicEndOffset("rewindOutput", 1);
+        EnsureTopicEndOffset(OutputTopic, 1);
     }
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDispositions, SharedReading, TConsumerRewindFixture) {
@@ -4555,21 +4072,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Y_DEFER {
             DropTopics();
         };
-        WriteTopicMessage("rewindInput", "old");
+        WriteTopicMessage(InputTopic, "old");
         Sleep(TDuration::Seconds(1));
         const auto fromTime = TInstant::Now();
         Sleep(TDuration::Seconds(1));
-        WriteTopicMessage("rewindInput", "recent");
+        WriteTopicMessage(InputTopic, "recent");
 
         CreateConsumerQuery("OLDEST");
         CheckReadingMode(SharedReading);
-        std::vector<std::string> expected = {"old", "recent"};
-        ReadTopicMessages("rewindOutput", expected);
+        std::vector<std::string> expected = { "old", "recent" };
+        ReadTopicMessages(OutputTopic, expected);
 
         const std::vector<std::pair<std::string, std::vector<std::string>>> replays = {
-            {"OLDEST", {"old", "recent"}},
-            {fmt::format("(FROM_TIME = \"{}\")", fromTime.ToString()), {"recent"}},
-            {"(TIME_AGO = \"PT1H\")", {"old", "recent"}},
+            { "OLDEST", { "old", "recent" } },
+            { fmt::format("(FROM_TIME = \"{}\")", fromTime.ToString()), { "recent" } },
+            { "(TIME_AGO = \"PT1H\")", { "old", "recent" } },
         };
         for (const auto& [disposition, replay] : replays) {
             // Replay actual payloads after both a completed checkpoint and a
@@ -4578,26 +4095,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ResumeConsumerQuery(disposition);
             CheckReadingMode(SharedReading);
             expected.insert(expected.end(), replay.begin(), replay.end());
-            ReadTopicMessages("rewindOutput", expected);
-            EnsureTopicEndOffset("rewindOutput", expected.size());
+            ReadTopicMessages(OutputTopic, expected);
+            EnsureTopicEndOffset(OutputTopic, expected.size());
         }
         CheckpointAndStopConsumerQuery(2);
 
-        WriteTopicMessage("rewindInput", "skip-on-fresh");
+        WriteTopicMessage(InputTopic, "skip-on-fresh");
         ResumeConsumerQuery("FRESH");
         CheckReadingMode(SharedReading);
         UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 2);
-        WriteTopicMessage("rewindInput", "live");
+        WriteTopicMessage(InputTopic, "live");
         expected.push_back("live");
-        ReadTopicMessages("rewindOutput", expected);
+        ReadTopicMessages(OutputTopic, expected);
         CheckpointAndStopConsumerQuery(4);
 
         ResumeConsumerQuery(fmt::format("(FROM_TIME = \"{}\")", (TInstant::Now() + TDuration::Hours(1)).ToString()));
         CheckReadingMode(SharedReading);
-        WriteTopicMessage("rewindInput", "skip-before-future-time");
+        WriteTopicMessage(InputTopic, "skip-before-future-time");
         WaitConsumerCheckpoint();
         UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 4);
-        EnsureTopicEndOffset("rewindOutput", expected.size());
+        EnsureTopicEndOffset(OutputTopic, expected.size());
         StopConsumerQuery();
     }
 
@@ -4606,41 +4123,40 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Y_DEFER {
             DropTopics();
         };
-        WriteTopicMessage("rewindInput", "first");
+        WriteTopicMessage(InputTopic, "first");
         CreateConsumerQuery("OLDEST");
         CheckReadingMode(SharedReading);
-        std::vector<std::string> expected = {"first"};
-        ReadTopicMessages("rewindOutput", expected);
+        std::vector<std::string> expected = { "first" };
+        ReadTopicMessages(OutputTopic, expected);
 
-        for (const std::string& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
+        for (const std::string& disposition : { "", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE" }) {
             CheckpointAndStopConsumerQuery(expected.size());
             const ui64 savedOffset = expected.size();
             expected.push_back("after-checkpoint-" + std::to_string(savedOffset));
-            WriteTopicMessage("rewindInput", expected.back());
+            WriteTopicMessage(InputTopic, expected.back());
             if constexpr (CommittedAhead) {
                 CommitConsumer(savedOffset + 1);
             }
             ResumeConsumerQuery(disposition);
 
             if constexpr (CommittedAhead) {
-                const TString expectedIssue = TStringBuilder()
-                    << "trying to read from position that is less than committed: read "
-                    << savedOffset << " committed " << savedOffset + 1;
+                const TString expectedIssue = TStringBuilder() << "trying to read from position that is less than committed: read "
+                                                               << savedOffset << " committed " << savedOffset + 1;
                 WaitFor(TDuration::Seconds(30), "checkpoint offset below consumer commit is rejected", [&](TString& error) {
                     error = GetStreamingQueryIssues("rewindQuery");
                     return error.Contains(expectedIssue);
                 });
                 StopConsumerQuery();
                 UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), savedOffset + 1);
-                EnsureTopicEndOffset("rewindOutput", savedOffset);
+                EnsureTopicEndOffset(OutputTopic, savedOffset);
                 // Repair the external commit; the same checkpoint must then resume normally.
                 CommitConsumer(savedOffset);
                 ResumeConsumerQuery(disposition);
             }
 
             CheckReadingMode(SharedReading);
-            ReadTopicMessages("rewindOutput", expected);
-            EnsureTopicEndOffset("rewindOutput", expected.size());
+            ReadTopicMessages(OutputTopic, expected);
+            EnsureTopicEndOffset(OutputTopic, expected.size());
         }
         CheckpointAndStopConsumerQuery(expected.size());
     }
@@ -4655,19 +4171,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // No data was read, so the checkpoint only contains the starting timestamp.
         WaitConsumerCheckpoint();
         StopConsumerQuery();
-        WriteTopicMessage("rewindInput", "while-stopped");
+        WriteTopicMessage(InputTopic, "while-stopped");
         CommitConsumer(1);
         ResumeConsumerQuery();
         CheckReadingMode(SharedReading);
         if constexpr (SharedReading) {
             UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
         }
-        WriteTopicMessage("rewindInput", "after-restart");
+        WriteTopicMessage(InputTopic, "after-restart");
 
-        std::vector<std::string> expected = {"after-restart"};
-        ReadTopicMessages("rewindOutput", expected);
+        std::vector<std::string> expected = { "after-restart" };
+        ReadTopicMessages(OutputTopic, expected);
         CheckpointAndStopConsumerQuery(2);
-        EnsureTopicEndOffset("rewindOutput", expected.size());
+        EnsureTopicEndOffset(OutputTopic, expected.size());
     }
 
     Y_UNIT_TEST_QUAD_F(StreamingQueryReadFromConsumerRewind, SharedReading, FromTimestamp, TConsumerRewindFixture) {
@@ -4677,14 +4193,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Y_DEFER {
             DropTopics();
         };
-        WriteTopicMessage("rewindInput", "first");
-        WriteTopicMessage("rewindInput", "second");
+        WriteTopicMessage(InputTopic, "first");
+        WriteTopicMessage(InputTopic, "second");
 
-        const std::string readFrom = FromTimestamp
-            ? "CurrentUtcTimestamp() - Interval(\"PT1H\")"
-            : "EARLIEST";
+        const std::string readFrom = FromTimestamp ? "CurrentUtcTimestamp() - Interval(\"PT1H\")" : "EARLIEST";
         std::vector<std::string> expected;
-        for (const bool alter : {false, true}) {
+        for (const bool alter : { false, true }) {
             CommitConsumer(2);
             WaitConsumerOffset(2);
 
@@ -4694,17 +4208,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ExecQuery(fmt::format(R"(
                     CREATE STREAMING QUERY rewindQuery WITH (READ_FROM = {read_from}) AS DO BEGIN
                         PRAGMA pq.Consumer = "test_consumer";
-                        INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
-                    END DO;)", "read_from"_a = readFrom));
+                        INSERT INTO rewindSource.`{output_topic}` SELECT Data FROM rewindSource.`{input_topic}`;
+                    END DO;)", "read_from"_a = readFrom, "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
             }
 
             CheckReadingMode(SharedReading);
             WaitConsumerOffset(0);
-            expected.insert(expected.end(), {"first", "second"});
-            ReadTopicMessages("rewindOutput", expected);
+            expected.insert(expected.end(), { "first", "second" });
+            ReadTopicMessages(OutputTopic, expected);
             WaitConsumerOffset(0);
             StopConsumerQuery();
-            EnsureTopicEndOffset("rewindOutput", expected.size());
+            EnsureTopicEndOffset(OutputTopic, expected.size());
         }
     }
 
@@ -4716,9 +4230,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateScopedTopic("readFromDisabledOutput");
         CreatePqSource("sourceName");
 
-        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+        for (const TString& value : { "EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")" }) {
             ExecQuery(TStringBuilder() << R"(
-                CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )" << value << R"() AS DO BEGIN
+                CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )"
+                                       << value << R"() AS DO BEGIN
                     INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
                 END DO;)", EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
         }
@@ -4727,9 +4242,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY my_query WITH (RUN = FALSE, STREAMING_DISPOSITION = OLDEST) AS DO BEGIN
                 INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
             END DO;)");
-        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
-            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");",
-                EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        for (const TString& value : { "EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")" }) {
+            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");", EStatus::GENERIC_ERROR,
+                "Streaming query READ_FROM is disabled");
         }
     }
 
@@ -4740,8 +4255,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         featureFlags->SetEnableStreamingQueryReadFrom(true);
         featureFlags->SetEnableStreamingQueryDisposition(false);
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-        constexpr char inputTopic[] = "readFromInput";
-        constexpr char outputTopic[] = "readFromOutput";
+        const auto inputTopic = MakeExternalName("readFromInput");
+        const auto outputTopic = MakeExternalName("readFromOutput");
         CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
         CreateScopedTopicExt(outputTopic, std::nullopt, LocalTopics);
         if constexpr (!LocalTopics) {
@@ -4760,8 +4275,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
 
         const auto describeConsumer = [&]() {
-            const auto result = GetTopicClient(LocalTopics)->DescribeConsumer(inputTopic, "test_consumer",
-                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            const auto result = GetTopicClient(LocalTopics)
+                                    ->DescribeConsumer(inputTopic, "test_consumer", NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true))
+                                    .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             const auto& partitions = result.GetConsumerDescription().GetPartitions();
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -4782,19 +4298,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY my_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
                 {consumer}
-                INSERT INTO {source}readFromOutput SELECT * FROM {source}readFromInput
-            END DO;)",
-            "consumer"_a = WithConsumer ? "PRAGMA pq.Consumer = 'test_consumer';" : "",
-            "source"_a = LocalTopics ? "" : "sourceName."
-        ));
+                INSERT INTO {source}`{output_topic}` SELECT * FROM {source}`{input_topic}`
+            END DO;)", "consumer"_a = WithConsumer ? "PRAGMA pq.Consumer = 'test_consumer';" : "", "source"_a = LocalTopics ? "" : "sourceName.",
+            "input_topic"_a = inputTopic, "output_topic"_a = outputTopic));
         CheckScriptExecutionsCount(1, 1);
-        ReadTopicMessages(outputTopic, {"data1", "data2"}, TInstant::Zero(), false, LocalTopics);
+        ReadTopicMessages(outputTopic, { "data1", "data2" }, TInstant::Zero(), false, LocalTopics);
         waitCommitted(2);
         auto writeFrom = TInstant::Now();
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY my_query SET (READ_FROM = Timestamp("{timestamp}"));)",
-            "timestamp"_a = readFrom.ToString()));
+            ALTER STREAMING QUERY my_query SET (READ_FROM = Timestamp("{timestamp}"));)", "timestamp"_a = readFrom.ToString()));
         CheckScriptExecutionsCount(2, 1);
         ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
         waitCommitted(2);
@@ -4811,7 +4324,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = EARLIEST);");
         CheckScriptExecutionsCount(4, 1);
-        ReadTopicMessages(outputTopic, {"data1", "data2"}, writeFrom, false, LocalTopics);
+        ReadTopicMessages(outputTopic, { "data1", "data2" }, writeFrom, false, LocalTopics);
         waitCommitted(2);
         writeFrom = TInstant::Now();
 
@@ -4878,16 +4391,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
         ui64 executionsCount = 0;
         CheckScriptExecutionsCount(++executionsCount, 1);
 
-        ReadTopicMessages(outputTopicName, {"data1", "data2"});
+        ReadTopicMessages(outputTopicName, { "data1", "data2" });
         auto writeDisposition = TInstant::Now();
 
         // Test FROM_TIME disposition
@@ -4896,10 +4405,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 STREAMING_DISPOSITION = (
                     FROM_TIME = "{disposition}"
                 )
-            );)",
-            "query_name"_a = queryName,
-            "disposition"_a = readDisposition.ToString()
-        ));
+            );)", "query_name"_a = queryName, "disposition"_a = readDisposition.ToString()));
         CheckScriptExecutionsCount(++executionsCount, 1);
 
         ReadTopicMessage(outputTopicName, "data2", writeDisposition);
@@ -4912,24 +4418,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 STREAMING_DISPOSITION = (
                     TIME_AGO = "PT{disposition}S"
                 )
-            );)",
-            "query_name"_a = queryName,
-            "disposition"_a = TStringBuilder() << duration.Seconds() << "." << duration.MicroSecondsOfSecond()
-        ));
+            );)", "query_name"_a = queryName,
+            "disposition"_a = TStringBuilder() << duration.Seconds() << "." << duration.MicroSecondsOfSecond()));
         CheckScriptExecutionsCount(++executionsCount, 1);
 
         ReadTopicMessage(outputTopicName, "data2", writeDisposition);
         writeDisposition = TInstant::Now();
 
         // Test checkpoint dispositions
-        for (const std::string& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
+        for (const std::string& disposition : { "", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE" }) {
             Sleep(TDuration::Seconds(1));
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     RUN = FALSE
-                );)",
-                "query_name"_a = queryName
-            ));
+                );)", "query_name"_a = queryName));
             CheckScriptExecutionsCount(std::min(executionsCount, (ui64)4), 0);
 
             WriteTopicMessage(inputTopicName, TStringBuilder() << "data" << ++dataIdx);
@@ -4938,10 +4440,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 ALTER STREAMING QUERY `{query_name}` SET (
                     RUN = TRUE,
                     {disposition}
-                );)",
-                "query_name"_a = queryName,
-                "disposition"_a = disposition.empty() ? TStringBuilder() : TStringBuilder() << "STREAMING_DISPOSITION = " << disposition
-            ));
+                );)", "query_name"_a = queryName,
+                "disposition"_a = disposition.empty() ? TStringBuilder() : TStringBuilder() << "STREAMING_DISPOSITION = " << disposition));
             CheckScriptExecutionsCount(std::min(++executionsCount, (ui64)4), 1);
 
             ReadTopicMessage(outputTopicName, TStringBuilder() << "data" << dataIdx, writeDisposition);
@@ -4952,9 +4452,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 STREAMING_DISPOSITION = FRESH
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(std::min(++executionsCount, (ui64)4), 1);
 
         Sleep(TDuration::Seconds(1));
@@ -4992,14 +4490,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (C)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "row_table"_a = rowSinkTable,
-            "column_table"_a = columnSinkTable
-        ));
+            );)", "row_table"_a = rowSinkTable, "column_table"_a = columnSinkTable));
 
         constexpr char queryName[] = "streamingQuery";
         const TSolomonLocation soLocation = {
-            .ProjectId = "cloudId1",
+            .ProjectId = MakeExternalName("cloudId1"),
             .FolderId = "folderId1",
             .Service = "custom",
             .IsCloud = false,
@@ -5027,20 +4522,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     Data || "-F" AS sensor,
                     Timestamp("2025-03-12T14:40:39Z") AS ts
                 FROM $rows;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic1"_a = outputTopic1,
-            "output_topic2"_a = outputTopic2,
-            "row_table"_a = rowSinkTable,
-            "column_table"_a = columnSinkTable,
-            "s3_sink"_a = s3SinkName,
-            "solomon_sink"_a = solomonSink,
-            "solomon_project"_a = soLocation.ProjectId,
-            "solomon_folder"_a = soLocation.FolderId,
-            "solomon_service"_a = soLocation.Service
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2, "row_table"_a = rowSinkTable, "column_table"_a = columnSinkTable, "s3_sink"_a = s3SinkName,
+            "solomon_sink"_a = solomonSink, "solomon_project"_a = soLocation.ProjectId, "solomon_folder"_a = soLocation.FolderId,
+            "solomon_service"_a = soLocation.Service));
         CheckScriptExecutionsCount(1, 1);
 
         CleanupSolomon(soLocation);
@@ -5052,10 +4537,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;
-            SELECT * FROM `{column_table}`;)",
-            "row_table"_a = rowSinkTable,
-            "column_table"_a = columnSinkTable
-        ));
+            SELECT * FROM `{column_table}`;)", "row_table"_a = rowSinkTable, "column_table"_a = columnSinkTable));
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
 
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
@@ -5087,9 +4569,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
 
-    void CreateMultiOutputQuery(TStreamingTestFixture& self, const std::string& queryName, const std::string& pqSource,
-        const std::string& inputTopic, const std::string& outputTopic1, const std::string& outputTopic2,
-        const std::string& rowTable, const std::string& columnTable)
+    void CreateMultiOutputQuery(TStreamingTestFixture & self, const std::string& queryName, const std::string& pqSource,
+        const std::string& inputTopic, const std::string& outputTopic1, const std::string& outputTopic2, const std::string& rowTable,
+        const std::string& columnTable)
     {
         self.ExecQuery(fmt::format(R"(
             CREATE TABLE `{row_table}` (
@@ -5103,10 +4585,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "row_table"_a = rowTable,
-            "column_table"_a = columnTable
-        ));
+            );)", "row_table"_a = rowTable, "column_table"_a = columnTable));
 
         self.ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
@@ -5123,15 +4602,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Unwrap(Value || "-t2") AS Data FROM $in;
                 UPSERT INTO `{row_table}` SELECT Key, Unwrap(Value || "-r") AS Value FROM $in;
                 UPSERT INTO `{column_table}` SELECT Key, Unwrap(Value || "-c") AS Value FROM $in;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic1"_a = outputTopic1,
-            "output_topic2"_a = outputTopic2,
-            "row_table"_a = rowTable,
-            "column_table"_a = columnTable
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2, "row_table"_a = rowTable, "column_table"_a = columnTable));
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputRestart, TStreamingTestFixture) {
@@ -5154,24 +4626,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
         ReadTopicMessage(outputTopic1, "m1-t1");
         ReadTopicMessage(outputTopic2, "m1-t2");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
+        CheckTable(*this, rowTable, { { "k1", "m1-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" } });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
@@ -5180,8 +4648,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopic1, "m2-t1", disposition);
         ReadTopicMessage(outputTopic2, "m2-t2", disposition);
         Sleep(TDuration::Seconds(1));
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+        CheckTable(*this, rowTable, { { "k1", "m1-r" }, { "k2", "m2-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" }, { "k2", "m2-c" } });
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputCheckpointRecovery, TStreamingTestFixture) {
@@ -5204,16 +4672,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
         ReadTopicMessage(outputTopic1, "m1-t1");
         ReadTopicMessage(outputTopic2, "m1-t2");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
+        CheckTable(*this, rowTable, { { "k1", "m1-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" } });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(1, 0);
 
         Sleep(TDuration::Seconds(1));
@@ -5223,17 +4689,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            );)",
-            "query_name"_a = queryName
-        ));
+            );)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         // Every output receives exactly the message added after the checkpoint (offset recovery, no loss / no duplicates)
         ReadTopicMessage(outputTopic1, "m2-t1", disposition);
         ReadTopicMessage(outputTopic2, "m2-t2", disposition);
         Sleep(TDuration::Seconds(1));
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+        CheckTable(*this, rowTable, { { "k1", "m1-r" }, { "k2", "m2-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" }, { "k2", "m2-c" } });
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputConsistencyOnRestart, TStreamingTestFixture) {
@@ -5259,20 +4723,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(0, R"({"Key": "k1", "Value": "m1"})");
         pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m1-t1");
         pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m1-t2");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
+        CheckTable(*this, rowTable, { { "k1", "m1-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" } });
 
         // Automatic restart via read session failure
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         pqGateway->WaitReadSession(inputTopic)->AddDataReceivedEvent(1, R"({"Key": "k2", "Value": "m2"})");
 
         // All outputs stay consistent after restart: exactly the second message, no re-delivery of the first
         pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m2-t1");
         pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m2-t2");
         Sleep(TDuration::Seconds(1));
-        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
-        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+        CheckTable(*this, rowTable, { { "k1", "m1-r" }, { "k2", "m2-r" } });
+        CheckTable(*this, columnTable, { { "k1", "m1-c" }, { "k2", "m2-c" } });
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputInvalidConfigurations, TStreamingTestFixture) {
@@ -5297,43 +4761,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRIMARY KEY (Value)
             ) WITH (
                 STORE = COLUMN 
-            );)",
-            "row_table"_a = rowTable,
-            "column_table"_a = columnTable
-        ));
+            );)", "row_table"_a = rowTable, "column_table"_a = columnTable));
 
-        for (const auto& sink : {
-            TStringBuilder() << "nonExistentSource`.`" << outputTopic,
-            TStringBuilder() << rowTable << "Unk"
-        }) {
+        for (const auto& sink : { TStringBuilder() << "nonExistentSource`.`" << outputTopic, TStringBuilder() << rowTable << "Unk" }) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `streamingQuery` AS
                 DO BEGIN
                     INSERT INTO `{sink}`
                     SELECT Data FROM `{pq_source}`.`{input_topic}`
-                END DO;)",
-                "pq_source"_a = pqSource,
-                "input_topic"_a = inputTopic,
-                "sink"_a = sink
-            ), EStatus::SCHEME_ERROR, "does not exist");
+                END DO;)", "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "sink"_a = sink), EStatus::SCHEME_ERROR, "does not exist");
         }
 
-        for (const auto& mode : {"UPSERT", "REPLACE"}) {
+        for (const auto& mode : { "UPSERT", "REPLACE" }) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `streamingQuery` AS
                 DO BEGIN
                     {mode} INTO `{pq_source}`.`{output_topic}`
                     SELECT Data FROM `{pq_source}`.`{input_topic}`
-                END DO;)",
-                "mode"_a = mode,
-                "pq_source"_a = pqSource,
-                "input_topic"_a = inputTopic,
-                "output_topic"_a = outputTopic
-            ), EStatus::GENERIC_ERROR, TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
+                END DO;)", "mode"_a = mode, "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "output_topic"_a = outputTopic),
+                EStatus::GENERIC_ERROR,
+                TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
         }
 
-        for (const auto& table : {rowTable, columnTable}) {
-            for (const auto& mode : {"INSERT", "REPLACE"}) {
+        for (const auto& table : { rowTable, columnTable }) {
+            for (const auto& mode : { "INSERT", "REPLACE" }) {
                 ExecQuery(fmt::format(R"(
                     CREATE STREAMING QUERY `streamingQuery` AS
                     DO BEGIN
@@ -5344,12 +4795,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                                 Value String NOT NULL
                             )
                         )
-                    END DO;)",
-                    "mode"_a = mode,
-                    "table"_a = table,
-                    "pq_source"_a = pqSource,
-                    "input_topic"_a = inputTopic
-                ), EStatus::GENERIC_ERROR, "Only UPSERT writing mode is supported for YDB writes inside streaming queries");
+                    END DO;)", "mode"_a = mode, "table"_a = table, "pq_source"_a = pqSource, "input_topic"_a = inputTopic),
+                    EStatus::GENERIC_ERROR, "Only UPSERT writing mode is supported for YDB writes inside streaming queries");
             }
         }
 
@@ -5358,11 +4805,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}` SELECT Data FROM `{pq_source}`.`{input_topic}`;
                 SELECT * FROM `{pq_source}`.`{input_topic}`;
-            END DO;)",
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), EStatus::GENERIC_ERROR, "Results is not allowed for streaming queries, please use INSERT to record the query result");
+            END DO;)", "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "output_topic"_a = outputTopic), EStatus::GENERIC_ERROR,
+            "Results is not allowed for streaming queries, please use INSERT to record the query result");
     }
 
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
@@ -5385,11 +4829,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{topic}`
                 SELECT * FROM `{pq_source}`.`{topic}`;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSource,
-            "topic"_a = topic
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSource, "topic"_a = topic));
 
         WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
@@ -5437,13 +4877,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             if (ok) {
                 break;
             }
-            Sleep(TDuration::MilliSeconds(50 + (rng() % 100))); // 100+-50ms
+            Sleep(TDuration::MilliSeconds(50 + (rng() % 100)));   // 100+-50ms
         }
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
-            "query_name"_a = queryName
-        ));
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)", "query_name"_a = queryName));
 
         {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
@@ -5454,9 +4892,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
 
         ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            DROP STREAMING QUERY `{query_name}`;)", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(0, 0);
     }
@@ -5464,6 +4900,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryDdlRetriesUnderSchemeShardRestarts, TStreamingWithSchemaSecretsTestFixture) {
         NodeCount = 5;
         LogSettings.Freeze = true;
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
 
         constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
         constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
@@ -5477,35 +4914,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 queriesCount = 1000;
         constexpr ui64 inflightLimit = 250;
 
-        std::vector<TAsyncStatus> results;
-        std::vector<NThreading::TFuture<void>> futures;
-        for (ui64 i = 0; i < queriesCount; ++i) {
-            // The SDK may replay a batch after a committed scheme transaction loses its reply.
-            const auto query = fmt::format(R"(
-                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
-                DO BEGIN
-                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
-                END DO;
-
-                ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);
-
-                DROP STREAMING QUERY IF EXISTS `query_{i}`;)",
-                "i"_a = i,
-                "source"_a = pqSourceName,
-                "output_topic"_a = outputTopicName,
-                "input_topic"_a = inputTopicName
-            );
-            results.emplace_back(GetQueryClient()->RetryQuery([query](TQueryClient& client) {
-                return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(0)))
+        const auto executeQuery = [queryClient = GetQueryClient()](const std::string& query) {
+            // Retry each DDL separately if a committed scheme transaction loses its reply.
+            return queryClient->RetryQuery([query](TQueryClient& client) {
+                return client
+                    .ExecuteQuery(
+                        query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(/* value */ 0)))
                     .Apply([](const TAsyncExecuteQueryResult& future) -> TStatus {
                         const auto& result = future.GetValue();
                         const TString issues(result.GetIssues().ToOneLineString());
+
                         if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
-                            if (issues.Contains("Streaming query already under operation")
-                                || issues.Contains("path version mistmach")
-                                || issues.Contains("path exists but creating right now")
-                                || issues.Contains("path is under operation")
-                                || issues.Contains("path is being deleted right now")) {
+                            if (issues.Contains("Streaming query already under operation") || issues.Contains("path version mistmach") ||
+                                issues.Contains("path exists but creating right now") || issues.Contains("path is under operation") ||
+                                issues.Contains("path is being deleted right now")) {
                                 return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
                             }
                         } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
@@ -5513,10 +4935,38 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                                 return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
                             }
                         }
+
                         return result;
                     });
-            }, TRetryOperationSettings().Idempotent(true).MaxRetries(100).MaxTimeout(TDuration::Minutes(2))));
+            }, TRetryOperationSettings().Idempotent(/* value */ true).MaxRetries(/* value */ 100).MaxTimeout(TDuration::Minutes(/* m */ 2)));
+        };
 
+        std::vector<TAsyncStatus> results;
+        results.reserve(queriesCount);
+        std::vector<NThreading::TFuture<void>> futures;
+        futures.reserve(inflightLimit);
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            const auto createQuery = fmt::format(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
+                DO BEGIN
+                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
+                END DO;)", "i"_a = i, "source"_a = pqSourceName, "output_topic"_a = outputTopicName, "input_topic"_a = inputTopicName);
+            const auto alterQuery = fmt::format("ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);", "i"_a = i);
+            const auto dropQuery = fmt::format("DROP STREAMING QUERY IF EXISTS `query_{i}`;", "i"_a = i);
+
+            auto result = executeQuery(createQuery);
+
+            for (const auto& query : { alterQuery, dropQuery }) {
+                result = result.Apply([executeQuery, query](const TAsyncStatus& future) -> TAsyncStatus {
+                    if (!future.GetValue().IsSuccess()) {
+                        return future;
+                    }
+
+                    return executeQuery(query);
+                });
+            }
+
+            results.emplace_back(std::move(result));
             futures.emplace_back(results.back().IgnoreResult());
 
             if (futures.size() >= inflightLimit) {
@@ -5530,6 +4980,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         newFutures.emplace_back(future);
                     }
                 }
+
                 futures = std::move(newFutures);
             }
         }
@@ -5557,19 +5008,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessage(outputTopicName, "key1value1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoint
 
         // Finish query like shutdown
         {
@@ -5657,41 +5104,32 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic2}`
                 SELECT Unwrap(key_2 || "-" || time || "-" || count) FROM $grouped2;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic1"_a = outputTopicName1,
-            "output_topic2"_a = outputTopicName2
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic1"_a = outputTopicName1, "output_topic2"_a = outputTopicName2));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessages(inputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "key1": "A", "key2": "X"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "key1": "B", "key2": "Y"})",
-        });
+                                               R"({"time": "2025-08-24T00:00:00.000000Z", "key1": "A", "key2": "X"})",
+                                               R"({"time": "2025-08-25T00:00:00.000000Z", "key1": "B", "key2": "Y"})",
+                                           });
         ReadTopicMessage(outputTopicName1, "A-k1-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "X-k2-2025-08-24T00:00:00.000000Z-1");
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 3));
 
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
-            "query_name"_a = queryName
-        ));
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)", "query_name"_a = queryName));
 
         const auto disposition = TInstant::Now();
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "key1": "C", "key2": "Z"})");
         Sleep(TDuration::Seconds(1));
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
-            "query_name"_a = queryName
-        ));
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName1, "B-k1-2025-08-25T00:00:00.000000Z-1", disposition);
@@ -5747,41 +5185,32 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic2}`
                 SELECT Unwrap(key || "-" || time2 || "-" || count) FROM $grouped2;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic1"_a = outputTopicName1,
-            "output_topic2"_a = outputTopicName2
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic1"_a = outputTopicName1, "output_topic2"_a = outputTopicName2));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessages(inputTopicName, {
-            R"({"time1": "2025-08-24T00:00:00.000000Z", "time2": "2028-08-24T00:00:00.000000Z", "key": "A"})",
-            R"({"time1": "2025-08-25T00:00:00.000000Z", "time2": "2028-08-25T00:00:00.000000Z", "key": "B"})",
-        });
+                                               R"({"time1": "2025-08-24T00:00:00.000000Z", "time2": "2028-08-24T00:00:00.000000Z", "key": "A"})",
+                                               R"({"time1": "2025-08-25T00:00:00.000000Z", "time2": "2028-08-25T00:00:00.000000Z", "key": "B"})",
+                                           });
         ReadTopicMessage(outputTopicName1, "A-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "A-2028-08-24T00:00:00.000000Z-1");
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 3));
 
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
-            "query_name"_a = queryName
-        ));
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)", "query_name"_a = queryName));
 
         const auto disposition = TInstant::Now();
         WriteTopicMessage(inputTopicName, R"({"time1": "2025-08-26T00:00:00.000000Z", "time2": "2028-08-26T00:00:00.000000Z", "key": "C"})");
         Sleep(TDuration::Seconds(1));
 
         ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
-            "query_name"_a = queryName
-        ));
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)", "query_name"_a = queryName));
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName1, "B-2025-08-25T00:00:00.000000Z-1", disposition);
@@ -5805,17 +5234,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
         Sleep(TDuration::Seconds(1));
 
-        const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)","topic"_a = topic));
+        const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)", "topic"_a = topic));
         CheckScriptResult(result1[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
 
-        const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` LIMIT 1)","topic"_a = topic));
+        const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` LIMIT 1)", "topic"_a = topic));
         CheckScriptResult(result2[0], 1, 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
 
-        const auto& result3 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))","topic"_a = topic));
+        const auto& result3 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))", "topic"_a = topic));
         CheckScriptResult(result3[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
@@ -5854,13 +5283,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         )
                     )
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic1"_a = inputTopicName1,
-            "input_topic2"_a = inputTopicName2,
-            "output_topic"_a = outputTopicName
-        ));
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic1"_a = inputTopicName1,
+            "input_topic2"_a = inputTopicName2, "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -5868,14 +5292,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName1, R"({"key": "topic1_", "value": "key1"})");
         WriteTopicMessage(inputTopicName2, R"({"key": "topic2_", "value": "key2"})");
 
-        ReadTopicMessages(outputTopicName, {"topic1_key1", "topic2_key2"}, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+        ReadTopicMessages(outputTopicName, { "topic1_key1", "topic2_key2" }, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
 
         ExecQuery(fmt::format(
             R"sql(
                 ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
-            )sql",
-            "query_name"_a = queryName
-        ));
+            )sql", "query_name"_a = queryName));
     }
 
     Y_UNIT_TEST_F(UnionAllTopicWithItself, TStreamingTestFixture) {
@@ -5909,26 +5331,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         )
                     )
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"key": "k", "value": "v"})");
 
-        ReadTopicMessages(outputTopicName, {"kv", "kv_dup"}, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+        ReadTopicMessages(outputTopicName, { "kv", "kv_dup" }, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
 
         ExecQuery(fmt::format(
             R"sql(
                 ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
-            )sql",
-            "query_name"_a = queryName
-        ));
+            )sql", "query_name"_a = queryName));
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithFlattenListBy, TStreamingTestFixture) {
@@ -5947,18 +5363,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Item FROM `{pq_source}`.`{input_topic}`
                 FLATTEN LIST BY (String::SplitToList(Data, ",") AS Item)
-            END DO;)sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "A,B,C,D,E");
-        ReadTopicMessages(outputTopicName, {"A", "B", "C", "D", "E"});
+        ReadTopicMessages(outputTopicName, { "A", "B", "C", "D", "E" });
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithOffsetAndLimit, TStreamingTestFixture) {
@@ -5978,17 +5390,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1 OFFSET 1
-            END DO;)sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
-        WriteTopicMessages(inputTopicName, {"A", "B", "C"});
+        WriteTopicMessages(inputTopicName, { "A", "B", "C" });
         ReadTopicMessage(outputTopicName, "B");
 
         Sleep(TDuration::Seconds(1));
@@ -5998,8 +5406,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_TWIN_F(StreamingQueryWithProcess, EnableKqpConstraintsTransformer, TStreamingTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(EnableKqpConstraintsTransformer);
 
-        constexpr char inputTopicName[] = "streamingQueryWithProcessInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryWithProcessOutputTopic";
+        const auto inputTopicName = MakeExternalName("streamingQueryWithProcessInputTopic");
+        const auto outputTopicName = MakeExternalName("streamingQueryWithProcessOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -6023,13 +5431,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Unwrap(Data) FROM $p WHERE Data IS NOT NULL;
-            END DO;)sql",
-            "opt_pragma"_a = EnableKqpConstraintsTransformer ? "PRAGMA ydb.OptValidateStreamingConstraints = \"false\";" : "",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)sql", "opt_pragma"_a = EnableKqpConstraintsTransformer ? "PRAGMA ydb.OptValidateStreamingConstraints = \"false\";" : "",
+            "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -6047,7 +5450,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(UseLocalTopics);
 
-        constexpr char outputTopic[] = "outputTopicName";
+        const auto outputTopic = MakeExternalName("outputTopicName");
         CreateScopedTopicExt(outputTopic, std::nullopt, UseLocalTopics);
 
         constexpr char outPqSource[] = "outSourceName";
@@ -6062,11 +5465,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     DATABASE_NAME = "{pq_database_name}",
                     AUTH_METHOD = "NONE"
                 );
-            )sql",
-            "pq_source"_a = inputPqSource,
-            "pq_location"_a = GetInternalDriver()->GetConfig().GetEndpoint(),
-            "pq_database_name"_a = GetInternalDriver()->GetConfig().GetDatabase()
-        ));
+            )sql", "pq_source"_a = inputPqSource, "pq_location"_a = GetInternalDriver()->GetConfig().GetEndpoint(),
+            "pq_database_name"_a = GetInternalDriver()->GetConfig().GetDatabase()));
 
         constexpr char tableName[] = "tableName";
         ExecQuery(fmt::format(R"sql(
@@ -6114,14 +5514,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     )))))
                 FROM $messages
                 WHERE Parsed.oldImage IS NULL
-            END DO;)sql",
-            "table"_a = tableName,
-            "changefeed"_a = changefeedName,
-            "output_name"_a = outputTopic,
+            END DO;)sql", "table"_a = tableName, "changefeed"_a = changefeedName, "output_name"_a = outputTopic,
             "input_source"_a = UseLocalTopics ? TStringBuilder() : TStringBuilder() << inputPqSource << ".",
-            "output_source"_a = UseLocalTopics ? TStringBuilder() : TStringBuilder() << outPqSource << ".",
-            "query_name"_a = queryName
-        ));
+            "output_source"_a = UseLocalTopics ? TStringBuilder() : TStringBuilder() << outPqSource << ".", "query_name"_a = queryName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -6150,12 +5545,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     value String NOT NULL
                 )
             )
-            LIMIT 1;)",
-            "source"_a = sourceName,
-            "topic"_a = topicName
-        ),
-        EStatus::GENERIC_ERROR,
-        "names starting with '__ydb_' are reserved for system columns");
+            LIMIT 1;)", "source"_a = sourceName, "topic"_a = topicName), EStatus::GENERIC_ERROR,
+            "names starting with '__ydb_' are reserved for system columns");
     }
 
     Y_UNIT_TEST_F(StreamingQueryInvalidationAfterCreation, TStreamingTestFixture) {
@@ -6177,12 +5568,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     INSERT INTO `{pq_source}`.`{output_topic}`
                     SELECT * FROM `{pq_source}`.`{input_topic}`;
                 END DO;
-            )sql",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
@@ -6193,19 +5580,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 changesCount = 10;
         for (ui64 i = 0; i < changesCount; ++i) {
             ExecQuery(fmt::format(
-                R"sql(
+                          R"sql(
                     ALTER STREAMING QUERY `{query_name}` SET (FORCE = TRUE) AS
                     DO BEGIN
                         PRAGMA ydb.OverridePlanner = "invalid";
                         INSERT INTO `{pq_source}`.`{output_topic}`
                         SELECT * FROM `{pq_source}`.`{input_topic}`;
                     END DO;
-                )sql",
-                "query_name"_a = queryName,
-                "pq_source"_a = pqSourceName,
-                "input_topic"_a = inputTopicName,
-                "output_topic"_a = outputTopicName
-            ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+                )sql", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                          "output_topic"_a = outputTopicName), EStatus::GENERIC_ERROR, "Invalid override planner settings");
         }
 
         {
@@ -6213,7 +5596,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
             CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Invalid override planner settings");
+                UNIT_ASSERT_STRING_CONTAINS(
+                    resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Invalid override planner settings");
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Status").GetOptionalUtf8().value_or(""), "FAILED");
             });
         }
@@ -6237,8 +5621,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         constexpr ui32 partitionCount = 1000;
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const auto inputTopicName = MakeExternalName("createAndAlterStreamingQueryInputTopic");
+        const auto outputTopicName = MakeExternalName("createAndAlterStreamingQueryOutputTopic");
         CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
         CreateScopedTopic(outputTopicName);
 
@@ -6258,13 +5642,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data FROM `{pq_source}`.`{input_topic}`
                 GROUP BY Data, HOP(CurrentUtcTimestamp(TableRow()), "PT10S", "PT10S", "PT10S");
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "disable_checkpoints"_a = DisableCheckpoints ? "TRUE" : "FALSE"
-        ), DisableCheckpoints ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED,
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+                      "output_topic"_a = outputTopicName, "disable_checkpoints"_a = DisableCheckpoints ? "TRUE" : "FALSE"),
+            DisableCheckpoints ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED,
             DisableCheckpoints ? "" : "Not enough resources to execute query");
 
         if (!DisableCheckpoints) {
@@ -6289,7 +5669,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 error = TStringBuilder() << "issues: " << issuesJson;
 
                 const auto status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
-                if (!IsIn({"RUNNING", "SUSPENDED"}, status)) {
+                if (!IsIn({ "RUNNING", "SUSPENDED" }, status)) {
                     UNIT_FAIL("Unexpected query status: " << status);
                 }
             });
@@ -6314,9 +5694,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 Key String NOT NULL,
                 Value String NOT NULL,
                 PRIMARY KEY (Key)
-            );)",
-            "output_table"_a = outputTableName
-        ));
+            );)", "output_table"_a = outputTableName));
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
@@ -6329,32 +5707,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         Value String NOT NULL
                     )
                 )
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_table"_a = outputTableName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_table"_a = outputTableName));
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, R"({"Key": "key1", "Value": "value1"})");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
-        CheckTable(*this, outputTableName, {{"key1", "value1"}});
+        Sleep(TDuration::Seconds(1));   // wait for checkpoint commit
+        CheckTable(*this, outputTableName, { { "key1", "value1" } });
 
-        ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)",
-            "output_table"_a = outputTableName
-        ));
+        ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)", "output_table"_a = outputTableName));
 
         // Trigger another batch so the write actor tries to write to the now-deleted table.
         WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
 
         // Shard-write retries followed by table-resolution retries can exceed a minute.
         WaitFor(TDuration::Minutes(2), "Wait for execution restart after table drop", [&](TString& error) {
-            const auto& result = ExecQuery(
-                R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"
-            );
+            const auto& result = ExecQuery(R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
             i64 generation = 0;
@@ -6382,11 +5752,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}` LIMIT 1
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Checkpoints are not supported for LIMIT operator, query may produce unstable results");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Checkpoints are not supported for LIMIT operator, query may produce unstable results");
 
         constexpr char queryNameLimit[] = "streamingQueryLimitRun";
         ExecQuery(fmt::format(R"(
@@ -6395,12 +5762,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "1" FROM `{pq_source}`.`{input_topic}` LIMIT 1
-            END DO;)",
-            "query_name"_a = queryNameLimit,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryNameLimit, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}2` AS
@@ -6408,18 +5771,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRAGMA ydb.DisableCheckpoints = "TRUE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "2" FROM `{pq_source}`.`{input_topic}` LIMIT 1
-            END DO;)",
-            "query_name"_a = queryNameLimit,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryNameLimit, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(3, 2);
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "test_message");
-        ReadTopicMessages(outputTopicName, {"test_message1", "test_message2"});
+        ReadTopicMessages(outputTopicName, { "test_message1", "test_message2" });
 
         Sleep(TDuration::Seconds(1));
         CheckScriptExecutionsCount(3, 0);
@@ -6435,12 +5794,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         ","
                     )
                 FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "query_name"_a = queryNameTakeWhile,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryNameTakeWhile, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(4, 1);
         const auto disposition = TInstant::Now();
@@ -6454,21 +5809,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
-    TTestInfo SetupCheckpointIntervalTest(TStreamingTestFixture& self, const TString& queryName) {
-        TTestInfo info = {
-            .InputTopicName = TStringBuilder() << queryName << "Input" << self.Name_,
+    TTestInfo SetupCheckpointIntervalTest(TStreamingTestFixture & self, const TString& queryName) {
+        TTestInfo info = { .InputTopicName = TStringBuilder() << queryName << "Input" << self.Name_,
             .OutputTopicName = TStringBuilder() << queryName << "Output" << self.Name_,
             .PqSourceName = "pqSourceName",
-            .QueryName = queryName
-        };
+            .QueryName = queryName };
         info.QueryText = fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-            )",
-            "pq_source"_a = info.PqSourceName,
-            "input_topic"_a = info.InputTopicName,
-            "output_topic"_a = info.OutputTopicName
-        );
+            )", "pq_source"_a = info.PqSourceName, "input_topic"_a = info.InputTopicName, "output_topic"_a = info.OutputTopicName);
 
         self.CreateTopic(info.InputTopicName);
         self.CreateTopic(info.OutputTopicName);
@@ -6492,21 +5841,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 CREATE STREAMING QUERY `{query_name}` WITH (
                     RUN = FALSE,
                     CHECKPOINT_INTERVAL = "{checkpoint_interval}"
-                ) AS DO BEGIN{query_text}END DO;)",
-                "query_name"_a = info.QueryName,
-                "checkpoint_interval"_a = checkpointInterval,
-                "query_text"_a = info.QueryText
-            );
+                ) AS DO BEGIN{query_text}END DO;)", "query_name"_a = info.QueryName, "checkpoint_interval"_a = checkpointInterval,
+                "query_text"_a = info.QueryText);
         };
 
         const auto alterQuery = [&](const std::string& checkpointInterval) {
             return fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     CHECKPOINT_INTERVAL = "{checkpoint_interval}"
-                );)",
-                "query_name"_a = info.QueryName,
-                "checkpoint_interval"_a = checkpointInterval
-            );
+                );)", "query_name"_a = info.QueryName, "checkpoint_interval"_a = checkpointInterval);
         };
 
         // Init script execution tables
@@ -6548,9 +5891,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RESOURCE_POOL = "default"
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", "P1DT2H3M4.5S");
 
         // Interval is reset to default by create or replace without setting
@@ -6558,10 +5899,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
                 RUN = FALSE
-            ) AS DO BEGIN{query_text}END DO;)",
-            "query_name"_a = info.QueryName,
-            "query_text"_a = info.QueryText
-        ));
+            ) AS DO BEGIN{query_text}END DO;)", "query_name"_a = info.QueryName, "query_text"_a = info.QueryText));
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", "");
 
         CheckScriptExecutionsCount(1, 0);
@@ -6591,10 +5929,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN{query_text}END DO;)",
-            "query_name"_a = defaultInfo.QueryName,
-            "query_text"_a = defaultInfo.QueryText
-        ));
+            DO BEGIN{query_text}END DO;)", "query_name"_a = defaultInfo.QueryName, "query_text"_a = defaultInfo.QueryText));
         CheckStreamingQueryProperty(defaultQueryName, "checkpoint_interval", "");
 
         // Query with setting overrides cluster wide checkpointing period
@@ -6603,11 +5938,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
                 CHECKPOINT_INTERVAL = "{checkpoint_interval}"
-            ) AS DO BEGIN{query_text}END DO;)",
-            "query_name"_a = fastInfo.QueryName,
-            "checkpoint_interval"_a = checkpointInterval,
-            "query_text"_a = fastInfo.QueryText
-        ));
+            ) AS DO BEGIN{query_text}END DO;)", "query_name"_a = fastInfo.QueryName, "checkpoint_interval"_a = checkpointInterval,
+            "query_text"_a = fastInfo.QueryText));
         CheckStreamingQueryProperty(fastQueryName, "checkpoint_interval", checkpointInterval);
 
         CheckScriptExecutionsCount(2, 2);
@@ -6634,11 +5966,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         // Setting is restored from operation meta after internal retry
 
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         pqGateway->WaitReadSession(fastInfo.InputTopicName);
         WaitStreamingQueryStatus(fastQueryName);
 
-        defaultReadSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        defaultReadSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         pqGateway->WaitReadSession(defaultInfo.InputTopicName);
         WaitStreamingQueryStatus(defaultQueryName);
 
@@ -6666,20 +5998,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             return fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     CHECKPOINT_INTERVAL = "{checkpoint_interval}"
-                );)",
-                "query_name"_a = info.QueryName,
-                "checkpoint_interval"_a = checkpointInterval
-            );
+                );)", "query_name"_a = info.QueryName, "checkpoint_interval"_a = checkpointInterval);
         };
 
         // Query is created without setting, so cluster wide checkpointing period is used
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN{query_text}END DO;)",
-            "query_name"_a = info.QueryName,
-            "query_text"_a = info.QueryText
-        ));
+            DO BEGIN{query_text}END DO;)", "query_name"_a = info.QueryName, "query_text"_a = info.QueryText));
         CheckScriptExecutionsCount(1, 1);
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", "");
         WaitStreamingQueryStatus(queryName);
@@ -6709,9 +6035,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RESOURCE_POOL = "default"
-            );)",
-            "query_name"_a = info.QueryName
-        ));
+            );)", "query_name"_a = info.QueryName));
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", "PT0.2S");
         WaitStreamingQueryStatus(queryName);
 
@@ -6748,11 +6072,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
                 CHECKPOINT_INTERVAL = "{checkpoint_interval}"
-            ) AS DO BEGIN{query_text}END DO;)",
-            "query_name"_a = info.QueryName,
-            "checkpoint_interval"_a = checkpointInterval,
-            "query_text"_a = info.QueryText
-        ));
+            ) AS DO BEGIN{query_text}END DO;)", "query_name"_a = info.QueryName, "checkpoint_interval"_a = checkpointInterval,
+            "query_text"_a = info.QueryText));
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", checkpointInterval);
 
         CheckScriptExecutionsCount(1, 1);
@@ -6771,8 +6092,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingDisabled, TStreamingTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableExactlyOnceTopicsWriting(false);
 
-        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
-        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        const auto inputTopicName = MakeExternalName("deliveryGuarantyWriteSettingDisabledInputTopic");
+        const auto outputTopicName = MakeExternalName("deliveryGuarantyWriteSettingDisabledOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -6785,11 +6106,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DELIVERY_GUARANTEE = "exactly_once"
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it.");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it.");
 
         // Test settings validation
         ExecQuery(fmt::format(R"(
@@ -6798,11 +6116,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DLIVERY_GUARANTEE = "exactly_once"
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Unknown setting 'dliveryguarantee'");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Unknown setting 'dliveryguarantee'");
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY streamingQuery AS
@@ -6810,11 +6125,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DELIVERY_GUARANTEE
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Expected `DELIVERY_GUARANTEE` = value");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Expected `DELIVERY_GUARANTEE` = value");
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY streamingQuery AS
@@ -6822,11 +6134,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DELIVERY_GUARANTEE = "none"
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` must be 'exactly_once' or 'at_least_once'");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` must be 'exactly_once' or 'at_least_once'");
     }
 
     Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingEnabled, TStreamingWithSchemaSecretsTestFixture) {
@@ -6836,8 +6145,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
         }
 
-        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
-        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        const auto inputTopicName = MakeExternalName("deliveryGuarantyWriteSettingDisabledInputTopic");
+        const auto outputTopicName = MakeExternalName("deliveryGuarantyWriteSettingDisabledOutputTopic");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -6852,11 +6161,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DELIVERY_GUARANTEE = "exactly_once"
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceNameNoAuth,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
+            END DO;)", "pq_source"_a = pqSourceNameNoAuth, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
 
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
@@ -6865,20 +6171,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                     DELIVERY_GUARANTEE = "exactly_once"
                 ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
+            END DO;)", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}` WITH (
                 DELIVERY_GUARANTEE = "exactly_once"
-            ) SELECT "test_message")",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), EStatus::SUCCESS, "`DELIVERY_GUARANTEE` = 'exactly_once' cannot be used in current query context, falling back to default 'at_least_once'");
+            ) SELECT "test_message")", "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName),
+            EStatus::SUCCESS,
+            "`DELIVERY_GUARANTEE` = 'exactly_once' cannot be used in current query context, falling back to default 'at_least_once'");
 
         ReadTopicMessage(outputTopicName, "test_message");
     }
@@ -6886,7 +6187,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(BackPressureOnWritingIntoTopics, TStreamingTestFixture) {
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetMaxTotalChannelBuffersSize(1_MB);
 
-        const auto pqGateway = SetupMockPqGateway(TMockPqGatewaySettings{.LockWritingByDefault = true});
+        const auto pqGateway = SetupMockPqGateway(TMockPqGatewaySettings{ .LockWritingByDefault = true });
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -6904,12 +6205,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`;
-            END DO;)",
-            "query_name"_a = queryName,
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            END DO;)", "query_name"_a = queryName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName));
 
         CheckScriptExecutionsCount(1, 1);
 
@@ -6924,8 +6221,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             readSession->AddDataReceivedEvent(0, TStringBuilder() << largeMessage << messageSentIdx++);
         }
 
-        CheckNoCheckpointUpdate(checkpointId); // Checkpoint should wait for unwritten data
-        writeSession->EnsureEmpty(); // No continuation token was provided
+        CheckNoCheckpointUpdate(checkpointId);   // Checkpoint should wait for unwritten data
+        writeSession->EnsureEmpty();   // No continuation token was provided
         UNIT_ASSERT_VALUES_EQUAL(readSession->GetInflightEventsCount(), 0);
 
         ui64 messageReceivedIdx = 0;
@@ -6962,9 +6259,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         // Graph should be stopped by back pressure
 
-        CheckNoCheckpointUpdate(checkpointId); // Checkpoint should wait for acks
+        CheckNoCheckpointUpdate(checkpointId);   // Checkpoint should wait for acks
         UNIT_ASSERT(!messageConsumed);
-        UNIT_ASSERT_GE(readSession->GetInflightEventsCount(), 1); // Messages waiting by back pressure
+        UNIT_ASSERT_GE(readSession->GetInflightEventsCount(), 1);   // Messages waiting by back pressure
 
         const auto& writtenData = writeSession->ExtractData();
         UNIT_ASSERT_GE(messagesCount, writtenData.size() + 1);
@@ -6989,4 +6286,4 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -71,6 +71,7 @@ public:
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
     NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
+    NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
@@ -201,7 +202,7 @@ public:
     bool HasOptEnableInplaceUpdate() const;
 };
 
-struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher, public NKikimrConfig::TTableServiceConfig {
+struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSettings>, public NKikimrConfig::TTableServiceConfig {
     using TPtr = TIntrusivePtr<TKikimrConfiguration>;
 
     TKikimrConfiguration();
@@ -222,7 +223,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         this->SetValidClusters(clusters);
 
         if (defaultCluster) {
-            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         }
 
         // Init settings from config
@@ -239,7 +240,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     {
         this->SetValidClusters(TVector<TString>{cluster});
 
-        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         this->Dispatch(defaultSettings);
         this->Dispatch(NCommon::ALL_CLUSTERS, settings);
 
@@ -273,6 +274,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseBlockHashJoinForCross() const;
     bool GetEnableBlockHashJoinEqualNulls() const;
     bool GetUseScalarHashJoinForMap() const;
+    bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool GetWindowFunctionsV2() const;

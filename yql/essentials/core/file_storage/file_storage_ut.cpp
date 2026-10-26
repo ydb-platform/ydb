@@ -18,6 +18,8 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
+#include <util/system/env.h>
+#include <util/system/shellcommand.h>
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
 #include <util/system/file_lock.h>
@@ -666,6 +668,16 @@ Y_UNIT_TEST(SocketTimeout) {
 }
 
 Y_UNIT_TEST(PutFileStrippedWithBandwidthLimit) {
+    const TString externalUtilsDirectory = BinaryPath("yql/essentials/core/file_storage/external_utils");
+    const TString pvPath = (TFsPath(externalUtilsDirectory) / "pv").GetPath();
+    TShellCommand pvVersion(pvPath, {"--version"});
+    pvVersion.Run().Wait();
+    UNIT_ASSERT_VALUES_EQUAL_C(pvVersion.GetExitCode(), 0, pvVersion.GetError());
+    TShellCommand stripVersion((TFsPath(externalUtilsDirectory) / "strip").GetPath(), {"--version"});
+    stripVersion.Run().Wait();
+    UNIT_ASSERT_VALUES_EQUAL_C(stripVersion.GetExitCode(), 0, stripVersion.GetError());
+    NTesting::TScopedEnvironment path("PATH", externalUtilsDirectory + ":" + GetEnv("PATH"));
+
     TTempFileHandle testFile;
     NFs::Copy("/proc/self/exe", testFile.GetName());
 

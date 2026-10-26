@@ -7,6 +7,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication {
@@ -81,6 +83,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
+        HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
+        HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
         HFunc(TEvPrivate::TEvPrepareAttachDst, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
@@ -92,6 +96,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
+        HFunc(TEvPrivate::TEvRestoreSession, Handle);
+        HFunc(TEvPrivate::TEvBootPersistedWorkers, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
@@ -180,6 +186,22 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 
         replication->Progress(ctx);
     }
+
+    // Workers are persisted once allowed to run (a root, or all parents ended),
+    // but their commands are not. Otherwise a child partition that is not running
+    // anywhere is never read. Boot them after a grace period, so that workers still
+    // running on nodes are re-adopted from TEvStatus first instead of being doubled.
+    for (auto& [id, worker] : Workers) {
+        if (worker.HasCommand() || !IsValidWorker(id)) {
+            continue;
+        }
+
+        if (const auto* target = FindTarget(id)) {
+            auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
+            worker.SetCommand(ev->Record.MutableCommand());
+        }
+    }
+    Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
 
     for (const auto& [key, barrier] : SchemaBarriers) {
         if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
@@ -329,6 +351,14 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
     RunTxCreateStreamResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx) {
+    // The request and cancellation come from the same actor in that order.
+    // A grant may already be in flight, so remove both queued and active entries.
+    std::erase(RequestedCreateStream, ev->Sender);
+    InflightCreateStream.erase(ev->Sender);
+    ProcessCreateStreamQueue(ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
@@ -344,6 +374,12 @@ void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActor
     InflightDropStream.erase(ev->Sender);
     ProcessDropStreamQueue(ctx);
     RunTxDropStreamResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvCancelDropStream::TPtr& ev, const TActorContext& ctx) {
+    std::erase(RequestedDropStream, ev->Sender);
+    InflightDropStream.erase(ev->Sender);
+    ProcessDropStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
@@ -534,6 +570,13 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
+        if (!worker->HasCommand()) {
+            if (const auto* target = FindTarget(id)) {
+                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
+                worker->SetCommand(ev->Record.MutableCommand());
+            }
+        }
+
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
                 Y_ABORT_UNLESS(Sessions.contains(sessionId));
@@ -659,6 +702,11 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
+    // DataEnd is resent on every handshake, the worker might be gone or about to be stopped
+    if (!Sessions[nodeId].HasWorker(id) || !IsValidWorker(id)) {
+        return;
+    }
+
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
 
@@ -1081,6 +1129,25 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
 
     if (Sessions.contains(nodeId)) {
         DeleteSession(nodeId, ctx);
+        // the node is still in discovery, so it will not be reported as a new one
+        Schedule(RestoreSessionInterval, new TEvPrivate::TEvRestoreSession(nodeId));
+    }
+}
+
+void TController::Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr&, const TActorContext&) {
+    for (const auto& [id, worker] : Workers) {
+        if (!worker.HasSession() && worker.HasCommand() && IsValidWorker(id)) {
+            BootQueue.insert(id);
+        }
+    }
+
+    ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx) {
+    const ui32 nodeId = ev->Get()->NodeId;
+    if (!Sessions.contains(nodeId) && NodesManager.HasNode(nodeId)) {
+        CreateSession(nodeId, ctx);
     }
 }
 

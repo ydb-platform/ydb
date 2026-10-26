@@ -174,6 +174,9 @@ namespace NKikimr::NStorage {
             details->SetNonUniformStorageEnabled(true);
             next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelNonUniformStorage));
         }
+        if (config->GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelPileOverrides));
+        }
         config->MutableClusterStateDetails()->MutablePileRegistry()->Swap(&next);
         return std::nullopt;
     }
@@ -188,10 +191,14 @@ namespace NKikimr::NStorage {
 
         config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize()));
         *config->MutableClusterStateDetails()->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(*cfg.BridgeConfig);
+        if (config->GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            config->MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelPileOverrides);
+        }
         if (cfg.BridgeConfig->GetEnableNonUniformStorage()) {
             auto *details = config->MutableClusterStateDetails();
             details->SetNonUniformStorageEnabled(true);
-            details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelNonUniformStorage);
+            details->MutablePileRegistry()->SetRequiredFeatureLevel(Max<ui32>(
+                details->GetPileRegistry().GetRequiredFeatureLevel(), BridgeFeatureLevelNonUniformStorage));
         }
     }
 
@@ -525,6 +532,14 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "can't find erasure of bridged static group GroupId# " << proxyGroupId;
             }
 
+            // New parts inherit the configured static base, not whichever heterogeneous part is found first.
+            if (config->GetSelfManagementConfig().HasErasureSpecies()) {
+                TBlobStorageGroupType::EErasureSpecies species;
+                if (!TBlobStorageGroupType::ParseErasureName(species, config->GetSelfManagementConfig().GetErasureSpecies())) {
+                    return "invalid static group ErasureSpecies";
+                }
+                groupType = TBlobStorageGroupType(species);
+            }
             ++nextGroupId;
             try {
                 const auto& smConfig = config->GetSelfManagementConfig();

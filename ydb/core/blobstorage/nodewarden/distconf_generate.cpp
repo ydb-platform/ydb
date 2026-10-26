@@ -2,6 +2,7 @@
 #include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -157,11 +158,34 @@ namespace NKikimr::NStorage {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
+        auto selfManagementConfig = config->GetSelfManagementConfig();
+        selfManagementConfig.MutableGeometry()->CopyFrom(geometry);
+        selfManagementConfig.MutablePDiskFilter()->CopyFrom(pdiskFilters);
+        if (pdiskType) {
+            selfManagementConfig.SetPDiskType(*pdiskType);
+        } else {
+            selfManagementConfig.ClearPDiskType();
+        }
+        const auto pileRegistry = GetConfigPileRegistry(*config);
+        if (bridgePileId && pileRegistry && bridgePileId.GetPileIndex() < pileRegistry->PilesSize()) {
+            const auto& pileName = pileRegistry->GetPiles(bridgePileId.GetPileIndex()).GetName();
+            if (const auto *rule = FindStoragePoolPileOverride(*bsConfig, pileName, std::nullopt)) {
+                ApplyStoragePoolPileOverride(selfManagementConfig, *rule);
+                if (rule->HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies species;
+                    if (!TBlobStorageGroupType::ParseErasureName(species, rule->GetErasureSpecies())) {
+                        throw TExConfigError() << "invalid static group pile override ErasureSpecies";
+                    }
+                    gtype = TBlobStorageGroupType(species);
+                }
+            }
+        }
+        pdiskType = selfManagementConfig.HasPDiskType()
+            ? std::make_optional(selfManagementConfig.GetPDiskType()) : std::nullopt;
 
         // build node location map
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
-        const auto pileRegistry = GetConfigPileRegistry(*config);
         const auto placementPileId = NBridge::GetPlacementPileId(bridgePileId, BridgeInfo.get());
         for (const auto& node : config->GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
@@ -192,7 +216,7 @@ namespace NKikimr::NStorage {
             if (type == pdiskType) {
                 return true;
             }
-            for (const auto& pdiskFilter : pdiskFilters) {
+            for (const auto& pdiskFilter : selfManagementConfig.GetPDiskFilter()) {
                 bool m = true;
                 for (const auto& p : pdiskFilter.GetProperty()) {
                     bool pMatch = false;
@@ -339,6 +363,9 @@ namespace NKikimr::NStorage {
 
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    if (group.GetErasureSpecies() != gtype.GetErasure()) {
+                        throw TExConfigError() << "can't change erasure of existing static group";
+                    }
                     generation.emplace(group.GetGroupGeneration());
 
                     ui32 failRealmIdx = 0;
@@ -480,7 +507,7 @@ namespace NKikimr::NStorage {
         EnumerateConfigDrives(*config, 0, processDrive, nullptr, true);
 
         // group mapper
-        NBsController::TGroupGeometryInfo geom(gtype.GetErasure(), geometry);
+        NBsController::TGroupGeometryInfo geom(gtype.GetErasure(), selfManagementConfig.GetGeometry());
         NBsController::TGroupMapper mapper(geom);
 
         for (const auto& [pdiskId, item] : pdisks) {

@@ -374,6 +374,9 @@ message TBlobStorageConfig {
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+
+    // Persistent per-pile allocation rules. At most one rule may match a (pile, pool kind) or static group.
+    repeated NKikimrBlobStorage.TStoragePoolPileOverride StoragePoolPileOverrides = 16;
 }
 
 message TSelfManagementConfig {

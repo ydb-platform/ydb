@@ -45,8 +45,8 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
             const auto& tx = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
                 proposal->Get()->Ev.Get())->Record.GetTransaction(0);
             UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(tx.GetExpectedReplicationOwner()), TPathId(1, 3));
-            UNIT_ASSERT_VALUES_EQUAL(tx.GetOperationType(), alter || detach
-                ? NKikimrSchemeOp::ESchemeOpAlterTable : NKikimrSchemeOp::ESchemeOpDropTable);
+            UNIT_ASSERT_C(tx.GetOperationType() == (alter || detach
+                ? NKikimrSchemeOp::ESchemeOpAlterTable : NKikimrSchemeOp::ESchemeOpDropTable), tx.ShortDebugString());
             if (alter || detach) {
                 UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(tx.GetAlterTable().GetPathId()), pathId);
                 UNIT_ASSERT(!tx.GetAlterTable().GetReplicationConfig().HasOwner());

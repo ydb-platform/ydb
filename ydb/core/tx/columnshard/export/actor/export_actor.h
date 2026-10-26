@@ -49,6 +49,7 @@ private:
     void SwitchStage(const EStage from, const EStage to);
 
     void AbortExport(const TString& errorMessage);
+    void FinishAbortExport(const TString& errorMessage);
     void KillExporter();
     void AbortScanIfKnown(const TString& reason);
 

@@ -33,6 +33,8 @@
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
 #include "outgoing_stream.h"
+#include "interconnect_session_iface.h"
+#include "interconnect_direct_session.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -94,7 +96,7 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
-    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+    // DEFAULT_DEADPEER_TIMEOUT lives in interconnect_common.h -- it is shared with the v2 data plane.
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;
     static constexpr ui32 DEFAULT_TOTAL_INFLIGHT_DATA = 4 * 10240 * 1024;
@@ -181,6 +183,11 @@ namespace NActors {
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
         bool Terminated = false;
+
+        // Direct send/receive handle shared with users via TEvNodeConnected. The input session
+        // consults it before dispatching an incoming event into the actor system; if a receiver is
+        // registered for the recipient, the event is delivered directly instead.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
@@ -352,7 +359,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
-        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
@@ -406,6 +413,7 @@ namespace NActors {
     class TInterconnectSessionTCP
        : public TActor<TInterconnectSessionTCP>
        , public TInterconnectLoggingBase
+       , public IInterconnectSession
     {
         enum {
             EvCheckCloseOnIdle = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -448,33 +456,41 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
+        explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
         ~TInterconnectSessionTCP();
 
-        void Init();
-        void CloseInputSession();
-        bool IsRdmaInUse();
+        void Init(const TSessionParams& params) override;
+        void CloseInputSession() override;
+        bool IsRdmaInUse() override;
+        bool HasRdmaState() const override;
+        bool SupportsContinuation() const override { return true; }
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));
         }
 
-        TDuration GetPingRTT() const {
+        TDuration GetPingRTT() const override {
             return TDuration::MicroSeconds(ReceiveContext->PingRTT_us);
         }
 
-        i64 GetClockSkew() const {
+        i64 GetClockSkew() const override {
             return ReceiveContext->ClockSkew_us;
         }
 
-        std::optional<ui8> GetXDCFlags() const noexcept;
+        std::optional<ui8> GetXDCFlags() const noexcept override;
+
+        // IInterconnectSession bridge/accessors
+        IActor& SessionActor() noexcept override { return *this; }
+        const TSessionParams& GetParams() const override { return Params; }
+        const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
+        ui64 GetTotalOutputQueueSize() const override { return TotalOutputQueueSize; }
 
     private:
         friend class TInterconnectProxyTCP;
 
         void Handle(TEvTerminate::TPtr& ev);
         void HandlePoison();
-        void Terminate(TDisconnectReason reason);
+        void Terminate(TDisconnectReason reason) override;
         void PassAway() override;
 
         void Enqueue(STATEFN_SIG);
@@ -506,6 +522,7 @@ namespace NActors {
                 hFunc(TEvSocketDisconnect, OnDisconnect)
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
+                cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
         }
@@ -514,8 +531,8 @@ namespace NActors {
 
         void OnDisconnect(TEvSocketDisconnect::TPtr& ev);
 
-        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev);
-        void SetNewConnection(TEvHandshakeDone::TPtr& ev);
+        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
+        void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
@@ -547,10 +564,10 @@ namespace NActors {
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
-        void StartHandshake();
+        void StartHandshake() override;
         void ReestablishConnection(TEvHandshakeDone::TPtr&& ev, bool startHandshakeOnSessionClose,
                 TDisconnectReason reason);
-        void ReestablishConnectionWithHandshake(TDisconnectReason reason);
+        void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void ReestablishConnectionExecute();
 
         TInterconnectProxyTCP* const Proxy;
@@ -598,7 +615,7 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params;
+        TSessionParams Params;
         std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;
@@ -669,11 +686,19 @@ namespace NActors {
         void HandleFlush();
         void ResetFlushLogic();
 
-        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev);
+        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
 
         TIntrusivePtr<TReceiveContext> ReceiveContext;
         TActorId ReceiverId;
         TDuration Ping;
+
+        // Direct send/receive handle handed out to subscribers via TEvNodeConnected; also published
+        // into ReceiveContext so the input session can intercept incoming events.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
+
+        // Drains the direct session's lock-free registration queue on the session/input-session mailbox
+        // thread (woken via EvProcessDirectSessionQueue by producers).
+        void HandleProcessDirectSessionQueue();
 
         ui64 ConfirmPacketsForcedBySize = 0;
         ui64 ConfirmPacketsForcedByTimeout = 0;

@@ -160,6 +160,7 @@ namespace NKikimr::NUtil {
             auto& state = *RollbackState_;
             // The cached tail can precede the transaction's starting chunk
             if (state.Spare) {
+                Y_DEBUG_ABORT_UNLESS(state.Spare->Ptr >= state.SparePtr);
                 const size_t used = state.Spare->Ptr - state.SparePtr;
                 state.Spare->Rollback(state.SparePtr);
                 Used_ -= used;

@@ -189,6 +189,19 @@ struct IDqComputeActorAsyncOutput {
 
     virtual i64 GetFreeSpace() const = 0;
 
+    // Outputs with hard admission limits must not receive channel overcommit.
+    // GetFreeSpace still uses estimated bytes; buffer Pop may include the last
+    // whole row, so such outputs must reserve capacity for that row as well.
+    virtual bool AllowFreeSpaceOvercommit() const {
+        return true;
+    }
+
+    // Called under the allocator before a narrow row leaves its input buffer.
+    // reservedBytes belongs to this Pop attempt, not to the output queue.
+    virtual bool CanAcceptInputRow(const NUdf::TUnboxedValuePod&, ui64& /*reservedBytes*/) const {
+        return true;
+    }
+
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.
@@ -198,6 +211,17 @@ struct IDqComputeActorAsyncOutput {
     // and finished flag is supposed to be ordered after checkpoint.
     virtual void SendData(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
+
+    // Ordered control records for transforms. Existing sinks discard watermarks.
+    // The order is batch, watermark, checkpoint, finish. An asynchronous transform
+    // must preserve it when publishing to its downstream consumer.
+    virtual void SendDataWithWatermark(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize,
+        const TMaybe<NDqProto::TWatermark>& watermark, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) {
+        if (watermark && batch.empty() && !checkpoint && !finished) {
+            return;
+        }
+        SendData(std::move(batch), dataSize, checkpoint, finished);
+    }
 
     // Checkpointing.
 

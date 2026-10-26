@@ -1,0 +1,60 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+
+// Experimental WASM service execution and limits. Disabled by default.
+message TWasmServicesConfig {
+    bool Enabled = 1;
+    // LOCAL_FILES single-module shorthand; requires adjacent <ModulePath>.manifest.json.
+    string ModulePath = 2;
+    reserved 3;
+    reserved "Bindings";
+    uint32 MaxBufferedRows = 4;
+    uint32 CallTimeoutMs = 5;
+    // Zero/one retains the single-row service protocol; 2..64 enables batching.
+    // Default batch size when SQL BATCH_SIZE is absent, not a cap on SQL.
+    // Zero selects the built-in default (one row).
+    uint32 MaxBatchRows = 6;
+    // Application request/response and guest result byte cap (default 32768).
+    uint32 MaxBatchBytes = 7;
+    repeated TModule Modules = 8;
+    // Conservative serialized input/output reservation, default 64 MiB.
+    uint64 MaxBufferedBytes = 9;
+    // Shared native transport limits per FQ node, including TVM wait and cancellation.
+    // Zero selects defaults: 1024 operations and 256 MiB of conservative reservations.
+    uint64 MaxTransportOperations = 10;
+    uint64 MaxTransportBytes = 11;
+
+    // ydbd uses the existing UDF Store. fqrun explicitly selects LOCAL_FILES.
+    enum EModuleSource {
+        UDF_STORE = 0;
+        LOCAL_FILES = 1;
+    }
+    EModuleSource ModuleSource = 12;
+
+    // Root traces are sampled per SQL execution attempt; zero disables tracing.
+    uint32 TraceSamplePerMillion = 13;
+    // Per-transform budget for invocation/call/auth spans; zero selects 4096.
+    uint32 MaxTraceSpansPerTransform = 14;
+
+    // Operator-approved providers; SQL cannot select arbitrary privileged modules.
+    repeated TAuthProvider AuthProviders = 15;
+    // Explicit local runner source, re-read asynchronously on every refresh.
+    string AuthSecretsFile = 16;
+    // FQ resolves schema secrets as its verified UserId in this database.
+    string AuthSecretDatabase = 17;
+    message TAuthProvider {
+        string Provider = 1;
+        string Module = 2;
+        string Endpoint = 3;
+        string CaCertificate = 4;
+        string Alias = 5;
+    }
+
+    message TModule {
+        string ModulePath = 1;
+        string ManifestPath = 2;
+    }
+
+}

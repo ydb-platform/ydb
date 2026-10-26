@@ -128,6 +128,10 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
             "login",
             "aws_region",
             "resource_id",
+            "auth_provider",
+            "auth_parameters",
+            "tvm_source_id",
+            "tvm_destination_id",
         };
         for (const auto& names : EDS_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -136,39 +140,31 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
 
         return settings;
     }();
-    const static TMap<TStringBuf, TExternalDataSourceAuthFields> AuthMethodFields{
-        {"NONE", TExternalDataSourceAuthFields{}},
-        {"SERVICE_ACCOUNT", TExternalDataSourceAuthFields(
-                                {"service_account_id"},
-                                {
-                                    TSecretSettingsNames("service_account_secret"),
-                                })},
-        {"BASIC", TExternalDataSourceAuthFields(
-                      {"login"},
-                      {
-                          TSecretSettingsNames("password_secret"),
-                      })},
-        {"AWS", TExternalDataSourceAuthFields(
-                    {"aws_region"},
-                    {TSecretSettingsNames("aws_access_key_id_secret"),
-                     TSecretSettingsNames("aws_secret_access_key_secret")})},
-        {"MDB_BASIC", TExternalDataSourceAuthFields(
-                          {"service_account_id", "login"},
-                          {
-                              TSecretSettingsNames("service_account_secret"),
-                              TSecretSettingsNames("password_secret"),
-                          })},
-        {"IAM", TExternalDataSourceAuthFields(
-                    {"service_account_id"},
-                    {
-                        TSecretSettingsNames("initial_token_secret"),
-                    },
-                    {"resource_id"})},
-        {"TOKEN", TExternalDataSourceAuthFields(
-                      {},
-                      {
-                          TSecretSettingsNames("token_secret"),
-                      })}};
+    const static TMap<TStringBuf, TExternalDataSourceAuthFields> AuthMethodFields{ { "NONE", TExternalDataSourceAuthFields{} },
+        { "WASM", TExternalDataSourceAuthFields({ "auth_provider", "auth_parameters" }, {}) },
+        { "TVM", TExternalDataSourceAuthFields({ "tvm_source_id", "tvm_destination_id" }, { TSecretSettingsNames("tvm_secret") }) },
+        { "SERVICE_ACCOUNT", TExternalDataSourceAuthFields({ "service_account_id" },
+                                 {
+                                     TSecretSettingsNames("service_account_secret"),
+                                 }) },
+        { "BASIC", TExternalDataSourceAuthFields({ "login" },
+                       {
+                           TSecretSettingsNames("password_secret"),
+                       }) },
+        { "AWS", TExternalDataSourceAuthFields({ "aws_region" },
+                     { TSecretSettingsNames("aws_access_key_id_secret"), TSecretSettingsNames("aws_secret_access_key_secret") }) },
+        { "MDB_BASIC", TExternalDataSourceAuthFields({ "service_account_id", "login" },
+                           {
+                               TSecretSettingsNames("service_account_secret"), TSecretSettingsNames("password_secret"),
+                           }) },
+        { "IAM", TExternalDataSourceAuthFields({ "service_account_id" },
+                     {
+                         TSecretSettingsNames("initial_token_secret"),
+                     },
+                     { "resource_id" }) },
+        { "TOKEN", TExternalDataSourceAuthFields({}, {
+                                                         TSecretSettingsNames("token_secret"),
+                                                     }) } };
 
     auto authMethodIt = result.find("auth_method");
     if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
@@ -177,7 +173,17 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
     }
 
     const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = AuthMethodFields.find(authMethod);
+    const auto sourceType = result.find("source_type");
+    const bool currentIam = authMethod == "CURRENT_IAM" && sourceType != result.end() && sourceType->second.GetLiteral() &&
+                            *sourceType->second.GetLiteral() == "ExternalService";
+    if ((authMethod == "TVM" || authMethod == "WASM") &&
+        (sourceType == result.end() || !sourceType->second.GetLiteral() || *sourceType->second.GetLiteral() != "ExternalService")) {
+        ctx.Error() << authMethod << " authorization requires SOURCE_TYPE=ExternalService";
+        return false;
+    }
+    // ExternalService resolves the caller's IAM token on the host. Like NONE,
+    // it must not accept any explicit credential settings.
+    auto it = AuthMethodFields.find(currentIam ? TString("NONE") : authMethod);
     if (it == AuthMethodFields.end()) {
         ctx.Error() << "Unknown AUTH_METHOD = " << authMethod;
         return false;

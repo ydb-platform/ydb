@@ -17,6 +17,7 @@ class TDqFunctionDataSink : public TDataProviderBase {
 public:
     TDqFunctionDataSink(TDqFunctionState::TPtr state)
         : State(std::move(state))
+        , ExpressionLowering(CreateServiceExpressionLowering(State))
         , PhysicalOptTransformer(CreateDqFunctionPhysicalOptTransformer(State))
         , LoadMetaDataTransformer(CreateDqFunctionMetaLoader(State))
         , IntentDeterminationTransformer(CreateDqFunctionIntentTransformer(State))
@@ -55,6 +56,10 @@ public:
             || TypeAnnotationTransformer->CanParse(node);
     }
 
+    IGraphTransformer& GetLogicalOptProposalTransformer() override {
+        return *ExpressionLowering;
+    }
+
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptTransformer;
     }
@@ -78,6 +83,7 @@ public:
 
 private:
     const TDqFunctionState::TPtr State;
+    const THolder<IGraphTransformer> ExpressionLowering;
     const THolder<IGraphTransformer> PhysicalOptTransformer;
     const THolder<IGraphTransformer> LoadMetaDataTransformer;
     const THolder<TVisitorTransformerBase> IntentDeterminationTransformer;

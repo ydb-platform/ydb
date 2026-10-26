@@ -212,15 +212,11 @@ public:
     }
 
 protected:
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
-        IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        bool ownMemoryQuota = true, bool passExceptions = false,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
-        NWilson::TTraceId traceId = {},
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
-        const TGUCSettings::TPtr& GUCSettings = nullptr)
+    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TComputeRuntimeSettings& settings,
+        const TComputeMemoryLimits& memoryLimits, bool ownMemoryQuota = true, bool passExceptions = false,
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr, NWilson::TTraceId traceId = {},
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr, const TGUCSettings::TPtr& GUCSettings = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -235,7 +231,10 @@ protected:
         , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
-        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor,
+              traceId            ? std::move(traceId)
+              : settings.TraceId ? settings.TraceId->Clone()
+                                 : NWilson::TTraceId{}, "ComputeActor")
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
@@ -247,6 +246,7 @@ protected:
 
         if (ComputeActorSpan) {
             ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
+            ComputeActorSpan.Attribute("task_id", i64(Task.GetId()));
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
         }
 
@@ -2027,10 +2027,13 @@ protected:
         NDqProto::TWatermark watermark;
         NDqProto::TCheckpoint checkpoint;
 
-        const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
+        ui64 reservedBytes = 0;
+        const ui64 dataSize = !outputInfo.Finished ? sink->PopWithAdmission(dataBatch, bytes, [&](const auto& row) {
+            return outputInfo.AsyncOutput->CanAcceptInputRow(row, reservedBytes);
+        }) : 0;
         const bool hasWatermark = sink->Pop(watermark);
         const bool hasCheckpoint = sink->Pop(checkpoint);
-        if (!dataSize && !hasCheckpoint) {
+        if (!dataSize && !hasCheckpoint && !hasWatermark) {
             if (!sink->IsFinished()) {
                 CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished, consumed watermark: " << hasWatermark);
                 return hasWatermark; // sink is empty and not finished yet
@@ -2048,7 +2051,11 @@ protected:
             maybeCheckpoint = checkpoint;
         }
 
-        outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
+        TMaybe<NDqProto::TWatermark> maybeWatermark;
+        if (hasWatermark) {
+            maybeWatermark = std::move(watermark);
+        }
+        outputInfo.AsyncOutput->SendDataWithWatermark(std::move(dataBatch), dataSize, maybeWatermark, maybeCheckpoint, outputInfo.Finished);
         CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier, sent watermark: " << hasWatermark);
 
         return dataSize + checkpointSize + hasWatermark;

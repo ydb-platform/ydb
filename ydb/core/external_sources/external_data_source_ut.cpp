@@ -1,4 +1,6 @@
 #include "external_data_source.h"
+#include "external_service.h"
+#include "external_source_factory.h"
 
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -17,6 +19,66 @@ NExternalSource::IExternalSource::TPtr CreateTestSource(std::vector<TRegExMatch>
 }   // namespace
 
 Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
+    Y_UNIT_TEST(ExternalServicePublicSettings) {
+        const auto source = NExternalSource::CreateExternalSourceFactory({})->GetOrCreate(NYql::EDatabaseType::ExternalService);
+        NKikimrSchemeOp::TExternalDataSourceDescription description;
+        description.SetSourceType("ExternalService");
+        description.SetLocation("https://example.invalid");
+        description.MutableAuth()->MutableNone();
+        auto& props = *description.MutableProperties()->MutableProperties();
+        props["protocol"] = "HTTP";
+        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()));
+        auto settings = NExternalSource::ParseServiceConnection(description);
+        UNIT_ASSERT(settings.UseTls);
+        UNIT_ASSERT(settings.SecretReference.empty());
+        for (const auto* endpoint : { "https://example.invalid/a", "https://example.invalid?token=x", "https://u:p@example.invalid",
+                 "http://example.invalid", "https://example.invalid#x" }) {
+            description.SetLocation(endpoint);
+            UNIT_ASSERT_EXCEPTION(
+                source->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException);
+        }
+        description.SetLocation("example.invalid:1234");
+        props["protocol"] = "GRPC";
+        props["use_tls"] = "false";
+        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()));
+        props["ca_certificate"] = "ca";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException, "CA_CERTIFICATE");
+        props.erase("ca_certificate");
+        props["tvm_source_id"] = "123";
+        UNIT_ASSERT_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException);
+        props["tvm_destination_id"] = "456";
+        UNIT_ASSERT_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException);
+        description.MutableAuth()->MutableToken()->SetTokenSecretName("/Root/tvm_secret");
+        settings = NExternalSource::ParseServiceConnection(description);
+        const auto restored = NExternalSource::TServiceConnectionSettings::Deserialize(settings.Serialize());
+        UNIT_ASSERT_VALUES_EQUAL(restored.SecretReference, "/Root/tvm_secret");
+        UNIT_ASSERT_VALUES_EQUAL(restored.TvmSourceId, 123);
+        UNIT_ASSERT_VALUES_EQUAL(restored.TvmDestinationId, 456);
+        UNIT_ASSERT(!restored.UseTls);
+        for (const auto* id : { "0", "-1", "4294967296", "x" }) {
+            props["tvm_source_id"] = id;
+            UNIT_ASSERT_EXCEPTION(
+                source->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException);
+        }
+    }
+
+    Y_UNIT_TEST(ExternalServiceAvailabilityAndHostname) {
+        const auto disabled =
+            NExternalSource::CreateExternalSourceFactory({}, nullptr, 0, {}, false, false, false, { NYql::EDatabaseType::ObjectStorage });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            disabled->GetOrCreate(NYql::EDatabaseType::ExternalService), NExternalSource::TExternalSourceException, "disabled");
+        const auto restricted =
+            NExternalSource::CreateExternalSourceFactory({ "allowed.invalid" })->GetOrCreate(NYql::EDatabaseType::ExternalService);
+        NKikimrSchemeOp::TExternalDataSourceDescription description;
+        description.SetSourceType("ExternalService");
+        description.SetLocation("https://denied.invalid");
+        description.MutableAuth()->MutableNone();
+        (*description.MutableProperties()->MutableProperties())["protocol"] = "HTTP";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            restricted->ValidateExternalDataSource(description.SerializeAsString()), NExternalSource::TExternalSourceException, "not allowed");
+    }
+
     Y_UNIT_TEST(ValidateName) {
         auto source = CreateTestSource();
         UNIT_ASSERT_VALUES_EQUAL(source->GetName(), "Test");

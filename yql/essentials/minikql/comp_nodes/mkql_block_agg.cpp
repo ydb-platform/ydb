@@ -571,7 +571,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(state, std::move(Stream_->GetValue(ctx)));
+        return ctx.HolderFactory.Create<TStreamValue>(state, std::move(Stream_->GetValue(ctx)), ctx.ExecutionWaitObserver);
     }
 
 private:
@@ -579,10 +579,12 @@ private:
         using TBase = TComputationValue<TStreamValue>;
 
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream)
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream,
+                     IExecutionWaitObserver* observer)
             : TBase(memInfo)
             , State_(state)
             , Stream_(stream)
+            , WaitObserver_(observer)
         {
         }
 
@@ -597,8 +599,11 @@ private:
             }
 
             while (true) {
+                TExecutionInputScope inputWait(WaitObserver_, this, EExecutionInputSide::None, "BlockCombineAll");
                 switch (Stream_.WideFetch(inputFields, inputWidth)) {
                     case NUdf::EFetchStatus::Yield:
+                        inputWait.Yielded();
+                        ReportWork(EExecutionWorkKind::Consume, "accumulate");
                         return NUdf::EFetchStatus::Yield;
                     case NUdf::EFetchStatus::Ok:
                         state.ProcessInput();
@@ -607,6 +612,7 @@ private:
                         break;
                 }
                 if (state.MakeOutput()) {
+                    ReportWork(EExecutionWorkKind::Emit, "emit");
                     for (size_t i = 0; i < width; ++i) {
                         output[i] = state.Get(i);
                     }
@@ -618,6 +624,13 @@ private:
 
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
+        IExecutionWaitObserver* const WaitObserver_;
+
+        void ReportWork(EExecutionWorkKind work, const char* phase) {
+            if (WaitObserver_) {
+                WaitObserver_->ReportWork(reinterpret_cast<ui64>(this), "BlockCombineAll", work, phase);
+            }
+        }
     };
 
     void RegisterDependencies() const final {
@@ -1271,7 +1284,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(KeyLength_, StreamIndex_, Width_, OutputWidth_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, OutputWidth_, std::move(state), std::move(Stream_->GetValue(ctx)), ctx.RuntimeSettings.DatumValidation.Get());
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, OutputWidth_, std::move(state), std::move(Stream_->GetValue(ctx)), ctx.RuntimeSettings.DatumValidation.Get(), ctx.ExecutionWaitObserver);
     }
 
 private:
@@ -1281,12 +1294,13 @@ private:
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, size_t outputWidth,
                      NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream,
-                     NYql::EDatumValidationMode validationMode)
+                     NYql::EDatumValidationMode validationMode, IExecutionWaitObserver* observer)
             : TBase(memInfo, holderFactory, outputWidth)
             , State_(state)
             , Stream_(stream)
             , HolderFactory_(holderFactory)
             , ValidationMode_(validationMode)
+            , WaitObserver_(observer)
         {
         }
 
@@ -1303,8 +1317,11 @@ private:
                 }
 
                 while (!state.WritingOutput) {
+                    TExecutionInputScope inputWait(WaitObserver_, this, EExecutionInputSide::None, OperatorName());
                     switch (Stream_.WideFetch(inputFields, inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
+                            inputWait.Yielded();
+                            ReportWork(EExecutionWorkKind::Consume, "accumulate");
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:
                             state.ProcessInput(HolderFactory_);
@@ -1329,6 +1346,8 @@ private:
             for (size_t i = 0; i < outputWidth; ++i) {
                 output[i] = state.Get(sliceSize, HolderFactory_, i);
             }
+            // This is buffered aggregate output, not an independent producer.
+            ReportWork(EExecutionWorkKind::Emit, "emit");
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -1337,6 +1356,17 @@ private:
         NUdf::TUnboxedValue Stream_;
         const THolderFactory& HolderFactory_;
         const NYql::EDatumValidationMode ValidationMode_;
+        IExecutionWaitObserver* const WaitObserver_;
+
+        static constexpr const char* OperatorName() {
+            return Many ? "BlockMergeManyFinalizeHashed"
+                : Finalize ? "BlockMergeFinalizeHashed" : "BlockCombineHashed";
+        }
+        void ReportWork(EExecutionWorkKind work, const char* phase) {
+            if (WaitObserver_) {
+                WaitObserver_->ReportWork(reinterpret_cast<ui64>(this), OperatorName(), work, phase);
+            }
+        }
     };
 
     void RegisterDependencies() const final {

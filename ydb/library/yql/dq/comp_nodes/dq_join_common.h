@@ -139,7 +139,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
 
     EFetchResult MatchRows(TComputationContext& ctx, auto consumeOneOrTwoTuples) {
         while (!Build_.Finished()) {
-            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build, "HashJoin");
             auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {
             case NYql::NUdf::EFetchStatus::Finish: {
@@ -158,7 +158,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
             }
         }
         if (!Probe_.Finished()) {
-            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe, "HashJoin");
             auto result = Probe_.ForEachRow(ctx, [&](NJoinTable::TTuple probeTuple) {
                 bool found = false;
                 Table_.Lookup(probeTuple, [&](NJoinTable::TTuple matchedBuildTuple) {
@@ -310,7 +310,7 @@ template <typename Source> class TInMemoryHashJoin {
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
                            JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto isFull) {
         while (!Sources_.Build.Finished()) {
-            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build, "HashJoin");
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
@@ -361,7 +361,7 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (!Sources_.Probe.Finished()) {
-            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe, "HashJoin");
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
             if (resEnum == EFetchResult::Yield) {
@@ -640,6 +640,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     EFetchResult WaitWhileSpilling(TComputationContext& ctx, const void* operation, EExecutionWaitKind kind,
                                    TFutureFactory&& getFuture) {
         if (ctx.ExecutionWaitObserver) {
+            ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "HashJoin", EExecutionWorkKind::Compute, "spill");
             ctx.ExecutionWaitObserver->AwaitFuture(reinterpret_cast<ui64>(this), operation, kind, getFuture());
         }
         return EFetchResult::Yield;
@@ -750,7 +751,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
             if (!state.Pack.has_value()) {
-                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
+                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build, "HashJoin");
                 FetchResult<TPackResult> var = state.Build.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
@@ -829,7 +830,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
             if (!state.FetchedPack.has_value()) {
-                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
+                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe, "HashJoin");
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
@@ -1499,18 +1500,24 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
                                     TPackedTuplePairFilter* filter = nullptr) {
     // Bound the batch in bytes, not rows: rows say nothing about memory once overflow columns are fat
     auto outputIsFull = [&]() { return output.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes); };
+    auto flush = [&] {
+        onFlush(output.Flush());
+        if (ctx.ExecutionWaitObserver) {
+            ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(&join), "HashJoin", EExecutionWorkKind::Emit, "emit");
+        }
+    };
     while (!outputIsFull()) {
         switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:
             if (output.SizeTuples() == 0) {
                 return EFetchResult::Finish;
             }
-            onFlush(output.Flush());
+            flush();
             return EFetchResult::One;
         case EFetchResult::Yield:
             if constexpr (JoinType::FlushOnYield) {
                 if (output.SizeTuples() > 0) {
-                    onFlush(output.Flush());
+                    flush();
                     return EFetchResult::One;
                 }
             }
@@ -1521,7 +1528,7 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
             MKQL_ENSURE(false, "unexpected fetch result");
         }
     }
-    onFlush(output.Flush());
+    flush();
     return EFetchResult::One;
 }
 

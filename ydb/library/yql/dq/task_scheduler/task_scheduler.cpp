@@ -200,6 +200,8 @@ void TTaskSchedulingHandle::BeginProbe() {
     std::lock_guard lock(Mutex);
     ObservedWaits.clear();
     ExplicitWaits.clear();
+    ProbeCoverage = ETaskWaitCoverage::Unknown;
+    ExplicitRunnable = false;
 }
 
 std::pair<size_t, size_t> TTaskSchedulingHandle::BeginInputWait() const {
@@ -207,7 +209,7 @@ std::pair<size_t, size_t> TTaskSchedulingHandle::BeginInputWait() const {
     return {ObservedWaits.size(), ExplicitWaits.size()};
 }
 
-void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui64 operatorId, ETaskInputSide side) {
+void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui64 operatorId, ETaskInputSide side, TStringBuf name) {
     std::lock_guard lock(Mutex);
     // A child can report a more precise cause, including a spill operation.
     if (State != EState::Running) {
@@ -215,7 +217,7 @@ void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui6
     }
     if (ExplicitWaits.size() > scope.second) {
         for (size_t i = scope.second; i < ExplicitWaits.size(); ++i) {
-            ExplicitWaits[i].InputPath.push_back({operatorId, side});
+            ExplicitWaits[i].InputPath.push_back({operatorId, side, TString(name)});
         }
         return;
     }
@@ -224,12 +226,16 @@ void TTaskSchedulingHandle::ReportInputWait(std::pair<size_t, size_t> scope, ui6
     description.Origin = ETaskWaitOrigin::Operator;
     description.Precision = ETaskWaitPrecision::ObservedInputs;
     description.OperatorId = operatorId;
+    description.OperatorName = name;
     description.InputSide = side;
     TVector<TTaskDependencyVersion> dependencies;
     for (size_t i = scope.first; i < ObservedWaits.size(); ++i) {
         dependencies.push_back(ObservedWaits[i]);
     }
     if (dependencies.empty()) {
+        // The child may be waiting for anything. The enclosing operator was
+        // reading an input, but that does not identify the child's stop reason.
+        description.Reason = ETaskWaitReason::Unknown;
         description.Precision = ETaskWaitPrecision::Opaque;
         dependencies.push_back({AnyDependency, AnyVersion});
     } else {
@@ -249,13 +255,14 @@ void TTaskSchedulingHandle::ReportWait(TTaskWaitDescription description) {
     }
 }
 
-void TTaskSchedulingHandle::ReportCallbackWait(ui64 operatorId, ETaskWaitReason reason) {
+void TTaskSchedulingHandle::ReportCallbackWait(ui64 operatorId, ETaskWaitReason reason, TStringBuf name) {
     std::lock_guard lock(Mutex);
     if (State == EState::Running) {
         TTaskWaitDescription description;
         description.Reason = reason;
         description.Origin = ETaskWaitOrigin::Operator;
         description.OperatorId = operatorId;
+        description.OperatorName = name;
         const bool spilling = reason == ETaskWaitReason::SpillRead || reason == ETaskWaitReason::SpillWrite;
         description.Condition = TTaskWaitCondition::Any({spilling
             ? TTaskDependencyVersion{SpillingDependency, SpillingVersion} : TTaskDependencyVersion{0, CallbackVersion}});
@@ -280,7 +287,29 @@ void TTaskSchedulingHandle::Await(TTaskDependencyId dependency, ui64 version) {
 
 void TTaskSchedulingHandle::MakeRunnable() {
     std::lock_guard lock(Mutex);
-    Continue = true;
+    ExplicitRunnable = true;
+}
+
+void TTaskSchedulingHandle::ReportWork(ETaskWorkKind work, ui64 operatorId, TStringBuf name, TStringBuf phase) {
+    std::lock_guard lock(Mutex);
+    if (State == EState::Running) {
+        Classification.Work = work;
+        Classification.OperatorId = operatorId;
+        Classification.OperatorName = name;
+        Classification.Phase = phase;
+    }
+}
+
+void TTaskSchedulingHandle::SealWait(ETaskWaitCoverage coverage) {
+    std::lock_guard lock(Mutex);
+    if (State == EState::Running) {
+        ProbeCoverage = coverage;
+    }
+}
+
+void TTaskSchedulingHandle::SetOperatorProfile(TVector<TTaskOperatorTraits> operators) {
+    std::lock_guard lock(Mutex);
+    Operators = std::make_shared<const TVector<TTaskOperatorTraits>>(std::move(operators));
 }
 
 void TTaskSchedulingHandle::AwaitCallback() {
@@ -341,6 +370,9 @@ bool TTaskSchedulingHandle::Start(ui64 generation) {
         State = EState::Running;
         ++Revision;
         Continue = false;
+        ExplicitRunnable = false;
+        Classification = {};
+        ProbeCoverage = ETaskWaitCoverage::Unknown;
         ObservedWaits.clear();
         ExplicitWaits.clear();
         CallbackVersion = Versions[0];
@@ -424,26 +456,55 @@ void TTaskSchedulingHandle::Complete(TTaskRunProgress progress, std::optional<TT
                 description.Condition = TTaskWaitCondition::Any({dependency});
                 LastWaits.push_back(std::move(description));
             }
-            ObservedWaits.push_back({0, CallbackVersion});
-            ObservedWaits.push_back({SpillingDependency, SpillingVersion});
             Wait = TTaskWaitCondition::Any(std::move(ObservedWaits));
-            TTaskWaitDescription callback;
-            callback.Condition = TTaskWaitCondition::Any({{0, CallbackVersion}, {SpillingDependency, SpillingVersion}});
-            LastWaits.push_back(std::move(callback));
         }
         if (LastWaits.empty()) {
             TTaskWaitDescription description;
             description.Condition = Wait;
             LastWaits.push_back(std::move(description));
         }
+        Classification.Coverage = wait ? ETaskWaitCoverage::Complete : ProbeCoverage;
+        if (Classification.Coverage == ETaskWaitCoverage::Unknown
+            && AnyOf(LastWaits, [](const auto& item) { return item.Reason != ETaskWaitReason::Unknown; })) {
+            Classification.Coverage = ETaskWaitCoverage::Partial;
+        }
+        Classification.Readiness = AnyOf(LastWaits, [](const auto& item) { return item.Reason != ETaskWaitReason::Unknown; })
+            ? ETaskReadiness::Waiting : ETaskReadiness::OpaqueYield;
+        if (ExplicitRunnable || progress.BudgetExhausted) {
+            Classification.Readiness = ETaskReadiness::Runnable;
+            Classification.Coverage = ETaskWaitCoverage::Complete;
+            if (Classification.Work == ETaskWorkKind::Unknown) { Classification.Work = ETaskWorkKind::Compute; }
+        }
+        if (progress.Finished || progress.QuotaRejected) {
+            Classification.Work = ETaskWorkKind::Control;
+            Classification.Readiness = ETaskReadiness::Waiting;
+            if (!wait) { Classification.Coverage = ETaskWaitCoverage::Unknown; }
+        }
+        Classification.LegacyWakeups = Classification.Coverage != ETaskWaitCoverage::Complete;
+        if (Classification.LegacyWakeups) {
+            // An exact leaf future does not close the resume contract of an
+            // opaque parent. Preserve both existing callback sources, including
+            // notifications delivered between Fetch and parking.
+            auto addFallback = [&](TTaskDependencyVersion fallback) {
+                const bool present = AnyOf(Wait.AnyOf, [&](const auto& group) {
+                    return group.size() == 1 && group[0].Id == fallback.Id && group[0].Version == fallback.Version;
+                });
+                if (!present) { Wait.AnyOf.push_back({fallback}); }
+            };
+            // An opaque parent may also have probed a different branch. These
+            // are conservative alternatives, not a fabricated ALL predicate.
+            for (auto dependency : ObservedWaits) { addFallback(dependency); }
+            addFallback({0, CallbackVersion});
+            addFallback({SpillingDependency, SpillingVersion});
+        }
         LastProgress = progress;
         LastStopReason = progress.QuotaRejected ? ETaskStopReason::CpuQuota
             : progress.Finished ? ETaskStopReason::RunnerFinished
             : progress.BudgetExhausted ? ETaskStopReason::Budget
-            : Continue ? ETaskStopReason::Runnable : ETaskStopReason::Waiting;
+            : Continue || ExplicitRunnable ? ETaskStopReason::Runnable : ETaskStopReason::Waiting;
         State = EState::Blocked;
         ++Revision;
-        enqueue = (Continue || progress.BudgetExhausted || Wait.IsSatisfied(Versions)) && MakeReadyLocked();
+        enqueue = (Continue || ExplicitRunnable || progress.BudgetExhausted || Wait.IsSatisfied(Versions)) && MakeReadyLocked();
         if (Trace && !enqueue) { Trace->State(SnapshotLocked()); }
         if (ReportState) {
             snapshot = SnapshotLocked();
@@ -491,7 +552,29 @@ ETaskPriority TTaskSchedulingHandle::GetPriority() const {
 }
 
 TTaskSchedulingSnapshot TTaskSchedulingHandle::SnapshotLocked() const {
-    return {Actor, Query, TaskId, Revision, Generation, State, Priority, LastProgress, LastWaits, LastStopReason};
+    TTaskSchedulingSnapshot snapshot{.Actor = Actor, .Query = Query, .TaskId = TaskId,
+        .Revision = Revision, .Generation = Generation, .State = State, .Priority = Priority,
+        .Progress = LastProgress, .Waits = LastWaits, .StopReason = LastStopReason,
+        .Classification = Classification, .ResumeCondition = Wait, .Operators = Operators};
+    auto& classification = snapshot.Classification;
+    if (State == EState::Finished || State == EState::Cancelled) {
+        classification.Readiness = State == EState::Finished ? ETaskReadiness::Finished : ETaskReadiness::Cancelled;
+        classification.Work = ETaskWorkKind::Control;
+        classification.Coverage = ETaskWaitCoverage::Complete;
+        classification.LegacyWakeups = false;
+    } else if (State == EState::Ready || State == EState::Dispatched) {
+        if (LastStopReason == ETaskStopReason::None) {
+            classification.Readiness = ETaskReadiness::Runnable;
+            classification.Work = ETaskWorkKind::Control;
+            classification.Coverage = ETaskWaitCoverage::Complete;
+            classification.LegacyWakeups = false;
+        } else if (classification.Readiness != ETaskReadiness::Runnable) {
+            const bool exact = classification.Coverage == ETaskWaitCoverage::Complete && !LastWaits.empty()
+                && AllOf(LastWaits, [](const auto& item) { return item.Precision == ETaskWaitPrecision::Exact; });
+            classification.Readiness = exact && Wait.IsSatisfied(Versions) ? ETaskReadiness::Runnable : ETaskReadiness::Recheck;
+        }
+    }
+    return snapshot;
 }
 
 TTaskSchedulingSnapshot TTaskSchedulingHandle::GetSnapshot() const {

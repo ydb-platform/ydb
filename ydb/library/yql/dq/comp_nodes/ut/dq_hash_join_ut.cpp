@@ -2577,12 +2577,21 @@ public:
     }
     void AwaitCallback(ui64, EExecutionWaitKind) override { ++OpaqueWaits; }
     void MakeRunnable() override {}
+    void ReportWork(ui64, const char* name, EExecutionWorkKind work, const char*) override {
+        Name = name;
+        Work = work;
+        Consumed |= work == EExecutionWorkKind::Consume;
+        Joined |= TStringBuf(name) == "HashJoin";
+    }
     void Reset() { Kind.reset(); Future.reset(); }
 
     std::optional<EExecutionWaitKind> Kind;
     std::optional<NThreading::TFuture<void>> Future;
     ui64 FutureWaits = 0;
     ui64 OpaqueWaits = 0;
+    TString Name;
+    EExecutionWorkKind Work = EExecutionWorkKind::Unknown;
+    bool Consumed = false, Joined = false;
 };
 
 void RunFinalDumpSpillingIsBatchedTest(bool reportWaits = false) {
@@ -2707,6 +2716,42 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 }
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST(JoinAndAggregationReportTheirOwnPhasesInOneGraph) {
+        for (bool hashed : {false, true}) {
+            TDqSetup<false, true> setup;
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* itemType = pb.NewDataType(NYql::NUdf::EDataSlot::Uint64);
+            auto makeBlocks = [&](std::initializer_list<ui64> values) {
+                TRuntimeNode::TList items;
+                for (auto value : values) { items.push_back(pb.NewDataLiteral<ui64>(value)); }
+                auto list = pb.NewList(itemType, items);
+                auto wide = pb.ExpandMap(pb.ToFlow(list, {}), [](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; });
+                return pb.WideToBlocks(pb.FromFlow(wide));
+            };
+            auto* blockType = pb.NewBlockType(itemType, TBlockType::EShape::Many);
+            auto* lengthType = pb.LastScalarIndexBlock();
+            auto* joinType = pb.NewStreamType(pb.NewMultiType({blockType, lengthType}));
+            const TVector<ui32> keys{0}, renames{0, 0};
+            auto join = pb.DqBlockHashJoin(makeBlocks({1, 1, 2}), makeBlocks({1, 3}), EJoinKind::Inner,
+                keys, keys, renames, {}, joinType);
+            const TVector<TAggInfo> aggs{{.Name = "count_all", .ArgsColumns = {}}};
+            auto result = hashed
+                ? pb.BlockCombineHashed(join, {}, keys, aggs, pb.NewStreamType(pb.NewMultiType({blockType, blockType, lengthType})))
+                : pb.BlockCombineAll(join, {}, aggs, pb.NewStreamType(pb.NewMultiType({itemType})));
+            auto graph = setup.BuildGraph(result);
+            TRecordingExecutionWaitObserver observer;
+            graph->GetContext().ExecutionWaitObserver = &observer;
+            auto stream = graph->GetValue();
+            TVector<NUdf::TUnboxedValue> values(hashed ? 3 : 1);
+            UNIT_ASSERT(stream.WideFetch(values.data(), values.size()) == NUdf::EFetchStatus::Ok);
+            UNIT_ASSERT(observer.Consumed && observer.Joined);
+            UNIT_ASSERT(observer.Work == EExecutionWorkKind::Emit);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Name, hashed ? "BlockCombineHashed" : "BlockCombineAll");
+            if (!hashed) { UNIT_ASSERT_VALUES_EQUAL(values.front().Get<ui64>(), 2); }
+            UNIT_ASSERT(stream.WideFetch(values.data(), values.size()) == NUdf::EFetchStatus::Finish);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }

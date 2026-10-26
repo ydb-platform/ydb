@@ -68,10 +68,45 @@ enum class ETaskWaitReason { Unknown, Input, Output, SpillRead, SpillWrite, Asyn
 enum class ETaskInputSide { None, Left, Right, Build, Probe };
 enum class ETaskWaitOrigin { ChannelProbe, Operator, OpaqueFallback };
 enum class ETaskWaitPrecision { Exact, ObservedInputs, Opaque };
+// Precision describes a dependency, coverage describes the whole Fetch. An
+// exact spill future in a child does not certify an opaque enclosing operator.
+enum class ETaskWaitCoverage { Unknown, Partial, Complete };
+enum class ETaskWorkKind { Unknown, Consume, Compute, Emit, Control };
+enum class ETaskReadiness { Recheck, Runnable, Waiting, OpaqueYield, Finished, Cancelled };
+
+struct TTaskOperatorTraits {
+    TString Name;
+    ui64 Count = 0;
+    bool Consumes = false;
+    bool Accumulates = false;
+    bool EmitsBuffered = false;
+    bool Spills = false;
+    bool ReportsWaits = false;
+    bool Known = false;
+};
+
+// An explicit adapter table of known contracts. An unrecognised callable stays
+// opaque; names/substrings are never used to invent readiness guarantees.
+TTaskOperatorTraits DescribeTaskOperator(TStringBuf name, ui64 count = 1);
+
+struct TTaskExecutionClassification {
+    ETaskReadiness Readiness = ETaskReadiness::Recheck;
+    ETaskWorkKind Work = ETaskWorkKind::Unknown;
+    ETaskWaitCoverage Coverage = ETaskWaitCoverage::Unknown;
+    ui64 OperatorId = 0;
+    TString OperatorName;
+    TString Phase;
+    bool LegacyWakeups = true;
+};
+
+TStringBuf TaskWorkName(ETaskWorkKind work);
+TStringBuf TaskReadinessName(ETaskReadiness readiness);
+TStringBuf TaskCoverageName(ETaskWaitCoverage coverage);
 
 struct TTaskInputContext {
     ui64 OperatorId = 0;
     ETaskInputSide Side = ETaskInputSide::None;
+    TString OperatorName;
 };
 
 struct TTaskWaitDescription {
@@ -82,6 +117,7 @@ struct TTaskWaitDescription {
     ETaskInputSide InputSide = ETaskInputSide::None;
     TTaskWaitCondition Condition;
     TVector<TTaskInputContext> InputPath;
+    TString OperatorName;
 };
 
 enum class ETaskStopReason { None, Waiting, Runnable, Budget, RunnerFinished, CpuQuota, Cancelled };
@@ -98,6 +134,9 @@ struct TTaskSchedulingSnapshot {
     TTaskRunProgress Progress;
     TVector<TTaskWaitDescription> Waits;
     ETaskStopReason StopReason = ETaskStopReason::None;
+    TTaskExecutionClassification Classification;
+    TTaskWaitCondition ResumeCondition;
+    std::shared_ptr<const TVector<TTaskOperatorTraits>> Operators;
 };
 
 // Kept by the planner/query manager, local compute actors and scheduling handles.
@@ -159,12 +198,17 @@ public:
     void Await(TTaskDependencyId dependency, ui64 version);
     void AwaitCallback();
     std::pair<size_t, size_t> BeginInputWait() const;
-    void ReportInputWait(std::pair<size_t, size_t> scope, ui64 operatorId, ETaskInputSide side);
+    void ReportInputWait(std::pair<size_t, size_t> scope, ui64 operatorId, ETaskInputSide side, TStringBuf name = {});
     void ReportWait(TTaskWaitDescription description);
-    void ReportCallbackWait(ui64 operatorId, ETaskWaitReason reason);
+    void ReportCallbackWait(ui64 operatorId, ETaskWaitReason reason, TStringBuf name = {});
     TTaskDependencyVersion NewAsyncDependency();
     bool HasObservedWaits() const;
     void MakeRunnable();
+    void ReportWork(ETaskWorkKind work, ui64 operatorId, TStringBuf name, TStringBuf phase);
+    // Only a task/root adapter that owns the complete resume contract may seal
+    // it. Leaf reports intentionally leave coverage Partial.
+    void SealWait(ETaskWaitCoverage coverage);
+    void SetOperatorProfile(TVector<TTaskOperatorTraits> operators);
     void RecordInputBytes(ui64 bytes);
     void RecordOutputBytes(ui64 bytes);
     TTaskRunProgress GetRunProgressForTrace(TTaskRunProgress progress) const;
@@ -201,6 +245,10 @@ private:
     TVector<TTaskWaitDescription> ExplicitWaits, LastWaits;
     TTaskRunProgress LastProgress;
     ETaskStopReason LastStopReason = ETaskStopReason::None;
+    TTaskExecutionClassification Classification;
+    ETaskWaitCoverage ProbeCoverage = ETaskWaitCoverage::Unknown;
+    bool ExplicitRunnable = false;
+    std::shared_ptr<const TVector<TTaskOperatorTraits>> Operators;
     ui64 Revision = 0;
     ui64 NextAsyncDependency = ui64(1) << 63;
     ui64 Generation = 0;

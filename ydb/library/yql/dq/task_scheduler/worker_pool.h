@@ -104,6 +104,7 @@ private:
     double ServiceFloor = 0;
     NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries;
     NMonitoring::TDynamicCounters::TCounterPtr SelectionsCount, SelectionCpuUs, SelectionLockWaitUs;
+    NMonitoring::TDynamicCounters::TCounterPtr RunnableSelections, RecheckSelections, BufferedOutputSelections;
 };
 
 void StartDqComputeWorkers(NActors::TActorSystem* actorSystem, ui32 poolId,

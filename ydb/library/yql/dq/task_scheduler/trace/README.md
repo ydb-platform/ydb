@@ -160,3 +160,15 @@ One complete traced pair measured 10.334184 s for the original path and
 no-observed-progress fractions were 64.78% and 9.34%. This is diagnostic evidence,
 not a stable performance benchmark: repeat with tracing disabled before drawing
 latency or CPU conclusions.
+
+## Classification fields
+
+`task.operator_traits` contains the static callable composition and explicit
+capability contracts, including unknown entries. `state.classification` records
+readiness, work phase, task coverage, legacy-wakeup fallback, operator name/id and
+phase. `state.resume_any_of_all` is the effective resume condition, including
+conservative fallback dependencies; each `waits` entry describes the original
+reason separately. Named `input_path` frames run from the inner operator outward.
+`selected` records readiness, work, coverage and the phase rank used in selection.
+An exact leaf future with partial task coverage remains a conservative recheck.
+The fields are available in trace-only baseline capture as well as worker mode.

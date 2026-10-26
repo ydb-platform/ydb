@@ -597,7 +597,7 @@ public:
         RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
         auto entry = BuildTask(task);
-        TraceTask(task);
+        DescribeTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -976,12 +976,12 @@ public:
         return channels;
     }
 
-    void TraceTask(const TDqTaskSettings& task) const {
-        if (!Scheduling || !Scheduling->Trace) { return; }
+    void DescribeTask(const TDqTaskSettings& task) const {
+        if (!Scheduling) { return; }
         NJson::TJsonValue args(NJson::JSON_MAP);
         args["stage_id"] = StageId;
         args["execution_mode"] = Scheduling->ObserveOnly ? "endpoint" : "scheduled";
-        // Decode in a private arena only when capture is enabled. Walking the
+        // Decode in a private arena for the task profile. Walking the
         // shared pattern cache's nodes would mutate cookies and race its users.
         {
             TScopedAlloc traceAlloc(__LOCATION__);
@@ -996,7 +996,30 @@ public:
                     ++counts[TString(static_cast<TCallable*>(node)->GetType()->GetName())];
                 }
             }
-            for (const auto& [name, count] : counts) { operators[name] = count; }
+            TVector<TTaskOperatorTraits> profile;
+            NJson::TJsonValue traits(NJson::JSON_ARRAY);
+            for (const auto& [name, count] : counts) {
+                operators[name] = count;
+                auto item = DescribeTaskOperator(name, count);
+                if (Scheduling->Trace) {
+                    NJson::TJsonValue json(NJson::JSON_MAP);
+                    json["name"] = name;
+                    json["count"] = count;
+                    json["known_contract"] = item.Known;
+                    auto capability = [&](TStringBuf field, bool value) {
+                        json[field] = item.Known ? NJson::TJsonValue(value) : NJson::TJsonValue();
+                    };
+                    capability("consumes", item.Consumes);
+                    capability("accumulates", item.Accumulates);
+                    capability("emits_buffered", item.EmitsBuffered);
+                    capability("spills", item.Spills);
+                    capability("reports_waits", item.ReportsWaits);
+                    traits.AppendValue(std::move(json));
+                }
+                profile.push_back(std::move(item));
+            }
+            Scheduling->SetOperatorProfile(std::move(profile));
+            args["operator_traits"] = std::move(traits);
             args["callables"] = std::move(operators);
         }
         NJson::TJsonValue sources(NJson::JSON_ARRAY), sinks(NJson::JSON_ARRAY);
@@ -1008,7 +1031,7 @@ public:
         }
         args["sources"] = std::move(sources);
         args["sinks"] = std::move(sinks);
-        Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args));
+        if (Scheduling->Trace) { Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args)); }
     }
 
     ERunStatus Run() final {
@@ -1031,6 +1054,7 @@ public:
         }
         Y_DEFER {
             if (Scheduling) {
+                WaitObserver->EndRun();
                 ui64 inputRowsAfter = 0;
                 for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
                     for (const auto& input : stats->Inputs) {
@@ -1286,6 +1310,11 @@ private:
             }
             if (AllocatedHolder->Output->GetFillLevel() != NoLimit) {
                 break;
+            }
+            if (Scheduling) {
+                // A new Fetch may enter a different, unadapted subtree. Never
+                // reuse a phase hint from a previous successful Fetch.
+                WaitObserver->ResetWork();
             }
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;

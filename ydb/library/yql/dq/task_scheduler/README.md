@@ -44,7 +44,8 @@ Each worker pulls a query, then a task. Query ordering uses accumulated worker
 CPU service divided by weight, including reservations for in-flight slices.
 Weights default to one; KQP refreshes them from the resource scheduler's query
 fair share. Task ordering prefers explicit readiness over conservative waits,
-then minimum graph distance to a result/sink/effects endpoint, then FIFO.
+then minimum graph distance to a result/sink/effects endpoint, then work phase
+(buffered output, control, consuming, computing, unknown), then FIFO.
 A task bypassed for 64 selections receives an ageing boost. Graph distance
 includes remote edges, but only local tasks are executable. Unknown distances
 remain eligible. Queue selection currently scans ready query/task sets under
@@ -86,6 +87,46 @@ Worker counters use `component=TaskSchedulerWorkers`: `WorkerSlices`,
 apply. Query fairness uses worker CPU; endpoint/control overhead and legacy
 source work are not included in that virtual runtime, although existing KQP
 resource accounting remains active for legacy work.
+
+## Task classification
+
+A task has a composition of callable traits, not a single join/aggregation/source
+label. `DescribeTaskOperator` is an explicit table of audited contracts: supported
+hash/grace joins and block aggregations report phases/waits; unmodified block map
+joins and WideMap have external capability descriptions, without a wait-report
+contract. Unrecognised callables retain unknown traits (null capability fields
+in traces). Neither names nor traits certify readiness. `DescribeQuery` snapshots retain the complete callable profile;
+the `task` trace marker includes names/counts and capability flags.
+
+The execution observer reports the active operator and phase independently of
+Fetch's unchanged One/Yield/Finish contract. Work hints are Consume, Compute,
+Emit and Control, with Unknown for unadapted code. Emit describes buffered
+aggregate/join output, not a source manufacturing new input. A hint describes the
+phase observed at the last stop; it does not reserve data or promise useful work
+on the next Fetch. The runner clears the hint before each new Fetch.
+
+Dependency precision (Exact/ObservedInputs/Opaque) is separate from task-level
+coverage (Complete/Partial/Unknown). Leaf reports are Partial even for an exact
+spill future. Only an adapter owning the whole task/root resume contract may
+call `SealWait(Complete)`. Input scopes preserve the leaf reason plus named
+inner-to-outer frames; e.g. a spill under Join.Build under BlockCombineHashed
+remains a spill, rather than becoming an aggregate-input wait. Scopes do not
+invent AND semantics from multiple failed probes. A root can explicitly report
+an OR of AND groups through the existing wait-condition interface.
+
+Incomplete descriptions retain callback and legacy-spill wakeups, including
+notifications racing with parking. An unknown Yield is OpaqueYield, not an
+invented input wait. A notification makes such a task a Recheck candidate. Only
+initialization, explicit runnable continuations/budgets, or a satisfied complete
+exact contract are ranked Runnable. No timer polling is added; opaque operators
+still need their existing wakeup contract. Incomplete descriptions cannot provide
+a guaranteed-progress scheduler.
+
+Selection uses readiness before distance and phase; phase breaks ties at the
+same result distance. Existing query CPU fairness and the 64-selection ageing
+boost remain in force. `RunnableSelections`, `RecheckSelections`, and
+`BufferedOutputSelections` complement the existing run/progress counters. These
+measure why candidates were selected, not proof that output rows were produced.
 
 ## Dispatcher baseline (`TaskSchedulerUseWorkerPool: false`)
 
@@ -259,3 +300,15 @@ upstream ageing and one persistent worker serving multiple queries. The KQP
 comparison asserts that the worker mode actually records worker runner calls.
 The KQP tests compare query results with legacy and observation modes and exercise
 a small slice budget and execution on two nodes.
+
+## Classification validation (2026-10-26)
+
+On the Linux development checkout, 66 selected C++ tests passed across scheduler,
+worker pool, synthetic mode comparison, execution waits, channel trace/readiness
+and hash joins. The tests include a real DqBlockHashJoin feeding BlockCombineAll
+or BlockCombineHashed, nested aggregation/join/spill descriptions, partial leaf
+reports with opaque sibling inputs, complete ALL contracts, notification/parking
+races, stale operator continuations, phase priority and ageing. Four Python trace
+converter tests also passed. The synthetic comparison preserves identical results
+and rejects irrelevant notifications; it does not establish a real-query speedup.
+Q5 performance measurements predate this classification revision.

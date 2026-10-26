@@ -32,6 +32,88 @@ struct TManualTask {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DqTaskScheduler) {
+    Y_UNIT_TEST(OperatorTraitsAreExplicitAndDoNotAssignOneTaskType) {
+        const auto join = DescribeTaskOperator("DqBlockHashJoin", 2);
+        const auto aggregation = DescribeTaskOperator("BlockCombineHashed");
+        const auto opaque = DescribeTaskOperator("CustomBlockHashJoinWithAsyncInput");
+        const auto mapJoin = DescribeTaskOperator("BlockMapJoinCore");
+        UNIT_ASSERT(DescribeTaskOperator("GraceJoinWithSpilling").ReportsWaits);
+        UNIT_ASSERT(DescribeTaskOperator("GraceSelfJoin").Known);
+        UNIT_ASSERT(join.Known && join.Consumes && join.Accumulates && join.Spills);
+        UNIT_ASSERT(aggregation.Known && aggregation.EmitsBuffered && !aggregation.Spills);
+        UNIT_ASSERT(!opaque.Known && !opaque.ReportsWaits);
+        UNIT_ASSERT(mapJoin.Known && mapJoin.Accumulates && !mapJoin.ReportsWaits);
+        TManualTask t;
+        t.Task->SetOperatorProfile({join, aggregation, opaque});
+        const auto snapshot = t.Task->GetSnapshot();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.Operators->size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.Operators->front().Count, 2);
+        UNIT_ASSERT(snapshot.Classification.Coverage == ETaskWaitCoverage::Unknown);
+    }
+
+    Y_UNIT_TEST(CompleteRootContractPreservesAllAndDoesNotBecomeReadyAfterOneSignal) {
+        TManualTask t;
+        t.Task->RequestExecution();
+        t.Start();
+        const auto left = t.Task->NewAsyncDependency();
+        const auto right = t.Task->NewAsyncDependency();
+        TTaskWaitDescription wait;
+        wait.Reason = ETaskWaitReason::AsyncIo;
+        wait.Precision = ETaskWaitPrecision::Exact;
+        wait.Origin = ETaskWaitOrigin::Operator;
+        wait.Condition = TTaskWaitCondition::All({left, right});
+        t.Task->ReportWait(std::move(wait));
+        t.Task->SealWait(ETaskWaitCoverage::Complete);
+        t.Task->Complete({.RunnerInvoked = true});
+        t.Task->Signal(left.Id);
+        t.Task->Signal(SpillingDependency);
+        UNIT_ASSERT_VALUES_EQUAL(t.Enqueues, 1);
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Readiness == ETaskReadiness::Waiting);
+        t.Task->Signal(right.Id);
+        UNIT_ASSERT_VALUES_EQUAL(t.Enqueues, 2);
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Readiness == ETaskReadiness::Runnable);
+        // A later opaque run must not inherit the previous root certificate.
+        t.Start();
+        t.Task->Complete({.RunnerInvoked = true});
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Coverage == ETaskWaitCoverage::Unknown);
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Readiness == ETaskReadiness::OpaqueYield);
+        t.Task->Cancel();
+    }
+
+    Y_UNIT_TEST(LegacyContinuationIsARecheckAndDoesNotCertifyLeafWait) {
+        TManualTask t;
+        t.Task->RequestExecution();
+        t.Start();
+        TTaskWaitDescription wait;
+        wait.Reason = ETaskWaitReason::SpillRead;
+        wait.Precision = ETaskWaitPrecision::Exact;
+        wait.Condition = TTaskWaitCondition::Any({t.Task->NewAsyncDependency()});
+        t.Task->ReportWait(std::move(wait));
+        t.Task->Complete({.RunnerInvoked = true});
+        t.Task->RequestExecution();
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Readiness == ETaskReadiness::Recheck);
+        UNIT_ASSERT(t.Task->GetSnapshot().Classification.Coverage == ETaskWaitCoverage::Partial);
+        t.Task->Cancel();
+    }
+
+    Y_UNIT_TEST(NextFetchDropsAnOldOperatorContinuationButRetainsExternalCallbacks) {
+        for (bool externalCallback : {false, true}) {
+            TManualTask t;
+            t.Task->RequestExecution();
+            t.Start();
+            t.Task->MakeRunnable();
+            if (externalCallback) { t.Task->RequestExecution(); }
+            // The operator produced output and the next Fetch really blocked.
+            t.Task->BeginProbe();
+            t.Task->Await(InputDependency(42), t.Task->Observe(InputDependency(42)));
+            t.Task->Complete({.RunnerInvoked = true});
+            UNIT_ASSERT_VALUES_EQUAL(t.Enqueues, externalCallback ? 2 : 1);
+            const auto classification = t.Task->GetSnapshot().Classification;
+            UNIT_ASSERT(classification.Readiness == (externalCallback ? ETaskReadiness::Recheck : ETaskReadiness::Waiting));
+            t.Task->Cancel();
+        }
+    }
+
     Y_UNIT_TEST(UninstrumentedChildSpillStillWakesAnInputWait) {
         for (bool observedInput : {false, true}) {
             for (bool completesBeforeParking : {false, true}) {

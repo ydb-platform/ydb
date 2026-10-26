@@ -48,17 +48,16 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     void BuildVisibleClusters();
 
     struct TAccountClusters {
-        struct TClusterAccess {
-            TString Name;
+        struct TAccess {
             bool CanRead = false;
             bool CanWrite = false;
 
-            bool operator==(const TClusterAccess& rhs) const {
-                return Name == rhs.Name && CanRead == rhs.CanRead && CanWrite == rhs.CanWrite;
+            bool operator==(const TAccess& rhs) const {
+                return CanRead == rhs.CanRead && CanWrite == rhs.CanWrite;
             }
         };
 
-        TVector<TClusterAccess> Clusters;
+        absl::flat_hash_map<TString, TAccess> Clusters;
 
         bool operator==(const TAccountClusters& rhs) const {
             return Clusters == rhs.Clusters;

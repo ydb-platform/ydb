@@ -101,24 +101,24 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("missing")), (TVector<TString>{"sas", "vla"}));
 
         list.Accounts["prod"].Clusters = {
-            {"myt", false, true},
-            {"sas", false, true},
+            {"myt", {false, true}},
+            {"sas", {false, true}},
         };
         list.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("PROD")), (TVector<TString>{"sas", "vla", "myt"}));
 
         list.Accounts["prod"].Clusters = {
-            {"vla", true, false},
-            {"myt", false, true},
-            {"sas", false, true},
+            {"vla", {true, false}},
+            {"myt", {false, true}},
+            {"sas", {false, true}},
         };
         list.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"vla", "myt"}));
 
         list.Accounts["prod"].Clusters = {
-            {"klg", true, false},
-            {"missing", true, false},
-            {"myt", false, true},
+            {"klg", {true, false}},
+            {"missing", {true, false}},
+            {"myt", {false, true}},
         };
         list.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"myt", "klg"}));

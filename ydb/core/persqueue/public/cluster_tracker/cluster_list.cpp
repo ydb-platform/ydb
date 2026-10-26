@@ -45,17 +45,12 @@ TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf accou
         spec = &it->second;
     }
 
-    absl::flat_hash_set<TString> readNames;
-    absl::flat_hash_set<TString> writeNames;
     bool hasReadList = false;
     if (spec) {
-        for (const auto& access : spec->Clusters) {
+        for (const auto& [_, access] : spec->Clusters) {
             if (access.CanRead) {
                 hasReadList = true;
-                readNames.insert(access.Name);
-            }
-            if (access.CanWrite) {
-                writeNames.insert(access.Name);
+                break;
             }
         }
     }
@@ -63,8 +58,14 @@ TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf accou
     TVector<TCluster> visible;
     visible.reserve(Clusters.size());
     for (const auto& cluster : Clusters) {
-        const bool listed = hasReadList && readNames.contains(cluster.Name);
-        const bool assignedFnx = cluster.IsFnx && writeNames.contains(cluster.Name);
+        const TAccountClusters::TAccess* access = nullptr;
+        if (spec) {
+            if (const auto it = spec->Clusters.find(cluster.Name); it != spec->Clusters.end()) {
+                access = &it->second;
+            }
+        }
+        const bool listed = hasReadList && access && access->CanRead;
+        const bool assignedFnx = cluster.IsFnx && access && access->CanWrite;
         const bool everyCommunal = !hasReadList && !cluster.IsFnx;
         if (listed || assignedFnx || everyCommunal) {
             visible.push_back(cluster);

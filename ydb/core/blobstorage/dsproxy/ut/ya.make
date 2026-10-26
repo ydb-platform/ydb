@@ -29,6 +29,7 @@ SRCS(
     dsproxy_request_reporting_ut.cpp
     dsproxy_discover_ut.cpp
     dsproxy_range_ut.cpp
+    dsproxy_index_range_ut.cpp
     dsproxy_vdisk_mock_ut.cpp
     dsproxy_check_integrity_ut.cpp
     dsproxy_dormant_ut.cpp

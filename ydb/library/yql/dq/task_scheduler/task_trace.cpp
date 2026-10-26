@@ -80,6 +80,21 @@ NJson::TJsonValue ProgressJson(const TTaskRunProgress& progress) {
     json["observed_progress"] = progress.HasObservedProgress();
     return json;
 }
+
+NJson::TJsonValue ConditionJson(const TTaskWaitCondition& condition) {
+    auto any = Array();
+    for (const auto& group : condition.AnyOf) {
+        auto all = Array();
+        for (const auto& dependency : group) {
+            auto term = Object();
+            term["dependency"] = ToString(dependency.Id);
+            term["version"] = dependency.Version;
+            all.AppendValue(std::move(term));
+        }
+        any.AppendValue(std::move(all));
+    }
+    return any;
+}
 }
 
 NJson::TJsonValue TTaskChannelSnapshot::ToJson(ui64 channelId, bool input) const {
@@ -143,6 +158,16 @@ void TQueryTaskTrace::State(const TTaskSchedulingSnapshot& state) {
     args["stop_reason"] = StopName(state.StopReason);
     args["priority"] = static_cast<ui32>(state.Priority);
     args["last_run_progress"] = ProgressJson(state.Progress);
+    auto classification = Object();
+    classification["readiness"] = TaskReadinessName(state.Classification.Readiness);
+    classification["work"] = TaskWorkName(state.Classification.Work);
+    classification["coverage"] = TaskCoverageName(state.Classification.Coverage);
+    classification["legacy_wakeups"] = state.Classification.LegacyWakeups;
+    classification["operator_id"] = ToString(state.Classification.OperatorId);
+    classification["operator_name"] = state.Classification.OperatorName;
+    classification["phase"] = state.Classification.Phase;
+    args["classification"] = std::move(classification);
+    args["resume_any_of_all"] = ConditionJson(state.ResumeCondition);
     auto waits = Array();
     for (const auto& wait : state.Waits) {
         auto item = Object();
@@ -152,27 +177,18 @@ void TQueryTaskTrace::State(const TTaskSchedulingSnapshot& state) {
         item["origin"] = wait.Origin == ETaskWaitOrigin::Operator ? "operator"
             : wait.Origin == ETaskWaitOrigin::ChannelProbe ? "channel_probe" : "opaque_fallback";
         item["operator_id"] = ToString(wait.OperatorId);
+        item["operator_name"] = wait.OperatorName;
         item["input_side"] = SideName(wait.InputSide);
         auto path = Array();
         for (const auto& input : wait.InputPath) {
             auto frame = Object();
             frame["operator_id"] = ToString(input.OperatorId);
+            frame["operator_name"] = input.OperatorName;
             frame["side"] = SideName(input.Side);
             path.AppendValue(std::move(frame));
         }
         item["input_path"] = std::move(path);
-        auto any = Array();
-        for (const auto& group : wait.Condition.AnyOf) {
-            auto all = Array();
-            for (const auto& dependency : group) {
-                auto term = Object();
-                term["dependency"] = ToString(dependency.Id);
-                term["version"] = dependency.Version;
-                all.AppendValue(std::move(term));
-            }
-            any.AppendValue(std::move(all));
-        }
-        item["any_of_all"] = std::move(any);
+        item["any_of_all"] = ConditionJson(wait.Condition);
         waits.AppendValue(std::move(item));
     }
     args["waits"] = std::move(waits);

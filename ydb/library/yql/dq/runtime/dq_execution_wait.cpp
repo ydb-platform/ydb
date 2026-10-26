@@ -35,6 +35,36 @@ void TTaskExecutionWaitObserver::AwaitInput(NKikimr::NMiniKQL::TExecutionInputWa
     Task->ReportInputWait({scope.Probes, scope.Reports}, operatorId, Convert(side));
 }
 
+void TTaskExecutionWaitObserver::AwaitNamedInput(NKikimr::NMiniKQL::TExecutionInputWaitScope scope, ui64 operatorId,
+    NKikimr::NMiniKQL::EExecutionInputSide side, const char* name) {
+    Task->ReportInputWait({scope.Probes, scope.Reports}, operatorId, Convert(side), name);
+}
+
+void TTaskExecutionWaitObserver::ReportWork(ui64 operatorId, const char* name,
+    NKikimr::NMiniKQL::EExecutionWorkKind work, const char* phase) {
+    using EKind = NKikimr::NMiniKQL::EExecutionWorkKind;
+    ETaskWorkKind kind = ETaskWorkKind::Unknown;
+    switch (work) {
+        case EKind::Unknown: break;
+        case EKind::Consume: kind = ETaskWorkKind::Consume; break;
+        case EKind::Compute: kind = ETaskWorkKind::Compute; break;
+        case EKind::Emit: kind = ETaskWorkKind::Emit; break;
+        case EKind::Control: kind = ETaskWorkKind::Control; break;
+    }
+    Work.Work = kind;
+    Work.OperatorId = operatorId;
+    if (Work.OperatorName != name) { Work.OperatorName = name; }
+    if (Work.Phase != phase) { Work.Phase = phase; }
+}
+
+void TTaskExecutionWaitObserver::EndRun() {
+    // Phase reporting is on the Fetch hot path. Publish once per Run rather
+    // than taking the scheduling mutex for every row/block/operator scope.
+    if (Work.Work != ETaskWorkKind::Unknown) {
+        Task->ReportWork(Work.Work, Work.OperatorId, Work.OperatorName, Work.Phase);
+    }
+}
+
 void TTaskExecutionWaitObserver::AwaitFuture(ui64 operatorId, const void* operation,
     NKikimr::NMiniKQL::EExecutionWaitKind kind, const NThreading::TFuture<void>& future)
 {
@@ -53,12 +83,16 @@ void TTaskExecutionWaitObserver::AwaitFuture(ui64 operatorId, const void* operat
     description.Origin = ETaskWaitOrigin::Operator;
     description.Precision = ETaskWaitPrecision::Exact;
     description.OperatorId = operatorId;
+    if (operatorId && Work.OperatorId == operatorId) {
+        description.OperatorName = Work.OperatorName;
+    }
     description.Condition = TTaskWaitCondition::Any({it->second.Dependency});
     Task->ReportWait(std::move(description));
 }
 
 void TTaskExecutionWaitObserver::AwaitCallback(ui64 operatorId, NKikimr::NMiniKQL::EExecutionWaitKind kind) {
-    Task->ReportCallbackWait(operatorId, Convert(kind));
+    Task->ReportCallbackWait(operatorId, Convert(kind), operatorId && Work.OperatorId == operatorId
+        ? TStringBuf(Work.OperatorName) : TStringBuf{});
 }
 
 void TTaskExecutionWaitObserver::MakeRunnable() {
@@ -66,6 +100,7 @@ void TTaskExecutionWaitObserver::MakeRunnable() {
 }
 
 void TTaskExecutionWaitObserver::BeginRun() {
+    ResetWork();
     for (auto it = AsyncWaits.begin(); it != AsyncWaits.end();) {
         if (it->second.Future.IsReady()) {
             const auto previous = it++;

@@ -143,6 +143,55 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         t.Run(std::move(*next), false);
     }
 
+    Y_UNIT_TEST(ExactLeafWithPartialCoverageDoesNotBeatKnownRunnableWork) {
+        TQueues t;
+        auto leaf = t.Add(Id(100), 1, 1);
+        auto claim = t.Pool->Take({}, 100);
+        UNIT_ASSERT(claim && claim->Execution->TryAcquire());
+        const auto generation = claim->Task->TryDispatch();
+        UNIT_ASSERT(generation && claim->Task->Start(*generation));
+        const auto dependency = claim->Task->NewAsyncDependency();
+        TTaskWaitDescription wait;
+        wait.Reason = ETaskWaitReason::SpillRead;
+        wait.Precision = ETaskWaitPrecision::Exact;
+        wait.Condition = TTaskWaitCondition::Any({dependency});
+        claim->Task->ReportWait(std::move(wait));
+        claim->Task->Complete({.RunnerInvoked = true});
+        claim->Execution->Release();
+        t.Pool->Finish(*claim, 10);
+        leaf->Task->Signal(dependency.Id);
+        // The partial leaf was enqueued earlier; its exact dependency alone
+        // must not outrank a task with an explicit root continuation.
+        t.Add(Id(100), 2, 2);
+        auto next = t.Pool->Take({}, 100);
+        UNIT_ASSERT(next && next->Task->TaskId == 2);
+        t.Run(std::move(*next), false);
+        next = t.Pool->Take({}, 100);
+        UNIT_ASSERT(next && next->Task->TaskId == 1);
+        t.Run(std::move(*next), false);
+    }
+
+    Y_UNIT_TEST(BufferedAggregateOutputWinsOverComputeWithoutBeingClassedAsSource) {
+        TQueues t;
+        auto compute = t.Add(Id(100), 1, 1);
+        auto emit = t.Add(Id(100), 2, 2);
+        for (auto execution : {compute, emit}) {
+            auto claim = t.Pool->Take({}, 100);
+            UNIT_ASSERT(claim && claim->Task == execution->Task && claim->Execution->TryAcquire());
+            const auto generation = claim->Task->TryDispatch();
+            UNIT_ASSERT(generation && claim->Task->Start(*generation));
+            claim->Task->ReportWork(execution == emit ? ETaskWorkKind::Emit : ETaskWorkKind::Compute,
+                10, "BlockCombineHashed", execution == emit ? "emit" : "accumulate");
+            claim->Task->MakeRunnable();
+            claim->Task->Complete({.RunnerInvoked = true});
+            claim->Execution->Release();
+            t.Pool->Finish(*claim, 10);
+        }
+        auto next = t.Pool->Take({}, 100);
+        UNIT_ASSERT(next && next->Task == emit->Task);
+        t.Run(std::move(*next), false);
+    }
+
     Y_UNIT_TEST(OneTaskCannotBeClaimedTwiceAndBusyEndpointsDoNotSpin) {
         TQueues t;
         auto execution = t.Add(Id(100), 1, 1);

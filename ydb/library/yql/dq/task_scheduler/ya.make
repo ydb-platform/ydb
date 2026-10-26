@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    task_classification.cpp
     task_trace.cpp
     task_graph.cpp
     task_scheduler.cpp

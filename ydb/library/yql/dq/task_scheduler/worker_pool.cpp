@@ -19,13 +19,18 @@ bool IsTerminal(ETaskSchedulingState state) {
 }
 
 bool KnownReady(const TTaskSchedulingSnapshot& state) {
-    if (state.StopReason == ETaskStopReason::None || state.StopReason == ETaskStopReason::Runnable
-        || state.StopReason == ETaskStopReason::Budget) {
-        return true;
+    return state.Classification.Readiness == ETaskReadiness::Runnable;
+}
+
+ui32 WorkRank(ETaskWorkKind work) {
+    switch (work) {
+        case ETaskWorkKind::Emit: return 0;
+        case ETaskWorkKind::Control: return 1;
+        case ETaskWorkKind::Consume: return 2;
+        case ETaskWorkKind::Compute: return 3;
+        case ETaskWorkKind::Unknown: return 4;
     }
-    return !state.Waits.empty() && AllOf(state.Waits, [](const auto& wait) {
-        return wait.Precision == ETaskWaitPrecision::Exact;
-    });
+    return 4;
 }
 } // namespace
 
@@ -43,6 +48,9 @@ TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitori
         SelectionsCount = group->GetCounter("Selections", true);
         SelectionCpuUs = group->GetCounter("SelectionCpuUs", true);
         SelectionLockWaitUs = group->GetCounter("SelectionLockWaitUs", true);
+        RunnableSelections = group->GetCounter("RunnableSelections", true);
+        RecheckSelections = group->GetCounter("RecheckSelections", true);
+        BufferedOutputSelections = group->GetCounter("BufferedOutputSelections", true);
     }
 }
 
@@ -216,7 +224,7 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
     TQuery* selectedQuery = nullptr;
     TTask* selectedTask = nullptr;
     double service = std::numeric_limits<double>::infinity();
-    std::tuple<bool, bool, ui32, ui64> taskKey;
+    std::tuple<bool, bool, ui32, ui32, ui64> taskKey;
     NActors::TActorId selectedQueryId, selectedActor;
     const auto now = TMonotonic::Now();
     for (auto id : ReadyQueries) {
@@ -235,7 +243,7 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
             }
             const auto distance = query.Graph ? query.Graph->GetResultDistance(task.State.TaskId) : std::nullopt;
             const auto key = std::tuple{Selections - task.SelectionAt < 64, !KnownReady(task.State),
-                distance.value_or(std::numeric_limits<ui32>::max()), task.Sequence};
+                distance.value_or(std::numeric_limits<ui32>::max()), WorkRank(task.State.Classification.Work), task.Sequence};
             if (!selectedTask || candidateService < service
                 || (candidateService == service && (selectedQuery == &query ? key < taskKey
                     : task.Sequence < selectedTask->Sequence))) {
@@ -257,6 +265,8 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
     ++Selections;
     if (SelectionsCount) {
         ++*SelectionsCount;
+        ++*(KnownReady(selectedTask->State) ? RunnableSelections : RecheckSelections);
+        if (selectedTask->State.Classification.Work == ETaskWorkKind::Emit) { ++*BufferedOutputSelections; }
     }
     ++selectedQuery->Running;
     selectedQuery->ReservedCpuUs += reserveCpuUs;
@@ -277,9 +287,13 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         selection["reserved_cpu_us"] = reserveCpuUs;
         selection["aging_override"] = !std::get<0>(taskKey);
         selection["known_ready"] = !std::get<1>(taskKey);
+        selection["readiness"] = TaskReadinessName(selectedTask->State.Classification.Readiness);
+        selection["work"] = TaskWorkName(selectedTask->State.Classification.Work);
+        selection["coverage"] = TaskCoverageName(selectedTask->State.Classification.Coverage);
+        selection["work_rank"] = std::get<3>(taskKey);
         selection["result_distance"] = std::get<2>(taskKey) == std::numeric_limits<ui32>::max()
             ? NJson::TJsonValue() : NJson::TJsonValue(std::get<2>(taskKey));
-        selection["fifo_sequence"] = std::get<3>(taskKey);
+        selection["fifo_sequence"] = std::get<4>(taskKey);
         selection["selection"] = Selections;
     }
     const auto selectedAt = task->Trace ? TMonotonic::Now() : TMonotonic();

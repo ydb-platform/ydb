@@ -729,7 +729,7 @@ private:
     }
 
     EFetchResult FetchAndPackData(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
-        TExecutionInputScope leftWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Left);
+        TExecutionInputScope leftWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Left, "GraceJoin");
         const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft_->FetchValues(ctx, LeftPacker_->TuplePtrs.data());
         if (resultLeft == EFetchResult::Yield) {
             leftWait.Yielded();
@@ -774,7 +774,7 @@ private:
                 std::copy_n(LeftPacker_->TupleHolder.begin(), LeftPacker_->TotalColumnsNum, RightPacker_->TupleHolder.begin());
             }
         } else {
-            TExecutionInputScope rightWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Right);
+            TExecutionInputScope rightWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Right, "GraceJoin");
             resultRight = FlowRight_->FetchValues(ctx, RightPacker_->TuplePtrs.data());
             if (resultRight == EFetchResult::Yield) {
                 rightWait.Yielded();
@@ -922,6 +922,7 @@ private:
             if (IsSpillingAllowed_ && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "compute");
                     ctx.ExecutionWaitObserver->MakeRunnable();
                 }
                 return EFetchResult::Yield;
@@ -939,6 +940,7 @@ private:
                 if (IsSpillingAllowed_ && ctx.SpillerFactory && !JoinedTablePtr_->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind_, *HaveMoreLeftRows_, *HaveMoreRightRows_)) {
                     SwitchMode(EOperatingMode::Spilling, ctx);
                     if (ctx.ExecutionWaitObserver) {
+                        ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "compute");
                         ctx.ExecutionWaitObserver->MakeRunnable();
                     }
                     return EFetchResult::Yield;
@@ -1007,6 +1009,7 @@ private:
 
                     if (isWaitingForReduce) {
                         if (ctx.ExecutionWaitObserver) {
+                            ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "spill");
                             ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
                         }
                         return EFetchResult::Yield;
@@ -1022,6 +1025,7 @@ private:
         if (!*HaveMoreLeftRows_ && !*HaveMoreRightRows_) {
             if (!IsSpillingFinished()) {
                 if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "spill");
                     ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
                 }
                 return EFetchResult::Yield;
@@ -1035,6 +1039,7 @@ private:
             }
             if (!IsReadyForSpilledDataProcessing()) {
                 if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "spill");
                     ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
                 }
                 return EFetchResult::Yield;
@@ -1051,6 +1056,7 @@ private:
             UpdateSpilling();
             if (IsRestoringSpilledBuckets()) {
                 if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->ReportWork(reinterpret_cast<ui64>(this), "GraceJoin", EExecutionWorkKind::Compute, "spill");
                     ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillRead);
                 }
                 return EFetchResult::Yield;

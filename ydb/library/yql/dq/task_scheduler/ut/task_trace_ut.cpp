@@ -139,6 +139,7 @@ Y_UNIT_TEST_SUITE(DqTaskTrace) {
         task->ReportWait({.Reason = ETaskWaitReason::Input, .Origin = ETaskWaitOrigin::Operator,
             .Precision = ETaskWaitPrecision::Exact, .OperatorId = 123, .InputSide = ETaskInputSide::Right,
             .Condition = TTaskWaitCondition::All({{InputDependency(42), 0}})});
+        task->ReportWork(ETaskWorkKind::Consume, 123, "HashJoin", "build");
         task->Complete({.RunnerInvoked = true});
         task->Signal(InputDependency(42));
         task->Cancel(true);
@@ -155,6 +156,11 @@ Y_UNIT_TEST_SUITE(DqTaskTrace) {
                 const auto& wait = event["args"]["waits"][0];
                 UNIT_ASSERT_VALUES_EQUAL(wait["input_side"].GetString(), "right");
                 UNIT_ASSERT_VALUES_EQUAL(wait["precision"].GetString(), "exact");
+                UNIT_ASSERT_VALUES_EQUAL(event["args"]["classification"]["coverage"].GetString(), "partial");
+                UNIT_ASSERT_VALUES_EQUAL(event["args"]["classification"]["work"].GetString(), "consume");
+                UNIT_ASSERT_VALUES_EQUAL(event["args"]["classification"]["phase"].GetString(), "build");
+                UNIT_ASSERT(event["args"]["classification"]["legacy_wakeups"].GetBoolean());
+                UNIT_ASSERT_VALUES_EQUAL(event["args"]["resume_any_of_all"].GetArraySafe().size(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(wait["any_of_all"][0][0]["dependency"].GetString(), ToString(InputDependency(42)));
                 waitSeen = true;
             }

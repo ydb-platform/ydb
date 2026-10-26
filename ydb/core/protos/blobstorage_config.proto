@@ -711,7 +711,6 @@ message TTestResetDataCenterStates {}
 
 message TConfigRequest {
     message TCommand {
-        reserved 64; // Former TestSetGroupDataCenter command.
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;

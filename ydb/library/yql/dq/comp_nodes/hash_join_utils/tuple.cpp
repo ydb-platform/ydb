@@ -236,6 +236,37 @@ void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColum
     }
 }
 
+void TTupleLayout::PrepareKeyNullCheck() {
+    if (KeyColumnsNum <= 8) {
+        NullCheckWidth = 1;
+        NullCheckOffset = BitmaskOffset;
+        NullCheckMask = (ui64{1} << KeyColumnsNum) - 1;
+        return;
+    }
+
+    // End the wide load at the last key-validity byte. Any preceding key bytes
+    // are masked out. The four-byte hash header makes even zero-size keys safe.
+    const ui32 keyBytes = (KeyColumnsNum + 7) / 8;
+    if (KeyColumnsNum <= 32) {
+        NullCheckWidth = sizeof(ui32);
+        NullCheckOffset = BitmaskOffset + keyBytes - sizeof(ui32);
+        NullCheckMask = ((ui64{1} << KeyColumnsNum) - 1) << ((sizeof(ui32) - keyBytes) * 8);
+    } else if (KeyColumnsNum <= 64) {
+        NullCheckWidth = sizeof(ui64);
+        NullCheckOffset = BitmaskOffset + keyBytes - sizeof(ui64);
+        NullCheckMask = (~ui64{0} >> (64 - KeyColumnsNum)) << ((sizeof(ui64) - keyBytes) * 8);
+    } else {
+        // Full words are checked separately; the final load may overlap them.
+        const ui32 remainder = KeyColumnsNum % 64;
+        const ui32 tailBytes = (remainder + 7) / 8;
+        NullCheckWidth = sizeof(ui64);
+        NullCheckOffset = BitmaskOffset + keyBytes - sizeof(ui64);
+        NullCheckMask = remainder
+            ? ((ui64{1} << remainder) - 1) << ((sizeof(ui64) - tailBytes) * 8)
+            : 0;
+    }
+}
+
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 #ifdef USE_X86_SIMD
@@ -344,6 +375,7 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     BitmaskOffset = currOffset;
 
     BitmaskSize = (OrigColumns.size() + 7) / 8;
+    PrepareKeyNullCheck();
 
     currOffset += BitmaskSize;
     BitmaskEnd = currOffset;

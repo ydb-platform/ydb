@@ -252,18 +252,29 @@ struct TTupleLayout {
         return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
     }
 
+    // Cached NULL-key check parameters; packed row size and offsets stay unchanged.
+    ui64 NullCheckMask = 0;
+    ui32 NullCheckOffset = 0;
+    ui32 NullCheckWidth = 0;
+
+    void PrepareKeyNullCheck();
+
     Y_FORCE_INLINE bool KeyHasNull(const ui8* row) const {
-        if (Y_LIKELY(KeyColumnsNum <= 8)) {
-            const ui8 mask = static_cast<ui8>((1u << KeyColumnsNum) - 1);
-            return (ReadUnaligned<ui8>(row + BitmaskOffset) & mask) != mask;
+        if (Y_LIKELY(NullCheckWidth == 1)) {
+            return (ReadUnaligned<ui8>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
         }
-        for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, ++byteN) {
-            const ui8 mask = i >= 8 ? 0xFF : static_cast<ui8>((1u << i) - 1);
-            if ((ReadUnaligned<ui8>(row + BitmaskOffset + byteN) & mask) != mask) {
-                return true;
+        if (NullCheckWidth == 4) {
+            return (ReadUnaligned<ui32>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
+        }
+        if (KeyColumnsNum > 64) {
+            for (ui32 i = 0; i < KeyColumnsNum / 64; ++i) {
+                if (ReadUnaligned<ui64>(row + BitmaskOffset + i * sizeof(ui64)) != ~ui64{0}) {
+                    return true;
+                }
             }
         }
-        return false;
+        return NullCheckMask != 0 &&
+            (ReadUnaligned<ui64>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
     }
 
     // Creates new tuple layout based on provided columns description.

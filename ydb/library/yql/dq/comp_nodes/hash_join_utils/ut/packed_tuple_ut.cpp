@@ -79,6 +79,55 @@ Y_UNIT_TEST(TestCalculateCRC32AVX2) {
 }
 
 Y_UNIT_TEST_SUITE(TupleLayout) {
+Y_UNIT_TEST(KeyHasNullChecksOnlyKeyValidityBits) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    for (const ui32 keys : {0u, 1u, 7u, 8u, 9u, 15u, 16u, 17u, 24u, 25u, 31u, 32u,
+                           33u, 40u, 41u, 48u, 49u, 56u, 57u, 63u, 64u, 65u, 72u, 73u,
+                           127u, 128u, 129u, 192u, 193u, 257u}) {
+        for (const ui32 keySize : {0u, 1u, 8u}) {
+            for (const ui32 payloads : {0u, 1u, 7u, 8u, 9u}) {
+                if (keys + payloads == 0) {
+                    continue;
+                }
+                TColumnDesc key;
+                key.Role = EColumnRole::Key;
+                key.DataSize = keySize;
+                TColumnDesc payload;
+                payload.Role = EColumnRole::Payload;
+                payload.DataSize = 1;
+                std::vector<TColumnDesc> columns(keys, key);
+                columns.insert(columns.end(), payloads, payload);
+                TTupleLayoutFallback layout(columns);
+                UNIT_ASSERT_VALUES_EQUAL(layout.TotalRowSize,
+                    sizeof(ui32) + keys * keySize + (keys + payloads + 7) / 8 + payloads);
+
+                // Exactly one row, with no readable padding after its validity bitmap
+                // when there is no payload. Zero-size keys also exercise the hash header.
+                for (const ui8 fill : {ui8{0}, ui8{0xA5}, ui8{0xFF}}) {
+                    std::vector<ui8> row(layout.TotalRowSize, fill);
+                    auto* validity = row.data() + layout.BitmaskOffset;
+                    for (ui32 bit = 0; bit < keys; ++bit) {
+                        validity[bit / 8] |= 1u << (bit % 8);
+                    }
+                    UNIT_ASSERT(!layout.KeyHasNull(row.data()));
+                    for (ui32 bit = 0; bit < keys; ++bit) {
+                        validity[bit / 8] &= ~(1u << (bit % 8));
+                        UNIT_ASSERT_C(layout.KeyHasNull(row.data()),
+                            "keys=" << keys << ", keySize=" << keySize << ", NULL key=" << bit);
+                        validity[bit / 8] |= 1u << (bit % 8);
+                    }
+                    // Neither NULL payloads nor unset padding bits are NULL keys.
+                    for (ui32 bit = keys; bit < layout.BitmaskSize * 8; ++bit) {
+                        validity[bit / 8] &= ~(1u << (bit % 8));
+                        UNIT_ASSERT(!layout.KeyHasNull(row.data()));
+                    }
+                }
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(CreateLayout) {
 
     TColumnDesc kc1, kc2,  pc1, pc2, pc3;

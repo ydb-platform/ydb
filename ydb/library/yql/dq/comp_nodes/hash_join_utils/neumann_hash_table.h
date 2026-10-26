@@ -380,10 +380,6 @@ class TNeumannHashTable {
 
         TIterator iter;
 
-        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
-            return iter;
-        }
-
         const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
@@ -392,6 +388,10 @@ class TNeumannHashTable {
         const TBloom dirBloomFilter = dir.BloomFilter;
 
         if (hashBloomTag & dirBloomFilter) {
+            return iter;
+        }
+
+        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
             return iter;
         }
 
@@ -468,10 +468,6 @@ class TNeumannHashTable {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
-        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
-            return;
-        }
-
         const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
@@ -480,6 +476,10 @@ class TNeumannHashTable {
         const TBloom dirBloomFilter = dir.BloomFilter;
 
         if (hashBloomTag & dirBloomFilter) {
+            return;
+        }
+
+        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
             return;
         }
 

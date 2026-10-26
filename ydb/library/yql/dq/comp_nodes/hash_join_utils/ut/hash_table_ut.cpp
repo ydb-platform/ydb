@@ -544,9 +544,104 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
     UNIT_ASSERT_VALUES_EQUAL(visited, 1u);
 }
 
+template <bool ConsecutiveDuplicates, bool Prefetch>
+void TestNullableKeyLookups(ui32 keys, ui32 payloadSize, bool equalNulls) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 1;
+    TColumnDesc payload;
+    payload.Role = EColumnRole::Payload;
+    payload.DataSize = payloadSize;
+    std::vector<TColumnDesc> columns(keys, key);
+    columns.push_back(payload);
+    auto layout = TTupleLayout::Create(columns);
+    if (equalNulls) {
+        // The last key is null-safe; all preceding keys keep ordinary equality.
+        layout->ApplyEqualNulls({keys - 1});
+    }
+
+    constexpr ui32 rows = 3;
+    std::vector<ui8> keyData(rows, 0);
+    std::vector<ui8> payloadData(rows * payloadSize, 0);
+    for (ui32 row = 0; row < rows; ++row) {
+        payloadData[row * payloadSize] = row + 1;
+    }
+    std::vector<const ui8*> data(keys, keyData.data());
+    data.push_back(payloadData.data());
+    const ui8 allValid = 0x07;
+    const ui8 nullable = 0x05;
+    std::vector<const ui8*> valid(keys + 1, &allValid);
+    valid[keys - 1] = &nullable;
+    std::vector<ui8> packed(rows * layout->TotalRowSize);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    layout->Pack(data.data(), valid.data(), packed.data(), overflow, 0, rows);
+
+    // NULL and zero share a hash, forcing the probe past the Bloom filter.
+    UNIT_ASSERT_VALUES_EQUAL(Hash(packed.data()), Hash(packed.data() + layout->TotalRowSize));
+    TNeumannHashTable<ConsecutiveDuplicates, Prefetch> table(layout.Get());
+    table.Build(packed.data(), overflow.data(), rows);
+    for (const ui32 probeIndex : {0u, 1u}) {
+        const ui8* probe = packed.data() + probeIndex * layout->TotalRowSize;
+        const std::vector<ui8> expected = probeIndex == 0
+            ? std::vector<ui8>{1, 3}
+            : equalNulls ? std::vector<ui8>{2} : std::vector<ui8>{};
+        auto checkMatches = [&](std::vector<ui8> matches) {
+            std::sort(matches.begin(), matches.end());
+            UNIT_ASSERT_VALUES_EQUAL(matches, expected);
+        };
+        std::vector<ui8> applied;
+        table.Apply(probe, overflow.data(), [&](const ui8* row) {
+            applied.push_back(row[layout->PayloadOffset]);
+            return true;
+        });
+        checkMatches(applied);
+
+        std::vector<ui8> found;
+        auto iter = table.Find(probe, overflow.data());
+        while (const ui8* row = table.NextMatch(iter, overflow.data())) {
+            found.push_back(row[layout->PayloadOffset]);
+        }
+        checkMatches(found);
+        UNIT_ASSERT(table.NextMatch(iter, overflow.data()) == nullptr);
+
+        if constexpr (!ConsecutiveDuplicates) {
+            size_t slot = 0;
+            std::vector<ui8> resumed;
+            for (ui32 attempts = 0;; ++attempts) {
+                UNIT_ASSERT_LE(attempts, rows);
+                bool produced = false;
+                table.Apply(probe, overflow.data(), slot, [&](const ui8* row) {
+                    resumed.push_back(row[layout->PayloadOffset]);
+                    produced = true;
+                    return false;
+                });
+                if (!produced) {
+                    break;
+                }
+            }
+            checkMatches(resumed);
+        }
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
+    Y_UNIT_TEST(NullableKeyLookups) {
+        for (const ui32 keys : {1u, 8u, 9u, 32u, 33u, 64u, 65u, 128u}) {
+            for (const ui32 payloadSize : {1u, 32u}) {
+                for (const bool equalNulls : {false, true}) {
+                    TestNullableKeyLookups<false, false>(keys, payloadSize, equalNulls);
+                    TestNullableKeyLookups<false, true>(keys, payloadSize, equalNulls);
+                    TestNullableKeyLookups<true, false>(keys, payloadSize, equalNulls);
+                    TestNullableKeyLookups<true, true>(keys, payloadSize, equalNulls);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(ApplyReturnsPackedRows) {
         TestApplyReturnsPackedRows<TNeumannTable>();
     }

@@ -1,3 +1,4 @@
+#include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/protos/data_format_settings.pb.h>

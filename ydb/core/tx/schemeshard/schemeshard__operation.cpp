@@ -1216,6 +1216,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
     case TTxState::ETxType::TxPrepareIndexValidation:
         return CreatePrepareIndexValidation(NextPartId(), txState);
+    case TTxState::ETxType::TxPrepareVectorIndex:
+        return CreatePrepareVectorIndex(NextPartId(), txState);
     case TTxState::ETxType::TxFinalizeBuildIndex:
         return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropTableIndexAtMainTable:

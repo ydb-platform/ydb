@@ -35,6 +35,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.DropGeneratedUnlocksDependencyAlterAndDro
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionPrimaryKeyConflictIsAtomic
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionRollbackRestoresGeneratedState
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleDmlStatementsCommitAndAbortAtomically
+ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnThroughSecondaryIndex
@@ -73,6 +74,7 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.DropNonexistingView
 ydb/core/kqp/ut/view TCreateAndDropViewTest.DropViewIfExists
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
+ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
@@ -96,6 +98,7 @@ ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDo
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropAfterDoneResolvesFreshSecret
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
@@ -107,12 +110,15 @@ ydb/core/tx/replication/controller/ut_schema_change StatsDescription.Credentials
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.UnresponsiveProxyReturnsPartialStats
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement+DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement+DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapCredentialRetry
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion-Deferred
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.CurrentFailureAndRetry
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.EmptyDiscoveryIsConsumed
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery+NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst

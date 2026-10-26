@@ -151,6 +151,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     settings.VisitTuples = true;
 
     // At first step convert KqpOps to RBO Ops.
+    std::optional<TCompileTraceScope> traceScope(std::in_place, KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+        "Convert to new RBO operators");
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -200,6 +202,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         },
         ctx, settings);
 
+    traceScope->SetSuccess(status != TStatus::Error);
+    traceScope.reset();
     if (status != TStatus::Ok) {
         return status;
     }
@@ -405,12 +409,13 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     CollectTablesAndColumnsNames(ctx);
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    TStatRequestsTrace trace{.Trace = KqpCtx.GetCompileTrace()};
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
-                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
+                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; }, &trace);
 
     if (futures.empty()) {
         return TStatus::Ok;
@@ -469,6 +474,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                 }
             }
         });
+    // Each request span records the outcome of its request.
+    ColumnStatisticsReadiness = TraceCompileDependency(ColumnStatisticsReadiness, std::move(trace.Join));
 
     SharedState = sharedState;
     return TStatus::Async;

@@ -130,22 +130,28 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     TVector<TVector<TExprNode::TPtr>> allPhyStages;
 
+    auto* trace = RBOCtx.GetCompileTrace();
+    const auto traced = [&](const char* name, auto&& func) {
+        TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, name);
+        return func();
+    };
+
     for (size_t i=0; i<Roots.size(); i++) {
-        auto phyStages = BuildPhysicalStageGraph(i);
+        auto phyStages = traced("Build stage graph", [&] { return BuildPhysicalStageGraph(i); });
         SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
         const bool fullPeephole = RBOCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
-        phyStages = PreparePhysicalStages(std::move(phyStages), fullPeephole);
+        phyStages = traced("Prepare physical stages", [&] { return PreparePhysicalStages(std::move(phyStages), fullPeephole); });
         SubmitPhysicalStagesTrace(RBOCtx, "After physical stage preparation", phyStages);
         if (!fullPeephole) {
-            phyStages = LowerPhysicalStageCompatibility(std::move(phyStages));
+            phyStages = traced("Lower incompatible callables", [&] { return LowerPhysicalStageCompatibility(std::move(phyStages)); });
             SubmitPhysicalStagesTrace(RBOCtx, "After compatibility lowering", phyStages);
         } else {
-            phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+            phyStages = traced("Peephole physical stages", [&] { return PeepHoleOptimizePhysicalStages(std::move(phyStages)); });
             SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
         }
         allPhyStages.push_back(std::move(phyStages));
     }
-    auto physicalQuery = BuildPhysicalQuery(std::move(allPhyStages));
+    auto physicalQuery = traced("Build physical query", [&] { return BuildPhysicalQuery(std::move(allPhyStages)); });
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
 }
@@ -933,7 +939,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
             argsType.push_back(argTypeAnn);
         }
 
-        newProgram = PeepHoleOptimize(newProgram, argsType);
+        {
+            TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail, "Peephole stage");
+            newProgram = PeepHoleOptimize(newProgram, argsType);
+            traceScope.SetSuccess(newProgram != nullptr);
+        }
         Y_ENSURE(newProgram);
         // Collect program after peephole.
         programsMap[program.Raw()] = newProgram;
@@ -1038,6 +1048,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
+    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail,
+        "Annotate physical stage");
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);

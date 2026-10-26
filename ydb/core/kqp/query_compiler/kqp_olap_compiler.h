@@ -9,9 +9,11 @@
 namespace NKikimr {
 namespace NKqp {
 
+class TCompileTrace;
+
 void CompileOlapProgram(const NYql::NNodes::TCoLambda& lambda, const NYql::TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames, NYql::TExprContext &exprCtx,
-    NYql::TTypeAnnotationContext& typesCtx);
+    NYql::TTypeAnnotationContext& typesCtx, TCompileTrace* trace = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

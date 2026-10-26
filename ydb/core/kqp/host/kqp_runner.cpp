@@ -1,4 +1,6 @@
 #include "kqp_host_impl.h"
+#include "kqp_compile_trace_transformer.h"
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -319,7 +321,12 @@ private:
         }
 
         const bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
-        auto kqlQueryBlocks = BuildKqlQuery(dataQueryBlocks, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx, TypesCtx);
+        auto kqlQueryBlocks = [&] {
+            TCompileTraceScope traceScope(queryCtx->CompileTrace.Get(), TCompileTraceLevels::Step, "Build KQL query");
+            auto result = BuildKqlQuery(dataQueryBlocks, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx, TypesCtx);
+            traceScope.SetSuccess(result.Defined());
+            return result;
+        }();
         if (!kqlQueryBlocks) {
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
@@ -349,6 +356,8 @@ private:
     void CreateGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
         const NMiniKQL::IFunctionRegistry& funcRegistry)
     {
+        TCompileTraceScope traceScope(sessionCtx->QueryPtr()->CompileTrace.Get(), TCompileTraceLevels::Step,
+            "Create transformer pipelines");
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
             Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
@@ -444,9 +453,17 @@ private:
 
         // Create a NewRBO composite transformer only if the special flag is enabled.
         if (Config->GetEnableNewRBO()) {
+            const auto traced = [queryCtx = sessionCtx->QueryPtr()](TAutoPtr<IGraphTransformer>&& transformer,
+                    const TString& name, ui8 verbosity = TCompileTraceLevels::Phase) {
+                return CreateCompileTraceTransformer(std::move(transformer), queryCtx, verbosity, name);
+            };
+            // The optimization runs in a loop that restarts until the query stops changing:
+            // a phase span covers the loop, and its passes are steps in it.
+            static const char optimization = 0;
+            static const char passes = 0;
             
-            auto newRBOPreparedExplainTransformer = CreateKqpRBOExplainPreparedTransformer(
-                Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
+            auto newRBOPreparedExplainTransformer = traced(CreateKqpRBOExplainPreparedTransformer(
+                Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx), "Build explain plan");
 
             auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
                 .Add(TAutoPtr<IGraphTransformer>(new TRboGcTransformer()), "GC")
@@ -466,18 +483,28 @@ private:
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
+                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Phase, "Optimize query",
+                    &optimization), "TraceBeginOptimizeQuery")
+                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Step, "Annotate KQL query",
+                    &passes), "TraceBeginAnnotateKqlQuery")
                 .AddPreTypeAnnotation()
                 //.AddExpressionEvaluation(funcRegistry)
                 .AddIOAnnotation()
                 .AddTypeAnnotationTransformer()
                 //.Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
                 .AddPostTypeAnnotation(/* forSubgraph */ true)
+                .Add(CreateCompileTraceEnd(sessionCtx->QueryPtr(), "Annotate KQL query", &passes),
+                    "TraceEndAnnotateKqlQuery")
                 //.AddCommonOptimization()
 
-                .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")
-                .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
-                    SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx), "NewRBOTransformer")
+                .Add(traced(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "Rewrite select",
+                    TCompileTraceLevels::Step), "RewriteSelect")
+                .Add(traced(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
+                    SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx),
+                    "Run new RBO", TCompileTraceLevels::Step), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
+                .Add(CreateCompileTraceEnd(sessionCtx->QueryPtr(), "Optimize query", &optimization),
+                    "TraceEndOptimizeQuery")
 
                 //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
                 //.Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
@@ -486,13 +513,13 @@ private:
                 //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
                 .Build(false);
 
-            TAutoPtr<IGraphTransformer> newRBOCompilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            auto newRBOCompilePhysicalQuery = traced(TAutoPtr<IGraphTransformer>(new TCompilePhysicalQueryTransformer(Cluster,
                 SessionCtx->GetDatabase(),
                 *TransformCtx,
                 *OptimizeCtx,
                 *typesCtx,
                 funcRegistry,
-                Config));
+                Config)), "Compile physical query");
 
             NewRBOTransformer = CreateCompositeGraphTransformer(
                 {

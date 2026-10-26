@@ -51,6 +51,7 @@ public:
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
         bool UsePessimisticLocks = false;
+        TCompileTrace::TPtr CompileTrace;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"

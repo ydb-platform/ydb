@@ -6,6 +6,7 @@ SPLIT_FACTOR(3)
 SIZE(MEDIUM)
 
 SRCS(
+    kqp_compile_trace_transformer_ut.cpp
     kqp_query_trace_ut.cpp
 )
 

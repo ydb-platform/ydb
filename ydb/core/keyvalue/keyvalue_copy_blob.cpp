@@ -45,6 +45,7 @@ public:
 
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
             BlobId, 0, BlobId.BlobSize(), TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::LowRead);
+        ev->ReaderTabletData = {TabletInfo->TabletID, NewBlobId.Generation()};
         SendToBSProxy(TActivationContext::AsActorContext(), groupId, ev.release(), 0, NWilson::TTraceId());
 
         Become(&TThis::StateGet);

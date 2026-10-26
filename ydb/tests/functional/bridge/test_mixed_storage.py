@@ -2,6 +2,9 @@ import ydb
 
 from common import BridgeKiKiMRTest
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.common.protobuf_console import AlterTenantRequest, GetOperationRequest
+from ydb.tests.library.common.wait_for import retry_assertions, wait_for
 
 
 class TestMixedStorageDatabases(BridgeKiKiMRTest):
@@ -70,6 +73,24 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             return session.transaction(ydb.SerializableReadWrite()).execute(query, commit_tx=True, settings=settings)
         return self.sessions[kind].retry_operation_sync(operation)
 
+    def grow_database(self, kind):
+        request = AlterTenantRequest(f"/Root/{kind}")
+        request.protobuf.AlterTenantRequest.Request.storage_units_to_add.add(unit_kind=kind, count=1)
+        response = self.cluster.client.send_request(request.protobuf, method="ConsoleRequest")
+        operation = response.AlterTenantResponse.Response.operation
+        assert operation.ready or response.Status.Code == StatusIds.STATUS_CODE_UNSPECIFIED, response
+        poll = GetOperationRequest(operation.id)
+
+        def ready():
+            if not operation.ready:
+                response = self.cluster.client.send_request(poll.protobuf, method="ConsoleRequest")
+                operation.CopyFrom(response.GetOperationResponse.operation)
+                assert operation.ready or response.Status.Code == StatusIds.STATUS_CODE_UNSPECIFIED, response
+            return operation.ready
+
+        assert wait_for(ready, timeout_seconds=120), operation
+        assert operation.status == StatusIds.SUCCESS, operation
+
     def check_pools(self, count):
         pools = {pool.Name: pool for pool in self.cluster.client.read_storage_pools()}
         config = self.cluster.client.query_base_config().BaseConfig
@@ -108,5 +129,5 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             self.execute(kind, 'UPSERT INTO data (id, value) VALUES (2u, "after-promotion");')
             rows = self.execute(kind, "SELECT id, value FROM data ORDER BY id;")[0].rows
             assert [(row.id, row.value) for row in rows] == [(1, "before-promotion"), (2, "after-promotion")]
-            self.cluster.alter_database(f"/Root/{kind}", storage_units_to_add={kind: 1})
-        self.check_pools(2)
+            self.grow_database(kind)
+        retry_assertions(lambda: self.check_pools(2), timeout_seconds=120)

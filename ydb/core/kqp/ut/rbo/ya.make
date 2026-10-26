@@ -15,6 +15,7 @@ SRCS(
     kqp_rbo_yql_ut.cpp
     kqp_rbo_lookup_join_ut.cpp
     kqp_rbo_olap_ut.cpp
+    kqp_rbo_compile_bench.cpp
 )
 
 PEERDIR(

@@ -28,9 +28,10 @@ public:
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     TActorId ReplyLeader;
     TEvStateStorage::TSignature Signatures;
+    TVector<TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     explicit TLookupFixture(TOptions::ESigWaitMode mode = TOptions::SigNone, ui32 ringGroupCount = 1,
-            const TVector<ERingGroupState>& ringGroupStates = {}) {
+            const TVector<ERingGroupState>& ringGroupStates = {}, bool waitForAllRingGroups = false) {
         Runtime.Initialize();
         Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
             NKikimrServices::EServiceKikimr_MAX,
@@ -65,9 +66,17 @@ public:
                     Status = reply->Status;
                     ReplyLeader = reply->CurrentLeader;
                     Signatures = reply->Signature;
+                    Followers = reply->Followers;
                     return TTestActorRuntimeBase::EEventAction::DROP;
                 } else if (event->GetTypeRewrite() == TEvStateStorage::TEvUpdateSignature::EventType) {
                     auto* reply = event->Get<TEvStateStorage::TEvUpdateSignature>();
+                    for (const auto& replica : Replicas) {
+                        if (Signatures.HasReplicaSignature(replica)) {
+                            UNIT_ASSERT(reply->Signature.HasReplicaSignature(replica));
+                            UNIT_ASSERT_VALUES_EQUAL(reply->Signature.GetReplicaSignature(replica),
+                                Signatures.GetReplicaSignature(replica));
+                        }
+                    }
                     ++SignatureUpdateCount;
                     Signatures = reply->Signature;
                     return TTestActorRuntimeBase::EEventAction::DROP;
@@ -75,7 +84,9 @@ public:
             }
             return TTestActorRuntimeBase::EEventAction::PROCESS;
         });
-        Runtime.SendAsync(new IEventHandle(proxy, Edge, new TEvStateStorage::TEvLookup(TabletId, Cookie, mode)));
+        TOptions options(mode);
+        options.WaitForAllRingGroups = waitForAllRingGroups;
+        Runtime.SendAsync(new IEventHandle(proxy, Edge, new TEvStateStorage::TEvLookup(TabletId, Cookie, options)));
         for (const auto& replica : Replicas) {
             auto request = Runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLookup>(replica);
             UNIT_ASSERT(request);
@@ -101,6 +112,15 @@ public:
 
     void KnownLeader(ui32 index, const TActorId& leader, ui32 generation) {
         Reply(index, MakeHolder<TEvStateStorage::TEvReplicaInfo>(TabletId, leader, TActorId(), generation, 0, false, 0, 0, 0));
+    }
+
+    void KnownLeaderWithFollower(ui32 index, const TActorId& follower, const TActorId& followerTablet, ui32 followerId) {
+        auto reply = MakeHolder<TEvStateStorage::TEvReplicaInfo>(TabletId, Leader, TActorId(), 100, 0, false, 0, 0, 0);
+        auto* info = reply->Record.AddFollowerInfo();
+        ActorIdToProto(follower, info->MutableFollower());
+        ActorIdToProto(followerTablet, info->MutableFollowerTablet());
+        info->SetFollowerId(followerId);
+        Reply(index, std::move(reply));
     }
 
     void Fail(ui32 index) {
@@ -142,7 +162,7 @@ public:
     ui32 ReplyCount = 0;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
 
-    TLockFixture() {
+    explicit TLockFixture(TEvStateStorage::TProxyOptions::ESigWaitMode mode = TEvStateStorage::TProxyOptions::SigNone) {
         Runtime.Initialize();
         Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
             NKikimrServices::EServiceKikimr_MAX,
@@ -179,7 +199,7 @@ public:
         });
 
         Runtime.SendAsync(new IEventHandle(proxy, Edge,
-            new TEvStateStorage::TEvLock(TabletId, Cookie, Leader, Generation, {})));
+            new TEvStateStorage::TEvLock(TabletId, Cookie, Leader, Generation, {}, mode)));
         for (const auto& replica : Replicas) {
             auto request = Runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLock>(replica);
             UNIT_ASSERT(request);
@@ -215,6 +235,75 @@ void CheckEmptyQuorum(TEvStateStorage::TProxyOptions::ESigWaitMode mode) {
     UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[4]), 0);
 }
 
+void CheckEarlyLookup(TEvStateStorage::TProxyOptions::ESigWaitMode mode, NKikimrProto::EReplyStatus status) {
+    TLookupFixture f(mode, 2, {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+    if (status == NKikimrProto::OK) {
+        f.KnownLeader(5);
+        f.KnownLeader(6);
+        f.ExpectPending();
+        f.KnownLeader(7);
+    } else {
+        f.Empty(5);
+        f.Empty(6);
+        f.KnownLeader(7);
+        f.ExpectPending();
+        f.Empty(8);
+    }
+    f.ExpectReply(status);
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+    UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+
+    f.KnownLeader(0);
+    f.KnownLeader(1);
+    f.KnownLeader(2);
+    f.Elapse();
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+    if (mode == TEvStateStorage::TProxyOptions::SigNone) {
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+        return;
+    }
+
+    UNIT_ASSERT(f.SignatureUpdateCount > 0);
+    for (ui32 i = 0; i < 3; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+    }
+    auto updateCount = f.SignatureUpdateCount;
+    f.KnownLeader(3);
+    f.KnownLeader(4);
+    f.Elapse();
+    UNIT_ASSERT(f.SignatureUpdateCount > updateCount);
+    for (ui32 i = 0; i < 5; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+    }
+
+    updateCount = f.SignatureUpdateCount;
+    if (status == NKikimrProto::OK) {
+        f.KnownLeader(8);
+    }
+    f.KnownLeader(9);
+    f.Elapse();
+    UNIT_ASSERT(f.SignatureUpdateCount > updateCount);
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
+    for (ui32 i = 0; i < 10; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+    }
+}
+
+void CheckSuccessfulLockWaits(TEvStateStorage::TProxyOptions::ESigWaitMode mode) {
+    TLockFixture f(mode);
+    f.Reply(3, f.Leader, TLockFixture::Generation);
+    f.Reply(4, f.Leader, TLockFixture::Generation);
+    f.Elapse();
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 0);
+
+    f.Reply(0, f.Leader, TLockFixture::Generation);
+    f.Reply(1, f.Leader, TLockFixture::Generation);
+    f.Elapse();
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
@@ -248,6 +337,34 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         f.Fail(4);
         f.ExpectReply(NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+    }
+
+    Y_UNIT_TEST(FollowersSurviveErrorsWithoutQuorumInEveryRingGroup) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+        const TVector<TActorId> followers = {f.Runtime.AllocateEdgeActor(), f.Runtime.AllocateEdgeActor()};
+        const TVector<TActorId> followerTablets = {f.Runtime.AllocateEdgeActor(), f.Runtime.AllocateEdgeActor()};
+        for (ui32 group = 0; group < 2; ++group) {
+            const ui32 first = group * 5;
+            f.KnownLeaderWithFollower(first, followers[group], followerTablets[group], group + 1);
+            f.Empty(first + 1);
+            f.Empty(first + 2);
+            f.Fail(first + 3);
+            f.ExpectPending();
+            f.Fail(first + 4);
+            if (group == 0) {
+                f.ExpectPending();
+            }
+        }
+        f.ExpectReply(NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(f.Followers.size(), 2);
+        for (const auto& info : f.Followers) {
+            UNIT_ASSERT(info.FollowerId.Defined());
+            const ui32 group = info.FollowerId.Get() - 1;
+            UNIT_ASSERT(group < followers.size());
+            UNIT_ASSERT_VALUES_EQUAL(info.Follower, followers[group]);
+            UNIT_ASSERT_VALUES_EQUAL(info.FollowerTablet, followerTablets[group]);
+        }
     }
 
     Y_UNIT_TEST(TimeoutWithoutNegativeQuorum) {
@@ -340,13 +457,110 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
     }
 
+    Y_UNIT_TEST(SigSyncWaitsForEveryRingGroupBeforeReturningRace) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigSync, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+        f.Empty(5);
+        f.Empty(6);
+        f.KnownLeader(7);
+        f.Empty(8);
+        f.Empty(9);
+        f.ExpectPending();
+
+        for (ui32 i = 0; i < 5; ++i) {
+            f.Empty(i);
+        }
+        f.ExpectReply(NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+    }
+
+    Y_UNIT_TEST(SigNoneReturnsOkWithoutWaitingForOtherRingGroups) {
+        CheckEarlyLookup(TEvStateStorage::TProxyOptions::SigNone, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(SigNoneReturnsRaceWithoutWaitingForOtherRingGroups) {
+        CheckEarlyLookup(TEvStateStorage::TProxyOptions::SigNone, NKikimrProto::RACE);
+    }
+
+    Y_UNIT_TEST(SigAsyncReturnsOkWithoutWaitingForOtherRingGroups) {
+        CheckEarlyLookup(TEvStateStorage::TProxyOptions::SigAsync, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(SigAsyncReturnsRaceWithoutWaitingForOtherRingGroups) {
+        CheckEarlyLookup(TEvStateStorage::TProxyOptions::SigAsync, NKikimrProto::RACE);
+    }
+
+    Y_UNIT_TEST(SigAsyncPublishesLastRingGroupSignaturesWithoutFurtherUpdates) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigAsync, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+        f.KnownLeader(0);
+        f.KnownLeader(1);
+        f.KnownLeader(2);
+        f.ExpectReply(NKikimrProto::OK);
+        f.KnownLeader(3);
+        f.KnownLeader(4);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 5);
+        const ui32 updateCount = f.SignatureUpdateCount;
+
+        f.Empty(5);
+        f.Empty(6);
+        f.Fail(7);
+        f.Fail(8);
+        f.Fail(9);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, updateCount + 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 7);
+        for (ui32 i = 0; i < 7; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+        }
+        for (ui32 i = 7; i < 10; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), 0);
+        }
+    }
+
+    Y_UNIT_TEST(SigAsyncCanWaitForQuorumSignaturesInEveryRingGroup) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigAsync, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED}, true);
+        f.KnownLeader(5);
+        f.KnownLeader(6);
+        f.KnownLeader(7);
+        f.ExpectPending();
+
+        f.KnownLeader(0);
+        f.KnownLeader(1);
+        f.ExpectPending();
+        f.KnownLeader(2);
+        f.ExpectReply(NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+        for (ui32 i : {0u, 1u, 2u, 5u, 6u, 7u}) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+        }
+
+        f.KnownLeader(3);
+        f.KnownLeader(4);
+        f.KnownLeader(8);
+        f.KnownLeader(9);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+        UNIT_ASSERT(f.SignatureUpdateCount > 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
+        for (ui32 i = 0; i < 10; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[i]), i + 1);
+        }
+    }
+
     Y_UNIT_TEST(DifferentStateIsDiagnosticOnly) {
         TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, 2,
             {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
         f.KnownLeader(5);
         f.KnownLeader(6);
         f.KnownLeader(7);
-        f.ExpectPending();
+        f.ExpectReply(NKikimrProto::OK);
 
         f.KnownLeader(0, f.OtherLeader, 101);
         f.KnownLeader(1, f.OtherLeader, 101);
@@ -389,6 +603,14 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
 }
 
 Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
+    Y_UNIT_TEST(SigNoneWaitsForEveryRingGroupAfterSuccessfulQuorum) {
+        CheckSuccessfulLockWaits(TEvStateStorage::TProxyOptions::SigNone);
+    }
+
+    Y_UNIT_TEST(SigAsyncWaitsForEveryRingGroupAfterSuccessfulQuorum) {
+        CheckSuccessfulLockWaits(TEvStateStorage::TProxyOptions::SigAsync);
+    }
+
     Y_UNIT_TEST(WaitsForEveryRingGroupAndKeepsRace) {
         TLockFixture f;
         f.Reply(3, f.OtherLeader, TLockFixture::Generation + 1);

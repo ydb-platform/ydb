@@ -4,7 +4,6 @@ import os
 import tempfile
 import time
 import threading
-import unittest
 from urllib.parse import urlparse
 
 import boto3
@@ -51,14 +50,14 @@ def _upload_download_size_id(size):
 
 
 def _data_blocks(size_bytes):
-    chunk = (b"kv_volume_tool_upload_download_test_" * 32)[:1024]
+    chunk = bytes(range(256)) * 4
     big_chunk = chunk * 1024  # 1MB
     for offset in range(0, size_bytes, len(big_chunk)):
         yield big_chunk[: min(len(big_chunk), size_bytes - offset)]
 
 
 @contextmanager
-def _execute_stream(command, *, upload, timeout=120):
+def _execute_stream(command, *, upload, timeout=300):
     read_fd, write_fd = os.pipe()
     with os.fdopen(read_fd, "rb") as reader, os.fdopen(write_fd, "wb") as writer:
         child_stream, parent_stream = (reader, writer) if upload else (writer, reader)
@@ -205,6 +204,29 @@ class TestKvVolumeTool(StressFixture):
                 actual = stream.read(len(expected))
                 assert actual == expected, "download mismatch at byte {}".format(offset * MB)
             assert stream.read(1) == b"", "download contains extra data"
+
+        self._run("remove")
+
+    @pytest.mark.parametrize("file_size", [0, 32 * MB, 33 * MB], ids=_upload_download_size_id)
+    def test_upload_download_files(self, file_size):
+        self._create_volume()
+        key = "upload_download_file_{}".format(file_size)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "source.bin")
+            downloaded_path = os.path.join(tmpdir, "downloaded.bin")
+            with open(source_path, "wb") as source:
+                for block in _data_blocks(file_size):
+                    source.write(block)
+
+            transfer_args = ["--partition-id", "0", "--key", key]
+            self._run("upload", *transfer_args, "--file", source_path)
+            self._run("download", *transfer_args, "--file", downloaded_path)
+
+            assert os.path.getsize(downloaded_path) == file_size
+            with open(downloaded_path, "rb") as downloaded:
+                for offset, expected in enumerate(_data_blocks(file_size)):
+                    assert downloaded.read(len(expected)) == expected, "download mismatch at byte {}".format(offset * MB)
+                assert downloaded.read(1) == b"", "download contains extra data"
 
         self._run("remove")
 

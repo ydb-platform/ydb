@@ -28,6 +28,12 @@
 #include <grpcpp/support/channel_arguments.h>
 #include <grpc/impl/channel_arg_names.h>
 
+#if defined(_win_)
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+#include <cstdio>
 #include <chrono>
 #include <cinttypes>
 #include <csignal>
@@ -976,6 +982,16 @@ void CleanupPartKeys(
     }
 }
 
+void SetBinaryStdio() {
+#if defined(_win_)
+    if (_setmode(_fileno(stdin), _O_BINARY) == -1 || _setmode(_fileno(stdout), _O_BINARY) == -1) {
+        throw std::runtime_error("Failed to set binary mode for stdin/stdout");
+    }
+#else
+    // POSIX standard streams are always binary; no mode switch is needed.
+#endif
+}
+
 bool IsStdioPath(const TString& path) {
     return path == "-";
 }
@@ -984,6 +1000,7 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
     const bool stdio = IsStdioPath(filePath);
     const i64 fileSize = stdio ? 0 : GetFileLength(filePath);
     if (stdio) {
+        SetBinaryStdio();
         Cout << "Uploading data from stdin" << Endl;
     } else {
         if (fileSize < 0) {
@@ -994,7 +1011,9 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
     }
 
     TVector<TString> partKeys;
-    partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
+    if (!stdio) {
+        partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
+    }
 
     std::unique_ptr<TFileInput> fileInput;
     IInputStream* input = nullptr;
@@ -1077,6 +1096,9 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
 }
 
 int DownloadFile(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath) {
+    if (IsStdioPath(filePath)) {
+        SetBinaryStdio();
+    }
 
     ui64 offset = 0;
     ui64 totalBytes = 0;
@@ -1978,7 +2000,7 @@ TOptions ParseOptions(int argc, char** argv) {
     opts.AddLongOption("value", "Value to write")
         .StoreResult(&options.Value);
 
-    opts.AddLongOption("file", "Path to local file (source for upload, destination for download)")
+    opts.AddLongOption("file", "Path to local file (source for upload, destination for download); use - for stdin/stdout")
         .StoreResult(&options.FilePath);
 
     opts.AddLongOption("read-offset", "Offset in bytes for read operation (default: 0)")

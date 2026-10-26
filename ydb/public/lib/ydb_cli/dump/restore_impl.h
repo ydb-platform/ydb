@@ -2,9 +2,10 @@
 
 #include "dump.h"
 
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_keyvalue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -265,7 +266,7 @@ private:
     NTable::TTableClient TableClient;
     NTopic::TTopicClient TopicClient;
     NCoordination::TClient CoordinationNodeClient;
-    NKeyValue::TKeyValueClient KeyValueClient;
+    NConsoleClient::NInternal::TRemover Remover;
     NRateLimiter::TRateLimiterClient RateLimiterClient;
     NQuery::TQueryClient QueryClient;
     NCms::TCmsClient CmsClient;

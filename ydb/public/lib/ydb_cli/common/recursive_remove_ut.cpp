@@ -35,7 +35,8 @@ Y_UNIT_TEST(SecondPass) {
         removedEntries.emplace_back(entry);
         return TStatus(EStatus::SUCCESS, {});
     };
-    NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, nullptr);
+    auto status = RemovePathsRecursive(entries.begin(), entries.end(), remover);
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
     std::swap(entries[1], entries[2]);
     UNIT_ASSERT_VALUES_EQUAL(removedEntries, entries);
@@ -53,7 +54,7 @@ Y_UNIT_TEST(BackupCollectionAfterChildren) {
         removedEntries.emplace_back(entry);
         return TStatus(EStatus::SUCCESS, {});
     };
-    auto status = NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, nullptr);
+    auto status = RemovePathsRecursive(entries.begin(), entries.end(), remover);
 
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(removedEntries, entries);

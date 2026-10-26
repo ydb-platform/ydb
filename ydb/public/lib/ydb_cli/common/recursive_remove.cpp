@@ -3,6 +3,11 @@
 
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_keyvalue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
@@ -220,15 +225,11 @@ TStatus Remove(
 }
 
 TStatus RemoveDirectoryRecursive(
-    TSchemeClient& schemeClient,
-    TTableClient& tableClient,
-    TTopicClient& topicClient,
-    NQuery::TQueryClient& queryClient,
-    NCoordination::TClient& coordinationClient,
-    NKeyValue::TKeyValueClient& keyValueClient,
+    const TDriver& driver,
     const TString& path,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
+    TSchemeClient schemeClient(driver);
     const auto listingSettings = TRecursiveListSettings()
         .SkipMode(settings.SkipMode_)
         .Filter([](const TSchemeEntry& entry) {
@@ -248,31 +249,13 @@ TStatus RemoveDirectoryRecursive(
 
     // RecursiveList outputs elements in pre-order: root, recurse(children)...
     // We need to reverse it to delete scheme objects before directories.
+    auto remover = NInternal::CreateDefaultRemover(driver, settings);
     return RemovePathsRecursive(
-        schemeClient,
-        tableClient,
-        topicClient,
-        queryClient,
-        coordinationClient,
-        keyValueClient,
         recursiveListResult.Entries.rbegin(),
         recursiveListResult.Entries.rend(),
+        remover,
         settings
     );
-}
-
-TStatus RemoveDirectoryRecursive(
-    const TDriver& driver,
-    const TString& path,
-    const TRemoveDirectoryRecursiveSettings& settings
-) {
-    TSchemeClient schemeClient(driver);
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    NKeyValue::TKeyValueClient keyValueClient(driver);
-    return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, queryClient, coordinationClient, keyValueClient, path, settings);
 }
 
 TStatus RemovePathRecursive(
@@ -280,13 +263,7 @@ TStatus RemovePathRecursive(
     const TSchemeEntry& entry,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
-    TSchemeClient schemeClient(driver);
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    NKeyValue::TKeyValueClient keyValueClient(driver);
-    auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, keyValueClient, settings);
+    auto remover = NInternal::CreateDefaultRemover(driver, settings);
     return remover(entry);
 }
 
@@ -319,15 +296,18 @@ TStatus RemovePathRecursive(
 namespace NInternal {
 
     TRemover CreateDefaultRemover(
-        NScheme::TSchemeClient& schemeClient,
-        NTable::TTableClient& tableClient,
-        NTopic::TTopicClient& topicClient,
-        NQuery::TQueryClient& queryClient,
-        NCoordination::TClient& coordinationClient,
-        NKeyValue::TKeyValueClient& keyValueClient,
+        const TDriver& driver,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
-        return [&, settings](const TSchemeEntry& entry) {
+        return [
+            schemeClient = TSchemeClient(driver),
+            tableClient = TTableClient(driver),
+            topicClient = TTopicClient(driver),
+            queryClient = NQuery::TQueryClient(driver),
+            coordinationClient = NCoordination::TClient(driver),
+            keyValueClient = NKeyValue::TKeyValueClient(driver),
+            settings
+        ](const TSchemeEntry& entry) mutable {
             return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, keyValueClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
         };
     }

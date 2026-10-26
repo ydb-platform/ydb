@@ -589,6 +589,12 @@ message TKqpSink {
     }
 }
 
+message TKqpExternalTransform {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+    TKqpPhyTableId Connection = 3;
+}
+
 message TKqpOutputTransform {
     uint32 OutputIndex = 1;
 
@@ -597,6 +603,7 @@ message TKqpOutputTransform {
 
     oneof Type {
         TKqpInternalSink InternalSink = 4;
+        TKqpExternalTransform ExternalTransform = 5;
     }
 }
 

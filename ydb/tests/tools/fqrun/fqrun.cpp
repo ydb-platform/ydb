@@ -1,15 +1,19 @@
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/fq/libs/compute/common/config.h>
 
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/tests/tools/fqrun/src/connection_ddl.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/time_provider/monotonic.h>
 #include <util/datetime/base.h>
+#include <util/generic/scope.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -33,6 +37,8 @@ struct TExecutionOptions {
     };
 
     std::vector<TString> Queries;
+    std::vector<TString> InitQueries;
+    std::vector<TConnectionDdl> ConnectionDdl;
     std::vector<FederatedQuery::ConnectionContent> Connections;
     std::vector<FederatedQuery::BindingContent> Bindings;
     bool UseTemplates = false;
@@ -101,7 +107,7 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled &&
+        if (Queries.empty() && InitQueries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled &&
             !runnerOptions.FqSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
@@ -121,7 +127,7 @@ private:
 
         checker(ExecutionCases.size(), "execution cases");
         checker(QueryActions.size(), "query actions");
-        checker(Scopes.size(), "query scopes");
+        checker(Scopes.size() > 1 ? Scopes.size() : 0, "query scopes");
         checker(runnerOptions.AstOutputs.size(), "ast output files");
         checker(runnerOptions.PlanOutputs.size(), "plan output files");
         checker(runnerOptions.StatsOutputs.size(), "statistics output files");
@@ -195,6 +201,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
         scopes.emplace(executionOptions.GetScope(i));
     }
 
+    if (scopes.empty()) {
+        scopes.emplace(executionOptions.GetScope(0));
+    }
+
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
         for (const auto& scope : scopes) {
@@ -202,6 +212,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections for scope " << scope;
             }
         }
+    }
+
+    for (const auto& scope : scopes) {
+        runner.CreateConnectionsFromDdl(executionOptions.ConnectionDdl, { .Scope = scope });
     }
 
     if (!executionOptions.Bindings.empty()) {
@@ -220,9 +234,22 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
 
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
+        if (IsInterrupted()) {
+            break;
+        }
         size_t idx = queryId % numberQueries;
         if (queryId > 0) {
-            Sleep(idx == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
+            const auto deadline = TMonotonic::Now() + (idx == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
+            while (!IsInterrupted()) {
+                const auto now = TMonotonic::Now();
+                if (now >= deadline) {
+                    break;
+                }
+                Sleep(std::min(deadline - now, TDuration::MilliSeconds(50)));
+            }
+        }
+        if (IsInterrupted()) {
+            break;
         }
 
         const size_t loopId = queryId / numberQueries;
@@ -250,6 +277,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
         }
     }
     runner.FinalizeRunner();
+    Y_ENSURE(!IsInterrupted(), "Query execution interrupted");
 
     if (executionOptions.HasResults()) {
         try {
@@ -264,9 +292,10 @@ void RunAsDaemon() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization finished" << colors.Default() << Endl;
-    while (true) {
+    while (!IsInterrupted()) {
         Sleep(TDuration::Seconds(1));
     }
+    Y_ENSURE(!IsInterrupted(), "Execution interrupted");
 }
 
 void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& runnerOptions) {
@@ -278,6 +307,9 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
     try {
         RunArgumentQueries(executionOptions, runner);
     } catch (const yexception& exception) {
+        if (IsInterrupted()) {
+            throw;
+        }
         if (runnerOptions.FqSettings.MonitoringEnabled) {
             Cerr << colors.Red() << CurrentExceptionMessage() << colors.Default() << Endl;
         } else {
@@ -299,7 +331,7 @@ class TMain: public TMainBase {
 
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
-        options.SetTitle("FqRun -- tool to execute stream queries through FQ proxy");
+        options.SetTitle("FqRun -- tool to execute analytical and streaming queries through FQ proxy");
         options.AddHelpOption('h');
         options.SetFreeArgsNum(0);
 
@@ -310,6 +342,30 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.Queries.emplace_back(LoadFile(option->CurVal()));
             });
+
+        options.AddLongOption("init-query", "SQL file with CREATE EXTERNAL DATA SOURCE statements, run once before queries")
+            .RequiredArgument("file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.InitQueries.emplace_back(LoadFile(option->CurVal()));
+            });
+
+        options.AddLongOption("secrets-file", "Local JSON object mapping TOKEN_SECRET_NAME or TVM_SECRET_NAME to credentials")
+            .RequiredArgument("file")
+            .StoreResult(&SecretsFile);
+
+        options
+            .AddLongOption(
+                "trace-file", "Capture sampled SQL and external-call Wilson spans as JSON lines (enables sampling for all executions)")
+            .RequiredArgument("file")
+            .StoreResult(&RunnerOptions.FqSettings.TraceFile);
+
+        options.AddLongOption("tvm-mock", "Return a fake TVM service ticket for local mock services")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.FqSettings.MockTvm);
+
+        options.AddLongOption("tvm-mock-delay-ms", "Delay each mock TVM ticket in milliseconds (requires --tvm-mock; default: 100)")
+            .RequiredArgument("milliseconds")
+            .StoreResult(&RunnerOptions.FqSettings.MockTvmDelayMs);
 
         options.AddLongOption('s', "sql", "Query SQL text to execute").RequiredArgument("str").AppendTo(&ExecutionOptions.Queries);
 
@@ -328,7 +384,7 @@ protected:
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
 
-        options.AddLongOption("cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
+        options.AddLongOption("cfg", "Application configuration (TAppConfig), use '-' for default")
             .RequiredArgument("file")
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
@@ -415,6 +471,13 @@ protected:
             .SetFlag(&RunnerOptions.CanonicalOutput);
 
         // Pipeline settings
+
+        options.AddLongOption("compute", "Override compute routing from --cfg (omitted: preserve existing behavior)")
+            .RequiredArgument("backend")
+            .Choices({ "in-place", "ydb" })
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ComputeBackend = TStringBuf(option->CurVal()) == "in-place" ? EComputeBackend::InPlace : EComputeBackend::Ydb;
+            });
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({ { "stream", TExecutionOptions::EExecutionCase::Stream },
             { "analytics", TExecutionOptions::EExecutionCase::Analytics }, { "async-stream", TExecutionOptions::EExecutionCase::AsyncStream },
@@ -591,13 +654,39 @@ protected:
             ReplaceTemplates(sql);
         }
 
-        if (ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) ||
-            ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics)) {
-            RunnerOptions.FqSettings.EnableYdbCompute = true;
+        RunnerOptions.FqSettings.ConfigureCompute(
+            ComputeBackend, ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) ||
+                                ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics));
+        if (!ExecutionOptions.InitQueries.empty()) {
+            const auto& config = RunnerOptions.FqSettings.AppConfig.GetFederatedQueryConfig();
+            Y_ENSURE(config.GetWasmServices().GetEnabled(), "Connection DDL requires WasmServices.Enabled");
+            const NFq::TComputeConfig compute(config.GetCompute());
+            for (size_t i = 0; i < std::max<size_t>(1, ExecutionOptions.Queries.size()); ++i) {
+                Y_ENSURE(compute.GetComputeType(FederatedQuery::QueryContent::ANALYTICS,
+                             TStringBuilder() << "yandexcloud://" << ExecutionOptions.GetScope(i)) == NFq::NConfig::IN_PLACE,
+                    "Connection DDL requires IN_PLACE compute; use --compute=in-place");
+            }
+            const auto secrets = LoadConnectionSecrets(SecretsFile);
+            for (const auto& sql : ExecutionOptions.InitQueries) {
+                auto statements = ParseConnectionDdl(sql, secrets);
+                for (auto& statement : statements) {
+                    ExecutionOptions.ConnectionDdl.push_back(std::move(statement));
+                }
+            }
+        } else {
+            Y_ENSURE(SecretsFile.empty(), "--secrets-file requires --init-query");
         }
+        if (!SecretsFile.empty()) {
+            RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig()->MutableWasmServices()->SetAuthSecretsFile(SecretsFile);
+        }
+        ValidateWasmServices();
 
         RunnerOptions.FqSettings.YqlToken = YqlToken;
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
+        InstallInterruptHandlers();
+        if (ComputeBackend && RunnerOptions.FqSettings.VerbosityLevel >= EVerbosity::Info) {
+            Cout << "Compute backend: " << (*ComputeBackend == EComputeBackend::InPlace ? "in-place" : "ydb") << Endl;
+        }
 
         auto& appConfig = RunnerOptions.FqSettings.AppConfig;
         auto& fqConfig = *appConfig.MutableFederatedQueryConfig();
@@ -637,6 +726,12 @@ protected:
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
+        Y_DEFER {
+            if (RunnerOptions.FqSettings.VerbosityLevel >= EVerbosity::Info) {
+                Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
+            }
+            FinishProfileMemoryAllocations();
+        };
 #else
         if (ProfileAllocationsOutput) {
             ythrow yexception() << "Profile memory allocations disabled, please rebuild fqrun with flag `-D PROFILE_MEMORY_ALLOCATIONS`";
@@ -645,17 +740,24 @@ protected:
 
         RunScript(ExecutionOptions, RunnerOptions);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.FqSettings.VerbosityLevel >= EVerbosity::Info) {
-            Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
-        }
-        FinishProfileMemoryAllocations();
-#endif
-
         return 0;
     }
 
 private:
+    void ValidateWasmServices() const {
+        const auto& config = RunnerOptions.FqSettings.AppConfig.GetFederatedQueryConfig();
+        if (!config.GetWasmServices().GetEnabled()) {
+            return;
+        }
+        const NFq::TComputeConfig compute(config.GetCompute());
+        // Also validate daemon-only startup, which can receive queries over gRPC.
+        for (size_t i = 0; i < std::max<size_t>(1, ExecutionOptions.Queries.size()); ++i) {
+            const TString scope = TStringBuilder() << "yandexcloud://" << ExecutionOptions.GetScope(i);
+            Y_ENSURE(compute.GetComputeType(FederatedQuery::QueryContent::ANALYTICS, scope) == NFq::NConfig::IN_PLACE,
+                "WASM services require IN_PLACE compute; use --compute=in-place");
+        }
+    }
+
     template <typename TGatewayConfig>
     void FillTokens(TGatewayConfig* gateway) const {
         for (auto& cluster : *gateway->mutable_clustermapping()) {
@@ -674,6 +776,8 @@ private:
 private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
+    std::optional<EComputeBackend> ComputeBackend;
+    TString SecretsFile;
 
     struct TTopicSettings {
         bool CancelOnFileFinish = false;

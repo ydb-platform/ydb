@@ -441,8 +441,16 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
         ExpandObjectsIntoFunctions(manifest);
     }
 
-    if (manifest.Functions.empty()) {
-        ythrow yexception() << "Wasm manifest must declare non-empty functions[] and/or objects[]";
+    if (root.Has("service_methods") || root.Has("service_abi_version")) {
+        manifest.Services =
+            std::make_shared<const NYdb::NWasm::NServices::TServiceManifest>(NYdb::NWasm::NServices::ParseServiceManifest(manifestJson));
+    }
+    if (root.Has("auth_provider")) {
+        manifest.Auth = std::make_shared<const NYdb::NWasm::NServices::TAuthManifest>(NYdb::NWasm::NServices::ParseAuthManifest(manifestJson));
+        Y_ENSURE(manifest.Functions.empty() && !manifest.Services, "WASM auth providers must be auth-only modules");
+    }
+    if (manifest.Functions.empty() && !manifest.Services && !manifest.Auth) {
+        ythrow yexception() << "Wasm manifest must declare non-empty functions[], objects[], service_methods[] or auth_provider";
     }
     return manifest;
 }

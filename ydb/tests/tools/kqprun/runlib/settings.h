@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/fq/libs/wasm_services/tvm.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 
@@ -36,6 +37,7 @@ struct TServerSettings {
     TString LogOutputFile;
 
     TString YqlToken;
+    std::shared_ptr<NFq::NWasmServices::ITvmTicketProvider> WasmTvmProvider;
     NKikimrConfig::TAppConfig AppConfig;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;

@@ -1,7 +1,5 @@
-#include <ydb/library/yql/providers/yt/async_io/yql_yt_message_stream_source.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
-
 #include "kqp_scan_compute_actor.h"
 #include "kqp_scan_fetcher_actor.h"
 
@@ -17,6 +15,8 @@
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_vector_search_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
+#include <ydb/core/kqp/wasm_services/integration.h>
+
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
@@ -24,7 +24,6 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/library/yql/providers/ydb_external/actors/dq_ydb_external_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
@@ -32,6 +31,8 @@
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/solomon/events/events.h>
+#include <ydb/library/yql/providers/ydb_external/actors/dq_ydb_external_read_actor.h>
+#include <ydb/library/yql/providers/yt/async_io/yql_yt_message_stream_source.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -198,6 +199,8 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterDqSourceKikimrLookupProviderFactories(*factory);
 
     if (federatedQuerySetup) {
+        RegisterKqpWasmServiceTransforms(*factory, federatedQuerySetup->WasmServices, federatedQuerySetup->WasmTvmProvider,
+            AppData()->UserPoolId, counters->GetKqpCounters()->GetSubgroup("subsystem", "wasm_services"));
         auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy, federatedQuerySetup->S3ReadActorFactoryConfig, nullptr, federatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);

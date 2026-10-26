@@ -7,4 +7,5 @@ RECURSE_FOR_TESTS(
     s3
     scheme
     ydb_external
+    wasm_services
 )

@@ -288,7 +288,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
     Y_UNIT_TEST(ReceiveActivationForEachRevolvingCounter) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1,
-            .UseRingQueue = false,
             .MinLocalQueueSize = 0,
             .MaxLocalQueueSize = 0
         }, nullptr);
@@ -309,21 +308,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 UNIT_ASSERT_EQUAL(activation, mailbox);
             }
         }
-    }
-
-    TString ToString(std::vector<TMailbox*> mailboxes) {
-        TStringStream ss;
-        ss << "[";
-        bool first = true;
-        for (auto mailbox : mailboxes) {
-            if (!first) {
-                ss << ", ";
-            }
-            ss << mailbox->Hint;
-            first = false;
-        }
-        ss << "]";
-        return ss.Str();
     }
 
     TString ToString(std::vector<ui64> counters) {
@@ -348,57 +332,9 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         return ss.Str();
     }
 
-    Y_UNIT_TEST(ReorderingOfCommonQueue) {
-        std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
-            .Threads = 1,
-            .UseRingQueue = false,
-            .MinLocalQueueSize = 0,
-            .MaxLocalQueueSize = 0
-        }, nullptr);
-
-        PreparePool(pool.get());
-
-        TThreadEmulator emulator({pool.get()}, nullptr);
-
-        std::vector<TMailbox*> mailboxes;
-        for (ui32 i = 0; i < 4; ++i) {
-            mailboxes.push_back(pool->GetMailboxTable()->Allocate());
-        }
-
-        std::vector<ui64> readCounters {0, 1, 2, 3};
-        std::vector<ui64> writeCounters {0, 1, 2, 3};
-        std::vector<TMailbox*> activations {nullptr, nullptr, nullptr, nullptr};
-        TWorkerIdentity workerIdentity{pool.get(), 0};
-
-        while (std::next_permutation(readCounters.begin(), readCounters.end())) {
-            std::sort(writeCounters.begin(), writeCounters.end());
-            while (std::next_permutation(writeCounters.begin(), writeCounters.end())) {
-                for (ui64 idx = 0; idx < 4; ++idx) {
-                    emulator.ScheduleActivation(workerIdentity, pool.get(), mailboxes[idx], writeCounters[idx]);
-                    activations[writeCounters[idx]] = mailboxes[idx];
-                }
-                for (ui64 idx = 0; idx < 4; ++idx) {
-                    TMailbox* activation = emulator.GetReadyActivation(workerIdentity, readCounters[idx]);
-                    UNIT_ASSERT(activation);
-                    UNIT_ASSERT_VALUES_EQUAL_C(activation->Hint, activations[readCounters[idx]]->Hint,
-                        "idx: " << idx
-                        << ", readCounters: " << ToString(readCounters)
-                        << ", writeCounters: " << ToString(writeCounters)
-                        << ", activations: " << ToString(activations));
-                    UNIT_ASSERT_EQUAL_C(activation, activations[readCounters[idx]],
-                        "idx: " << idx
-                        << ", readCounters: " << ToString(readCounters)
-                        << ", writeCounters: " << ToString(writeCounters)
-                        << ", activations: " << ToString(activations));
-                }
-            }
-        }
-    }
-
     Y_UNIT_TEST(OrderingOfRingQueue) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1,
-            .UseRingQueue = true,
             .MinLocalQueueSize = 0,
             .MaxLocalQueueSize = 0
         }, nullptr);
@@ -441,7 +377,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
     Y_UNIT_TEST(CorrectnessOfLocalQueue) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1,
-            .UseRingQueue = false,
             .MinLocalQueueSize = 8,
             .MaxLocalQueueSize = 8
         }, nullptr);
@@ -492,7 +427,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         std::unique_ptr<TBasicExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1,
             .HasSharedThread = true,
-            .UseRingQueue = false,
             .MinLocalQueueSize = 0,
             .MaxLocalQueueSize = 0,
         }, nullptr);
@@ -556,7 +490,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolName = "Pool" + ToString(i),
                 .Threads = 1,
                 .HasSharedThread = true,
-                .UseRingQueue = false,
                 .MinLocalQueueSize = 0,
                 .MaxLocalQueueSize = 0,
             }, nullptr));
@@ -678,7 +611,6 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolName = i < 2 ? "WorkerPool" + ToString(i) : "TaskPool" + ToString(i),
                 .Threads = 1,
                 .HasSharedThread = true,
-                .UseRingQueue = false,
                 .MinLocalQueueSize = 0,
                 .MaxLocalQueueSize = 0,
             }, nullptr));

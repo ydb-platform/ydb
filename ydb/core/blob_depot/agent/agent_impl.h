@@ -522,6 +522,7 @@ namespace NKikimr::NBlobDepot {
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);

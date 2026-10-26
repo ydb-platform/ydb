@@ -17,6 +17,7 @@
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -435,6 +436,22 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
+    if (Loaded && prevStorageConfig) {
+        const auto& previous = prevStorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        const auto& current = StorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        if (!std::equal(previous.begin(), previous.end(), current.begin(), current.end(), [](const auto& a, const auto& b) {
+                return google::protobuf::util::MessageDifferencer::Equals(a, b);
+            })) {
+            for (auto& [groupId, group] : GroupMap) {
+                group->CalculateLayoutStatus(this, group->Topology.get(), [&] {
+                    return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                        GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
+                });
+            }
+            InitializeSelfHealState();
+        }
+    }
+
     if (!isFirstStorageConfig) {
         // this isn't the first configuration change, we just update static groups information in self heal actor now
         PushStaticGroupsToSelfHeal();
@@ -461,6 +478,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     CheckBridgeConversion();
     CheckBridgePileOperation();
+    CheckBridgeGroupModes(); // groups may wait for their piles to get synchronized
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -894,6 +912,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 }
             }
 
+            if (auto error = ValidateStoragePoolPileOverrides(storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason(*error);
+                break;
+            }
+
             const ui64 cookie = NextValidationCookie++;
             PendingValidationRequests.emplace(cookie, TConfigValidationInfo{
                 .Sender = ev->Sender,
@@ -1121,6 +1145,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         cFunc(TEvPrivate::EvRetryBridgeConversion, HandleRetryBridgeConversion);
         cFunc(TEvPrivate::EvRetryBridgePileOperation, HandleRetryBridgePileOperation);
+        cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
+        cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
@@ -1311,6 +1337,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

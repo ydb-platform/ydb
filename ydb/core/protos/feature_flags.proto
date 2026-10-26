@@ -457,4 +457,7 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
+    optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
+    optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
+    optional bool EnableAddColumnGeneratedStored = 372 [default = false];
 }

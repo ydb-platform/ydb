@@ -104,6 +104,23 @@ struct TTest {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
+    Y_UNIT_TEST(WrittenQuorumUsesCurrentLayoutAndExcludesExpiredDisks) {
+        for (ui32 cookie = 0; cookie < 3; ++cookie) {
+            TTest t({R::N1, R::F, R::F}, cookie);
+            t.Set({2, 3, 3}, S::Present);
+            TBlobStorageGroupInfo::TGroupVDisks expired(&t.Info->GetTopology());
+            const auto& state = t.Blackboard[t.Id];
+            UNIT_ASSERT(state.HasWrittenQuorum(*t.Info, expired));
+            for (ui32 disk = 0; disk < 3; ++disk) {
+                if (t.Realm(disk) == 0) {
+                    expired += TBlobStorageGroupInfo::TGroupVDisks(&t.Info->GetTopology(),
+                        t.Info->GetVDiskId(state.Disks[disk].OrderNumber));
+                }
+            }
+            UNIT_ASSERT(!state.HasWrittenQuorum(*t.Info, expired));
+        }
+    }
+
     Y_UNIT_TEST(NormalInitialAndPartialRepliesMatchLegacy) {
         for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {
@@ -139,18 +156,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(NormalFailureMasksMatchLegacyWithinFailModel) {
+    Y_UNIT_TEST(NormalFailureMasksMatchLegacy) {
         for (auto tactic : {P::TacticDefault, P::TacticMaxThroughput, P::TacticMinLatency}) {
             for (bool mod3x3 : {false, true}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
                     TTest current({R::N0, R::N0, R::N0});
                     TTest legacy({R::N0, R::N0, R::N0});
-                    const auto failed = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
-                        &legacy.Info->GetTopology(), errors);
-                    // Compare the shared domain; excessive failures have a separate regression below.
-                    if (!legacy.Info->GetTopology().GetQuorumChecker().CheckFailModelForSubgroup(failed)) {
-                        continue;
-                    }
                     bool degraded = false;
                     for (ui32 realm = 0; realm < 3; ++realm) {
                         const ui32 realmMask = 0b001001001u << realm;
@@ -164,8 +175,14 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                     }
                     const auto context = TStringBuilder() << "tactic " << ui32(tactic)
                         << " 3x3 " << mod3x3 << " errors " << errors;
-                    UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Run(tactic, false, mod3x3).Value),
+                    const auto outcome = current.Run(tactic, false, mod3x3);
+                    UNIT_ASSERT_VALUES_EQUAL_C(ui32(outcome.Value),
                         ui32(legacy.RunLegacy(tactic, false, mod3x3).Value), context);
+                    if (outcome == EStrategyOutcome::ERROR) {
+                        UNIT_ASSERT_VALUES_EQUAL(current.RequestMask(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(legacy.RequestMask(), 0);
+                        continue;
+                    }
                     // Skip request equality for degraded MinLatency: legacy targets 2+2, new targets 3+3.
                     // The legacy change belongs in a separate PR; outcomes are still compared here.
                     if (tactic != P::TacticMinLatency || mod3x3 || !degraded) {
@@ -210,7 +227,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(NormalWriteQuorumCanSucceedOutsideLegacyFailModel) {
+    Y_UNIT_TEST(NormalFailureModelIsCheckedBeforeWrittenQuorum) {
         for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
             TTest current({R::N0, R::N0, R::N0});
             TTest legacy({R::N0, R::N0, R::N0});
@@ -218,10 +235,34 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                 test->Set({3, 3, 3}, S::Present);
                 test->Set({2, 2, 0}, S::Error); // Remaining copies 1+1+3 satisfy W, errors violate legacy's E.
             }
-            UNIT_ASSERT(current.Run(tactic) == EStrategyOutcome::DONE);
+            UNIT_ASSERT(current.Run(tactic) == EStrategyOutcome::ERROR);
             UNIT_ASSERT(legacy.RunLegacy(tactic) == EStrategyOutcome::ERROR);
             UNIT_ASSERT_VALUES_EQUAL(current.RequestMask(), 0);
             UNIT_ASSERT_VALUES_EQUAL(legacy.RequestMask(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(FailureModelUsesCurrentEnsuredLayoutAndIgnoresRecoveryAndFailedRealms) {
+        for (ui32 cookie = 0; cookie < 3; ++cookie) {
+            for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
+                for (bool accelerate : {false, true}) {
+                    TTest inv1({R::N1, R::R, R::F}, cookie);
+                    inv1.Set({1, 0, 0}, S::Error); // E=1 in N; W=2+2 is still attainable.
+                    UNIT_ASSERT(inv1.Run(tactic, accelerate) == EStrategyOutcome::ERROR);
+                    inv1.Expect({0, 0, 0});
+
+                    TTest inv2({R::N2, R::R, R::F}, cookie);
+                    inv2.Set({1, 0, 3}, S::Error); // E=2 permits one failed disk in N.
+                    UNIT_ASSERT(inv2.Run(tactic, accelerate) == EStrategyOutcome::IN_PROGRESS);
+
+                    TTest recovering({R::N1, R::N1, R::R}, cookie);
+                    recovering.Set({1, 0, 3}, S::Error); // E=1+1 uses only N realms.
+                    UNIT_ASSERT(recovering.Run(tactic, accelerate) == EStrategyOutcome::IN_PROGRESS);
+                    recovering.Set({1, 1, 3}, S::Error);
+                    UNIT_ASSERT(recovering.Run(tactic, accelerate) == EStrategyOutcome::ERROR);
+                    recovering.Expect({0, 0, 0});
+                }
+            }
         }
     }
 
@@ -236,10 +277,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
             {{R::N1, R::N2, R::R}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in N/N.
             {{R::N0, R::N0, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
             {{R::N2, R::N2, R::F}, {2, 2, 0}, {3, 3, 0}},
-            {{R::N0, R::F, R::F}, {2, 0, 0}, {3, 0, 0}}, // W = 2, expand to 3.
             {{R::N1, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
             {{R::N2, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
-            {{R::N0, R::R, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in N/R.
+            {{R::N1, R::R, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in N/R.
         };
         for (const auto& test : cases) {
             std::array<ui32, 3> permutation = {0, 1, 2};
@@ -280,9 +320,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
             t.Expect(tactic == P::TacticMinLatency ? TCounts{3, 2, 0} : TCounts{2, 2, 0});
         }
         TTest t({R::N0, R::N0, R::N0});
-        t.Set({0, 2, 2}, S::Error); // Only 1+1+1 remains; expand to the available part of 3x2.
-        UNIT_ASSERT(t.Run(P::TacticMinLatency) == EStrategyOutcome::IN_PROGRESS);
-        t.Expect({2, 1, 1});
+        t.Set({0, 2, 2}, S::Error); // W is attainable, but the errors exceed E.
+        UNIT_ASSERT(t.Run(P::TacticMinLatency) == EStrategyOutcome::ERROR);
+        t.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(RecoveryCannotReplaceAnAvailableNormalRealm) {
@@ -304,7 +344,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         TTest solo({R::N1, R::F, R::F});
         solo.Set({3, 3, 3}, S::Present);
         solo.Set({1, 0, 0}, S::Error); // Violates E = 1 but W = 2 remains satisfied.
-        UNIT_ASSERT(solo.Run(P::TacticMaxThroughput) == EStrategyOutcome::DONE);
+        UNIT_ASSERT(solo.Run(P::TacticMaxThroughput) == EStrategyOutcome::ERROR);
         solo.Expect({0, 0, 0});
     }
 
@@ -317,7 +357,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
             UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
             t.Expect({0, 0, 0});
         }
-        TTest t({R::N0, R::R, R::F});
+        TTest t({R::N1, R::R, R::F});
         t.Set({1, 1, 0}, S::Present);
         UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({1, 1, 0});
@@ -335,7 +375,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({2, 2, 0});
 
-        TTest solo({R::N0, R::F, R::F});
+        TTest solo({R::N1, R::F, R::F});
         for (auto& disk : solo.Blackboard[solo.Id].Disks) {
             disk.IsSlow = true;
         }
@@ -350,11 +390,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         TTest failed({R::N0, R::N0, R::F});
         UNIT_ASSERT(failed.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
         failed.Expect({3, 3, 0});
-        // Even a realm unable to provide two copies participates in explicit 3x3 mode.
+        // Explicit 3x3 mode must also reject errors that exceed E.
         TTest partial({R::N0, R::N0, R::N0});
         partial.Set({1, 1, 2}, S::Error);
-        UNIT_ASSERT(partial.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::IN_PROGRESS);
-        partial.Expect({2, 2, 1});
+        UNIT_ASSERT(partial.Run(P::TacticMinLatency, false, true) == EStrategyOutcome::ERROR);
+        partial.Expect({0, 0, 0});
     }
 
     Y_UNIT_TEST(InvalidStateDoesNotSendWrites) {
@@ -363,22 +403,25 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         t.Expect({0, 0, 0});
     }
 
-    Y_UNIT_TEST(EveryFailureMaskTerminatesAccordingToWriteQuorum) {
+    Y_UNIT_TEST(EveryFailureMaskTerminatesAccordingToWriteQuorumAndFailureModel) {
         // 512 binary failure masks, not a Cartesian product of all reply statuses.
         for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::R},
-                TStates{R::N0, R::N0, R::F}, TStates{R::N0, R::R, R::F}, TStates{R::N0, R::F, R::F}}) {
+                TStates{R::N0, R::N0, R::F}, TStates{R::N1, R::R, R::F}, TStates{R::N1, R::F, R::F}}) {
             for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
                     TTest t(states);
                     const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*t.Info, t.Id.Hash());
                     const auto possible = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
                         &t.Info->GetTopology(), 511 ^ errors);
-                    const bool expected = checker->CheckQuorumForSubgroup(possible);
+                    TBlobStorageGroupInfo::TSubgroupVDisks observedFailures(&t.Info->GetTopology());
                     ui32 sent = 0;
                     for (ui32 step = 0; ; ++step) {
                         UNIT_ASSERT(step < 10);
                         const auto outcome = t.Run(tactic);
                         if (outcome != EStrategyOutcome::IN_PROGRESS) {
+                            const bool failureModel = checker->GetBlobState({}, observedFailures)
+                                != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+                            const bool expected = failureModel && checker->CheckQuorumForSubgroup(possible);
                             UNIT_ASSERT_VALUES_EQUAL_C(outcome == EStrategyOutcome::DONE, expected,
                                 "errors " << errors << " tactic " << static_cast<ui32>(tactic));
                             break;
@@ -390,6 +433,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                             UNIT_ASSERT(states[t.Realm(disk)] != R::F);
                             sent |= 1u << disk;
                             if (errors & (1u << disk)) {
+                                observedFailures += TBlobStorageGroupInfo::TSubgroupVDisks(&t.Info->GetTopology(), disk);
                                 t.Blackboard.AddErrorResponse(request.Id, request.OrderNumber, "test error");
                             } else {
                                 t.Blackboard.AddPutOkResponse(request.Id, request.OrderNumber);

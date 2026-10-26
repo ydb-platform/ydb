@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/library/naming_conventions
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json

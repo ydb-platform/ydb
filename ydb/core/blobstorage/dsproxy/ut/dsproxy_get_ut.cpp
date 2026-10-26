@@ -28,6 +28,74 @@ do {                            \
 
 Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
+Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
+    for (bool mustRestore : {false, true}) {
+        for (bool phantomCheck : {false, true}) {
+            TActorSystemStub actorSystemStub;
+            TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
+            const auto info = group.GetInfo();
+            const TString data = "testdata";
+            const TLogoBlobID uncertainId(1, 1, 1, 0, data.size(), 1);
+            const TLogoBlobID presentId(1, 1, 1, 0, data.size(), 2);
+            const TLogoBlobID absentId(1, 1, 1, 0, data.size(), 3);
+            for (ui32 disk = 0; disk < 9; ++disk) {
+                group.PutPartAtSlot(presentId, disk, disk % 3 + 1, data);
+            }
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[3]);
+            queries[0].Set(uncertainId);
+            queries[1].Set(presentId);
+            queries[2].Set(absentId);
+            TEvBlobStorage::TEvGet request(queries, 3, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, mustRestore);
+            request.PhantomCheck = phantomCheck;
+            TGetImpl getImpl(info, group.MakeGroupQueues(), &request, nullptr, TAccelerationParams{});
+            TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
+            logCtx.LogAcc.IsLogEnabled = false;
+            TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> gets;
+            getImpl.GenerateInitialRequests(logCtx, gets);
+            TAutoPtr<TEvBlobStorage::TEvGetResult> result;
+            while (!result) {
+                UNIT_ASSERT(!gets.empty());
+                auto get = std::move(gets.front());
+                gets.pop_front();
+                TEvBlobStorage::TEvVGetResult reply;
+                group.OnVGet(*get, reply);
+                const auto vdisk = VDiskIDFromVDiskID(get->Record.GetVDiskID());
+                const ui32 disk = info->GetIdxInSubgroup(vdisk, uncertainId.Hash());
+                for (auto& item : *reply.Record.MutableResult()) {
+                    if (LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID() == uncertainId) {
+                        // One real failure is in-model; ERROR plus NOT_YET can still hide 1+1+1.
+                        if (disk == 0) {
+                            item.SetStatus(NKikimrProto::ERROR);
+                        } else if (!phantomCheck && (disk == 1 || disk == 2)) {
+                            item.SetStatus(NKikimrProto::NOT_YET);
+                        }
+                    }
+                }
+                TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> puts;
+                getImpl.OnVGetResult(logCtx, reply, gets, puts, result);
+                UNIT_ASSERT(puts.empty());
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK,
+                "mustRestore# " << mustRestore << " phantomCheck# " << phantomCheck);
+            UNIT_ASSERT_VALUES_EQUAL(result->ResponseSz, 3);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Id, uncertainId);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Status, NKikimrProto::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[1].Id, presentId);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[1].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Id, absentId);
+            UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Status, NKikimrProto::NODATA);
+            if (phantomCheck) {
+                UNIT_ASSERT(!result->Responses[0].LooksLikePhantom.value());
+                UNIT_ASSERT(!result->Responses[1].LooksLikePhantom.value());
+                UNIT_ASSERT(result->Responses[2].LooksLikePhantom.value());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result->Responses[1].Buffer.ConvertToString(), data);
+            }
+        }
+    }
+}
+
 void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled, bool checkCrc) {
     TActorSystemStub actorSystemStub;
 

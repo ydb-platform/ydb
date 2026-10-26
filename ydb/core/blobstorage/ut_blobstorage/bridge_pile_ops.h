@@ -234,6 +234,9 @@ namespace NBridgeTest {
             YAML::Node pile;
             pile["name"] = "pile_1";
             config["bridge_config"]["piles"].push_back(pile);
+            if (env.Runtime->GetAppDataBridgeConfig().GetEnableNonUniformStorage()) {
+                config["bridge_config"]["enable_non_uniform_storage"] = true; // activation can't be dropped
+            }
             for (YAML::Node host : config["hosts"]) {
                 host["location"]["bridge_pile_name"] = "pile_1";
             }

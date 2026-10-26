@@ -61,6 +61,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
 
     switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                "HNSW index implementation is not available yet")};
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             // no feature flag, everything is fine

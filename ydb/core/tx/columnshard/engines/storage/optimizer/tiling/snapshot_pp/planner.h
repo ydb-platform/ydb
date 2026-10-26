@@ -15,6 +15,7 @@
 
 #include <util/generic/function_ref.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
@@ -60,12 +61,22 @@ struct TBySnapshot {
     }
 };
 
-/// The shard's clock as the planner sees it. SettledBefore is Now minus the settle time L; the owner computes it,
-/// because only the owner knows the snapshot arithmetic.
+/// The clock as the adapter supplies it, the node's time as a plan step (decision 6, revised 2026-10-16): SettledBefore
+/// is Now minus the settle time L; the adapter computes it, because only the adapter knows the snapshot arithmetic.
 template <std::totally_ordered TSnapshot>
 struct TClock {
-    TSnapshot Now{};
-    TSnapshot SettledBefore{};
+    /// The engine's snapshot has no default constructor but a Zero(); the tests use plain integers. A zero clock settles
+    /// nothing, so no advance target exists until the adapter has set the clock.
+    static TSnapshot Origin() {
+        if constexpr (requires { TSnapshot::Zero(); }) {
+            return TSnapshot::Zero();
+        } else {
+            return TSnapshot{};
+        }
+    }
+
+    TSnapshot Now = Origin();
+    TSnapshot SettledBefore = Origin();
 };
 
 enum class ETaskKind : ui8 {
@@ -128,13 +139,6 @@ public:
     using TTask = NSnapshotTiling::TTask<TKey, TPortion>;
     using TIsLocked = TFunctionRef<bool(const TConstPtr&)>;
 
-    /// What Actualize needs from the shard: the clock and the lock state, so that inputs of aborted tasks come back
-    /// before any priority is read (decision 14).
-    struct TActualizationContext {
-        TClock Clock;
-        TIsLocked IsLocked;
-    };
-
     struct TEntry {
         TPtr Portion;
         ui8 Level = ACCUMULATOR_LEVEL;
@@ -178,17 +182,16 @@ public:
         }
     }
 
+    /// The clock moves the delay source (decision 18), so the node's buckets are refreshed here as well as on portion changes.
     void UpdateClock(const TClock& clock) {
         Clock = clock;
+        PublishHighestLevel();
     }
 
-    /// Runs before the scheduler reads any priority: refreshes the clock and puts the inputs of aborted tasks back.
-    void Actualize(const TActualizationContext& context) {
-        Clock = context.Clock;
-        Resync(context.IsLocked);
-    }
-
-    /// Inputs of a task that is no longer running and that the engine has not removed were aborted: restore them.
+    /// Inputs of a task that is no longer running and that the engine has not removed were aborted: restore them. Runs at
+    /// the start of every task request, where the engine passes its locks manager; the scheduling pass reads priorities
+    /// without lock information, so the remembered priority of the handed-out tasks keeps such a table in that pass
+    /// until the next request (decision 14).
     void Resync(TIsLocked isLocked) {
         std::vector<ui64> restore;
         for (const auto& [id, p] : HandedOut) {
@@ -201,11 +204,14 @@ public:
         }
     }
 
-    /// The next task from the accumulator or a tree level, handed out at once: its inputs leave the unlocked
-    /// structures and come back only through Resync (decision 14). Nothing at or above a trigger means no task;
-    /// the advance is a separate entry point.
+    /// The next task from the accumulator, a tree level or, once S lags the clock by the delay trigger, the advance as a
+    /// prioritized source (decision 18, revised 2026-10-21); handed out at once: its inputs leave the unlocked structures
+    /// and come back only through Resync, which runs first (decision 14). Nothing at or above a trigger means no task;
+    /// the idle advance is a separate entry point.
     std::optional<TTask> TakeNextTask(TIsLocked isLocked) {
+        Resync(isLocked);
         std::optional<TTask> best;
+        TConstPtr advanceTarget;
         const auto consider = [&best](std::optional<TTask>&& candidate) {
             if (candidate && (!best || best->Priority < candidate->Priority)) {
                 best = std::move(candidate);
@@ -215,6 +221,13 @@ public:
             consider(BuildLevelTask(level, isLocked));
         }
         consider(BuildAccumulatorTask(isLocked));
+        if (const auto delayPriority = DelayPriority(); delayPriority && (!best || best->Priority < *delayPriority)) {
+            if (auto advance = BuildAdvanceTask(isLocked)) {
+                advance->first.Priority = *delayPriority;
+                best = std::move(advance->first);
+                advanceTarget = advance->second;
+            }
+        }
         if (!best) {
             return std::nullopt;
         }
@@ -224,41 +237,37 @@ public:
             return std::nullopt;
         }
         Counters.GeneratedTasksPriorityLevel->Collect(best->Priority.GetLevel());
-        for (const auto& p : best->Portions) {
-            HandOut(p->GetPortionId());
+        if (advanceTarget) {
+            RaisePlacementThreshold(advanceTarget->RecordSnapshotMin());
         }
+        HandOut(*best);
         return best;
     }
 
-    /// The advance (decisions 18 to 21, 26), to be called only when TakeNextTask returned nothing: the first portion of
-    /// the set that is at least L old, not held by a task and unlocked, composed into one task and handed out at once.
-    /// A target whose mandatory input is held by another task is skipped and retried on a later pass.
+    /// The advance regardless of the delay trigger (decisions 19 to 21, 26): the first portion of the set that is at least
+    /// L old, not held by a task and unlocked, composed into one task and handed out at once. The adapter takes the advance
+    /// through TakeNextTask once S lags the clock by the trigger (decision 18); this entry point serves the tests and, in
+    /// PR 2, a forced request. A target whose mandatory input is held by another task is skipped and retried later.
     std::optional<TTask> TakeAdvanceTask(TIsLocked isLocked) {
-        for (const auto& candidate : Outside) {
-            if (Clock.SettledBefore < candidate->RecordSnapshotMin()) {
-                break;   // ordered by snapshot: everything from here on is younger than L
-            }
-            const auto& entry = Registry.at(candidate->GetPortionId());
-            if (entry.HandedOut || isLocked(candidate)) {
-                continue;
-            }
-            auto task = ComposeAdvance(entry, isLocked);
-            if (!task) {
-                continue;
-            }
-            RaisePlacementThreshold(candidate->RecordSnapshotMin());
-            for (const auto& p : task->Portions) {
-                HandOut(p->GetPortionId());
-            }
-            return task;
+        Resync(isLocked);
+        auto advance = BuildAdvanceTask(isLocked);
+        if (!advance) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        RaisePlacementThreshold(advance->second->RecordSnapshotMin());
+        HandOut(advance->first);
+        return std::move(advance->first);
     }
 
-    /// Whether the advance has a target at all: used for the level-0 priority the adapter builds from S.
+    /// Whether the advance has a settled target at all, whatever the lag of S.
     bool HasAdvanceTarget() const {
+        return HasAdvanceTarget(Clock.SettledBefore);
+    }
+
+    /// The same against a clock the caller supplies: the priority read is const and must not touch the core's clock.
+    bool HasAdvanceTarget(const TSnapshot& settledBefore) const {
         for (const auto& p : Outside) {
-            if (Clock.SettledBefore < p->RecordSnapshotMin()) {
+            if (settledBefore < p->RecordSnapshotMin()) {
                 return false;
             }
             if (!Registry.at(p->GetPortionId()).HandedOut) {
@@ -268,7 +277,8 @@ public:
         return false;
     }
 
-    /// The highest priority among units at or above their triggers; nothing when none is (decision 16).
+    /// The highest priority among the sources at or above their triggers, the lag of S included; nothing when none is
+    /// (decisions 16 and 18).
     std::optional<TOptimizationPriority> GetTaskPriority() const {
         std::optional<TOptimizationPriority> best;
         const auto consider = [&best](const std::optional<TOptimizationPriority>& candidate) {
@@ -280,12 +290,29 @@ public:
             consider(LevelPriority(level));
         }
         consider(AccumulatorPriority());
+        consider(DelayPriority());
         return best;
     }
 
-    /// Overload on the unlocked view (decisions 14 and 25): a level at its edge with no task running for its portions.
+    /// The priority the shard schedules by (decision 14): the highest unit priority, or, while the planner holds
+    /// handed-out portions, at least the priority remembered from the task that took them, so that the pass after an
+    /// abort still asks the queue and the next task request can restore the inputs. The lag of S is one of the sources
+    /// (decision 18).
+    std::optional<TOptimizationPriority> GetSchedulingPriority() const {
+        auto best = GetTaskPriority();
+        if (PendingPriority && (!best || *best < *PendingPriority)) {
+            best = PendingPriority;
+        }
+        return best;
+    }
+
+    /// Overload on the unlocked view (decisions 14 and 25): a level at its edge with no task running for its portions, the
+    /// accumulator at its edge, or S lagging the clock by the delay overload (decision 18).
     bool IsOverloaded() const {
         if (Accumulator.size() >= Settings.AccumulatorOverloadPortions) {
+            return true;
+        }
+        if (GetDelaySeconds() >= Settings.DelayOverload.Seconds()) {
             return true;
         }
         for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
@@ -323,22 +350,34 @@ public:
         Erase(it);
     }
 
-    /// S for forced requests (decision 1): the oldest portion outside the line, in-flight inputs included.
-    TSnapshot GetForcedCompactedSnapshot() const {
+    /// S for forced requests (decision 1): the oldest portion outside the line, in-flight inputs included; nothing when
+    /// there is nothing to count, and the reader supplies the fallback, the shard its outdated step minus L (decision 6).
+    std::optional<TSnapshot> GetForcedCompactedSnapshot() const {
         if (Outside.empty()) {
-            return Clock.SettledBefore;
+            return std::nullopt;
         }
         return (*Outside.begin())->RecordSnapshotMin();
     }
 
-    /// S for the queue key and the age buckets (decision 6): the oldest portion outside the line that no task holds.
-    TSnapshot GetSchedulingCompactedSnapshot() const {
+    /// S for the queue key and the age buckets (decision 6): the oldest portion outside the line that no task holds;
+    /// nothing when there is none, and the adapter supplies the node's clock minus L as the fallback.
+    std::optional<TSnapshot> GetSchedulingCompactedSnapshot() const {
         for (const auto& p : Outside) {
             if (!Registry.at(p->GetPortionId()).HandedOut) {
                 return p->RecordSnapshotMin();
             }
         }
-        return Clock.SettledBefore;
+        return std::nullopt;
+    }
+
+    /// The lag of the scheduling reading of S behind the clock, in seconds (decision 18): zero when nothing unlocked is
+    /// outside the line, so a running task's inputs count for nothing, as for the levels.
+    ui64 GetDelaySeconds() const {
+        const auto s = GetSchedulingCompactedSnapshot();
+        if (!s || !(*s < Clock.Now)) {
+            return 0;
+        }
+        return SnapshotDistanceSeconds(*s, Clock.Now);
     }
 
     /// Y (decision 1): empty means zero, the sentinel of an empty bootstrap.
@@ -443,6 +482,10 @@ public:
         if (outsideExpected != Outside.size()) {
             return TConclusionStatus::Fail(TStringBuilder() << "S set holds " << Outside.size() << " portions, expected " << outsideExpected);
         }
+        if (PendingPriority.has_value() != !HandedOut.empty()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "remembered priority and handed-out set disagree: " << HandedOut.size()
+                                                            << " handed out, priority " << (PendingPriority ? PendingPriority->DebugString() : "none"));
+        }
         const TPortion* previous = nullptr;
         for (const auto& p : Line) {
             if (previous && !(previous->IndexKeyEnd() < p->IndexKeyStart())) {
@@ -475,8 +518,11 @@ public:
         result.InsertValue("levels", std::move(levels));
         result.InsertValue("outside", Outside.size());
         result.InsertValue("handed_out", HandedOut.size());
-        result.InsertValue("s_forced", TStringBuilder() << GetForcedCompactedSnapshot());
-        result.InsertValue("s_scheduling", TStringBuilder() << GetSchedulingCompactedSnapshot());
+        result.InsertValue("pending_priority", PendingPriority ? PendingPriority->DebugString() : TString("none"));
+        const auto forced = GetForcedCompactedSnapshot();
+        const auto scheduling = GetSchedulingCompactedSnapshot();
+        result.InsertValue("s_forced", forced ? TString(TStringBuilder() << *forced) : TString("none"));
+        result.InsertValue("s_scheduling", scheduling ? TString(TStringBuilder() << *scheduling) : TString("none"));
         result.InsertValue("y", Y ? TString(TStringBuilder() << *Y) : TString("none"));
         return result;
     }
@@ -493,6 +539,9 @@ private:
     TSnapshotSorted Outside;
     /// Inputs of running tasks, by id (decision 14).
     THashMap<ui64, TConstPtr> HandedOut;
+    /// The highest priority among the tasks whose inputs are still handed out, at least level 0 with weight 1, the floor
+    /// an advance task needs since its core priority is zero; empty exactly when nothing is handed out (decision 14).
+    std::optional<TOptimizationPriority> PendingPriority;
     std::optional<TSnapshot> Y;
     TClock Clock;
     bool FirstLoad = true;
@@ -536,20 +585,45 @@ private:
         return p.GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit;
     }
 
+    /// Levels 1 to 10 from the trigger to the overload edge, both inclusive (decision 16); at and above the edge the
+    /// unit is critical, level 10, and the raw count stays as the weight so that the heavier backlog ranks first.
+    static TOptimizationPriority NormalizePriority(const ui64 trigger, const ui64 overload, const ui64 value) {
+        const auto priority = TOptimizationPriority::Normalize(trigger, overload, value);
+        return priority.IsCritical() ? TOptimizationPriority::Critical(static_cast<i64>(value)) : priority;
+    }
+
     std::optional<TOptimizationPriority> LevelPriority(const ui8 level) const {
         const ui64 height = GetHeight(level);
         if (height < Settings.TriggerHeight) {
             return std::nullopt;
         }
-        return TOptimizationPriority::Normalize(Settings.TriggerHeight, Settings.OverloadHeight, height);
+        return NormalizePriority(Settings.TriggerHeight, Settings.OverloadHeight, height);
     }
 
     std::optional<TOptimizationPriority> AccumulatorPriority() const {
         if (Accumulator.size() < Settings.AccumulatorTriggerPortions) {
             return std::nullopt;
         }
-        return TOptimizationPriority::Normalize(
-            Settings.AccumulatorTriggerPortions, Settings.AccumulatorOverloadPortions, Accumulator.size());
+        return NormalizePriority(Settings.AccumulatorTriggerPortions, Settings.AccumulatorOverloadPortions, Accumulator.size());
+    }
+
+    /// Plan steps are milliseconds in the engine's snapshot; the tests use plain integers and read them as seconds.
+    static ui64 SnapshotDistanceSeconds(const TSnapshot& from, const TSnapshot& to) {
+        if constexpr (requires { from.GetPlanStep(); }) {
+            return (to.GetPlanStep() - from.GetPlanStep()) / 1000;
+        } else {
+            return static_cast<ui64>(to - from);
+        }
+    }
+
+    /// Decision 18, revised 2026-10-21: from the delay trigger the advance is a prioritized source, level 1 at the trigger
+    /// rising linearly to critical at the delay overload edge, like a level between its trigger and overload heights.
+    std::optional<TOptimizationPriority> DelayPriority() const {
+        const ui64 delay = GetDelaySeconds();
+        if (delay < Settings.DelayTrigger.Seconds()) {
+            return std::nullopt;
+        }
+        return NormalizePriority(Settings.DelayTrigger.Seconds(), Settings.DelayOverload.Seconds(), delay);
     }
 
     bool FitsBudget(const TTask& task, const TPortion& candidate) const {
@@ -658,6 +732,24 @@ private:
         return task;
     }
 
+    /// The advance task and its target, not yet handed out: the first settled, unlocked portion of the set that no task
+    /// holds and whose composition succeeds (decisions 19 to 21).
+    std::optional<std::pair<TTask, TConstPtr>> BuildAdvanceTask(TIsLocked isLocked) const {
+        for (const auto& candidate : Outside) {
+            if (Clock.SettledBefore < candidate->RecordSnapshotMin()) {
+                break;   // ordered by snapshot: everything from here on is younger than L
+            }
+            const auto& entry = Registry.at(candidate->GetPortionId());
+            if (entry.HandedOut || isLocked(candidate)) {
+                continue;
+            }
+            if (auto task = ComposeAdvance(entry, isLocked)) {
+                return std::make_pair(std::move(*task), candidate);
+            }
+        }
+        return std::nullopt;
+    }
+
     using TCheckPoint = typename TTask::TCheckPoint;
 
     std::optional<TTask> ComposeAdvance(const TEntry& entry, TIsLocked isLocked) const {
@@ -707,94 +799,125 @@ private:
         return result;
     }
 
-    /// The stack of a tree level at the middle key of the given intersecting portions: the lower median end key,
-    /// clamped to [start, end] (decision 20); oldest first.
-    std::vector<TConstPtr> StackAtMiddle(const TTreeLevel& level, std::vector<TConstPtr> intersecting, const TKey& start,
-        const TKey& end, const ui64 excludeId, TIsLocked isLocked) const {
-        std::sort(intersecting.begin(), intersecting.end(), TByEndKey<TKey, TPortion>());
-        TKey middle = intersecting[(intersecting.size() - 1) / 2]->IndexKeyEnd();
-        if (middle < start) {
-            middle = start;
+    /// The key window of an advance (decision 20, revised 2026-10-26): [Left, Right] inclusive when the sweep ran out of
+    /// intersecting portions, [Left, Cut) when the budget or a portion held by another task stopped it.
+    struct TWindow {
+        TKey Left;
+        TKey Right;
+        std::optional<TKey> Cut;
+        bool Complete = true;
+        bool LineTaken = false;
+    };
+
+    struct TCandidate {
+        TConstPtr Portion;
+        /// The start clamped to the window's left border: the order of the sweep.
+        TKey EffectiveStart;
+        bool Line = false;
+    };
+
+    /// Decision 20, revised 2026-10-26: the window starts at the target, or at the first line portion the target
+    /// intersects, and takes every unlocked portion of the line and of every tree level that intersects it, in order of
+    /// start key, line portions first at equal starts. A taken portion that reaches further right grows the window, so
+    /// overlapping neighbours chain until a gap or the budget. The sweep stops at the first portion that does not fit or
+    /// that another task holds, and the window is cut at its start: everything inside is absorbed whole and free of line
+    /// portions, so the slice inside enters the line, and the parts beyond are remainders placed by the arrival rule. A
+    /// held line portion covering the left border blocks the target. When the portion that does not fit covers the left
+    /// border itself no cut leaves a non-empty window, so the window closes at the end of the first line portion, the only
+    /// one inside, before the first line portion when none was taken yet, or at the target's end without the line.
+    std::optional<TWindow> SweepWindow(TTask& task, const TConstPtr& target, TIsLocked isLocked) const {
+        const TKey start = target->IndexKeyStart();
+        const TKey end = target->IndexKeyEnd();
+        const ui64 targetId = target->GetPortionId();
+        TWindow window{ .Left = start, .Right = end };
+        std::optional<TKey> firstLineStart;
+        if (const auto first = Line.lower_bound(start); first != Line.end() && !(end < (*first)->IndexKeyStart())) {
+            firstLineStart = (*first)->IndexKeyStart();
+            if (*firstLineStart < window.Left) {
+                window.Left = *firstLineStart;
+            }
         }
-        if (end < middle) {
-            middle = end;
-        }
-        std::vector<TConstPtr> stack;
-        auto range = level.Tree.FindRange(middle);
-        if (range) {
-            range.ForEachValue([&](const ui64 id) {
-                if (id != excludeId) {
-                    const auto& p = Registry.at(id).Portion;
-                    if (!isLocked(p)) {
-                        stack.push_back(p);
-                    }
+        THashSet<ui64> seen{ targetId };
+        std::vector<TCandidate> queue;
+        const auto push = [&](const TConstPtr& p, const bool line) {
+            if (!seen.insert(p->GetPortionId()).second) {
+                return;
+            }
+            const TKey& portionStart = p->IndexKeyStart();
+            queue.push_back(TCandidate{
+                .Portion = p, .EffectiveStart = portionStart < window.Left ? window.Left : portionStart, .Line = line });
+        };
+        const auto collect = [&](const TKey& from, const TKey& to) {
+            for (auto it = Line.lower_bound(from); it != Line.end() && !(to < (*it)->IndexKeyStart()); ++it) {
+                push(*it, true);
+            }
+            for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
+                for (const auto& p : Intersecting(TreeLevelAt(level), from, to, targetId, isLocked)) {
+                    push(p, false);
                 }
-                return true;
-            });
-        }
-        std::sort(stack.begin(), stack.end(), TBySnapshot<TPortion>());
-        return stack;
-    }
-
-    static void AddCutWindow(TTask& task, const TKey& left, const TKey& right) {
-        task.CheckPoints.push_back(TCheckPoint{ .Key = left, .KeyBelongsToLeft = false });
-        task.CheckPoints.push_back(TCheckPoint{ .Key = right, .KeyBelongsToLeft = true });
-    }
-
-    /// Takes a tree-level stack within the budget and cuts the output at its borders, clipped to the target's range,
-    /// so that the absorbed portions vanish whole and the target's lineage never widens (decisions 20 and 26).
-    void TakeStack(TTask& task, const std::vector<TConstPtr>& stack, const TKey& targetStart, const TKey& targetEnd,
-        bool& neighbourTaken) const {
-        std::optional<TKey> left;
-        std::optional<TKey> right;
-        for (const auto& p : stack) {
+            }
+        };
+        const auto before = [](const TCandidate& a, const TCandidate& b) {
+            return std::tuple(a.EffectiveStart, !a.Line, a.Portion->IndexKeyEnd(), a.Portion->GetPortionId()) <
+                   std::tuple(b.EffectiveStart, !b.Line, b.Portion->IndexKeyEnd(), b.Portion->GetPortionId());
+        };
+        collect(window.Left, window.Right);
+        bool neighbourTaken = false;
+        std::optional<TKey> lineEnd;
+        while (!queue.empty()) {
+            const auto next = std::min_element(queue.begin(), queue.end(), before);
+            const TCandidate candidate = *next;
+            queue.erase(next);
+            const TConstPtr& p = candidate.Portion;
+            if (candidate.Line && !IsAvailable(p, isLocked)) {
+                if (!(window.Left < p->IndexKeyStart())) {
+                    return std::nullopt;
+                }
+                window.Cut = p->IndexKeyStart();
+                window.Complete = false;
+                break;
+            }
             if (!TryAppend(task, p, neighbourTaken)) {
+                window.Cut = p->IndexKeyStart();
+                window.Complete = false;
                 break;
             }
-            if (!left || p->IndexKeyStart() < *left) {
-                left = p->IndexKeyStart();
+            if (candidate.Line) {
+                window.LineTaken = true;
+                if (!lineEnd || *lineEnd < p->IndexKeyEnd()) {
+                    lineEnd = p->IndexKeyEnd();
+                }
             }
-            if (!right || *right < p->IndexKeyEnd()) {
-                right = p->IndexKeyEnd();
+            if (window.Right < p->IndexKeyEnd()) {
+                const TKey from = window.Right;
+                window.Right = p->IndexKeyEnd();
+                collect(from, window.Right);
             }
         }
-        if (!left) {
-            return;
+        if (window.Cut && !(window.Left < *window.Cut)) {
+            window.Cut.reset();
+            if (lineEnd) {
+                window.Right = *lineEnd;
+            } else if (firstLineStart && window.Left < *firstLineStart) {
+                window.Cut = *firstLineStart;
+            } else {
+                window.Right = end;
+            }
         }
-        AddCutWindow(task, (*left < targetStart) ? targetStart : *left, (targetEnd < *right) ? targetEnd : *right);
+        return window;
     }
 
-    /// The line portions intersecting [start, end] in key order: all of them, or the longest initial run that fits,
-    /// with the output cut at the run's borders (decision 20). False when the first one is held elsewhere.
-    bool TakeLineRun(TTask& task, const TKey& start, const TKey& end, bool& neighbourTaken, TIsLocked isLocked) const {
-        std::optional<TKey> runStart;
-        std::optional<TKey> runEnd;
-        bool complete = true;
-        for (auto it = Line.lower_bound(start); it != Line.end() && !(end < (*it)->IndexKeyStart()); ++it) {
-            if (!IsAvailable(*it, isLocked)) {
-                if (!runStart) {
-                    return false;
-                }
-                complete = false;
-                break;
-            }
-            if (!TryAppend(task, *it, neighbourTaken)) {
-                complete = false;
-                break;
-            }
-            if (!runStart) {
-                runStart = (*it)->IndexKeyStart();
-            }
-            runEnd = (*it)->IndexKeyEnd();
+    /// The window's borders as checkpoints: the slice inside is absorbed whole and enters the line; a cut window is a prefix.
+    static void ApplyWindow(TTask& task, const TWindow& window) {
+        task.CheckPoints.push_back(TCheckPoint{ .Key = window.Left, .KeyBelongsToLeft = false });
+        if (window.Cut) {
+            task.CheckPoints.push_back(TCheckPoint{ .Key = *window.Cut, .KeyBelongsToLeft = false });
+        } else {
+            task.CheckPoints.push_back(TCheckPoint{ .Key = window.Right, .KeyBelongsToLeft = true });
         }
-        if (runStart) {
-            AddCutWindow(task, *runStart, *runEnd);
-            task.TargetLevel = LINE_LEVEL;
-            if (!complete) {
-                task.Reason = ETaskReason::AdvancePrefix;
-            }
+        if (!window.Complete) {
+            task.Reason = ETaskReason::AdvancePrefix;
         }
-        return true;
     }
 
     /// Drops cuts at the task's outer borders, which would produce empty slices, then sorts and deduplicates.
@@ -827,46 +950,31 @@ private:
         task.CheckPoints = std::move(kept);
     }
 
-    /// A normal-size target (decisions 20 and 26): one budget filled in order with the target, the stack at the middle
-    /// key of its own-level intersections, the stack at the middle key of the nearest lower level that intersects it,
-    /// the line included as a run or a prefix; a target that intersects nothing anywhere is a metadata move.
+    /// A normal-size target (decisions 20 and 26, revised 2026-10-26): the window swept from the target; a target that
+    /// intersects nothing anywhere is a metadata move. The output carries the line's level when line portions were taken,
+    /// so the slice inside the window enters the line whatever its snapshot; otherwise it keeps the target's level and
+    /// the arrival rule admits the slice that carries the target's rows, old enough and free of the line.
     std::optional<TTask> ComposeLargeAdvance(const TConstPtr& target, const ui8 level, TIsLocked isLocked) const {
-        const TKey start = target->IndexKeyStart();
-        const TKey end = target->IndexKeyEnd();
-        const ui64 targetId = target->GetPortionId();
         TTask task;
         task.Kind = ETaskKind::Merge;
         task.Reason = ETaskReason::AdvanceMerge;
         task.SourceLevel = level;
         task.TargetLevel = level;
         Append(task, target);
-        bool neighbourTaken = false;
-
-        const auto own = Intersecting(TreeLevelAt(level), start, end, targetId, isLocked);
-        if (!own.empty()) {
-            TakeStack(task, StackAtMiddle(TreeLevelAt(level), own, start, end, targetId, isLocked), start, end, neighbourTaken);
-        }
-
-        bool lowerTaken = false;
-        for (ui8 below = level - 1; below >= FIRST_TREE_LEVEL && !lowerTaken; --below) {
-            const auto intersecting = Intersecting(TreeLevelAt(below), start, end, targetId, isLocked);
-            if (!intersecting.empty()) {
-                TakeStack(task, StackAtMiddle(TreeLevelAt(below), intersecting, start, end, targetId, isLocked), start, end,
-                    neighbourTaken);
-                lowerTaken = true;
-            }
-        }
-        if (!lowerTaken && !TakeLineRun(task, start, end, neighbourTaken, isLocked)) {
+        const auto window = SweepWindow(task, target, isLocked);
+        if (!window) {
             return std::nullopt;
         }
-
         if (task.Portions.size() == 1) {
             task.Kind = ETaskKind::MetadataMove;
             task.Reason = ETaskReason::AdvanceMove;
             task.TargetLevel = LINE_LEVEL;
-            task.CheckPoints.clear();
             return task;
         }
+        if (window->LineTaken) {
+            task.TargetLevel = LINE_LEVEL;
+        }
+        ApplyWindow(task, *window);
         FinalizeCheckPoints(task);
         return task;
     }
@@ -951,9 +1059,10 @@ private:
         }
     }
 
-    /// A small target (decision 21): the intersecting line portions, else the nearest line portion without a separating
-    /// cut, else the nearest normal-size portion on any level, else the nearest small portions; then the accumulator
-    /// portions inside the task's span, as many as fit.
+    /// A small target (decision 21, revised 2026-10-26): the window swept from the target, line and tree portions alike;
+    /// when nothing intersects, the nearest line portion without a separating cut, else the nearest normal-size portion
+    /// on any level, else the nearest small portions; then the accumulator portions inside the task's span and before the
+    /// cut, as many as fit.
     std::optional<TTask> ComposeSmallAdvance(const TConstPtr& target, TIsLocked isLocked) const {
         const TKey start = target->IndexKeyStart();
         const TKey end = target->IndexKeyEnd();
@@ -963,12 +1072,16 @@ private:
         task.SourceLevel = ACCUMULATOR_LEVEL;
         task.TargetLevel = LINE_LEVEL;
         Append(task, target);
-        bool neighbourTaken = false;
-
-        if (!TakeLineRun(task, start, end, neighbourTaken, isLocked)) {
+        const auto window = SweepWindow(task, target, isLocked);
+        if (!window) {
             return std::nullopt;
         }
-        if (task.Portions.size() == 1) {
+        std::optional<TKey> limit;
+        if (task.Portions.size() > 1) {
+            ApplyWindow(task, *window);
+            limit = window->Cut;
+        } else {
+            bool neighbourTaken = false;
             if (!Line.empty()) {
                 const TConstPtr neighbour = NearestLinePortion(start, isLocked);
                 if (!neighbour) {
@@ -1001,6 +1114,9 @@ private:
         }
         for (auto it = Accumulator.lower_bound(spanStart); it != Accumulator.end() && !(spanEnd < (*it)->IndexKeyEnd()); ++it) {
             const TConstPtr& p = *it;
+            if (limit && !(p->IndexKeyEnd() < *limit)) {
+                break;
+            }
             if (p == target || p->IndexKeyStart() < spanStart || isLocked(p)) {
                 continue;
             }
@@ -1011,6 +1127,19 @@ private:
         }
         FinalizeCheckPoints(task);
         return task;
+    }
+
+    /// Decision 14: the inputs leave their levels' unlocked structures, and the task's priority is remembered until they
+    /// are removed or restored, so that the scheduling pass after an abort still reaches a task request.
+    void HandOut(const TTask& task) {
+        for (const auto& p : task.Portions) {
+            HandOut(p->GetPortionId());
+        }
+        const TOptimizationPriority floor = TOptimizationPriority::Optimization(1);
+        const TOptimizationPriority& priority = floor < task.Priority ? task.Priority : floor;
+        if (!PendingPriority || *PendingPriority < priority) {
+            PendingPriority = priority;
+        }
     }
 
     /// Decision 14: an input leaves its level's unlocked structures; the line keeps it visible; the set behind S
@@ -1030,8 +1159,15 @@ private:
         AFL_VERIFY(entry.HandedOut)("portion_id", id)("reason", "tiling-s_restore_not_handed_out");
         entry.HandedOut = false;
         AFL_VERIFY(HandedOut.erase(id))("portion_id", id);
+        ForgetPendingPriorityWhenIdle();
         if (entry.Level != LINE_LEVEL) {
             Attach(entry.Portion, entry.Level);
+        }
+    }
+
+    void ForgetPendingPriorityWhenIdle() {
+        if (HandedOut.empty()) {
+            PendingPriority.reset();
         }
     }
 
@@ -1073,7 +1209,9 @@ private:
         RefreshCounters(level);
     }
 
-    /// Height and overload per unit, which also feed the node-wide buckets (decision 25).
+    /// Height and overload per unit, and the planner's highest unit level in the shared tiling category, which the gap
+    /// rule and the node back-off read: its bucket 10 is non-empty exactly while some planner on the node is at its
+    /// overload edge on the unlocked view (decision 25).
     void RefreshCounters(const ui8 level) const {
         const auto& counters = LevelCounters(level);
         if (level == ACCUMULATOR_LEVEL) {
@@ -1088,6 +1226,14 @@ private:
             counters.Portions->SetHeight(GetHeight(level));
             counters.Portions->SetOverload(priority ? priority->GetLevel() : 0);
         }
+        PublishHighestLevel();
+    }
+
+    /// The planner's highest source level in the shared tiling category (decision 25); the delay source moves with the
+    /// clock, so this runs on clock updates as well as on portion changes.
+    void PublishHighestLevel() const {
+        const auto highest = GetTaskPriority();
+        Counters.GetTilingCounters().Portions->SetOverload(highest ? highest->GetLevel() : 0);
     }
 
     /// Decision 7: old enough means RecordSnapshotMin at or below Y.
@@ -1265,6 +1411,7 @@ private:
         }
         if (entry.HandedOut) {
             AFL_VERIFY(HandedOut.erase(id))("portion_id", id);
+            ForgetPendingPriorityWhenIdle();
         }
         if (!entry.HandedOut || entry.Level == LINE_LEVEL) {
             Detach(p, entry.Level);

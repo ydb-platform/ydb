@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 
+#include <util/datetime/base.h>
+
 namespace NKikimr::NOlap::NCompaction {
 
 class TPortionToMerge;
@@ -13,9 +15,14 @@ class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
                                           public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
+    /// Why the planner built the task; the compaction counters are kept per reason. Planners that give none count as generic.
+    YDB_ACCESSOR(TString, TaskReason, "generic");
     using TBase = TCompactColumnEngineChanges;
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
+    const TMonotonic CreationMonotonic = TMonotonic::Now();
+    TMonotonic StartMonotonic;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+    virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     NArrow::NMerger::TIntervalPositions CheckPoints;
 
     [[nodiscard]] std::vector<TWritePortionInfoWithBlobsResult> BuildAppendedPortionsByChunks(TConstructionContext& context,
@@ -52,6 +59,12 @@ protected:
 public:
     void SetQueueGuard(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g) {
         PrioritiesAllocationGuard = g;
+    }
+
+    // A change without switched portions rewrites nothing: it only moves portions between compaction levels (a metadata
+    // move of the tiling-s planner), so the shard fetches the moved portions' accessors and reads no blobs.
+    virtual bool NeedConstruction() const override {
+        return !SwitchedPortions.empty();
     }
 
     using TBase::TBase;

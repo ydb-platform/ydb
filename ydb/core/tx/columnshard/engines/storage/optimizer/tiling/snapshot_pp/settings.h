@@ -2,6 +2,8 @@
 
 #include <ydb/library/conclusion/status.h>
 
+#include <library/cpp/json/writer/json_value.h>
+
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
@@ -30,6 +32,11 @@ struct TSnapshotTilingSettings {
     ui32 MinTaskPortionsFactor = 16;
     /// Settle time L: the advance ignores younger portions, a forced request waits until R is this old.
     TDuration SettleTime = TDuration::Seconds(10);
+    /// Lag of the compacted snapshot S behind the clock from which the advance is a prioritized source, level 1, and the
+    /// lag at which it is critical and the planner reports overload, like a level between its trigger and overload heights
+    /// (decision 18, revised 2026-10-21).
+    TDuration DelayTrigger = TDuration::Minutes(15);
+    TDuration DelayOverload = TDuration::Hours(1);
     ui32 CompactionThreads = 2;
     /// Node gap rule for height and accumulator tasks; the advance is exempt.
     ui32 MaxPriorityGap = 3;
@@ -39,6 +46,15 @@ struct TSnapshotTilingSettings {
     }
 
     TConclusionStatus Validate() const;
+
+    /// The keys are the field names in snake case; durations end in _seconds: settle_time_seconds, delay_trigger_seconds,
+    /// delay_overload_seconds.
+    NJson::TJsonValue SerializeToJson() const;
+
+    /// Strict: an unknown key is an error, except the two keys of the planner container itself, node_portions_count_limit
+    /// and weight_kff, which the container reads before it hands the same object down (optimizer.h). Ends with Validate,
+    /// so that a configuration that breaks decision 15 is rejected when the settings are evaluated.
+    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& json);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NSnapshotTiling

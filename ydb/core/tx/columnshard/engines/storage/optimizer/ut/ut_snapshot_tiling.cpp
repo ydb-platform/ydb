@@ -1,4 +1,5 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/snapshot_pp/planner.h>
 
@@ -71,6 +72,9 @@ TSnapshotTilingSettings TestSettings() {
     settings.AccumulatorPortionSizeLimit = 1'000;
     settings.PortionExpectedSize = 4'000;
     settings.TaskBytes = 64'000;
+    // Test clocks are small integers read as seconds; the delay source stays out of the way unless a test asks for it.
+    settings.DelayTrigger = TDuration::Seconds(100'000);
+    settings.DelayOverload = TDuration::Seconds(200'000);
     return settings;
 }
 
@@ -89,6 +93,8 @@ TTestPortion::TPtr EvictedPortion(const ui64 id, const ui64 start, const ui64 fi
 struct TFixture {
     NTiling::TCounters Counters;
     TCore Core;
+    /// Inputs of running tasks, as the engine's locks manager would report them.
+    THashSet<ui64> Locked;
 
     explicit TFixture(TSnapshotTilingSettings settings = TestSettings())
         : Core(std::move(settings), Counters)
@@ -127,28 +133,54 @@ struct TFixture {
         return false;
     }
 
+    bool IsLocked(const TTestPortion::TConstPtr& p) const {
+        return Locked.contains(p->GetPortionId());
+    }
+
+    /// A task request as the engine makes it: the inputs of running tasks are locked, the task taken gets locked.
     std::optional<TCore::TTask> Take() {
-        auto task = Core.TakeNextTask(&TFixture::NeverLocked);
+        auto task = Core.TakeNextTask([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
+        if (task) {
+            Lock(*task);
+        }
         Check();
         return task;
+    }
+
+    std::optional<TCore::TTask> TakeAdvance() {
+        auto task = Core.TakeAdvanceTask([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
+        if (task) {
+            Lock(*task);
+        }
+        Check();
+        return task;
+    }
+
+    void Lock(const TCore::TTask& task) {
+        for (const auto& p : task.Portions) {
+            Locked.insert(p->GetPortionId());
+        }
+    }
+
+    /// The engine released the task's locks, as it does on success and on abort alike.
+    void ReleaseLocks(const TCore::TTask& task) {
+        for (const auto& p : task.Portions) {
+            Locked.erase(p->GetPortionId());
+        }
     }
 
     /// The engine finished the task: its inputs are removed, the given outputs are added.
     void Finish(const TCore::TTask& task, std::vector<TTestPortion::TPtr> outputs = {}) {
+        ReleaseLocks(task);
         Core.ModifyPortions(outputs, task.Portions);
         Check();
     }
 
-    /// The task aborted: locks are gone, the next Actualize puts the inputs back.
-    void Abort() {
-        Core.Actualize({ .Clock = Core.GetClock(), .IsLocked = &TFixture::NeverLocked });
+    /// The task aborted: its locks are gone, and the next task request's first step puts the inputs back.
+    void Abort(const TCore::TTask& task) {
+        ReleaseLocks(task);
+        Core.Resync([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
         Check();
-    }
-
-    std::optional<TCore::TTask> TakeAdvance() {
-        auto task = Core.TakeAdvanceTask(&TFixture::NeverLocked);
-        Check();
-        return task;
     }
 
     static std::vector<ui64> Ids(const TCore::TTask& task) {
@@ -201,7 +233,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingPlacement) {
         f.Add(Portion(2, 100, 109, 20, SMALL));
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), ACCUMULATOR_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 20);
     }
 
     Y_UNIT_TEST(OldFreePortionGoesToLine) {
@@ -220,8 +252,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingPlacement) {
         f.Load({ Portion(1, 0, 9, 10) });
         f.Add(Portion(2, 20, 29, 11));
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), FIRST_TREE_LEVEL);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetSchedulingCompactedSnapshot(), 11);
     }
 
     Y_UNIT_TEST(IntersectingOldPortionStaysOutsideLine) {
@@ -287,13 +319,13 @@ Y_UNIT_TEST_SUITE(SnapshotTilingPlacement) {
         f.Load({ line });
         f.Add(tree);
         f.Add(small);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
         f.Remove(tree);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 12);
         f.Remove(small);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetOutsideSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 990);
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
         f.Remove(line);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetRegistrySize(), 0);
     }
@@ -314,7 +346,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrap) {
         // Free, but after the first failure: demoted, comes back through the advance (accepted risk).
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(4), FIRST_TREE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 3);
     }
 
     Y_UNIT_TEST(DerivesSnapshotFromAccumulatorToo) {
@@ -328,25 +360,27 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrap) {
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(3), FIRST_TREE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 20);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 10);
     }
 
-    Y_UNIT_TEST(EmptyTableUsesTheClock) {
+    Y_UNIT_TEST(EmptyTableHasNoSnapshot) {
         TFixture f;
         f.Load({});
         UNIT_ASSERT(!f.Core.GetPlacementThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 990);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingCompactedSnapshot(), 990);
+        // Nothing to count: the reader supplies the fallback, the shard its outdated step minus L for a forced request,
+        // the adapter the node's clock minus L for the queue key (decision 6).
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
+        UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
         f.Core.UpdateClock({ .Now = 2'000, .SettledBefore = 1'990 });
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 1'990);
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
     }
 
-    Y_UNIT_TEST(EverythingFitsGivesTheClock) {
+    Y_UNIT_TEST(EverythingFitsGivesNoSnapshot) {
         TFixture f;
         f.Load({ Portion(1, 0, 9, 1), Portion(2, 20, 29, 2), Portion(3, 40, 49, 3) });
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetLineSize(), 3);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 990);
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
     }
 
     Y_UNIT_TEST(AllSmallTableHasNoThreshold) {
@@ -354,7 +388,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrap) {
         f.Load({ Portion(1, 0, 9, 5, SMALL), Portion(2, 20, 29, 6, SMALL) });
         UNIT_ASSERT(!f.Core.GetPlacementThreshold());
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 5);
     }
 
     Y_UNIT_TEST(PersistedLevelsAreIgnoredAtBootstrap) {
@@ -478,7 +512,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrapLevels) {
         // Measured against the seeded level, the old wide portion spans three and goes up (design.md, decision 10).
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(3), FIRST_TREE_LEVEL + 1);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 1);
     }
 
     Y_UNIT_TEST(LeftoversStayOnTheTopLevel) {
@@ -529,8 +563,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 10);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetOutsideSize(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingCompactedSnapshot(), 990);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
         UNIT_ASSERT(!f.Core.GetTaskPriority());
         UNIT_ASSERT(!f.Take());
 
@@ -541,7 +575,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(30), FIRST_TREE_LEVEL);
     }
 
-    Y_UNIT_TEST(AbortedInputsComeBackOnActualize) {
+    Y_UNIT_TEST(AbortedInputsComeBackOnTheNextTaskRequest) {
         TFixture f;
         f.Load({ Portion(1, 1'000, 1'009, 10) });
         for (ui64 i = 0; i < 10; ++i) {
@@ -550,14 +584,41 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         const auto task = f.Take();
         UNIT_ASSERT(task);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 0);
-        f.Abort();
+        // The level reports nothing, but the planner remembers the task's priority until its inputs are back or gone,
+        // so the scheduling pass after an abort still asks the queue (decision 14).
+        UNIT_ASSERT(!f.Core.GetTaskPriority());
+        UNIT_ASSERT(f.Core.GetSchedulingPriority());
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 1);
+        // The task aborted and the engine released its locks: the next request restores the inputs and builds the task again.
+        f.ReleaseLocks(*task);
+        const auto again = f.Take();
+        UNIT_ASSERT(again);
+        UNIT_ASSERT_VALUES_EQUAL(again->Portions.size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 0);
+        UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
+        f.Finish(*again, { Portion(30, 0, 10, 11) });
+        UNIT_ASSERT(!f.Core.GetSchedulingPriority());
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetSchedulingCompactedSnapshot(), 11);
+    }
+
+    Y_UNIT_TEST(AbortedInputsComeBackOnResync) {
+        TFixture f;
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        for (ui64 i = 0; i < 10; ++i) {
+            f.Add(Portion(10 + i, 0, 10, 11));
+        }
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        f.Abort(*task);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 10);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetSchedulingCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 1);
         UNIT_ASSERT(f.Take());
     }
 
-    Y_UNIT_TEST(RunningTaskInputsStayLockedThroughActualize) {
+    Y_UNIT_TEST(RunningTaskInputsStayLockedThroughTheNextRequest) {
         TFixture f;
         f.Load({ Portion(1, 1'000, 1'009, 10) });
         for (ui64 i = 0; i < 10; ++i) {
@@ -565,13 +626,11 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         }
         const auto task = f.Take();
         UNIT_ASSERT(task);
-        const auto stillRunning = [](const TTestPortion::TConstPtr&) {
-            return true;
-        };
-        f.Core.Actualize({ .Clock = f.Core.GetClock(), .IsLocked = stillRunning });
-        f.Check();
+        // While the task runs, a request finds its inputs locked: nothing comes back and no task is built.
+        UNIT_ASSERT(!f.Take());
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 10);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 1);
     }
 
     Y_UNIT_TEST(LevelTaskIsCappedAndOverloadRecomputed) {
@@ -592,6 +651,36 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHeight(FIRST_TREE_LEVEL), 4);
         UNIT_ASSERT(!f.Core.IsOverloaded());
         UNIT_ASSERT(!f.Core.GetTaskPriority());
+    }
+
+    Y_UNIT_TEST(OverloadIsPublishedToTheNodeBuckets) {
+        TFixture f;
+        const auto nodeMax = [&f]() {
+            return f.Counters.GetTilingCounters().Portions->GetMaxOverloadLevel();
+        };
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 0);
+        for (ui64 i = 0; i < 9; ++i) {
+            f.Add(Portion(10 + i, 0, 10, 11 + i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 0);
+        f.Add(Portion(19, 0, 10, 20));
+        // Height 10 is the trigger: level 1.
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 1);
+        for (ui64 i = 0; i < 5; ++i) {
+            f.Add(Portion(20 + i, 0, 10, 21 + i));
+        }
+        // Height 15 is the overload edge: critical.
+        UNIT_ASSERT(f.Core.IsOverloaded());
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 10);
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 15);
+        // The whole stack is running: nothing is overloaded on the unlocked view (decision 25).
+        UNIT_ASSERT(!f.Core.IsOverloaded());
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 0);
+        f.Abort(*task);
+        UNIT_ASSERT_VALUES_EQUAL(nodeMax(), 10);
     }
 
     Y_UNIT_TEST(TwoPortionsAlwaysFit) {
@@ -659,7 +748,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
         // End-key order, so that neighbours meet.
         UNIT_ASSERT_VALUES_EQUAL(task->Portions[1]->GetPortionId(), 4);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
         f.Finish(*task, { Portion(5, 0, 51, 11) });
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(5), FIRST_TREE_LEVEL);
     }
@@ -684,6 +773,112 @@ Y_UNIT_TEST_SUITE(SnapshotTilingTasks) {
     }
 }
 
+Y_UNIT_TEST_SUITE(SnapshotTilingDelay) {
+    TSnapshotTilingSettings DelaySettings() {
+        auto settings = TestSettings();
+        settings.DelayTrigger = TDuration::Seconds(100);
+        settings.DelayOverload = TDuration::Seconds(200);
+        return settings;
+    }
+
+    Y_UNIT_TEST(BelowTheTriggerNothingIsCompacted) {
+        TFixture f(DelaySettings());
+        f.Load({ Portion(1, 0, 9, 10) });
+        // S is 950 against a clock of 1000: a lag of 50, below the trigger of 100. No source, no task, no overload.
+        f.Add(Portion(2, 5, 14, 950));
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetDelaySeconds(), 50);
+        UNIT_ASSERT(!f.Core.GetTaskPriority());
+        UNIT_ASSERT(!f.Core.GetSchedulingPriority());
+        UNIT_ASSERT(!f.Take());
+        UNIT_ASSERT(!f.Core.IsOverloaded());
+        // The entry point that ignores the trigger, for a forced request in PR 2, still composes the task.
+        UNIT_ASSERT(f.Core.HasAdvanceTarget());
+        UNIT_ASSERT(f.TakeAdvance());
+    }
+
+    Y_UNIT_TEST(DelayPriorityGrowsLinearlyToCritical) {
+        TFixture f(DelaySettings());
+        f.Load({ Portion(1, 0, 9, 10) });
+        // A lag of exactly the trigger: level 1.
+        f.Add(Portion(2, 5, 14, 900));
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetDelaySeconds(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTaskPriority()->GetLevel(), 1);
+        // Halfway to the edge: level 5.
+        f.Core.UpdateClock({ .Now = 1'050, .SettledBefore = 1'040 });
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetDelaySeconds(), 150);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTaskPriority()->GetLevel(), 5);
+        UNIT_ASSERT(!f.Core.IsOverloaded());
+        // At the edge: critical, overloaded, and the node's buckets follow the clock, not only portion changes.
+        f.Core.UpdateClock({ .Now = 1'100, .SettledBefore = 1'090 });
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTaskPriority()->GetLevel(), 10);
+        UNIT_ASSERT(f.Core.IsOverloaded());
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.GetTilingCounters().Portions->GetMaxOverloadLevel(), 10);
+        // The advance is taken as a prioritized task: the target with its line portion, at the delay's priority.
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvanceMerge);
+        UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 1, 2 }));
+        UNIT_ASSERT_VALUES_EQUAL(task->Priority.GetLevel(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 900);
+        // Handed out, the target counts for nothing on the unlocked view: no lag, no overload, the priority is remembered.
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetDelaySeconds(), 0);
+        UNIT_ASSERT(!f.Core.IsOverloaded());
+        UNIT_ASSERT(!f.Core.GetTaskPriority());
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 10);
+    }
+
+    Y_UNIT_TEST(LevelTaskStillWinsOverALowerDelayPriority) {
+        TFixture f(DelaySettings());
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        // Height 15 is critical; the lag of 100 is only level 1.
+        for (ui64 i = 0; i < 15; ++i) {
+            f.Add(Portion(10 + i, 0, 10, 900));
+        }
+        const auto task = f.Take();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::Level);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 15);
+    }
+}
+
+Y_UNIT_TEST_SUITE(SnapshotTilingCounters) {
+    Y_UNIT_TEST(OldestSnapshotOverPlanners) {
+        NTiling::TCounters counters;
+        auto& snapshots = counters.GetCompactedSnapshotCounters();
+        snapshots.Set(1, 1'000, 1'100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetCurrentSeconds(), 1'100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 100);
+        snapshots.Set(2, 900, 1'100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 900);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 200);
+        // The older planner leaves: the other one's value is the oldest again.
+        snapshots.Remove(2, 1'200);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 200);
+        // No planner left: the oldest snapshot is the clock and the delay is zero.
+        snapshots.Remove(1, 1'300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetCurrentSeconds(), 1'300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 0);
+    }
+
+    Y_UNIT_TEST(TaskCountersPerReason) {
+        using NChanges::TGeneralCompactionCounters;
+        const auto& move = TGeneralCompactionCounters::ForReason("snapshot_move");
+        const auto& level = TGeneralCompactionCounters::ForReason("level");
+        UNIT_ASSERT(&move != &level);
+        UNIT_ASSERT(&move == &TGeneralCompactionCounters::ForReason("snapshot_move"));
+        const auto startedBefore = move.GetTasksStarted();
+        move.OnStart(1, 0, TDuration::MilliSeconds(5));
+        move.OnWritten(0, 0);
+        move.OnFinish(true, TDuration::MilliSeconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(move.GetTasksStarted(), startedBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(move.GetTasksFinished(), startedBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(level.GetTasksStarted(), 0);
+    }
+}
+
 Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
     Y_UNIT_TEST(FreeTargetIsMovedByMetadata) {
         TFixture f;
@@ -699,14 +894,14 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
         UNIT_ASSERT(task->CheckPoints.empty());
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetPlacementThreshold(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingCompactedSnapshot(), 990);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
         UNIT_ASSERT(!f.Core.HasAdvanceTarget());
         // The engine commits the move: the same portion comes back with level 1 persisted.
         f.Core.ModifyPortions({ LinePortion(2, 20, 29, 11) }, { task->Portions.front() });
         f.Check();
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), LINE_LEVEL);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 990);
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
     }
 
     Y_UNIT_TEST(MoveWhoseDestinationWasTakenIsPlacedByTheArrivalRule) {
@@ -721,7 +916,27 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         f.Core.ModifyPortions({ LinePortion(2, 20, 29, 11) }, { task->Portions.front() });
         f.Check();
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), FIRST_TREE_LEVEL);
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+    }
+
+    Y_UNIT_TEST(AbortedAdvanceKeepsAFloorPriority) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 9, 10) });
+        f.Add(Portion(2, 20, 29, 11));
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task && task->Kind == ETaskKind::MetadataMove);
+        UNIT_ASSERT(!f.Core.GetTaskPriority());
+        UNIT_ASSERT(!f.Core.HasAdvanceTarget());
+        // Level 0 with weight 1 passes the engine's zero filter, so the pass after an abort still asks the queue.
+        UNIT_ASSERT(f.Core.GetSchedulingPriority());
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 0);
+        UNIT_ASSERT(!f.Core.GetSchedulingPriority()->IsZero());
+        // The move aborted: the next advance request restores the target and takes it again.
+        f.ReleaseLocks(*task);
+        const auto again = f.TakeAdvance();
+        UNIT_ASSERT(again && again->Kind == ETaskKind::MetadataMove);
+        UNIT_ASSERT_VALUES_EQUAL(again->Portions.front()->GetPortionId(), 2);
+        UNIT_ASSERT(f.Core.GetSchedulingPriority());
     }
 
     Y_UNIT_TEST(TargetInsideTheLineRunNeedsNoCut) {
@@ -742,13 +957,16 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetOutsideSize(), 0);
     }
 
-    Y_UNIT_TEST(TargetBeyondTheRunIsCutAtTheRunBorder) {
+    Y_UNIT_TEST(TargetBeyondTheRunEntersTheLineWhole) {
         TFixture f;
         f.Load({ Portion(1, 0, 9, 10), Portion(2, 20, 29, 10) });
         f.Add(Portion(3, 5, 40, 11));
         const auto task = f.TakeAdvance();
         UNIT_ASSERT(task);
-        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "]29 ");
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvanceMerge);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
+        // The window grows to the target's end, where the line has nothing: the whole output enters the line.
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
     }
 
     Y_UNIT_TEST(PrefixWhenTheLineRunExceedsTheBudget) {
@@ -765,12 +983,12 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
         UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
         UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 64'000);
-        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "]149 ");
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[150 ");
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 16);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetLineSize(), 20);
     }
 
-    Y_UNIT_TEST(OwnLevelStackAtTheMiddleKeyIsCutAtItsBorders) {
+    Y_UNIT_TEST(EveryIntersectingPortionOfTheLevelJoins) {
         TFixture f;
         f.Load({ Portion(1, 1'000, 1'009, 10) });
         f.Add(Portion(2, 0, 100, 11));
@@ -781,12 +999,14 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         const auto task = f.TakeAdvance();
         UNIT_ASSERT(task);
         UNIT_ASSERT(task->Kind == ETaskKind::Merge);
-        UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 2, 4 }));
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvanceMerge);
+        UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 2, 3, 4, 5 }));
         UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, FIRST_TREE_LEVEL);
-        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[40 ]50 ");
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 0);
     }
 
-    Y_UNIT_TEST(StackWiderThanTheTargetIsCutAtTheTargetBorders) {
+    Y_UNIT_TEST(WiderNeighbourGrowsTheWindow) {
         TFixture f;
         f.Load({ Portion(1, 1'000, 1'009, 10) });
         f.Add(Portion(2, 0, 10, 11));
@@ -794,8 +1014,95 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         const auto task = f.TakeAdvance();
         UNIT_ASSERT(task);
         UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 2, 3 }));
-        // The absorbed stack spans [5,100]; the cut window is clipped to the target's [0,10].
-        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[5 ]10 ");
+        // The neighbour is taken whole and the window follows it to 100: no cut, no remainder.
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+    }
+
+    Y_UNIT_TEST(EveryLevelAndTheLineJoinTheWindow) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 109, 10) });
+        for (ui64 i = 0; i < 11; ++i) {
+            f.Add(Portion(10 + i, 10 * i, 10 * i + 9, 11));
+        }
+        f.Add(Portion(30, 0, 109, 12));
+        UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(30), FIRST_TREE_LEVEL + 1);
+        // The target is the narrow portion with the smallest end key; the line portion grows the window over everything.
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvanceMerge);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL + 1), 0);
+        f.Finish(*task, { LinePortion(40, 0, 109, 11) });
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetOutsideSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetLineSize(), 1);
+    }
+
+    Y_UNIT_TEST(OverlappingNeighboursChainUntilAGap) {
+        TFixture f;
+        f.Load({ Portion(1, 100, 109, 10) });
+        f.Add(Portion(2, 0, 10, 11));
+        f.Add(Portion(3, 8, 30, 12));
+        f.Add(Portion(4, 28, 50, 12));
+        f.Add(Portion(5, 60, 70, 12));
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 2, 3, 4 }));
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, FIRST_TREE_LEVEL);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 1);
+    }
+
+    Y_UNIT_TEST(BudgetCutsTheWindowAtTheFirstPortionThatDoesNotFit) {
+        TFixture f;
+        f.Load({ Portion(1, 1'000, 1'009, 10) });
+        f.Add(Portion(2, 0, 200, 11));
+        for (ui64 i = 0; i < 20; ++i) {
+            f.Add(Portion(10 + i, 10 * i, 10 * i + 9, 12));
+        }
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(task->Bytes, 64'000);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, FIRST_TREE_LEVEL);
+        // The sixteenth sibling starts at 150: the slice below it is absorbed whole, the rest stays for the next advance.
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[150 ");
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 5);
+    }
+
+    Y_UNIT_TEST(HeldLinePortionBeyondTheLeftBorderCutsTheWindow) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 9, 10), Portion(2, 20, 29, 10) });
+        f.Add(Portion(4, 22, 23, 11));
+        const auto first = f.TakeAdvance();
+        UNIT_ASSERT(first);
+        UNIT_ASSERT_EQUAL(f.Ids(*first), (std::vector<ui64>{ 2, 4 }));
+        f.Add(Portion(3, 5, 25, 12));
+        const auto second = f.TakeAdvance();
+        UNIT_ASSERT(second);
+        UNIT_ASSERT(second->Reason == ETaskReason::AdvancePrefix);
+        UNIT_ASSERT_EQUAL(f.Ids(*second), (std::vector<ui64>{ 1, 3 }));
+        UNIT_ASSERT_VALUES_EQUAL(second->TargetLevel, LINE_LEVEL);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*second), "[20 ");
+    }
+
+    Y_UNIT_TEST(PortionsCoveringTheLeftBorderBeyondTheBudgetCloseAtTheLinePortion) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 9, 10) });
+        f.Add(Portion(2, 0, 100, 11));
+        for (ui64 i = 0; i < 16; ++i) {
+            f.Add(Portion(10 + i, 0, 100 + i, 12));
+        }
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT(task->Reason == ETaskReason::AdvancePrefix);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
+        // Every sibling covers key 0, so no cut at a start key works; the window closes at the line portion's end.
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "]9 ");
     }
 
     Y_UNIT_TEST(TargetAboveAnEmptiedLevelReachesTheLine) {
@@ -826,6 +1133,18 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         const auto task = f.TakeAdvance();
         UNIT_ASSERT(task);
         UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 1, 2 }));
+        UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
+        UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+    }
+
+    Y_UNIT_TEST(SmallTargetTakesTheIntersectingTreePortionsToo) {
+        TFixture f;
+        f.Load({ Portion(1, 0, 9, 10) });
+        f.Add(Portion(2, 5, 5, 11, SMALL));
+        f.Add(Portion(3, 3, 30, 12));
+        const auto task = f.TakeAdvance();
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 1, 2, 3 }));
         UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
     }
@@ -873,7 +1192,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         f.Add(Portion(1, 0, 1, 11, SMALL));
         UNIT_ASSERT(f.Core.HasAdvanceTarget());
         UNIT_ASSERT(!f.TakeAdvance());
-        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
     }
 
     Y_UNIT_TEST(BlockedTargetIsSkippedAndRetried) {

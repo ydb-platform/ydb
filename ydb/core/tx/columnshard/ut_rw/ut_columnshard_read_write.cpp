@@ -2455,6 +2455,104 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
+    Y_UNIT_TEST(TilingSCompactsMovesAndSurvivesRestart) {
+        // A standalone column table on the tiling-s planner. Five overlapping writes form a stack on level 2; a level task
+        // merges them; the advance moves the outputs into the line by metadata, so a forced compaction completes; the data
+        // survives a restart, after which the planner is rebuilt from the portions and the forced check passes at once.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+
+        const ui64 tableId = 1;
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        // Height 2 triggers a level task, the settle time is one second, the advance exists from two seconds of lag of S
+        // (decision 18), and test portions never count as small. Both overload edges stay far away: at an edge the planner
+        // reports overload and the shard queues writes until compaction catches up (decision 25), which with compaction
+        // disabled would stall the writes below.
+        auto specials = TTestSchema::TTableSpecials().WithCompactionPlanner("tiling-s",
+            R"({"trigger_height": 2, "overload_height": 100, "settle_time_seconds": 1, "accumulator_portion_size_limit": 1024,)"
+            R"( "delay_trigger_seconds": 2, "delay_overload_seconds": 100000})");
+        TString txBody = TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials);
+        Y_UNUSED(SetupSchema(runtime, sender, txBody, /*txId=*/10));
+
+        ui64 writeId = 0;
+        ui64 txId = 100;
+        std::optional<NTxUT::TPlanStep> lastPlanStep;
+        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
+        for (ui32 i = 0; i < 5; ++i, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
+            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+            lastPlanStep = planStep;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        const auto readSnapshot = NOlap::TSnapshot::MaxForPlanStep(*lastPlanStep);
+        const auto rowsBefore = ReadAllAsBatch(runtime, tableId, readSnapshot, schema)->num_rows();
+        UNIT_ASSERT_VALUES_EQUAL(rowsBefore, 75 * 1000);
+
+        // Compaction enabled: the level task and the metadata moves run, and the held forced request is answered OK once
+        // nothing is left outside the line.
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        TEvDataShard::TEvCompactTableResult::TPtr ev;
+        for (int i = 0; i < 120 && !ev; ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        // The merge of the stack and at least one move.
+        UNIT_ASSERT_GE(csControllerGuard->GetCompactionStartedCounter().Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ReadAllAsBatch(runtime, tableId, readSnapshot, schema)->num_rows(), rowsBefore);
+
+        // After a restart the planner is rebuilt from the portions: everything is in the line, the forced request is
+        // answered at once, and the data is intact.
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT_VALUES_EQUAL(ReadAllAsBatch(runtime, tableId, readSnapshot, schema)->num_rows(), rowsBefore);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        auto afterRestart = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender);
+        UNIT_ASSERT(afterRestart);
+        UNIT_ASSERT_VALUES_EQUAL(afterRestart->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        // A fresh portion with a key range of its own is not old enough for the line (decision 7) and waits on level 2;
+        // once settled, the advance moves it into the line by metadata, the one task of decision 26 that reads no blobs,
+        // and a forced compaction completes again after exactly one more task.
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 110 * 1000 }, schema), schema, true, &writeIds));
+            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+            ++txId;
+            lastPlanStep = planStep;
+        }
+        const auto startedBeforeMove = csControllerGuard->GetCompactionStartedCounter().Val();
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        TEvDataShard::TEvCompactTableResult::TPtr afterMove;
+        for (int i = 0; i < 120 && !afterMove; ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            afterMove = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT(afterMove);
+        UNIT_ASSERT_VALUES_EQUAL(afterMove->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCompactionStartedCounter().Val(), startedBeforeMove + 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(*lastPlanStep), schema)->num_rows(), rowsBefore + 10 * 1000);
+    }
+
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
     }

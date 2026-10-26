@@ -529,7 +529,11 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
-    if (specials.GetUseForcedCompaction()) {
+    if (specials.CompactionPlannerClassName) {
+        auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        plannerConstructor->SetClassName(*specials.CompactionPlannerClassName);
+        plannerConstructor->MutableTiling()->SetJson(specials.CompactionPlannerFeatures);
+    } else if (specials.GetUseForcedCompaction()) {
         auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
         plannerConstructor->SetClassName("tiling++");
         plannerConstructor->MutableTiling()->SetJson("{}");

@@ -161,6 +161,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
     NChanges::TGeneralCompactionCounters::OnCompactionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten);
+    NChanges::TGeneralCompactionCounters::ForReason(GetTaskReason()).OnWritten(AppendedPortions.size(), context.BytesWritten);
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -169,6 +170,19 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+    StartMonotonic = TMonotonic::Now();
+    ui64 bytesIn = 0;
+    for (const auto& p : SwitchedPortions) {
+        bytesIn += p->GetTotalBlobBytes();
+    }
+    // A metadata move reads nothing: its moved portions count as inputs with zero bytes.
+    NChanges::TGeneralCompactionCounters::ForReason(GetTaskReason())
+        .OnStart(SwitchedPortions.size() + GetPortionsToMove().GetSize(), bytesIn, StartMonotonic - CreationMonotonic);
+}
+
+void TGeneralCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    TBase::DoOnFinish(self, context);
+    NChanges::TGeneralCompactionCounters::ForReason(GetTaskReason()).OnFinish(context.FinishedSuccessfully, TMonotonic::Now() - StartMonotonic);
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

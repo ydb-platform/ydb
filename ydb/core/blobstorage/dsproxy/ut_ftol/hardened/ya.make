@@ -1,0 +1,30 @@
+UNITTEST()
+
+FORK_SUBTESTS(MODULO)
+
+SPLIT_FACTOR(15)
+
+REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE OR BUILD_TYPE == "DEBUG")
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+PEERDIR(
+    ydb/core/blobstorage/dsproxy
+    ydb/core/blobstorage/ut_vdisk/lib
+    yql/essentials/minikql
+    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+)
+
+YQL_LAST_ABI_VERSION()
+
+SRCS(
+    dsproxy_fault_tolerance_hardened_ut.cpp
+)
+
+END()

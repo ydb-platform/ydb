@@ -665,7 +665,8 @@ protected:
         Context->Token.Status = ETokenCheckStatus::Ok;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
-        Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
+        Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath,
+            event->UserToken ? event->UserToken->GetSerializedToken() : TString()};
         Context->DatabaseId = event->DatabaseId;
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
@@ -675,7 +676,7 @@ protected:
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-            {"SID", Context->Token.UserToken->GetUserSID()});
+            {"SID", GetUsernameOrAnonymous(Context)});
         ScheduleTokenRecheck(ctx);
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);

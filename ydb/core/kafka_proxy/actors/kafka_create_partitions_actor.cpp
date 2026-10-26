@@ -46,7 +46,7 @@ public:
     }
 
     const TString& GetSerializedToken() const override {
-        return UserToken->GetSerializedToken();
+        return UserToken ? UserToken->GetSerializedToken() : DummyString;
     }
 
     bool IsClientLost() const override {

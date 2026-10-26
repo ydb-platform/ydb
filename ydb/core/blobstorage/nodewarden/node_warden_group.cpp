@@ -308,8 +308,12 @@ namespace NKikimr::NStorage {
 
             if (const auto& info = group.Info) {
                 Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
+                TVector<TVDiskRecord*> disks;
                 for (auto& vdisk : group.VDisksOfGroup) {
-                    UpdateGroupInfoForDisk(vdisk, info);
+                    disks.push_back(&vdisk);
+                }
+                for (auto* vdisk : disks) {
+                    UpdateGroupInfoForDisk(*vdisk, info);
                 }
             }
 

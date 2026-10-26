@@ -461,8 +461,5 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
-    // A binary replication stream is written only when this flag is enabled
-    // both on the destination, which accepts the replication, and on the
-    // source, which accepts the changefeed. Existing streams stay as they are.
     optional bool EnableBinaryChangefeedForAsyncReplication = 373 [default = false];
 }

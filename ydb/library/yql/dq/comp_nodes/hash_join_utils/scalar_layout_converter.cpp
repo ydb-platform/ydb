@@ -41,6 +41,12 @@ struct IColumnDataExtractor {
     virtual void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, ui32 stride, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) = 0;
     
     virtual NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) = 0;
+
+    virtual void CreateColumnFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 count, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue* out, size_t stride) {
+        for (ui32 row = 0; row < count; ++row) {
+            out[row * stride] = CreateFromUnpack(columnsData, columnsNullBitmap, row, holderFactory);
+        }
+    }
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
@@ -126,6 +132,19 @@ public:
 
         const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]) + tupleIndex;
         return CreateFixedSizeValue(*data);
+    }
+
+    void CreateColumnFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 count, [[maybe_unused]] const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue* out, size_t stride) override {
+        const TLayout* data = reinterpret_cast<const TLayout*>(columnsData[0]);
+        for (ui32 row = 0; row < count; ++row) {
+            if constexpr (Nullable) {
+                if (!(columnsNullBitmap[0][row / 8] & (1 << (row % 8)))) {
+                    out[row * stride] = NYql::NUdf::TUnboxedValuePod();
+                    continue;
+                }
+            }
+            out[row * stride] = CreateFixedSizeValue(data[row]);
+        }
     }
 
     ui32 GetElementSize() override {
@@ -783,36 +802,30 @@ private:
             columnsData.data(), columnsNullBitmap.data(),
             packedData, packed.Overflow, 0, count);
 
-        // Now extract each tuple for each extractor
-        for (ui32 tupleIndex = 0; tupleIndex < count; ++tupleIndex) {
-            // We need to calculate pointer offsets based on inner extractors
+        if (PointerOffsets_.size() != Extractors_.size()) {
+            PointerOffsets_.assign(Extractors_.size(), 0);
             for (size_t i = 0; i < Extractors_.size(); ++i) {
-                const auto& mapping = InnerMapping_[i];
-
-                // Calculate how many pointers we need to pass
-                // (strings have 2 pointers per column: offset + data)
-                size_t pointerOffset = 0;
-                for (size_t j = 0; j < mapping.front(); ++j) {
-                    auto* innerExtractor = InnerExtractors_[j];
-                    if (innerExtractor->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
-                        pointerOffset += 2; // offset + data
-                    } else {
-                        pointerOffset += 1;
-                    }
+                for (size_t j = 0; j < InnerMapping_[i].front(); ++j) {
+                    PointerOffsets_[i] += InnerExtractors_[j]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable ? 2 : 1;
                 }
-
-                values[tupleIndex * Extractors_.size() + i] = Extractors_[i]->CreateFromUnpack(
-                    columnsData.data() + pointerOffset,
-                    columnsNullBitmap.data() + pointerOffset,
-                    tupleIndex,
-                    HolderFactory_);
             }
+        }
+
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            Extractors_[i]->CreateColumnFromUnpack(
+                columnsData.data() + PointerOffsets_[i],
+                columnsNullBitmap.data() + PointerOffsets_[i],
+                count,
+                HolderFactory_,
+                values + i,
+                Extractors_.size());
         }
     }
 
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
+    TVector<size_t> PointerOffsets_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
     const THolderFactory& HolderFactory_;
     

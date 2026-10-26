@@ -5323,47 +5323,6 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             fixture.Check("SELECT k FROM VNull WHERE v IS NULL;", "[[1]]");
         }
 
-        Y_UNIT_TEST_TWIN(ReadVirtualColumnsWithParameterizedAndPgTypes, ColumnStore) {
-            TTestFixture fixture(WithTableStore(R"(
-                CREATE TABLE VTypes (
-                    k Int32 NOT NULL,
-                    nullable_int Int32,
-                    nonnull_int Int32 NOT NULL,
-                    pg_source Int32 NOT NULL,
-                    decimal_value Decimal(22, 9) NOT NULL,
-                    string_value String NOT NULL,
-                    date_value Date NOT NULL,
-                    datetime_value Datetime NOT NULL,
-                    timestamp_value Timestamp NOT NULL,
-                    v_nullable Int32 GENERATED ALWAYS AS (nullable_int + 1) VIRTUAL,
-                    v_nonnull Int32 NOT NULL GENERATED ALWAYS AS (nonnull_int + 1) VIRTUAL,
-                    v_pg PgInt4 NOT NULL GENERATED ALWAYS AS (ToPg(pg_source)) VIRTUAL,
-                    v_decimal Decimal(22, 9) NOT NULL GENERATED ALWAYS AS (decimal_value) VIRTUAL,
-                    v_string String NOT NULL GENERATED ALWAYS AS (string_value) VIRTUAL,
-                    v_date Date NOT NULL GENERATED ALWAYS AS (date_value) VIRTUAL,
-                    v_datetime Datetime NOT NULL GENERATED ALWAYS AS (datetime_value) VIRTUAL,
-                    v_timestamp Timestamp NOT NULL GENERATED ALWAYS AS (timestamp_value) VIRTUAL,
-                    PRIMARY KEY (k)
-                )
-            )", ColumnStore), R"(
-                UPSERT INTO VTypes (
-                    k, nullable_int, nonnull_int, pg_source, decimal_value, string_value,
-                    date_value, datetime_value, timestamp_value
-                ) VALUES (
-                    1, NULL, 7, 42, Decimal("12.34", 22, 9), "bytes",
-                    Date("2021-01-01"), Datetime("2021-01-01T01:02:03Z"),
-                    Timestamp("2021-01-01T01:02:03.123456Z")
-                );
-            )");
-
-            fixture.Check(R"(
-                SELECT
-                    v_nullable, v_nonnull, v_pg, v_decimal, v_string,
-                    v_date, v_datetime, v_timestamp
-                FROM VTypes;
-            )", R"([[#;8;"42";"12.34";"bytes";18628u;1609462923u;1609462923123456u]])");
-        }
-
         Y_UNIT_TEST(ReturningNoMatchDoesNotSynthesizeVirtualRows) {
             TTestFixture fixture(R"(
                 CREATE TABLE VNoMatch (

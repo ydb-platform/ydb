@@ -25,11 +25,8 @@ class TTestHive : public THive {
 public:
     TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
 
-<<<<<<< HEAD
     using THive::GetStats;
 
-=======
->>>>>>> nbs-26-3-1
     TNodeInfo& Node(TNodeId nodeId) {
         return Nodes.at(nodeId);
     }

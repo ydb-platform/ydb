@@ -2440,6 +2440,14 @@ partitioning_settings {
         WriteRow(Runtime(), ++txId, "/MyRoot/Table", 1, 100, "v100");
         Env().TestWaitNotification(Runtime(), txId);
 
+        bool partition00Completed = false;
+        auto observer = Runtime().AddObserver<TEvDataShard::TEvSchemaChanged>([&](auto& ev) {
+            // Only the backup reports an OpResult; partition 01 is still blocked.
+            if (ev->Get()->Record.HasOpResult()) {
+                partition00Completed = true;
+            }
+        });
+
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2452,6 +2460,9 @@ partitioning_settings {
         )", S3Port()));
 
         Runtime().WaitFor("put object request from 01 partition", [&]{ return blockPartition01.size() >= 1; });
+
+        // S3 uses real I/O, so wait for its completion before polling in simulated time.
+        Runtime().WaitFor("backup completion from partition 00", [&] { return partition00Completed; });
 
         bool found = false;
         for (int attempt = 0; attempt < 100 && !found; ++attempt) {

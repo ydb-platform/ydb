@@ -71,11 +71,11 @@ static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::C
     return response.operation().status();
 }
 
-static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "", const TString& requestPath = "") {
+static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "", const TString& expectedPath = "") {
     std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
     stub = Ydb::Cms::V1::CmsService::NewStub(channel);
     Ydb::Cms::GetDatabaseStatusRequest request;
-    request.set_path(requestPath ? requestPath : path);
+    request.set_path(path);
     Ydb::Cms::GetDatabaseStatusResponse response;
     while (true) {
         grpc::ClientContext context;
@@ -91,7 +91,7 @@ static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc
         Ydb::Cms::GetDatabaseStatusResult result;
         auto res = response.operation().result().UnpackTo(&result);
         UNIT_ASSERT(res);
-        UNIT_ASSERT_VALUES_EQUAL(result.path(), path);
+        UNIT_ASSERT_VALUES_EQUAL(result.path(), expectedPath ? expectedPath : path);
         if (result.state() == state) {
             return result;
         }
@@ -150,8 +150,8 @@ static void doSimpleTenantsTest(bool sync, bool relativePathsEnabled) {
     std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
     channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
-    const TString requestPath = "Root/users/user-1";
-    const TString tenant = relativePathsEnabled ? "/Root/Root/users/user-1" : "/Root/users/user-1";
+    const TString tenant = "/Root/users/user-1";
+    const TString requestPath = relativePathsEnabled ? "users/user-1" : tenant;
     // create tenant
     {
         stub = Ydb::Cms::V1::CmsService::NewStub(channel);
@@ -184,7 +184,7 @@ static void doSimpleTenantsTest(bool sync, bool relativePathsEnabled) {
 
     {
         server.Tenants_->Run(tenant);
-        WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING, "", requestPath);
+        WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING);
     }
 
     // alter tenant
@@ -208,7 +208,7 @@ static void doSimpleTenantsTest(bool sync, bool relativePathsEnabled) {
 
     // get tenant status
     {
-        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING, "", requestPath);
+        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, requestPath, Ydb::Cms::GetDatabaseStatusResult::RUNNING, "", tenant);
         UNIT_ASSERT_VALUES_EQUAL(result.path(), tenant);
         UNIT_ASSERT_VALUES_EQUAL(result.state(), Ydb::Cms::GetDatabaseStatusResult::RUNNING);
         UNIT_ASSERT_VALUES_EQUAL(result.required_resources().storage_units_size(), 1);

@@ -22,7 +22,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/test_tablet/test_tablet.h>
-#include <ydb/core/wrappers/events/abstract.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -632,7 +632,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , ChannelsCount(opts.NChannels_)
 {
     EnableYDBBacktraceFormat();
-    AddExternalStorageObserver(runtime);
+    // S3 mocks answer inside the actor system: their replies would otherwise come from real HTTP threads, which the
+    // runtime can't see, and fast simulated time would run the timers of the tablets ahead of them
+    NWrappers::NTestHelpers::TS3Mock::ServeInActorSystem();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;
@@ -837,31 +839,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 ncha
         .NChannels(nchannels)
         .EnablePipeRetries(enablePipeRetries), ssFactory)
 {
-}
-
-void NSchemeShardUT_Private::TTestEnv::AddExternalStorageObserver(TTestActorRuntime& runtime) {
-    using namespace NWrappers::NExternalStorage;
-    static_assert(EvGetObjectRequest == EvBegin + 1 && EvGetObjectResponse == EvBegin + 2,
-        "requests and responses of the S3 wrapper alternate");
-
-    FastSimulatedTime = runtime.SetFastSimulatedTime(true);
-    runtime.SetFastSimulatedTime(FastSimulatedTime);
-    ExternalStorageObserver = runtime.AddObserver<IEventHandle>([this, &runtime](TAutoPtr<IEventHandle>& ev) {
-        const ui32 type = ev->GetTypeRewrite();
-        if (type <= EvBegin || type >= EvEnd) {
-            return;
-        }
-        // A response goes back to the actor that sent the request. An event seen twice (rescheduled, or waiting in
-        // an edge mailbox) can only keep the real waits on longer, never cut them short for another requester.
-        if ((type - EvBegin) % 2 == 1) {
-            ++ExternalStorageRequestsInFlight[ev->Sender];
-        } else if (auto it = ExternalStorageRequestsInFlight.find(ev->Recipient); it != ExternalStorageRequestsInFlight.end()) {
-            if (--it->second == 0) {
-                ExternalStorageRequestsInFlight.erase(it);
-            }
-        }
-        runtime.SetFastSimulatedTime(FastSimulatedTime && ExternalStorageRequestsInFlight.empty());
-    });
 }
 
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {

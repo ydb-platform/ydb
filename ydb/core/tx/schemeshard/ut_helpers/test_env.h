@@ -122,12 +122,6 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime::TEventObserverHolder ExtSubdomainCleanupObserver;
         THashSet<TPathId> ExtSubdomainCleanupComplete;
 
-        // External storage requests (S3 wrapper events) whose response has not been dispatched yet, by requester.
-        // Their responses come from real threads, see AddExternalStorageObserver.
-        TTestActorRuntime::TEventObserverHolder ExternalStorageObserver;
-        THashMap<TActorId, ui32> ExternalStorageRequestsInFlight;
-        bool FastSimulatedTime = true;
-
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
 
@@ -167,11 +161,6 @@ namespace NSchemeShardUT_Private {
 
         void AddExtSubdomainCleanupObserver(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId);
         void WaitForExtSubdomainCleanup(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId);
-
-        // An S3 wrapper answers from the threads of its HTTP client, so the runtime can't see that a response is on
-        // the way. While a request is in flight, fast simulated time is off: the runtime waits in real time for the
-        // response instead of running timers ahead of it.
-        void AddExternalStorageObserver(TTestActorRuntime& runtime);
 
         void AddSysViewsRosterUpdateObserver(TTestActorRuntime& runtime);
         void WaitForSysViewsRosterUpdate(TTestActorRuntime& runtime);

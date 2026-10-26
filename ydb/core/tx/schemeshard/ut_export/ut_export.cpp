@@ -1788,6 +1788,30 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         )");
     }
 
+    // The test environment serves the S3 mock inside the actor system: its replies come as events of the test
+    // runtime, not from HTTP threads, so fast simulated time can't run ahead of them
+    Y_UNIT_TEST(S3MockAnswersInsideActorSystem) {
+        RunS3({
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+        UNIT_ASSERT(HasS3File("/metadata.json"));
+        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetHttpRequestCount(), 0);
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
         RunS3({
             R"(

@@ -1,18 +1,48 @@
 #include "s3_mock.h"
+#include "s3_mock_storage.h"
+
+#include <ydb/core/wrappers/abstract.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/xml/document/xml-document.h>
 
+#include <util/generic/singleton.h>
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/system/mutex.h>
+
+#include <mutex>
 
 namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
+
+namespace {
+
+// Started mocks by endpoint, for ServeInActorSystem
+struct TStartedMocks {
+    TMutex Mutex;
+    THashMap<TString, std::weak_ptr<TS3Mock::TStorage>> Storages;
+
+    std::shared_ptr<TS3Mock::TStorage> Find(TStringBuf endpoint) {
+        if (!endpoint.SkipPrefix("http://")) {
+            endpoint.SkipPrefix("https://");
+        }
+        TGuard<TMutex> guard(Mutex);
+        const auto it = Storages.find(endpoint);
+        return it == Storages.end() ? nullptr : it->second.lock();
+    }
+};
+
+TStartedMocks& StartedMocks() {
+    return *Singleton<TStartedMocks>();
+}
+
+} // anonymous
 
 TS3Mock::TSettings::TSettings()
     : CorruptETags(false)
@@ -50,24 +80,32 @@ TS3Mock::TSettings& TS3Mock::TSettings::WithPartialReadFailure(TString path, ui3
     return *this;
 }
 
-TS3Mock::TRequest::EMethod TS3Mock::TRequest::ParseMethod(const char* str) {
-    if (strnicmp(str, "HEAD", 4) == 0) {
-        return EMethod::Head;
-    } else if (strnicmp(str, "GET", 3) == 0) {
-        return EMethod::Get;
-    } else if (strnicmp(str, "PUT", 3) == 0) {
-        return EMethod::Put;
-    } else if (strnicmp(str, "POST", 4) == 0) {
-        return EMethod::Post;
-    } else if (strnicmp(str, "PATCH", 5) == 0) {
-        return EMethod::Patch;
-    } else if (strnicmp(str, "DELETE", 6) == 0) {
-        return EMethod::Delete;
-    }
-    return EMethod::NotImplemented;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TStorage
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::TResult::NotFound(TString code) {
+    TResult result;
+    result.Status = EStatus::NotFound;
+    result.Error = std::move(code);
+    return result;
 }
 
-bool TS3Mock::TRequest::TryParseRange(TStringBuf str, std::pair<ui32, ui32>& range) {
+TS3Mock::TStorage::TResult TS3Mock::TStorage::TResult::BadRequest(TString message) {
+    TResult result;
+    result.Status = EStatus::BadRequest;
+    result.Error = std::move(message);
+    return result;
+}
+
+TS3Mock::TStorage::TStorage(const TSettings& settings, THashMap<TString, TString>&& data)
+    : Settings(settings)
+    , Data(std::move(data))
+    , PartialReadFailuresLeft(settings.PartialReadFailures)
+{
+}
+
+bool TS3Mock::TStorage::TryParseRange(TStringBuf str, std::pair<ui32, ui32>& range) {
     if (!str.SkipPrefix("bytes=")) {
         return false;
     }
@@ -84,6 +122,228 @@ bool TS3Mock::TRequest::TryParseRange(TStringBuf str, std::pair<ui32, ui32>& ran
 
     range = std::make_pair(start, end);
     return true;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::Read(TStringBuf path, const TString* rangeValue, bool head) const {
+    const auto it = Data.find(path);
+    if (it == Data.end()) {
+        return TResult::NotFound("NoSuchKey");
+    }
+
+    const TStringBuf content = it->second;
+    Cerr << "S3_MOCK::HttpServeRead: " << path << " / " << content.size() << Endl;
+    std::pair<ui32, ui32> range(0, content.size() ? content.size() - 1 : 0);
+    if (rangeValue) {
+        if (!TryParseRange(*rangeValue, range)) {
+            return TResult::BadRequest("Invalid range");
+        }
+        if (range.first > range.second) {
+            return TResult::BadRequest("Invalid range borders (from > to)");
+        }
+    }
+    if (range.second >= content.size() && content.size()) {
+        return TResult::BadRequest("Invalid range right border");
+    }
+
+    TResult result;
+    result.ETag = MD5::Data(content);
+    if (Settings.CorruptETags) {
+        ShuffleRange(result.ETag);
+    }
+    result.ObjectSize = content.size();
+    result.Range = range;
+    if (!head) {
+        result.Body = TString(content.SubStr(range.first, range.second - range.first + 1));
+    }
+    return result;
+}
+
+TVector<std::pair<TString, size_t>> TS3Mock::TStorage::List(TStringBuf bucketName, const TString& prefix) const {
+    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
+    TVector<std::pair<TString, size_t>> objects;
+    TString bucketPrefix(bucketName);
+    if (!bucketPrefix.EndsWith('/')) {
+        bucketPrefix += '/';
+    }
+    const TString keyPrefix = TStringBuilder() << bucketPrefix << prefix;
+    for (const auto& [key, value] : Data) {
+        if (key.StartsWith(keyPrefix)) {
+            objects.emplace_back(key.substr(bucketPrefix.size()), value.size());
+        }
+    }
+    return objects;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::Put(TStringBuf path, TString content) {
+    TResult result;
+    result.ETag = MD5::Data(content);
+    Data[path] = std::move(content);
+    return result;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::CreateMultipartUpload(TStringBuf path) {
+    TResult result;
+    result.UploadId = ToString(NextUploadId++);
+    MultipartUploads[std::make_pair(TString(path), result.UploadId)] = {};
+    return result;
+}
+
+bool TS3Mock::TStorage::HasMultipartUpload(TStringBuf path, const TString& uploadId) const {
+    return MultipartUploads.contains(std::make_pair(TString(path), uploadId));
+}
+
+// The checks a part goes through before its content is taken, in the order of the HTTP mock; on success, the part
+// slot is in partSlot
+TS3Mock::TStorage::TResult TS3Mock::TStorage::PreparePart(TStringBuf path, const TString& uploadId,
+    const TString& partNumberStr, TString*& partSlot)
+{
+    auto it = MultipartUploads.find(std::make_pair(TString(path), uploadId));
+    if (it == MultipartUploads.end()) {
+        return TResult::NotFound("NoSuchUpload");
+    }
+
+    size_t partNumber = 0;
+    if (!TryFromString(partNumberStr, partNumber) || !partNumber) {
+        return TResult::BadRequest("Invalid partNumber");
+    }
+
+    if (Settings.RejectUploadParts) {
+        return TResult::BadRequest("Reject");
+    }
+
+    auto& parts = it->second;
+    if (parts.size() < partNumber) {
+        parts.resize(partNumber);
+    }
+    partSlot = &parts[partNumber - 1];
+    return {};
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::UploadPart(TStringBuf path, const TString& uploadId,
+    const TString& partNumber, TString content)
+{
+    TString* part = nullptr;
+    if (auto result = PreparePart(path, uploadId, partNumber, part); result.Status != EStatus::Ok) {
+        return result;
+    }
+    TResult result;
+    result.ETag = MD5::Data(content);
+    *part = std::move(content);
+    return result;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::UploadPartCopy(TStringBuf path, const TString& uploadId,
+    const TString& partNumber, const TString& sourcePath, const TString* sourceRange)
+{
+    TString* part = nullptr;
+    if (auto result = PreparePart(path, uploadId, partNumber, part); result.Status != EStatus::Ok) {
+        return result;
+    }
+
+    if (!sourceRange) {
+        return TResult::BadRequest("Invalid range");
+    }
+
+    std::pair<ui32, ui32> range(0, 0);
+    if (!TryParseRange(*sourceRange, range)) {
+        return TResult::BadRequest("Invalid range");
+    }
+
+    const auto* source = Data.FindPtr(sourcePath);
+    if (!source) {
+        return TResult::BadRequest("Invalid source");
+    }
+
+    if (source->size() < range.first + range.second) {
+        return TResult::BadRequest("Range is outside of source");
+    }
+
+    *part = source->substr(range.first, range.second);
+    TResult result;
+    result.ETag = MD5::Data(*part);
+    return result;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::CompleteMultipartUpload(TStringBuf path, const TString& uploadId,
+    const TVector<TString>& etags)
+{
+    auto it = MultipartUploads.find(std::make_pair(TString(path), uploadId));
+    if (it == MultipartUploads.end()) {
+        return TResult::NotFound("NoSuchUpload");
+    }
+
+    if (etags.size() != it->second.size()) {
+        return TResult::BadRequest("<Error><Code>InvalidPart</Code><Message>Invalid part count</Message></Error>");
+    }
+
+    for (auto i : xrange(etags.size())) {
+        if (etags.at(i) != MD5::Data(it->second.at(i))) {
+            return TResult::BadRequest("<Error><Code>InvalidPart</Code><Message>Invalid part</Message></Error>");
+        }
+    }
+
+    auto& object = Data[path];
+    object = JoinSeq("", it->second);
+    MultipartUploads.erase(it);
+
+    TResult result;
+    result.ETag = MD5::Data(object);
+    return result;
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::AbortMultipartUpload(TStringBuf path, const TString& uploadId) {
+    auto it = MultipartUploads.find(std::make_pair(TString(path), uploadId));
+    if (it == MultipartUploads.end()) {
+        return TResult::NotFound("NoSuchUpload");
+    }
+    MultipartUploads.erase(it);
+    return {};
+}
+
+TS3Mock::TStorage::TResult TS3Mock::TStorage::Delete(TStringBuf path) {
+    if (!Data.contains(path)) {
+        return TResult::BadRequest({});
+    }
+    Data.erase(path);
+    return {};
+}
+
+bool TS3Mock::TStorage::ShouldFailPartialRead(TStringBuf path) {
+    if (path != Settings.PartialReadPath) {
+        return false;
+    }
+
+    ++PartialReadRequestCount;
+
+    ui32 failuresLeft = PartialReadFailuresLeft.load();
+    while (failuresLeft) {
+        if (PartialReadFailuresLeft.compare_exchange_weak(failuresLeft, failuresLeft - 1)) {
+            ++PartialReadFailureCount;
+            return true;
+        }
+    }
+    return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// HTTP
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TS3Mock::TRequest::EMethod TS3Mock::TRequest::ParseMethod(const char* str) {
+    if (strnicmp(str, "HEAD", 4) == 0) {
+        return EMethod::Head;
+    } else if (strnicmp(str, "GET", 3) == 0) {
+        return EMethod::Get;
+    } else if (strnicmp(str, "PUT", 3) == 0) {
+        return EMethod::Put;
+    } else if (strnicmp(str, "POST", 4) == 0) {
+        return EMethod::Post;
+    } else if (strnicmp(str, "PATCH", 5) == 0) {
+        return EMethod::Patch;
+    } else if (strnicmp(str, "DELETE", 6) == 0) {
+        return EMethod::Delete;
+    }
+    return EMethod::NotImplemented;
 }
 
 bool TS3Mock::TRequest::HttpBadRequest(const TReplyParams& params, const TString& error) {
@@ -109,6 +369,13 @@ bool TS3Mock::TRequest::HttpNotImplemented(const TReplyParams& params) {
     return true;
 }
 
+bool TS3Mock::TRequest::HttpError(const TReplyParams& params, const TStorage::TResult& result) {
+    Y_ABORT_UNLESS(result.Status != TStorage::EStatus::Ok);
+    return result.Status == TStorage::EStatus::NotFound
+        ? HttpNotFound(params, result.Error)
+        : HttpBadRequest(params, result.Error);
+}
+
 void TS3Mock::TRequest::MaybeContinue(const TReplyParams& params) {
     if (params.Input.HasExpect100Continue()) {
         params.Output.SendContinue();
@@ -116,39 +383,25 @@ void TS3Mock::TRequest::MaybeContinue(const TReplyParams& params) {
 }
 
 bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path) {
-    const TStringBuf content = Parent->Data.at(path);
-    Cerr << "S3_MOCK::HttpServeRead: " << path << " / " << content.size() << Endl;
-    std::pair<ui32, ui32> range(0, content.size() ? content.size() - 1 : 0);
     const auto* rangeHeader = params.Input.Headers().FindHeader("Range");
-    if (rangeHeader) {
-        if (!TryParseRange(rangeHeader->Value(), range)) {
-            return HttpBadRequest(params, "Invalid range");
-        }
-        if (range.first > range.second) {
-            return HttpBadRequest(params, "Invalid range borders (from > to)");
-        }
-    }
-    if (range.second >= content.size() && content.size()) {
-        return HttpBadRequest(params, "Invalid range right border");
-    }
-
-    TString etag = MD5::Data(content);
-    if (Parent->Settings.CorruptETags) {
-        ShuffleRange(etag);
+    const TString rangeValue = rangeHeader ? rangeHeader->Value() : TString();
+    const auto read = Parent->Storage->Read(path, rangeHeader ? &rangeValue : nullptr, method != EMethod::Get);
+    if (read.Status != TStorage::EStatus::Ok) {
+        return HttpError(params, read);
     }
 
     params.Output << (rangeHeader ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 Ok\r\n");
     THttpHeaders headers;
-    headers.AddHeader("ETag", etag);
+    headers.AddHeader("ETag", read.ETag);
 
     if (method == EMethod::Get) {
-        const size_t responseSize = range.second - range.first + 1;
-        const bool failPartialRead = Parent->ShouldFailPartialRead(path);
+        const size_t responseSize = read.Range.second - read.Range.first + 1;
+        const bool failPartialRead = Parent->Storage->ShouldFailPartialRead(path);
         headers.AddHeader("Content-Length", responseSize);
         headers.AddHeader("Content-Type", "application/octet-stream");
         if (rangeHeader) {
             headers.AddHeader("Accept-Ranges", "bytes");
-            headers.AddHeader("Content-Range", "bytes " + ::ToString(range.first) + "-" + ToString(range.second) + "/" + ::ToString(content.size()));
+            headers.AddHeader("Content-Range", "bytes " + ::ToString(read.Range.first) + "-" + ToString(read.Range.second) + "/" + ::ToString(read.ObjectSize));
         }
         if (failPartialRead) {
             params.Output.EnableKeepAlive(false);
@@ -156,13 +409,13 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
         }
         headers.OutTo(&params.Output);
         params.Output << "\r\n";
-        params.Output << content.SubStr(range.first, failPartialRead ? responseSize / 2 : responseSize);
+        params.Output << TStringBuf(read.Body).SubStr(0, failPartialRead ? responseSize / 2 : responseSize);
         if (failPartialRead) {
             params.Output.Finish();
             return true;
         }
     } else {
-        headers.AddHeader("Content-Length", content.size());
+        headers.AddHeader("Content-Length", read.ObjectSize);
         headers.OutTo(&params.Output);
         params.Output << "\r\n";
     }
@@ -201,23 +454,10 @@ TString BuildListObjectsXML(const TVector<std::pair<TString, size_t>>& objects, 
 }
 
 bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
-    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
 
-    TVector<std::pair<TString, size_t>> objects;
-    TString bucketPrefix(bucketName);
-    if (!bucketPrefix.EndsWith('/')) {
-        bucketPrefix += '/';
-    }
-    const TString keyPrefix = TStringBuilder() << bucketPrefix << prefix;
-    for (const auto& [key, value] : Parent->Data) {
-        if (key.StartsWith(keyPrefix)) {
-            objects.emplace_back(key.substr(bucketPrefix.size()), value.size());
-        }
-    }
-
-    TString xml = BuildListObjectsXML(objects, bucketName);
+    TString xml = BuildListObjectsXML(Parent->Storage->List(bucketName, prefix), bucketName);
 
     headers.AddHeader("Content-Type", "application/xml");
     headers.AddHeader("Content-Length", xml.length());
@@ -242,59 +482,23 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
     }
     Cerr << "S3_MOCK::HttpServeWrite: " << path << " / " << queryParams.Print() << " / " << length << Endl;
 
-    TString etag = MD5::Data(content);
-
+    TStorage::TResult result;
     if (!queryParams) {
-        Parent->Data[path] = std::move(content);
+        result = Parent->Storage->Put(path, std::move(content));
     } else {
         if (!queryParams.Has("uploadId") || !queryParams.Has("partNumber")) {
             return HttpBadRequest(params, "'uploadId' & 'partNumber' must be specified");
         }
 
-        auto it = Parent->MultipartUploads.find(std::make_pair(path, queryParams.Get("uploadId")));
-        if (it == Parent->MultipartUploads.end()) {
-            return HttpNotFound(params, "NoSuchUpload");
-        }
-
-        size_t partNumber = 0;
-        if (!TryFromString(queryParams.Get("partNumber"), partNumber) || !partNumber) {
-            return HttpBadRequest(params, "Invalid partNumber");
-        }
-
-        if (Parent->Settings.RejectUploadParts) {
-            return HttpBadRequest(params, "Reject");
-        }
-
-        auto& parts = it->second;
-        if (parts.size() < partNumber) {
-            parts.resize(partNumber);
-        }
-
         const auto* sourceHeader = params.Input.Headers().FindHeader("x-amz-copy-source");
         if (sourceHeader) {
             const auto* sourceRangeHeader = params.Input.Headers().FindHeader("x-amz-copy-source-range");
-            if (!sourceRangeHeader) {
-                return HttpBadRequest(params, "Invalid range");
+            const TString sourceRange = sourceRangeHeader ? sourceRangeHeader->Value() : TString();
+            result = Parent->Storage->UploadPartCopy(path, queryParams.Get("uploadId"), queryParams.Get("partNumber"),
+                sourceHeader->Value(), sourceRangeHeader ? &sourceRange : nullptr);
+            if (result.Status != TStorage::EStatus::Ok) {
+                return HttpError(params, result);
             }
-
-            std::pair<ui32, ui32> range(0, 0);
-            if (!TryParseRange(sourceRangeHeader->Value(), range)) {
-                return HttpBadRequest(params, "Invalid range");
-            }
-
-            const auto* source = Parent->Data.FindPtr(sourceHeader->Value());
-            if (!source) {
-                return HttpBadRequest(params, "Invalid source");
-            }
-
-            if (source->size() < range.first + range.second) {
-                return HttpBadRequest(params, "Range is outside of source");
-            }
-
-            const auto part = source->substr(range.first, range.second);
-
-            parts[partNumber - 1] = part;
-            etag = MD5::Data(part);
 
             params.Output << "HTTP/1.1 200 Ok\r\n";
             THttpHeaders headers;
@@ -306,21 +510,23 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
                     <ETag>%s</ETag>
                     <LastModified>2011-04-11T20:34:56.000Z</LastModified>
                 </CopyPartResult>
-            )", etag.c_str());
+            )", result.ETag.c_str());
 
             params.Output.Flush();
 
             return true;
-        } else {
-            parts[partNumber - 1] = std::move(content);
         }
+        result = Parent->Storage->UploadPart(path, queryParams.Get("uploadId"), queryParams.Get("partNumber"), std::move(content));
+    }
+    if (result.Status != TStorage::EStatus::Ok) {
+        return HttpError(params, result);
     }
 
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
     headers.AddHeader("x-amz-id-2", "LriYPLdmOdAiIfgSm/F1YsViT1LW94/xUQxMsF7xiEb1a0wiIOIxl+zbwZ163pt7");
     headers.AddHeader("x-amz-request-id", "0A49CE4060975EAC");
-    headers.AddHeader("ETag", etag);
+    headers.AddHeader("ETag", result.ETag);
     headers.OutTo(&params.Output);
     params.Output << "\r\n";
     params.Output.Flush();
@@ -331,20 +537,19 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
 bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod method, TStringBuf path, const TCgiParameters& queryParams) {
     Cerr << "S3_MOCK::HttpServeAction: " << (ui32)method << " / " << path << " / " << queryParams.Print() << Endl;
     if (queryParams.Has("uploads")) {
-        const int uploadId = Parent->NextUploadId++;
-        Parent->MultipartUploads[std::make_pair(path, ToString(uploadId))] = {};
+        const auto result = Parent->Storage->CreateMultipartUpload(path);
 
         params.Output << "HTTP/1.1 200 Ok\r\n\r\n";
         params.Output << Sprintf(R"(
             <?xml version="1.0" encoding="UTF-8"?>
             <InitiateMultipartUploadResult>
               <Key>%s</Key>
-              <UploadId>%i</UploadId>
+              <UploadId>%s</UploadId>
             </InitiateMultipartUploadResult>
-        )", TString(path.After('/')).c_str(), uploadId);
+        )", TString(path.After('/')).c_str(), result.UploadId.c_str());
     } else if (queryParams.Has("uploadId")) {
-        auto it = Parent->MultipartUploads.find(std::make_pair(path, queryParams.Get("uploadId")));
-        if (it == Parent->MultipartUploads.end()) {
+        const TString& uploadId = queryParams.Get("uploadId");
+        if (!Parent->Storage->HasMultipartUpload(path, uploadId)) {
             return HttpNotFound(params, "NoSuchUpload");
         }
 
@@ -373,22 +578,10 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
                 part = part.NextSibling("Part");
             }
 
-            if (etags.size() != it->second.size()) {
-                return HttpBadRequest(params,
-                    "<Error><Code>InvalidPart</Code><Message>Invalid part count</Message></Error>");
+            const auto result = Parent->Storage->CompleteMultipartUpload(path, uploadId, etags);
+            if (result.Status != TStorage::EStatus::Ok) {
+                return HttpError(params, result);
             }
-
-            for (auto i : xrange(etags.size())) {
-                if (etags.at(i) != MD5::Data(it->second.at(i))) {
-                    return HttpBadRequest(params,
-                        "<Error><Code>InvalidPart</Code><Message>Invalid part</Message></Error>");
-                }
-            }
-
-            Parent->Data[path] = JoinSeq("", it->second);
-            Parent->MultipartUploads.erase(it);
-
-            const TString etag = MD5::Data(Parent->Data[path]);
 
             params.Output << "HTTP/1.1 200 Ok\r\n\r\n";
             params.Output << Sprintf(R"(
@@ -397,15 +590,14 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
                   <Key>%s</Key>
                   <ETag>%s</ETag>
                 </CompleteMultipartUploadResult>
-            )", TString(path.After('/')).c_str(), etag.c_str());
+            )", TString(path.After('/')).c_str(), result.ETag.c_str());
         } else if (method == EMethod::Delete) {
-            Parent->MultipartUploads.erase(it);
+            Parent->Storage->AbortMultipartUpload(path, uploadId);
             params.Output << "HTTP/1.1 204 Ok\r\n\r\n";
         } else {
             return HttpBadRequest(params);
         }
-    } else if (method == EMethod::Delete && Parent->Data.contains(path)) {
-        Parent->Data.erase(path);
+    } else if (method == EMethod::Delete && Parent->Storage->Delete(path).Status == TStorage::EStatus::Ok) {
         params.Output << "HTTP/1.1 204 Ok\r\n\r\n";
     } else {
         return HttpBadRequest(params);
@@ -420,6 +612,7 @@ TS3Mock::TRequest::TRequest(TS3Mock* parent)
 }
 
 bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
+    ++Parent->HttpRequestCount;
     TStringBuf requestString(RequestString);
     TStringBuf methodStr = requestString.NextTok(' ');
     TStringBuf uriStr = requestString.NextTok(' ');
@@ -440,8 +633,8 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     TCgiParameters queryParams;
     queryParams.ScanAddAll(uriStr);
 
-    if (Parent->Settings.ErrorResponse) {
-        if (const TString response = Parent->Settings.ErrorResponse(methodStr, pathStr)) {
+    if (Parent->Storage->Settings.ErrorResponse) {
+        if (const TString response = Parent->Storage->Settings.ErrorResponse(methodStr, pathStr)) {
             MaybeContinue(params);
             if (params.Input.HasContent()) {
                 params.Input.ReadAll();
@@ -462,10 +655,8 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     case EMethod::Get:
         if (queryParams.Has("prefix")) {
             return HttpServeList(params, pathStr == "/" ? "" : pathStr, queryParams.Get("prefix"));
-        } else if (Parent->Data.contains(pathStr)) {
-            return HttpServeRead(params, method, pathStr);
         } else {
-            return HttpNotFound(params, "NoSuchKey");
+            return HttpServeRead(params, method, pathStr);
         }
         break;
 
@@ -484,8 +675,22 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TS3Mock
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool TS3Mock::Start() {
-    return HttpServer.Start();
+    if (!HttpServer.Start()) {
+        return false;
+    }
+    const ui16 port = Storage->Settings.HttpOptions.Port;
+    TGuard<TMutex> guard(StartedMocks().Mutex);
+    for (const TString& host : {"localhost", "127.0.0.1"}) {
+        const TString endpoint = TStringBuilder() << host << ":" << port;
+        StartedMocks().Storages[endpoint] = Storage;
+        RegisteredEndpoints.push_back(endpoint);
+    }
+    return true;
 }
 
 const char* TS3Mock::GetError() {
@@ -493,47 +698,49 @@ const char* TS3Mock::GetError() {
 }
 
 TS3Mock::TS3Mock(const TSettings& settings)
-    : Settings(settings)
-    , PartialReadFailuresLeft(settings.PartialReadFailures)
+    : Storage(std::make_shared<TStorage>(settings))
     , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings)
-    : Settings(settings)
-    , Data(std::move(data))
-    , PartialReadFailuresLeft(settings.PartialReadFailures)
+    : Storage(std::make_shared<TStorage>(settings, std::move(data)))
     , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings)
-    : Settings(settings)
-    , Data(data)
-    , PartialReadFailuresLeft(settings.PartialReadFailures)
+    : Storage(std::make_shared<TStorage>(settings, THashMap<TString, TString>(data)))
     , HttpServer(this, settings.HttpOptions)
 {
 }
 
-bool TS3Mock::ShouldFailPartialRead(TStringBuf path) {
-    if (path != Settings.PartialReadPath) {
-        return false;
-    }
-
-    ++PartialReadRequestCount;
-
-    ui32 failuresLeft = PartialReadFailuresLeft.load();
-    while (failuresLeft) {
-        if (PartialReadFailuresLeft.compare_exchange_weak(failuresLeft, failuresLeft - 1)) {
-            ++PartialReadFailureCount;
-            return true;
+TS3Mock::~TS3Mock() {
+    TGuard<TMutex> guard(StartedMocks().Mutex);
+    for (const auto& endpoint : RegisteredEndpoints) {
+        if (auto it = StartedMocks().Storages.find(endpoint); it != StartedMocks().Storages.end() && it->second.lock() == Storage) {
+            StartedMocks().Storages.erase(it);
         }
     }
-    return false;
 }
 
 TClientRequest* TS3Mock::CreateClient() {
     return new TRequest(this);
+}
+
+void TS3Mock::ServeInActorSystem() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        NExternalStorage::IExternalStorageConfig::SetS3EndpointOverride(
+            [](const TString& endpoint, const TString& bucket, bool useVirtualAddressing) -> NExternalStorage::IExternalStorageConfig::TPtr {
+                auto storage = StartedMocks().Find(endpoint);
+                // Raw error responses and broken connections are what the HTTP client sees, so such mocks stay on HTTP
+                if (!storage || storage->Settings.ErrorResponse || storage->Settings.PartialReadFailures) {
+                    return nullptr;
+                }
+                return MakeS3MockStorageConfig(std::move(storage), bucket, useVirtualAddressing);
+            });
+    });
 }
 
 } // NTestHelpers

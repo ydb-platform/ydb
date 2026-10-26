@@ -13,6 +13,7 @@ from flask import Flask
 import ydb.tests.stability.nemesis.routers.orchestrator_router as router
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import use_cluster
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
     FailureModelGuard,
@@ -142,6 +143,17 @@ def test_scheduler_start_rejects_bad_profiles(client, body):
     assert resp.status_code == 400, resp.data
     assert resp.get_json()["message"]
     assert router.nemesis_scheduler.started == 0, "a rejected profile must not start chaos"
+
+
+def test_local_harness_rejects_unavailable_scheduler_type(client):
+    with use_cluster(object()):
+        response = client.post(
+            "/api/scheduler/start",
+            json={"enabled": ["NetworkNemesis"]},
+        )
+    assert response.status_code == 400
+    assert "unavailable in the current runtime" in response.get_json()["message"]
+    assert router.nemesis_scheduler.started == 0
 
 
 def test_endpoints_survive_missing_wiring(client):

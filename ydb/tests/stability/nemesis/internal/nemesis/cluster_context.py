@@ -13,6 +13,12 @@ from ydb.tests.stability.nemesis.internal.config import Settings
 
 _cluster_override: Any | None = None
 
+# Start deliberately narrow. Each additional type needs its own local scenario
+# test before it is admitted here.
+LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
+    "KillDataShardNemesis",
+})
+
 
 def cluster_yaml_path() -> str:
     return (os.environ.get("YAML_CONFIG_LOCATION") or Settings().yaml_config_location or "").strip()
@@ -48,6 +54,20 @@ def require_cluster() -> Any:
     if _cluster_override is not None:
         return _cluster_override
     return require_external_cluster()
+
+
+def local_harness_mode() -> bool:
+    return _cluster_override is not None
+
+
+def nemesis_rejection_reason(nemesis_type: str) -> str | None:
+    """Why a type cannot execute in the current runtime, if applicable."""
+    if local_harness_mode() and nemesis_type not in LOCAL_HARNESS_NEMESIS_TYPES:
+        return (
+            f"{nemesis_type} is not enabled for local harness execution; "
+            f"allowed types: {', '.join(sorted(LOCAL_HARNESS_NEMESIS_TYPES))}"
+        )
+    return None
 
 
 @contextmanager

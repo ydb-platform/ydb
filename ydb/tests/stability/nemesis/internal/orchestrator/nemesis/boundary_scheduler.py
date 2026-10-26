@@ -24,6 +24,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import nemesis_rejection_reason
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
@@ -66,7 +67,13 @@ DEFAULT_RESTART_JOIN_SEC: float = 30.0  # wait out a stop() that gave up mid-tic
 def default_enabled_types() -> list[str]:
     """The stability chaos profile: registered for this cluster and usable by this scheduler."""
     return [
-        t for t in _STABILITY_PROFILE if t in NEMESIS_TYPES and supports_boundary_scheduler(t)
+        t
+        for t in _STABILITY_PROFILE
+        if (
+            t in NEMESIS_TYPES
+            and supports_boundary_scheduler(t)
+            and nemesis_rejection_reason(t) is None
+        )
     ]
 
 

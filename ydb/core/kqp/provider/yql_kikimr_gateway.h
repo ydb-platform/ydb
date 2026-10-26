@@ -890,7 +890,12 @@ public:
     // A second call is an invariant violation, even if validation failed.
     void InitSecretValues(const std::vector<TString>& secretValues);
 
-    bool IsAws() const { return Config.has_aws(); }
+    bool IsAws() const { return Config.has_aws();
+    }
+
+    const NKikimrSchemeOp::TAuth& GetConfig() const {
+        return Config;
+    }
 
     THashMap<TString, TString> BuildAuthProperties() const;
 
@@ -941,7 +946,11 @@ public:
 
     const std::optional<EDatabaseType>& GetDatabaseType() const { return DatabaseType; }
     const TString& GetLocation() const { return Location; }
-    const TString& GetDataSourcePath() const { return DataSourcePath; }
+    const TString& GetDataSourcePath() const { return DataSourcePath;
+    }
+
+    // Does not resolve or export secret values.
+    NKikimrSchemeOp::TExternalDataSourceDescription GetConnectionDescription() const;
     TString ComposeStructuredTokenJson() const {
         return Auth.ComposeStructuredTokenJson();
     }
@@ -1746,6 +1755,11 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithRequiredAccess(ui32 access) {
+            RequiredAccess = access;
+            return *this;
+        }
+
         TLoadTableMetadataSettings& WithAuthInfo(bool enable) {
             RequestAuthInfo_ = enable;
             return *this;
@@ -1773,6 +1787,7 @@ public:
 
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
+        ui32 RequiredAccess = 0;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;

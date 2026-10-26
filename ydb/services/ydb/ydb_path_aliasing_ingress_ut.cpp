@@ -180,8 +180,8 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(!physicalChildren.contains("virtual"));
         }
 
-        Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
-            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true);
+        Y_UNIT_TEST_TWIN(ListDirectoryRenamesChildForTrailingSlashParent, enableRelativePaths) {
+            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true, enableRelativePaths);
             auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
 
             Ydb::Scheme::MakeDirectoryRequest make;
@@ -192,7 +192,7 @@ namespace NKikimr::NGRpcService {
             Ydb::Scheme::ListDirectoryRequest list;
             list.set_path("/Root/");
             const auto result = Result<Ydb::Scheme::ListDirectoryResult>(
-                Call(*stub, &TScheme::ListDirectory, list, "/Root/virtual"));
+                Call(*stub, &TScheme::ListDirectory, list, enableRelativePaths ? "virtual" : "/Root/virtual"));
 
             std::set<std::string> children;
             for (const auto& child : result.children()) {

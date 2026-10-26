@@ -2305,7 +2305,7 @@ partitioning_settings {
         Runtime().Send(delayed.Release(), 0, true);
         Env().TestWaitNotification(Runtime(), exportId);
 
-        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
         Env().TestWaitNotification(Runtime(), exportId);

@@ -153,9 +153,6 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
-            THashSet<TBoxStoragePoolId> DataCentersChanged;
-
-            void ApplyStoragePoolDataCenters();
             THashSet<TGroupId> GroupFailureModelChanged;
             // Pools whose leading-disk override changed. Their VDisk service-set records are resent
             // without touching group generation.
@@ -428,6 +425,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TTestSetGroupDataCenter& cmd, TStatus& status);
         };
 
     } // NBsController

@@ -417,12 +417,13 @@ namespace {
 
 namespace {
 
-    struct TPoolDataCentersEnv : TEnvironmentSetup {
+    struct TGroupDataCenterEnv : TEnvironmentSetup {
         using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         TMap<ui32, TString> NodeDataCenters;
-        TMap<ui32, ui64> GroupPools;
+        ui32 GroupId = 0;
+        ui32 BlockGroupId = 0;
 
-        TPoolDataCentersEnv()
+        TGroupDataCenterEnv()
             : TEnvironmentSetup(24, 3)
         {
             bool activeZone;
@@ -432,7 +433,7 @@ namespace {
             DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, GetNodes(), request);
             DefineStoragePool(1, 1, "managed", 3, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
             DefineStoragePool(1, 2, "other", 1, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
-            DefineStoragePool(1, 3, "block", 0, NKikimrBlobStorage::ROT, false, request);
+            DefineStoragePool(1, 3, "block", 1, NKikimrBlobStorage::ROT, false, request);
             const auto response = Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
             const auto config = FetchBaseConfig(this);
@@ -440,7 +441,11 @@ namespace {
                 NodeDataCenters[node.GetNodeId()] = node.GetLocation().GetDataCenter();
             }
             for (const auto& group : config.GetGroup()) {
-                GroupPools[group.GetGroupId()] = group.GetStoragePoolId();
+                if (group.GetStoragePoolId() == 1 && !GroupId) {
+                    GroupId = group.GetGroupId();
+                } else if (group.GetStoragePoolId() == 3) {
+                    BlockGroupId = group.GetGroupId();
+                }
             }
         }
 
@@ -454,19 +459,12 @@ namespace {
             return response.GetStatus(0).GetStoragePool(0);
         }
 
-        NKikimrBlobStorage::TConfigRequest Policy(std::initializer_list<TString> included,
-                std::initializer_list<TString> excluded, ui64 poolId = 1) {
+        NKikimrBlobStorage::TConfigRequest SetDataCenter(ui32 groupId, const TString& dataCenter, bool excluded = true) {
             NKikimrBlobStorage::TConfigRequest request;
-            auto* command = request.AddCommand()->MutableUpdateStoragePoolSettings();
-            command->SetBoxId(1);
-            command->SetStoragePoolId(poolId);
-            auto* policy = command->MutableSettings()->MutableDataCenters();
-            for (const auto& dc : included) {
-                policy->AddIncluded(dc);
-            }
-            for (const auto& dc : excluded) {
-                policy->AddExcluded(dc);
-            }
+            auto* command = request.AddCommand()->MutableTestSetGroupDataCenter();
+            command->SetGroupId(groupId);
+            command->SetDataCenter(dataCenter);
+            command->SetExcluded(excluded);
             return request;
         }
 
@@ -488,10 +486,13 @@ namespace {
 
         void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, R::EState state) const {
             for (const auto& [id, group] : groups) {
+                if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
+                    continue;
+                }
                 UNIT_ASSERT_VALUES_EQUAL(group.RingsSize(), 3);
                 for (const auto& realm : group.GetRings()) {
                     const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
-                    const auto expected = GroupPools.at(id) == 1 && NodeDataCenters.at(node) == "2" ? state : R::N0;
+                    const auto expected = id == GroupId && NodeDataCenters.at(node) == "2" ? state : R::N0;
                     UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
                 }
             }
@@ -501,161 +502,88 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
-    Y_UNIT_TEST(StoragePoolDataCentersTransitionAndRestart) {
-        using R = TPoolDataCentersEnv::R;
-        TPoolDataCentersEnv env;
+    Y_UNIT_TEST(TestGroupDataCenterTransitions) {
+        using R = TGroupDataCenterEnv::R;
+        TGroupDataCenterEnv env;
         const auto before = env.ReadGroups();
-        UNIT_ASSERT_VALUES_EQUAL(before.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(before.size(), 5);
         env.CheckStates(before, R::N0);
-        const auto request = env.Policy({"1", "3"}, {"2"});
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto excluded = env.ReadGroups();
-        env.CheckStates(excluded, R::F);
-        for (const auto& [id, group] : excluded) {
-            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(),
-                before.at(id).GetGroupGeneration() + (env.GroupPools.at(id) == 1));
-        }
-        response = env.Invoke(request);
+        // Including a normal realm preserves N0 and the group generation.
+        auto response = env.Invoke(env.SetDataCenter(env.GroupId, "2", false));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         for (const auto& [id, group] : env.ReadGroups()) {
-            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), excluded.at(id).SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
         }
-        const auto pool = env.ReadPool();
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().IncludedSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().ExcludedSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().GetExcluded(0), "2");
-        UNIT_ASSERT(!env.ReadPool(2).GetSettings().HasDataCenters());
-
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), pool.SerializeAsString());
-        for (const auto& [id, group] : env.ReadGroups()) {
-            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), excluded.at(id).SerializeAsString());
+        auto previous = before;
+        for (const bool excluded : {true, false, true}) {
+            const auto request = env.SetDataCenter(env.GroupId, "2", excluded);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            const auto updated = env.ReadGroups();
+            env.CheckStates(updated, excluded ? R::F : R::R);
+            for (const auto& [id, group] : updated) {
+                if (id == env.GroupId) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), previous.at(id).GetGroupGeneration() + 1);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
+                }
+            }
+            // Repeating the command does not publish another generation.
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            for (const auto& [id, group] : env.ReadGroups()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), updated.at(id).SerializeAsString());
+            }
+            previous = updated;
         }
-        response = env.Invoke(env.Policy({"1", "2", "3"}, {}));
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto included = env.ReadGroups();
-        env.CheckStates(included, R::R);
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().GetSettings().GetDataCenters().ExcludedSize(), 0);
-        for (const auto& [id, group] : included) {
-            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(),
-                excluded.at(id).GetGroupGeneration() + (env.GroupPools.at(id) == 1));
-        }
-        response = env.Invoke(env.Policy({"1", "2", "3"}, {}));
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        for (const auto& [id, group] : env.ReadGroups()) {
-            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), included.at(id).SerializeAsString());
-        }
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        env.CheckStates(env.ReadGroups(), R::R);
     }
 
-    Y_UNIT_TEST(StoragePoolDataCentersDefaultIncluded) {
-        using R = TPoolDataCentersEnv::R;
-        TPoolDataCentersEnv env;
-        auto response = env.Invoke(env.Policy({"1"}, {"2"}));
+    Y_UNIT_TEST(TestGroupDataCenterIsNotPersisted) {
+        TGroupDataCenterEnv env;
+        const auto response = env.Invoke(env.SetDataCenter(env.GroupId, "2"));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.CheckStates(env.ReadGroups(), R::F);
-        // Removing DC 2 from Excluded includes it even without an explicit Included entry.
-        response = env.Invoke(env.Policy({}, {}));
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto included = env.ReadGroups();
-        env.CheckStates(included, R::R);
-        const auto pool = env.ReadPool();
-        UNIT_ASSERT(pool.GetSettings().HasDataCenters());
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().IncludedSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().ExcludedSize(), 0);
+        env.CheckStates(env.ReadGroups(), TGroupDataCenterEnv::R::F);
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        env.CheckStates(env.ReadGroups(), R::R);
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), pool.SerializeAsString());
+        // Read fresh GroupInfo directly from BSC; this does not check existing NodeWarden caches.
+        env.CheckStates(env.ReadGroups(), TGroupDataCenterEnv::R::N0);
     }
 
-    Y_UNIT_TEST(StoragePoolDataCentersValidationAndRollback) {
-        TPoolDataCentersEnv env;
+    Y_UNIT_TEST(TestGroupDataCenterValidationAndRollback) {
+        TGroupDataCenterEnv env;
         const auto before = env.ReadGroups();
         for (const auto& request : {
-                env.Policy({"1", "2", "3"}, {"2"}),
-                env.Policy({"1", "1", "3"}, {"2"}),
-                env.Policy({"1", "3", ""}, {"2"}),
-                env.Policy({"1", "3"}, {"2"}, 3)}) {
+                env.SetDataCenter(0, "2"),
+                env.SetDataCenter(env.BlockGroupId, "2"),
+                env.SetDataCenter(env.GroupId, ""),
+                env.SetDataCenter(env.GroupId, "unknown")}) {
             const auto response = env.Invoke(request);
             UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
         }
-        auto request = env.Policy({"1", "3"}, {"2"});
+        auto request = env.SetDataCenter(env.GroupId, "2");
         request.SetRollback(true);
         const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetRollbackSuccess(), response.DebugString());
-        UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
         for (const auto& [id, group] : env.ReadGroups()) {
             UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
         }
     }
 
-    Y_UNIT_TEST(StoragePoolDataCentersNewGroupsAndReset) {
-        TPoolDataCentersEnv env;
-        auto response = env.Invoke(env.Policy({"1", "3"}, {"2"}));
+    Y_UNIT_TEST(TestGroupDataCenterDoesNotAffectNewGroups) {
+        TGroupDataCenterEnv env;
+        auto response = env.Invoke(env.SetDataCenter(env.GroupId, "2"));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto before = env.ReadGroups();
         auto pool = env.ReadPool();
         pool.SetNumGroups(pool.GetNumGroups() + 1);
         NKikimrBlobStorage::TConfigRequest request;
         *request.AddCommand()->MutableDefineStoragePool() = pool;
         response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().GetSettings().SerializeAsString(), pool.GetSettings().SerializeAsString());
-        const auto config = FetchBaseConfig(&env);
-        for (const auto& group : config.GetGroup()) {
-            env.GroupPools[group.GetGroupId()] = group.GetStoragePoolId();
-        }
-        const auto added = env.ReadGroups();
-        UNIT_ASSERT_VALUES_EQUAL(added.size(), 5);
-        env.CheckStates(added, TPoolDataCentersEnv::R::F);
-        request.Clear();
-        auto* command = request.AddCommand()->MutableUpdateStoragePoolSettings();
-        command->SetBoxId(1);
-        command->SetStoragePoolId(1);
-        command->AddReset("DataCenters");
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
-        env.CheckStates(env.ReadGroups(), TPoolDataCentersEnv::R::R);
-    }
-
-    Y_UNIT_TEST(StoragePoolDataCentersMoveGroup) {
-        using R = TPoolDataCentersEnv::R;
-        TPoolDataCentersEnv env;
-        auto response = env.Invoke(env.Policy({"1", "3"}, {"2"}));
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto before = env.ReadGroups();
-        ui32 moved = 0;
-        for (const auto& [id, pool] : env.GroupPools) {
-            if (pool == 1) {
-                moved = id;
-                break;
-            }
-        }
-        UNIT_ASSERT(moved);
-        NKikimrBlobStorage::TConfigRequest request;
-        auto* command = request.AddCommand()->MutableMoveGroups();
-        command->SetBoxId(1);
-        command->SetOriginStoragePoolId(1);
-        command->SetTargetStoragePoolId(2);
-        command->SetOriginStoragePoolGeneration(env.ReadPool(1).GetItemConfigGeneration());
-        command->SetTargetStoragePoolGeneration(env.ReadPool(2).GetItemConfigGeneration());
-        command->AddExplicitGroupId(moved);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         const auto after = env.ReadGroups();
-        for (const auto& [id, group] : after) {
-            if (id != moved) {
-                UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
-                continue;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), before.at(id).GetGroupGeneration() + 1);
-            for (const auto& realm : group.GetRings()) {
-                const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
-                UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(env.NodeDataCenters.at(node) == "2" ? R::R : R::N0));
-            }
+        UNIT_ASSERT_VALUES_EQUAL(after.size(), before.size() + 1);
+        env.CheckStates(after, TGroupDataCenterEnv::R::F);
+        for (const auto& [id, group] : before) {
+            UNIT_ASSERT_VALUES_EQUAL(after.at(id).SerializeAsString(), group.SerializeAsString());
         }
     }
 

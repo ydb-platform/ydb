@@ -267,10 +267,6 @@ public:
                     Y_DEBUG_ABORT_UNLESS(success);
                 }
 
-                if (groups.HaveValue<T::FailRealmStates>()) {
-                    group.FailRealmStates.emplace(groups.GetValue<T::FailRealmStates>());
-                }
-
                 if (groups.HaveValue<T::BridgeGroupInfo>()) {
                     group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }

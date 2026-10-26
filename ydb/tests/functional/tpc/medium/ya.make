@@ -19,7 +19,9 @@ FORK_TESTS()
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:4 ram_disk:3)
+
+USE_RECIPE(ydb/tests/functional/tpc/ram_drive_recipe/tpc_ram_drive_recipe)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -43,6 +45,7 @@ PEERDIR(
 )
 
 DEPENDS(
+    ydb/tests/functional/tpc/ram_drive_recipe
     ydb/apps/ydb
     ydb/tests/stress/simple_queue
     ydb/tests/stress/oltp_workload

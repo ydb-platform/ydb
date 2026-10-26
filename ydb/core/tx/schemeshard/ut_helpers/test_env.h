@@ -125,6 +125,11 @@ namespace NSchemeShardUT_Private {
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
 
+        // Keep NOTICE and more severe messages by default; ENABLE_SCHEMESHARD_LOG=1
+        // restores the requested verbose priority without rebuilding the tests.
+        static void SetVerboseLogPriority(TTestActorRuntime& runtime, NActors::NLog::EComponent component,
+            NActors::NLog::EPriority verbosePriority);
+
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,

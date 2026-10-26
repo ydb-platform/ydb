@@ -51,7 +51,7 @@ void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTe
         if (runtimeSetup) {
             runtimeSetup(runtime);
         }
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
             CreateSchemeObjects(t, runtime, schemeObjects);
@@ -92,7 +92,7 @@ void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
         if (runtimeSetup) {
             runtimeSetup(runtime);
         }
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
             CreateSchemeObjects(t, runtime, schemeObjects);
@@ -138,7 +138,7 @@ void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
         if (runtimeSetup) {
             runtimeSetup(runtime);
         }
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
             CreateSchemeObjects(t, runtime, schemeObjects);

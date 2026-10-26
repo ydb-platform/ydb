@@ -2,7 +2,6 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
-#include <algorithm>
 #include <array>
 
 namespace NKikimr::NBsController {
@@ -869,63 +868,111 @@ namespace NKikimr::NBsController {
         group->CalculateGroupStatus();
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TTestSetGroupDataCenter& cmd,
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd,
             TStatus& /*status*/) {
-        const auto groupId = TGroupId::FromValue(cmd.GetGroupId());
-        const auto* group = Groups.Find(groupId);
-        if (!group) {
-            throw TExGroupNotFound(cmd.GetGroupId());
-        }
-        if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
-                || !group->Topology || group->Topology->GetTotalFailRealmsNum() != 3
-                || StoragePools.Get().at(group->StoragePoolId).BridgeMode) {
-            throw TExError() << "TestSetGroupDataCenter requires a mirror-3-dc group without bridge mode";
-        }
-        if (cmd.GetDataCenter().empty()) {
-            throw TExError() << "DataCenter must not be empty";
-        }
-        std::array<TString, 3> dataCenters;
-        for (const TVSlotInfo* slot : group->VDisksInGroup) {
-            if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
-                throw TExError() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter";
-            }
-            NActorsInterconnect::TNodeLocation location;
-            HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-            auto& dataCenter = dataCenters.at(slot->RingIdx);
-            if (!location.HasDataCenter() || location.GetDataCenter().empty()
-                    || (!dataCenter.empty() && dataCenter != location.GetDataCenter())) {
-                throw TExError() << "group# " << groupId << " realm# " << slot->RingIdx
-                    << " must belong to one physical DataCenter";
-            }
-            dataCenter = location.GetDataCenter();
-        }
-        const auto realm = std::find(dataCenters.begin(), dataCenters.end(), cmd.GetDataCenter());
-        if (realm == dataCenters.end()) {
-            throw TExError() << "DataCenter# " << cmd.GetDataCenter() << " not found in group# " << groupId;
-        }
+        using D = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
         using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        std::array<R::EState, 3> states;
-        bool changed = false;
-        for (ui32 i = 0; i < 3; ++i) {
-            const auto previous = group->TestFailRealmStates ? (*group->TestFailRealmStates)[i] : R::N0;
-            auto current = previous;
-            if (dataCenters[i] == cmd.GetDataCenter()) {
-                if (cmd.GetExcluded()) {
-                    current = R::F;
-                } else if (current == R::F) {
-                    current = R::R;
+        TDataCenterStates states;
+        THashSet<TString> names;
+        for (const auto& dc : cmd.GetDataCenter()) {
+            if (dc.GetName().empty() || !names.insert(dc.GetName()).second) {
+                throw TExError() << "empty or duplicate DataCenter# " << dc.GetName();
+            }
+            switch (dc.GetState()) {
+                case D::INCLUDED:
+                    break;
+                case D::EXCLUDED:
+                    states.emplace(dc.GetName(), R::F);
+                    break;
+                case D::RECOVERING:
+                    states.emplace(dc.GetName(), R::R);
+                    break;
+                default:
+                    throw TExError() << "unknown state for DataCenter# " << dc.GetName();
+            }
+        }
+        if (states != DataCenterStates.Get()) {
+            DataCenterStates.Unshare() = std::move(states);
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates&,
+            TStatus& /*status*/) {
+        DataCenterStates.Unshare().clear();
+        Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                GroupContentChanged.insert(groupId);
+            }
+        });
+    }
+
+    std::optional<TString> TBlobStorageController::TConfigState::ApplyDataCenterStates() {
+        const auto& dcStates = DataCenterStates.Get();
+        if (dcStates.empty() && !DataCenterStates.Changed()) {
+            return std::nullopt;
+        }
+        TVector<TGroupId> groups;
+        if (DataCenterStates.Changed()) {
+            Groups.ForEach([&](TGroupId groupId, const TGroupInfo&) { groups.push_back(groupId); });
+        } else {
+            // Apply the current states to newly allocated or relocated groups as well.
+            for (const auto& [base, overlay] : Groups.Diff()) {
+                if (overlay->second) {
+                    groups.push_back(overlay->first);
                 }
             }
-            states[i] = current;
-            changed |= current != previous;
         }
-        if (!GetMirror3dcGroupState(states[0], states[1], states[2])) {
-            throw TExError() << "unsupported mirror-3-dc state for group# " << groupId;
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        for (const auto groupId : groups) {
+            const auto* group = Groups.Find(groupId);
+            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
+                    || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()) {
+                continue;
+            }
+            if (group->Topology->GetTotalFailRealmsNum() != 3) {
+                return TStringBuilder() << "group# " << groupId << " must have three fail realms";
+            }
+            std::array<R::EState, 3> states{R::N0, R::N0, R::N0};
+            if (!dcStates.empty()) {
+                std::array<TString, 3> dataCenters;
+                for (const TVSlotInfo* slot : group->VDisksInGroup) {
+                    if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
+                        return TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter";
+                    }
+                    NActorsInterconnect::TNodeLocation location;
+                    HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
+                    auto& dc = dataCenters.at(slot->RingIdx);
+                    if (!location.HasDataCenter() || location.GetDataCenter().empty()
+                            || (!dc.empty() && dc != location.GetDataCenter())) {
+                        return TStringBuilder() << "group# " << groupId << " realm# " << slot->RingIdx
+                            << " must belong to one physical DataCenter";
+                    }
+                    dc = location.GetDataCenter();
+                }
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    if (const auto it = dcStates.find(dataCenters[realm]); it != dcStates.end()) {
+                        states[realm] = it->second;
+                    }
+                }
+                if (!GetMirror3dcGroupState(states[0], states[1], states[2])) {
+                    return TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId;
+                }
+            }
+            const std::array<R::EState, 3> normal{R::N0, R::N0, R::N0};
+            const bool changed = group->FailRealmStates.value_or(normal) != states;
+            if (changed || (dcStates.empty() && group->FailRealmStates)) {
+                auto* updated = Groups.FindForUpdate(groupId);
+                if (dcStates.empty()) {
+                    updated->FailRealmStates.reset();
+                } else {
+                    updated->FailRealmStates = states;
+                }
+                if (changed) {
+                    GroupContentChanged.insert(groupId);
+                }
+            }
         }
-        if (changed) {
-            Groups.FindForUpdate(groupId)->TestFailRealmStates = states;
-            GroupContentChanged.insert(groupId);
-        }
+        return std::nullopt;
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& /*status*/) {

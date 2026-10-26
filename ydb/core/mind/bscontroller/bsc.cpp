@@ -1310,7 +1310,8 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kTestSetGroupDataCenter:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDataCenterStates:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kTestResetDataCenterStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 

@@ -691,16 +691,27 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Test-only, in-memory control of one physical DataCenter in an existing mirror-3-dc group.
-// Use a full test-environment restart to reset it: BSC restart alone does not invalidate cached GroupInfo.
-message TTestSetGroupDataCenter {
-    uint32 GroupId = 1;
-    string DataCenter = 2; // DataCenter from node locations, not a fail-realm index.
-    bool Excluded = 3; // true: set F; false: transition F to R, preserving other states.
+// Volatile cluster-wide states of physical DataCenters for mirror-3-dc groups.
+message TDefineDataCenterStates {
+    message TDataCenter {
+        enum EState {
+            INCLUDED = 0;
+            EXCLUDED = 1;
+            RECOVERING = 2;
+        }
+        string Name = 1;
+        EState State = 2;
+    }
+    // Replaces the entire list. Unlisted DataCenters are INCLUDED.
+    repeated TDataCenter DataCenter = 1;
 }
+
+// Clear the volatile states and publish a new generation of every dynamic mirror-3-dc group.
+message TTestResetDataCenterStates {}
 
 message TConfigRequest {
     message TCommand {
+        reserved 64; // Former TestSetGroupDataCenter command.
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;
@@ -757,7 +768,8 @@ message TConfigRequest {
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
-            TTestSetGroupDataCenter TestSetGroupDataCenter = 64;
+            TDefineDataCenterStates DefineDataCenterStates = 65;
+            TTestResetDataCenterStates TestResetDataCenterStates = 66;
         }
     }
 

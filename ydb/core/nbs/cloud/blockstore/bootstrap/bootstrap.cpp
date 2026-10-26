@@ -109,6 +109,38 @@ void StopNbsService()
     }
 }
 
+<<<<<<< HEAD
+=======
+void StopNbsExecutors()
+{
+    if (!NbsService) {
+        return;
+    }
+
+    // Same count the pool was built with, so the rotated vector holds each
+    // executor once. GetExecutors(0) indexes an empty pool.
+    const ui32 executorCount = NbsService->StorageConfig->GetThreadPoolSize();
+    if (executorCount == 0) {
+        return;
+    }
+
+    for (const auto& executor:
+         NbsService->ExecutorPool.GetExecutors(executorCount))
+    {
+        executor->Stop();
+    }
+}
+
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+GetNbsFrontendBlockStore()
+{
+    if (!NbsService || !NbsService->Frontend) {
+        return {};
+    }
+    return NbsService->Frontend->GetBlockStore();
+}
+
+>>>>>>> 078873ca180 ([YDBBUGS-790] Fix use-after-free in nbs2 (#53752))
 TNbsServicePtr GetNbsService()
 {
     return NbsService;

@@ -343,7 +343,10 @@ private:
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
-    TInstant GetWriteTimeEstimate(ui64 offset) const;
+    // firstUnreadMessage: true if offset is the first UNREAD message (step 1
+    // key back to that message itself); false if offset is the next-to-commit
+    // offset (step 2 keys back to the last committed message).
+    TInstant GetWriteTimeEstimate(ui64 offset, bool firstUnreadMessage = false) const;
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages

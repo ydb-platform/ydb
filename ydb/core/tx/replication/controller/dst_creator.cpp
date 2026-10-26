@@ -327,10 +327,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         AllocateTxId();
     }
 
-    void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig,
-            bool preserveUnownedReplica = false) const {
+    void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (!preserveUnownedReplica && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (AssignOwner) {
             PathId.ToProto(replicationConfig.MutableOwner());
         }
     }
@@ -380,7 +379,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         tx.SetInternal(true);
         DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig(), PreserveUnownedReplica);
+        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
         ExecuteSchemeTx(tx);
     }
 
@@ -548,9 +547,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
-                    return PrepareDropIndex(index, record);
+            const auto& config = desc.GetTable().GetReplicationConfig();
+            // Claim a foreign-owned table through ALTER before changing its indexes.
+            if (!config.HasOwner() || TPathId::FromProto(config.GetOwner()) == PathId) {
+                for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                    if (ShouldDropVectorIndex(index)) {
+                        return PrepareDropIndex(index, record);
+                    }
                 }
             }
             if (CanResumeReplica(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
@@ -565,8 +568,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
-            PreserveUnownedReplica = IsReplica(desc.GetTable())
-                && !desc.GetTable().GetReplicationConfig().HasOwner();
+            // Existing owners remain protected when assignment is disabled.
+            // Ownerless read-only replicas retain their legacy configuration.
+            AssignOwner = desc.GetTable().GetReplicationConfig().HasOwner()
+                || (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership() && !IsReplica(desc.GetTable()));
             Attaching = true;
             return PrepareAttachment();
         }
@@ -620,8 +625,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     bool CanResumeReplica(const NKikimrSchemeOp::TTableDescription& table) const {
         const auto& config = table.GetReplicationConfig();
         // Ownerless replicas retain legacy behavior and remain unclaimed.
-        return IsReplica(table) && (!AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()
-            || !config.HasOwner()
+        return IsReplica(table) && (!config.HasOwner()
             || TPathId::FromProto(config.GetOwner()) == PathId);
     }
 
@@ -1021,6 +1025,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        AssignOwner = AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
         // DONE and DROP finish the pending attachment so it can be detached locally.
         if (PendingDstPathId && Cleanup) {
             return AllocateTxId();
@@ -1080,7 +1085,7 @@ private:
     bool NeedToCheck = false;
     bool Attaching = false;
     bool AttachmentComplete = false;
-    bool PreserveUnownedReplica = false;
+    bool AssignOwner = false;
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TPathId PendingDstPathId;

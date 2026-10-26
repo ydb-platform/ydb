@@ -2,7 +2,6 @@
 #include "logging.h"
 #include "private_events.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -51,7 +50,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         auto& tx = *ev->Record.AddTransaction();
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         tx.SetInternal(true);
-        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (ReplicationPathId) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
         }
         PendingDstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
@@ -66,7 +65,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
-        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (ReplicationPathId) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
         }
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);

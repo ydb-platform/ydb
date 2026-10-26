@@ -460,5 +460,5 @@ message TFeatureFlags {
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
     optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
-    optional bool EnableAsyncReplicationTableOwnership = 371 [default = false, (RequireRestart) = true];
+    optional bool EnableAsyncReplicationTableOwnership = 373 [default = false, (RequireRestart) = true];
 }

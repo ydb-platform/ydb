@@ -49,8 +49,7 @@ namespace NWilson {
 
     class TSpan {
         struct TData {
-            const TInstant StartTime;
-            const ui64 StartCycles;
+            const ui64 StartTimeUnixNano;
             const TTraceId TraceId;
             NTraceProto::Span Span;
             TFlags Flags;
@@ -60,7 +59,7 @@ namespace NWilson {
             bool EndAsIs = false; // don't update any data on End()
             NActors::TActorSystem* ActorSystem;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
+            TData(ui64 startTimeUnixNano, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -83,7 +82,16 @@ namespace NWilson {
 
         static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
                 TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode,
-                const TString& name);
+                const TString& name, NActors::TActorSystem* actorSystem = nullptr);
+        // Takes timestamps sampled with NowUnixNano().
+        static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
+                ui64 startUnixNano, ui64 endUnixNano, NTraceProto::Status::StatusCode statusCode,
+                const TString& name, NActors::TActorSystem* actorSystem = nullptr);
+
+        // The clock of all span timestamps: starts, events and ends. Readings of
+        // one clock keep the order of the events they time, also across threads,
+        // so a span that ends before another one starts is never recorded later.
+        static ui64 NowUnixNano();
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;
@@ -131,7 +139,7 @@ namespace NWilson {
         TSpan& Event(T&& name, T1&& attributes) {
             if (Y_UNLIKELY(*this)) {
                 auto *event = Data->Span.add_events();
-                event->set_time_unix_nano(TimeUnixNano());
+                event->set_time_unix_nano(NowUnixNano());
                 event->set_name(std::forward<T>(name));
                 for (auto&& [key, value] : attributes) {
                     SerializeKeyValue(std::move(key), std::move(value), event->add_attributes());
@@ -208,11 +216,6 @@ namespace NWilson {
 
     private:
         void Send();
-
-        ui64 TimeUnixNano() const {
-            const TInstant now = Data->StartTime + CyclesToDuration(GetCycleCount() - Data->StartCycles);
-            return now.NanoSeconds();
-        }
 
         void VerifyNotSent() {
             Y_DEBUG_ABORT_UNLESS(!Data || !Data->Sent, "span has been ended");

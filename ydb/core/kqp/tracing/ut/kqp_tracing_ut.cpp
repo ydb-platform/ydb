@@ -13,6 +13,9 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
+#include <util/string/join.h>
+
+#include <chrono>
 #include <thread>
 #include <stdexcept>
 
@@ -147,6 +150,11 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         AssertDescendant(*uploader, "Unapplied child", "Rule: Unapplied with work (not applied)");
         AssertStatus(*uploader, "Rule: Throwing", NTraceProto::Status::STATUS_CODE_ERROR);
         UNIT_ASSERT(!FindSpan(*uploader, "Rule: Empty attempt"));
+        // Emitted after the fact, a rule still nests around the work it started.
+        const auto& rule = *FindSpan(*uploader, "Rule: Applied");
+        const auto& child = *FindSpan(*uploader, "CBO work");
+        UNIT_ASSERT_LE(rule.start_time_unix_nano(), child.start_time_unix_nano());
+        UNIT_ASSERT_LE(child.end_time_unix_nano(), rule.end_time_unix_nano());
         UNIT_ASSERT(uploader->BuildTraceTrees());
     }
 
@@ -231,6 +239,9 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         AssertStatus(*uploader, "Waiting phase", NTraceProto::Status::STATUS_CODE_ERROR);
+        const auto& phase = *FindSpan(*uploader, "Waiting phase");
+        const auto& root = *FindSpan(*uploader, "Query");
+        UNIT_ASSERT_LE(phase.end_time_unix_nano(), root.end_time_unix_nano());
         UNIT_ASSERT(!FindSpan(*uploader, "After finish"));
     }
 
@@ -250,6 +261,63 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         AssertStatus(*uploader, "Unfinished phase", NTraceProto::Status::STATUS_CODE_ERROR);
+    }
+
+    Y_UNIT_TEST(FlowNestingViolations) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NWilson::TSpan root(15, NWilson::TTraceId::NewTraceId(15, 4095), "Root",
+            NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        const auto pause = [] {
+            // Distinct timestamps, whatever the resolution of the clock.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        };
+        auto request = root.CreateChild(15, "Request");
+        NKqp::MarkAsyncFlow(request);
+        auto unmarked = root.CreateChild(15, "Unmarked request");
+        pause();
+        {
+            auto step = root.CreateChild(15, "Step");
+            step.EndOk();
+        }
+        root.EndOk();
+        pause();
+        // Both requests outlive the root; only the marked one may.
+        request.EndOk();
+        unmarked.EndOk();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto violations = FindFlowNestingViolations(*uploader, "Root");
+        std::ranges::sort(violations);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq("; ", violations),
+            "Step overlaps Unmarked request in Root; Unmarked request sticks out of its parent Root");
+    }
+
+    Y_UNIT_TEST(FlowNestingViolationsAgainstLongSibling) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NWilson::TSpan root(15, NWilson::TTraceId::NewTraceId(15, 4095), "Root",
+            NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        const auto pause = [] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        };
+        // Both later siblings overlap the long one, not only the first of them.
+        auto longStep = root.CreateChild(15, "Long step");
+        pause();
+        root.CreateChild(15, "First step").EndOk();
+        pause();
+        root.CreateChild(15, "Second step").EndOk();
+        pause();
+        longStep.EndOk();
+        root.EndOk();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto violations = FindFlowNestingViolations(*uploader, "Root");
+        std::ranges::sort(violations);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq("; ", violations),
+            "First step overlaps Long step in Root; Second step overlaps Long step in Root");
     }
 
     TFakeWilsonUploader* RegisterUploader(NActors::TTestActorRuntimeBase& runtime) {

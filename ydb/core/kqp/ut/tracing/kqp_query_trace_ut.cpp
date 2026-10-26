@@ -816,6 +816,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_C(stage && stage->name().StartsWith("RBO stage: "), snapshot.PrintTraces());
         AssertDescendant(snapshot, "Search join order", "Rule: Optimize CBO tree");
 
+        // All compiler spans form one stack, including the rules emitted after the fact.
+        AssertFlowsNest(snapshot, "Get query plan");
+
         // Flows.
         const auto isAsync = [](const auto& span) {
             const auto* flow = FindAttribute(span, NKqp::FlowAttribute);
@@ -835,6 +838,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(plan && plan->name() == "Get query plan");
         UNIT_ASSERT(isAsync(compile));
         UNIT_ASSERT(dependsOn(*plan, compile));
+        UNIT_ASSERT_LE(compile.end_time_unix_nano(), plan->end_time_unix_nano());
 
         // Metadata loads run concurrently with the compiler, which waits for all of them.
         const auto& metadataWait = *FindSpan(snapshot, "Await table metadata");
@@ -862,6 +866,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             return link.span_id() == compile.span_id()
                 && relation && relation->value().string_value() == NKqp::FollowsFromRelation;
         }));
+        UNIT_ASSERT_LE(compile.end_time_unix_nano(), release.start_time_unix_nano());
     }
 
     Y_UNIT_TEST(NewRboDefaultLevelTrace) {
@@ -896,6 +901,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         for (const TStringBuf name : {"Await table metadata", "Await column statistics"}) {
             UNIT_ASSERT_VALUES_EQUAL_C(FindSpan(snapshot, name)->links_size(), 0, snapshot.PrintTraces());
         }
+        AssertFlowsNest(snapshot, "Get query plan");
     }
 
     Y_UNIT_TEST(NewRboFailedConversionTrace) {
@@ -917,6 +923,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             "Convert to new RBO operators"});
         AssertStatus(snapshot, "Convert to new RBO operators", NTraceProto::Status::STATUS_CODE_ERROR);
         AssertStatus(snapshot, "Compile query", NTraceProto::Status::STATUS_CODE_ERROR);
+        AssertFlowsNest(snapshot, "Get query plan");
     }
 
     Y_UNIT_TEST(CompilerFallbackKeepsBothAttempts) {
@@ -943,8 +950,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         auto snapshot = WaitForExternalTrace(runtime, traceparent, {"Get query plan", "Compile query"});
         AssertStatus(snapshot, "Compile query", NTraceProto::Status::STATUS_CODE_OK);
         // The failed new RBO attempt stays under the Compile query that the
-        // YQL optimizer completes.
+        // YQL optimizer completes, and its phases end before the retry.
         AssertDescendant(snapshot, "Annotate IO", "Compile query");
+        AssertFlowsNest(snapshot, "Get query plan");
         UNIT_ASSERT_VALUES_EQUAL_C(std::ranges::count_if(snapshot.Spans, [](const auto& span) {
             return span.name() == "Set up compilation";
         }), 2, snapshot.PrintTraces());
@@ -1130,6 +1138,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(metadata->parent_span_id(), initiating->span_id());
         UNIT_ASSERT_VALUES_EQUAL(stats->parent_span_id(), initiating->span_id());
         // Statistics are requested once the metadata request has completed.
+        UNIT_ASSERT_LE(metadata->end_time_unix_nano(), stats->start_time_unix_nano());
         UNIT_ASSERT(std::ranges::any_of(stats->links(), [&](const auto& link) {
             const auto* relation = FindAttribute(link, NKqp::RelationAttribute);
             return link.span_id() == metadata->span_id()

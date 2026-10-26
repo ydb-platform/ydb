@@ -156,7 +156,8 @@ TCompileTraceRuleScope::TCompileTraceRuleScope(TCompileTrace* trace, const TStri
     if (Trace) {
         Parent = Trace->GetCurrentParent();
         Id = Parent.Span(TCompileTraceLevels::Detail);
-        StartTime = TInstant::Now();
+        // The span is emitted later: sample the clock of the spans around it.
+        StartUnixNano = NWilson::TSpan::NowUnixNano();
         Trace->Push(Id);
     }
 }
@@ -165,14 +166,13 @@ TCompileTraceRuleScope::~TCompileTraceRuleScope() {
     if (!Trace) {
         return;
     }
-    const auto endTime = TInstant::Now();
+    const auto endUnixNano = NWilson::TSpan::NowUnixNano();
     const bool hasChildren = Trace->Pop(Id);
     const bool success = std::uncaught_exceptions() == UncaughtExceptions;
     if (Applied || hasChildren || !success) {
-        // Takes the actor system of the compiling actor's thread.
-        auto span = NWilson::TSpan::ConstructTerminated(Parent, Id, StartTime, endTime,
+        auto span = NWilson::TSpan::ConstructTerminated(Parent, Id, StartUnixNano, endUnixNano,
             success ? NWilson::NTraceProto::Status::STATUS_CODE_OK : NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
-            "Rule: " + Name + (Applied || !success ? "" : " (not applied)"));
+            "Rule: " + Name + (Applied || !success ? "" : " (not applied)"), Trace->ActorSystem);
         if (Trace->ActorSystem) {
             span.Attribute("node_id", Trace->ActorSystem->NodeId);
         }

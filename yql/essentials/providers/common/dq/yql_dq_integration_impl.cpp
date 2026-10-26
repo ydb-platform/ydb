@@ -13,6 +13,10 @@ bool TDqIntegrationBase::CheckPragmas(const TExprNode& node, TExprContext& ctx, 
     return true;
 }
 
+bool TDqIntegrationBase::AllowExecuteInDq(const TExprNode&, TExprContext&) {
+    return true;
+}
+
 bool TDqIntegrationBase::CanRead(const TExprNode&, TExprContext&, bool) {
     return false;
 }

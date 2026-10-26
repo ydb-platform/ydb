@@ -22,7 +22,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
 
-using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
+using TCoreTiling = Tiling<TPortionInfo>;
 
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {

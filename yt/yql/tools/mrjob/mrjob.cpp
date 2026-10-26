@@ -5,11 +5,21 @@
 
 #include <yt/cpp/mapreduce/client/init.h>
 
+#ifdef YQL_USE_TCMALLOC
+    #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+#endif
+
 #include <util/system/env.h>
 #include <util/system/mlock.h>
 #include <util/system/yassert.h>
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
+#ifdef YQL_USE_TCMALLOC
+    // disable tcmalloc sampling
+    tcmalloc::MallocExtension::SetGuardedSamplingInterval(-1);
+    tcmalloc::MallocExtension::SetProfileSamplingInterval(0);
+#endif
+
     Y_UNUSED(NKikimr::NUdf::GetStaticSymbols());
     try {
         LockAllMemory(LockCurrentMemory | LockFutureMemory);

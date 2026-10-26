@@ -51,13 +51,13 @@ Y_FORCE_INLINE auto TSimpleSkiffParser<wireType>::operator()(NSkiff::TCheckedInD
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-TTzSkiffParser<internalWireType>::TTzSkiffParser()
+TTzTupleSkiffParser<internalWireType>::TTzTupleSkiffParser()
 {
     Buffer_.resize(NTzTypes::GetMaxPossibleTzStringSize());
 }
 
 template <NSkiff::EWireType internalWireType>
-Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser)
+Y_FORCE_INLINE TStringBuf TTzTupleSkiffParser<internalWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser)
 {
     using namespace NSkiff;
     using namespace NTzTypes;
@@ -83,7 +83,7 @@ Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator()(NSkiff::T
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-void TTzSkiffWriter<internalWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+void TTzTupleSkiffWriter<internalWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
 {
     using namespace NSkiff;
     using namespace NTzTypes;

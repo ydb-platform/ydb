@@ -859,6 +859,15 @@ namespace NKikimr {
                 } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
                     return; // skip this pile, no data quorum needed
                 }
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> ||
+                        std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
+                    // only the answer of the pile holding the whole content of the group is taken, while an error from
+                    // another one (e.g. degraded while being synced) would fail the request
+                    if (pile->State != NKikimrBridge::TClusterState::SYNCHRONIZED ||
+                            groupPileInfo.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                        return;
+                    }
+                }
 
                 // check the sync state for this group
                 if (auto eventToSend = PrepareEvent(groupPileInfo, *ev->Get(), pile->BridgePileId)) {

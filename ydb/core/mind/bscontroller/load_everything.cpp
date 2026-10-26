@@ -678,7 +678,7 @@ public:
                 const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
                 if (inserted) {
                     if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType, jt->second);
                     } else {
                         Y_DEBUG_ABORT();
                     }

@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
 
 #include <library/cpp/threading/future/wait/wait.h>
-#include <library/cpp/threading/future/subscription/wait_any.h>
 
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>

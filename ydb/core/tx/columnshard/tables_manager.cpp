@@ -349,6 +349,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             return false;
         }
 
+        // one message for all versions: parsing into it reuses its strings and columns instead of allocating them anew
+        TSchemaPreset::TSchemaPresetVersionInfo info;
         while (!rowset.EndOfSet()) {
             const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
             AFL_VERIFY(preset);
@@ -356,7 +358,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(), rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
 
-            TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
             YDB_LOG_DEBUG("",
                 {"event", "load_preset"},
@@ -370,15 +371,15 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
                 {"presetId", id},
                 {"snapshot", version},
                 {"version", info.GetSchema().GetVersion()});
-            NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
+            NOlap::IColumnEngine::TSchemaVersionView versionView(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
-                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
+                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, versionView, PortionsStats);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
-                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
+                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, versionView);
             } else {
-                PrimaryIndex->RegisterOldSchemaVersion(version, preset->Id, schemaInitializationData);
+                PrimaryIndex->RegisterOldSchemaVersion(version, preset->Id, versionView);
             }
 
             if (!rowset.Next()) {
@@ -546,13 +547,13 @@ void TTablesManager::AddSchemaVersion(
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
-            NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+            NOlap::IColumnEngine::TSchemaVersionView(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
         PrimaryIndex->OnTieringModified(GetTtl());
     } else {
-        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaVersionView(versionInfo));
     }
 }
 

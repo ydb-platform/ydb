@@ -23,7 +23,7 @@ NJson::TJsonValue ResultJson(const NKikimr::NMiniKQL::TBenchmarkCaseResult& resu
     out["algo"] = NKikimr::NMiniKQL::AlgoOptionName(result.Algo);
     out["keySchema"] = NKikimr::NMiniKQL::KeySchemaOptionName(result.KeySchema);
     out["payload"] = NKikimr::NMiniKQL::PayloadOptionName(result.Payload);
-    out["payloadColumns"] = result.Payload == NKikimr::NMiniKQL::ETestedPayload::kWide ? params.WidePayloadColumns : 1;
+    out["payloadColumns"] = result.Payload == NKikimr::NMiniKQL::ETestedPayload::kWide ? params.WidePayloadColumns : result.Payload == NKikimr::NMiniKQL::ETestedPayload::kTpc ? 4 : 1;
     out["stringBytes"] = params.StringBytes;
     out["flavour"] = NKikimr::NMiniKQL::FlavourOptionName(result.Flavour);
     out["preset"] = params.Preset.PresetName;
@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("payload")
         .Help("payload shape: narrow is one column per side, wide uses "
               "--wide-payload-columns integers. May be repeated")
-        .Choices({"narrow", "wide"})
+        .Choices({"narrow", "wide", "tpc"})
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
             payloads.emplace([&]() {
@@ -125,6 +125,8 @@ int main(int argc, char** argv) {
                     return NKikimr::NMiniKQL::ETestedPayload::kNarrow;
                 } else if (val == "wide") {
                     return NKikimr::NMiniKQL::ETestedPayload::kWide;
+                } else if (val == "tpc") {
+                    return NKikimr::NMiniKQL::ETestedPayload::kTpc;
                 } else {
                     Y_ABORT("unknown option for payload");
                 }

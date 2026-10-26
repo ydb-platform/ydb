@@ -62,9 +62,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     THashSet<TActorId> UndeliveredReplicas;
 
     TStateStorageInfo::TSelection::EStatus ReplyStatus;
-    ui32 RepliesMerged;
+    // Used only to decide whether to send a signature update on timeout.
     ui32 RepliesAfterReply;
-    ui32 SignaturesMerged;
     ui32 NoDataReplies;
 
     TActorId ReplyLeader;
@@ -78,6 +77,16 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     const ui32 RingGroupIndex;
     bool NotifyRingGroupProxy;
+
+    ui32 RepliedReplicasCount() const {
+        // Each actual replica reply carries a signature, regardless of its status.
+        return Signature.Size();
+    }
+
+    ui32 AccountedReplicasCount() const {
+        // A late reply moves the replica from UndeliveredReplicas to Signature.
+        return RepliedReplicasCount() + UndeliveredReplicas.size();
+    }
 
     ui32 Majority() const {
         return Replicas / 2 + 1;
@@ -144,7 +153,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void ReplyAndSig(NKikimrProto::EReplyStatus status) {
         Reply(status);
-        if (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && RepliesMerged != Replicas)
+        if (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && AccountedReplicasCount() != Replicas)
             Become(&TThis::StateUpdateSig);
         else
             PassAway();
@@ -218,7 +227,6 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         if (!Signature.HasReplicaSignature(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
-            ++RepliesMerged;
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusUnavailable, &ReplyStatus, cookie, false);
         }
     }
@@ -267,8 +275,6 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         }
         UndeliveredReplicas.erase(replicaId);
         Signature.SetReplicaSignature(replicaId, ev->Record.GetSignature());
-        ++RepliesMerged;
-        ++SignaturesMerged;
 
         switch (status) {
         case NKikimrProto::OK: {
@@ -453,8 +459,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void CheckLookupReply() {
         const bool allowReply = ProxyOptions.SigWaitMode == ProxyOptions.SigNone
-            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && SignaturesMerged >= Majority())
-            || RepliesMerged == Replicas;
+            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && RepliedReplicasCount() >= Majority())
+            || AccountedReplicasCount() == Replicas;
 
         if (allowReply) {
             switch (ReplyStatus) {
@@ -468,7 +474,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 // replica replies count towards a negative lookup quorum.
                 if (NoDataReplies >= Majority()) {
                     ReplyAndSig(NKikimrProto::NODATA);
-                } else if (RepliesMerged == Replicas) {
+                } else if (AccountedReplicasCount() == Replicas) {
                     ReplyAndSig(NKikimrProto::ERROR);
                 }
                 return;
@@ -538,7 +544,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void CheckUpdateReply() {
-        const bool allowReply = ProxyOptions.SigWaitMode != ProxyOptions.SigSync || RepliesMerged == Replicas;
+        const bool allowReply = ProxyOptions.SigWaitMode != ProxyOptions.SigSync || AccountedReplicasCount() == Replicas;
 
         if (allowReply) {
             switch (ReplyStatus) {
@@ -605,17 +611,20 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void UpdateSigFor(ui64 cookie, ui64 sig) {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
-            if (sig != Max<ui64>()) {
-                Signature.SetReplicaSignature(replicaId, sig);
-            }
-            ++RepliesAfterReply;
-            ++SignaturesMerged;
+        if (Signature.HasReplicaSignature(replicaId)) {
+            return;
+        }
+        if (sig == Max<ui64>()) {
+            UndeliveredReplicas.insert(replicaId);
+        } else {
+            UndeliveredReplicas.erase(replicaId);
+            Signature.SetReplicaSignature(replicaId, sig);
+        }
+        ++RepliesAfterReply;
 
-            if (RepliesMerged + RepliesAfterReply == Replicas) {
-                Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
-                return PassAway();
-            }
+        if (AccountedReplicasCount() == Replicas) {
+            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
+            return PassAway();
         }
     }
 
@@ -634,7 +643,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             {"disconnectedNode", node});
         MergeSigNodeError(node);
 
-        if (RepliesMerged + RepliesAfterReply == Replicas) {
+        if (AccountedReplicasCount() == Replicas) {
             Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
             return PassAway();
         }
@@ -662,7 +671,6 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 {"ev", ev->ToString()});
             return;
         }
-        UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }
 
@@ -690,9 +698,7 @@ public:
         , SuggestedStep(0)
         , Replicas(0)
         , ReplyStatus(TStateStorageInfo::TSelection::StatusUnknown)
-        , RepliesMerged(0)
         , RepliesAfterReply(0)
-        , SignaturesMerged(0)
         , NoDataReplies(0)
         , ReplyGeneration(0)
         , ReplyStep(0)

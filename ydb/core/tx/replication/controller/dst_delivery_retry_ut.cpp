@@ -8,12 +8,14 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <ydb/library/testlib/helpers.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
-    void CheckDeliveryRetry(bool alter, bool detach = false) {
+    void CheckDeliveryRetry(bool alter, bool detach, bool success) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
@@ -24,9 +26,9 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
         const TPathId pathId(1, 1);
         const auto actor = runtime.Register(alter
             ? CreateDstAlterer(parent, pathId.OwnerId, 1, 1,
-                TReplication::ETargetKind::Table, pathId, TReplication::EState::Done)
+                TReplication::ETargetKind::Table, pathId, TReplication::EState::Done, TPathId(1, 3))
             : CreateDstRemover(parent, pathId.OwnerId, {}, 1, 1,
-                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId()));
+                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId(), TPathId(1, 3)));
 
         NTxProxy::TTxProxyServices services;
         services.LeaderPipeCache = pipeCache;
@@ -62,19 +64,45 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
         // Deliver the captured retry and verify that the destination operation is proposed again.
         runtime.Send(actor, parent, new TEvents::TEvWakeup());
         allocate(101);
-        runtime.Send(actor, parent, new TEvents::TEvPoison());
+        const TString error = "AlreadyExists unrelated to replication ownership";
+        auto reply = [&](ui64 txId, NKikimrScheme::EStatus status) {
+            runtime.Send(actor, pipeCache,
+                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(status, txId, pathId.OwnerId, error));
+        };
+        reply(101, success ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusAlreadyExists);
+        if (!success && detach) {
+            // An unrelated AlreadyExists retries; only conditional StatusSuccess completes cleanup.
+            const auto retry = runtime.CaptureScheduledEvents();
+            UNIT_ASSERT_VALUES_EQUAL(retry.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(retry.begin()->Event->Type, ui32(TEvents::TSystem::Wakeup));
+            runtime.Send(actor, parent, new TEvents::TEvWakeup());
+            allocate(102);
+            reply(102, NKikimrScheme::StatusSuccess);
+        }
+        auto check = [&](const auto& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), success || (!alter && detach));
+            if (!result->Get()->IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        };
+        if (alter) {
+            check(runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(parent));
+        } else {
+            check(runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(parent));
+        }
     }
 
-    Y_UNIT_TEST(AlterRetriesOwnSchemeShard) {
-        CheckDeliveryRetry(true);
+    Y_UNIT_TEST_TWIN(AlterRetriesOwnSchemeShard, Success) {
+        CheckDeliveryRetry(true, false, Success);
     }
 
-    Y_UNIT_TEST(DropRetriesOwnSchemeShard) {
-        CheckDeliveryRetry(false);
+    Y_UNIT_TEST_TWIN(DropRetriesOwnSchemeShard, Success) {
+        CheckDeliveryRetry(false, false, Success);
     }
 
-    Y_UNIT_TEST(DetachRetriesOwnSchemeShard) {
-        CheckDeliveryRetry(false, true);
+    Y_UNIT_TEST_TWIN(DetachRetriesOwnSchemeShard, Success) {
+        CheckDeliveryRetry(false, true, Success);
     }
 }
 

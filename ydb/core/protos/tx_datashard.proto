@@ -585,6 +585,10 @@ message TFinalizeBuildIndex {
     optional uint64 BuildIndexId = 5;
 
     optional NKikimrSchemeOp.TBuildIndexOutcome Outcome = 6;
+
+    // Additional snapshot to remove in the same transaction (vector index delta scan).
+    optional uint64 ExtraSnapshotStep = 7;
+    optional uint64 ExtraSnapshotTxId = 8;
 }
 
 message TDropIndexNotice {

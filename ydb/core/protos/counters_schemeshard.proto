@@ -318,6 +318,8 @@ enum ESimpleCounters {
     COUNTER_PARTITIONS_WITH_DEFERRED_SPLIT_MERGE = 244 [(CounterOpts) = {Name: "PartitionsWithDeferredSplitMerge"}];
     COUNTER_TABLES_WITH_DEFERRED_SPLIT_MERGE = 245 [(CounterOpts) = {Name: "TablesWithDeferredSplitMerge"}];
 
+    COUNTER_IN_FLIGHT_OPS_TxPrepareVectorIndex = 246      [(CounterOpts) = {Name: "InFlightOps/PrepareVectorIndex"}];
+
 }
 
 enum ECumulativeCounters {
@@ -535,6 +537,8 @@ enum ECumulativeCounters {
     // The deferral is direction-aware in the demand-tracking state, but this counter is
     // intentionally unified across directions and reasons.
     COUNTER_SPLIT_MERGE_DEFERRALS = 154 [(CounterOpts) = {Name: "SplitMergeDeferrals"}];
+
+    COUNTER_FINISHED_OPS_TxPrepareVectorIndex = 155 [(CounterOpts) = {Name: "FinishedOps/PrepareVectorIndex"}];
 }
 
 enum EPercentileCounters {

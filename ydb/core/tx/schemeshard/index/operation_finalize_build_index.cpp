@@ -14,6 +14,21 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+// Vector index builds keep a second main table snapshot for the delta scan, we should drop it too
+TTxId GetExtraSnapshotTxId(TSchemeShard* ss, TIndexBuildInfo& buildInfo, const TPathId& pathId) {
+    if (!buildInfo.IsBuildVectorIndex() || buildInfo.TablePathId != pathId) {
+        return {};
+    }
+    if (const auto it = ss->TablesWithSnapshots.find(pathId); it != ss->TablesWithSnapshots.end()) {
+        for (const TTxId txId : it->second) {
+            if (txId != buildInfo.InitiateTxId) {
+                return txId;
+            }
+        }
+    }
+    return {};
+}
+
 class TConfigureParts: public TSubOperationState {
     virtual const char* Name() const override final { return "TConfigureParts"; }
 private:
@@ -63,6 +78,10 @@ public:
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));
+            if (const auto extraTxId = GetExtraSnapshotTxId(context.SS, **buildInfoPtr, pathId)) {
+                op->SetExtraSnapshotTxId(ui64(extraTxId));
+                op->SetExtraSnapshotStep(ui64(context.SS->SnapshotsStepIds.at(extraTxId)));
+            }
             op->SetTableSchemaVersion(table->AlterVersion+1);
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
             if (txState->BuildIndexOutcome) {
@@ -126,6 +145,12 @@ public:
         context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
 
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+
+        if (const TTxId extraTxId = GetExtraSnapshotTxId(context.SS, **buildInfoPtr, tableId)) {
+            context.SS->RemoveTableSnapshot(tableId, extraTxId);
+            context.SS->PersistDropSnapshot(db, extraTxId, tableId);
+            context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        }
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
@@ -312,6 +337,17 @@ public:
 
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
+        if (finalizeMainTable.HasExtraSnapshotTxId() &&
+            !context.SS->HasTableSnapshot(tablePathId, TTxId(finalizeMainTable.GetExtraSnapshotTxId())))
+        {
+            errStr = TStringBuilder()
+                << "No extra snapshot with requested txId presents for table"
+                << ", tableId:" << tablePathId
+                << ", requested snapshotTxId: " << finalizeMainTable.GetExtraSnapshotTxId();
+            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
 

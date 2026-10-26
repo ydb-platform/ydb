@@ -250,6 +250,10 @@ TParts MakePrepareIndexValidation(const TOperation& op, const TTxTransaction& tx
     return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
 }
 
+TParts MakePrepareVectorIndex(const TOperation& op, const TTxTransaction& tx, TOperationContext&) {
+    return {CreatePrepareVectorIndex(op.NextPartId(), tx)};
+}
+
 TParts MakeCancelIndexBuild(const TOperation& op, const TTxTransaction& tx, TOperationContext& context) {
     return CancelBuildIndex(op.NextPartId(), tx, context);
 }

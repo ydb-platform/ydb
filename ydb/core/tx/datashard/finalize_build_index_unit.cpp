@@ -97,6 +97,11 @@ public:
         const TSnapshotKey key(pathId, step, txId);
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
 
+        if (params.HasExtraSnapshotTxId() && params.GetExtraSnapshotStep()) {
+            const TSnapshotKey extraKey(pathId, params.GetExtraSnapshotStep(), params.GetExtraSnapshotTxId());
+            DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, extraKey);
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 

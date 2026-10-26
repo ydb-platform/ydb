@@ -93,6 +93,7 @@ bool IsCreate(ETxType t) {
             return false; // IsCreate
         case TxInitializeBuildIndex: //this is more like alter
         case TxPrepareIndexValidation:
+        case TxPrepareVectorIndex:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
             return false; // IsCreate
@@ -258,6 +259,7 @@ bool IsDrop(ETxType t) {
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxPrepareIndexValidation:
+        case TxPrepareVectorIndex:
         case TxCreateLock:
         case TxDropLock:
         case TxFinalizeBuildIndex:
@@ -405,6 +407,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxPrepareIndexValidation:
+        case TxPrepareVectorIndex:
         case TxCreateLock:
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
@@ -606,6 +609,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
         case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
+        case NKikimrSchemeOp::ESchemeOpPrepareVectorIndex: return TxPrepareVectorIndex;
         case NKikimrSchemeOp::ESchemeOpCreateTestShardSet: return TxCreateTestShardSet;
         case NKikimrSchemeOp::ESchemeOpDropTestShardSet: return TxDropTestShardSet;
         // Fan out to TxChangePathState sub-ops; the wrapper type is never persisted.

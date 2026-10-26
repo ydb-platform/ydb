@@ -476,6 +476,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::AlterSequence:
         case EState::AlterIndexTable:
         case EState::PrepareValidation:
+        case EState::PrepareVectorIndex:
         case EState::Done:
         case EState::Cancellation_Applying:
         case EState::Cancellation_Unlocking:
@@ -503,6 +504,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextRowIdSrc:
         case ESubState::FulltextIndexPrefixBorders:
         case ESubState::RebuildReplacing:
+        case ESubState::VectorIndexDelta:
             return true;
     }
     return false;

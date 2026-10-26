@@ -36,6 +36,10 @@ TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo) {
                 : TPath::Init(buildInfo.TablePathId, ss);
         case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
         case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
+            if (buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta) {
+                // Delta scans always read the main table, regardless of the level build state.
+                return TPath::Init(buildInfo.TablePathId, ss);
+            }
             if (buildInfo.KMeans.Level == 1 &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {

@@ -2094,6 +2094,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterUserAttributes:
     case TTxState::TxInitializeBuildIndex:
     case TTxState::TxPrepareIndexValidation:
+    case TTxState::TxPrepareVectorIndex:
     case TTxState::TxFinalizeBuildIndex:
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
@@ -6249,6 +6250,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvDeltaKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);

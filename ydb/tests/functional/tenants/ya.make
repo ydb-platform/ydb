@@ -18,7 +18,7 @@ TEST_SRCS(
     test_users_groups_with_acl.py
 )
 
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(80)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 

@@ -105,19 +105,20 @@ void TDirectReadSessionControlCallbacks::OnDirectReadDone(
     // Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response,
     // TDeferredActions<false>& deferred
 ) {
+    TDeferredActions<false> deferred;
     if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
-        s->OnDirectReadDone(responses);
+        s->OnDirectReadDone(responses, deferred);
     }
 }
 
 void TDirectReadSessionControlCallbacks::AbortSession(TSessionClosedEvent&& closeEvent) {
-    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+    if (auto s = GetReadSessionOwner(SingleClusterReadSessionContextPtr)) {
         s->AbortSession(std::move(closeEvent));
     }
 }
 
 void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::function<void()> callback) {
-    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+    if (auto s = GetReadSessionOwner(SingleClusterReadSessionContextPtr)) {
         s->ScheduleCallback(
             delay,
             [callback = std::move(callback)](bool ok) {
@@ -142,7 +143,7 @@ void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::
 }
 
 void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionId partitionSessionId) {
-    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+    if (auto s = GetReadSessionOwner(SingleClusterReadSessionContextPtr)) {
         s->StopPartitionSession(partitionSessionId);
     }
 }

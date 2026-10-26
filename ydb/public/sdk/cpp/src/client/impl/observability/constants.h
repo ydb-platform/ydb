@@ -131,11 +131,30 @@ inline constexpr std::string_view kSessionLeafMax             = "max";
 inline constexpr std::string_view kSessionTagPoolNameSuffix   = "pool.name";
 inline constexpr std::string_view kSessionTagStateSuffix      = "state";
 
+inline constexpr std::string_view kTopicReaderReceivedMessages = "ydb.topic.reader.received.messages";
+inline constexpr std::string_view kTopicReaderDeliveredMessages = "ydb.topic.reader.delivered.messages";
+inline constexpr std::string_view kTopicReaderCommitQueued = "ydb.topic.reader.commit.queued";
+inline constexpr std::string_view kTopicReaderCommitAcknowledged = "ydb.topic.reader.commit.acknowledged";
+
 } // namespace MetricName
 
 // ---------------------------------------------------------------------------
 // Metrics: instrument units (UCUM / Semconv recommended forms).
 // ---------------------------------------------------------------------------
+namespace MetricDescription {
+
+    inline constexpr std::string_view kTopicReaderReceivedMessages =
+        "Number of logical messages received by the SDK before decompression; redeliveries are counted again and malformed Kafka batches use the available header or a fallback.";
+    inline constexpr std::string_view kTopicReaderDeliveredMessages =
+        "Number of logical messages delivered to the application.";
+    inline constexpr std::string_view kTopicReaderCommitQueued =
+        "Number of application-requested offset positions accepted by the Reader for commit, including transactional precommit submissions.";
+    inline constexpr std::string_view kTopicReaderCommitAcknowledged =
+        "Number of ordinary application-requested offset positions acknowledged by the Topic Reader; "
+        "transactional offsets are excluded.";
+
+} // namespace MetricDescription
+
 namespace MetricUnit {
 
 inline constexpr std::string_view kSeconds   = "s";
@@ -143,6 +162,9 @@ inline constexpr std::string_view kOperation = "{operation}";
 inline constexpr std::string_view kRequest   = "{request}";
 inline constexpr std::string_view kTimeout   = "{timeout}";
 inline constexpr std::string_view kSession   = "{session}";
+
+inline constexpr std::string_view kMessage = "{message}";
+inline constexpr std::string_view kOffset = "{offset}";
 
 } // namespace MetricUnit
 
@@ -157,6 +179,12 @@ using AttrKey::kDbOperationName;
 using AttrKey::kDbResponseStatusCode;
 using AttrKey::kServerAddress;
 using AttrKey::kServerPort;
+
+inline constexpr std::string_view kEndpoint = "endpoint";
+inline constexpr std::string_view kDatabase = "database";
+inline constexpr std::string_view kTopic = "topic";
+inline constexpr std::string_view kConsumer = "consumer";
+inline constexpr std::string_view kReaderName = "reader.name";
 
 } // namespace MetricLabel
 

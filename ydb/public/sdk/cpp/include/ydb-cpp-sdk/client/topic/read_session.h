@@ -201,6 +201,10 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
 
     //! InFlightMemoryController.
     FLUENT_SETTING_OPTIONAL(std::uint64_t, PartitionMaxInFlightBytes);
+
+    //! Explicit name enabling exported Topic reader metrics.
+    //! An empty name leaves these metrics disabled.
+    FLUENT_SETTING(std::string, ReaderName);
 };
 
 struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSessionGetEventSettings> {

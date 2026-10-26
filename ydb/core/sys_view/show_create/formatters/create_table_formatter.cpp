@@ -1380,6 +1380,19 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    switch (cdcStream.GetCompression()) {
+    case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        break;
+    case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+        Stream << del << "COMPRESSION = 'ZSTD'";
+        Stream << ", COMPRESSION_LEVEL = "
+            << (cdcStream.HasCompressionLevel() ? cdcStream.GetCompressionLevel() : 3);
+        del = ", ";
+        break;
+    default:
+        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected cdc stream compression");
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";

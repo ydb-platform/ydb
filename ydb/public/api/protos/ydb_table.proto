@@ -555,6 +555,17 @@ message ChangefeedFormat {
     }
 }
 
+message ChangefeedCompression {
+    enum Codec {
+        CODEC_NONE = 0;
+        CODEC_ZSTD = 1;
+    }
+
+    Codec codec = 1;
+    // ZSTD compression level. If unspecified, level 3 is used.
+    optional int32 level = 2 [(Ydb.value) = "[1; 22]"];
+}
+
 message Changefeed {
     // Name of the feed
     string name = 1;
@@ -582,6 +593,8 @@ message Changefeed {
     bool user_sids = 12;
     // Emit user trace identifier (trace_id) or not.
     bool trace_ids = 13;
+    // Compression applied to every changefeed message.
+    ChangefeedCompression compression = 14;
 }
 
 message ChangefeedDescription {
@@ -629,6 +642,8 @@ message ChangefeedDescription {
     bool user_sids = 11;
     // State of emitting of user trace identifier (trace_id) or not.
     bool trace_ids = 12;
+    // Compression applied to every changefeed message.
+    ChangefeedCompression compression = 13;
 }
 
 message StoragePool {

@@ -2119,6 +2119,32 @@ Y_UNIT_TEST(TableChangefeeds) {
                 PRIMARY KEY (Key)
             );
             ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'JSON',
+                    COMPRESSION = 'ZSTD', COMPRESSION_LEVEL = 7
+                );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` String,
+                `Value` String,
+                PRIMARY KEY (`Key`)
+            );
+
+            ALTER TABLE `test_show_create`
+                ADD CHANGEFEED `feed` WITH (MODE = 'UPDATES', FORMAT = 'JSON', COMPRESSION = 'ZSTD', COMPRESSION_LEVEL = 7, RETENTION_PERIOD = INTERVAL('P1D'))
+            ;
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
                 ADD CHANGEFEED `feed_1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
             ALTER TABLE test_show_create
                 ADD CHANGEFEED `feed_2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', USER_SIDS = TRUE);

@@ -8562,6 +8562,43 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(AddChangefeedWithZstdCompression) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/table` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                COMPRESSION = 'ZSTD',
+                COMPRESSION_LEVEL = 7
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(changefeeds[0].GetCompression(), EChangefeedCompression::Zstd);
+        UNIT_ASSERT(changefeeds[0].GetCompressionLevel());
+        UNIT_ASSERT_VALUES_EQUAL(*changefeeds[0].GetCompressionLevel(), 7);
+
+        result = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/table` ADD CHANGEFEED `bad_feed` WITH (
+                MODE = 'UPDATES', FORMAT = 'JSON',
+                COMPRESSION = 'NONE', COMPRESSION_LEVEL = 3
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "compression level requires ZSTD");
+    }
+
     Y_UNIT_TEST(AddChangefeedWhenDisabled) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())

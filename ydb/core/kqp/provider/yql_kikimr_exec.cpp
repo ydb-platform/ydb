@@ -3154,6 +3154,34 @@ public:
                                             TStringBuilder() << "Unknown changefeed format: " << format));
                                         return SyncError();
                                     }
+                                } else if (name == "compression") {
+                                    auto compression = to_lower(TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    ));
+
+                                    if (compression == "none") {
+                                        add_changefeed->mutable_compression()->set_codec(
+                                            Ydb::Table::ChangefeedCompression::CODEC_NONE);
+                                    } else if (compression == "zstd") {
+                                        add_changefeed->mutable_compression()->set_codec(
+                                            Ydb::Table::ChangefeedCompression::CODEC_ZSTD);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << "Unknown changefeed compression: " << compression));
+                                        return SyncError();
+                                    }
+                                } else if (name == "compression_level") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    i32 level;
+                                    if (!TryFromString(value, level) || level < 1 || level > 22) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be in range [1, 22]"));
+                                        return SyncError();
+                                    }
+                                    add_changefeed->mutable_compression()->set_level(level);
                                 } else if (name == "initial_scan") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()

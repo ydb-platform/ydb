@@ -1139,6 +1139,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithZstdCompression(i32 level, TCdcStream streamDesc) {
+        streamDesc.Compression = NKikimrSchemeOp::ECdcStreamCompressionZstd;
+        streamDesc.CompressionLevel = level;
+        return streamDesc;
+    }
+
     TString CalcPartitionKey(const TString& data) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
@@ -1669,6 +1675,98 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
         });
+    }
+
+    Y_UNIT_TEST(KeysOnlyLogZstd) {
+        TopicRunner::Read(SimpleTable(),
+            WithZstdCompression(7, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
+                UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);
+            )"}, {
+                R"({"update":{},"key":[1]})",
+            });
+    }
+
+    Y_UNIT_TEST(LargeBinaryPayloadZstd) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "String", false, false},
+            });
+        TTestTopicEnv env(table,
+            WithZstdCompression(7, Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        auto& client = env.GetClient();
+        for (const TString consumer : {"compressed", "decompressed"}) {
+            auto result = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer(consumer).EndAddConsumer()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TString binary;
+        binary.reserve(256_KB);
+        for (ui32 repeat = 0; repeat < 1024; ++repeat) {
+            for (ui32 value = 0; value < 256; ++value) {
+                binary.push_back(static_cast<char>(value));
+            }
+        }
+        const TString encoded = Base64Encode(binary);
+
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), Sprintf(R"(
+            $value = Unwrap(String::Base64Decode("%s"));
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, $value);
+        )", encoded.c_str()), true);
+
+        auto readOne = [&](const TString& consumer, bool decompress, auto&& callback) {
+            auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(std::string{"/Root/Table/Stream"})
+                .ConsumerName(consumer)
+                .Decompress(decompress));
+
+            while (true) {
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event);
+
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    callback(*data);
+                    break;
+                } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    start->Confirm();
+                } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL("Topic read session closed before receiving the CDC message");
+                }
+            }
+
+            reader->Close(TDuration::Zero());
+        };
+
+        size_t compressedSize = 0;
+        readOne("compressed", false, [&](const auto& event) {
+            const auto& messages = event.GetCompressedMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetCodec(), NYdb::NTopic::ECodec::ZSTD);
+            compressedSize = messages[0].GetData().size();
+        });
+
+        TString decompressed;
+        readOne("decompressed", true, [&](const auto& event) {
+            const auto& messages = event.GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            decompressed = messages[0].GetData();
+        });
+
+        constexpr size_t MinCompressionRatio = 4;
+        UNIT_ASSERT_GT(compressedSize, 0);
+        UNIT_ASSERT_C(compressedSize * MinCompressionRatio <= decompressed.size(), TStringBuilder()
+            << "Expected at least " << MinCompressionRatio << ":1 compression ratio"
+            << ", compressed size: " << compressedSize
+            << ", uncompressed size: " << decompressed.size());
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(decompressed, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["key"][0].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode(json["update"]["value"].GetString()), binary);
     }
 
     Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {

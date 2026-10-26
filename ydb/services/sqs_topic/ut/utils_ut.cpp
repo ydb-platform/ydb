@@ -213,6 +213,8 @@ Y_UNIT_TEST_SUITE(SqsTopicConsumerAttributes) {
         UNIT_ASSERT(V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value());
         consumer.SetDeadLetterQueue("/Root/dlq");
         UNIT_ASSERT_VALUES_EQUAL(V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value(), enableRelativePaths);
+        consumer.SetDeadLetterQueue("Root/dlq");
+        UNIT_ASSERT_VALUES_EQUAL(V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value(), enableRelativePaths);
         consumer.SetDeadLetterQueue("/Other/dlq");
         UNIT_ASSERT(!V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value());
     }

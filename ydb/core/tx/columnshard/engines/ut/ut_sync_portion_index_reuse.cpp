@@ -290,6 +290,106 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
         UNIT_ASSERT(max->Equals(values->GetScalar(0).ValueOrDie()));
     }
 
+    Y_UNIT_TEST(MinMaxIndexBuildsNumericBoundsAndPrunesPredicates) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        const auto& indexInfo = schema->GetIndexInfo();
+        const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
+        const auto nulls = MakeDecimalArray({ std::nullopt, std::nullopt });
+        const auto first = MakeDecimalArray({ 1, 256 });
+        const auto second = MakeDecimalArray({ -1, 0, std::nullopt });
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
+            { ValueColumnId,
+                { BuildColumnChunkFromArray(*schema, ValueColumnId, nulls), BuildColumnChunkFromArray(*schema, ValueColumnId, first),
+                    BuildColumnChunkFromArray(*schema, ValueColumnId, second), BuildColumnChunkFromArray(*schema, ValueColumnId, nulls) } },
+        };
+        const auto index = meta->BuildIndexOptional(chunks, 2 * nulls->length() + first->length() + second->length(), indexInfo);
+        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
+        const auto& payload = index.GetResult().front()->GetData();
+        const auto bounds = NArrow::NAccessor::TMinMax::FromBinaryString(payload, first->type());
+        UNIT_ASSERT(bounds.Min()->Equals(second->GetScalar(0).ValueOrDie()));
+        UNIT_ASSERT(bounds.Max()->Equals(first->GetScalar(1).ValueOrDie()));
+
+        using EOp = NArrow::NSSA::TIndexCheckOperation::EOperation;
+        const auto requests = MakeDecimalArray({ -2, -1, 255, 256, 257 });
+        const std::vector<std::pair<EOp, std::array<bool, 5>>> cases = {
+            { EOp::Equals, { false, true, true, true, false } },
+            { EOp::Less, { false, false, true, true, true } },
+            { EOp::LessOrEqual, { false, true, true, true, true } },
+            { EOp::Greater, { true, true, true, false, false } },
+            { EOp::GreaterOrEqual, { true, true, true, true, false } },
+        };
+        for (const auto& [op, expected] : cases) {
+            for (ui32 i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(meta->CheckValue(payload, std::nullopt, requests->GetScalar(i).ValueOrDie(),
+                                             NArrow::NSSA::TIndexCheckOperation(op, true), indexInfo), expected[i]);
+            }
+        }
+
+        // Turning the flag off must not interpret numeric bounds as byte-ordered bounds either.
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        for (const auto& [op, expected] : cases) {
+            for (ui32 i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT(meta->CheckValue(
+                    payload, std::nullopt, requests->GetScalar(i).ValueOrDie(), NArrow::NSSA::TIndexCheckOperation(op, true), indexInfo));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MinMaxIndexPreservesLegacyOrderAndPayload) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        const auto schema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
+        const auto& indexInfo = schema->GetIndexInfo();
+        const auto meta = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(indexInfo.GetIndexVerified(MinMaxIndexId).GetObjectPtr());
+        const auto values = MakeDecimalArray({ 1, 256 });
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
+            { ValueColumnId, { BuildColumnChunkFromArray(*schema, ValueColumnId, values) } },
+        };
+        const auto index = meta->BuildIndexOptional(chunks, values->length(), indexInfo);
+        UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
+        const auto& payload = index.GetResult().front()->GetData();
+        auto legacy = NArrow::NAccessor::TMinMax::MakeNull(values->type());
+        legacy.Min() = values->GetScalar(1).ValueOrDie();
+        legacy.Max() = values->GetScalar(0).ValueOrDie();
+        UNIT_ASSERT_VALUES_EQUAL(payload, legacy.ToBinaryString());
+        UNIT_ASSERT_VALUES_EQUAL(payload[0], '1');
+
+        const NArrow::NSSA::TIndexCheckOperation equals(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true);
+        const auto requests = MakeDecimalArray({ 1, 256, 257 });
+        UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(0).ValueOrDie(), equals, indexInfo));
+        UNIT_ASSERT(meta->CheckValue(payload, std::nullopt, requests->GetScalar(1).ValueOrDie(), equals, indexInfo));
+        UNIT_ASSERT(!meta->CheckValue(payload, std::nullopt, requests->GetScalar(2).ValueOrDie(), equals, indexInfo));
+    }
+
+    Y_UNIT_TEST(MaxIndexIgnoresNullChunks) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
+        const auto& indexInfo = schema->GetIndexInfo();
+        const auto meta = std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(indexInfo.GetIndexVerified(MaxIndexId).GetObjectPtr());
+        const auto nulls = MakeDecimalArray({ std::nullopt, std::nullopt });
+        const auto values = MakeDecimalArray({ 1, 256 });
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
+            { ValueColumnId,
+                { BuildColumnChunkFromArray(*schema, ValueColumnId, nulls), BuildColumnChunkFromArray(*schema, ValueColumnId, values),
+                    BuildColumnChunkFromArray(*schema, ValueColumnId, nulls) } },
+        };
+        for (const bool numeric : { false, true }) {
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            const auto index = meta->BuildIndexOptional(chunks, 2 * nulls->length() + values->length(), indexInfo);
+            UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
+            UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
+            const auto max = meta->GetMaxScalarVerified({ index.GetResult().front()->GetData() }, indexInfo);
+            UNIT_ASSERT(max->Equals(values->GetScalar(numeric ? 1 : 0).ValueOrDie()));
+        }
+    }
+
     Y_UNIT_TEST(NumericDecimalDoesNotPruneLegacyMinMaxPayload) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();

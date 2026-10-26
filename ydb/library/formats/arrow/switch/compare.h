@@ -11,7 +11,13 @@ namespace NKikimr::NArrow {
 
 class TComparator {
 public:
-    static bool IsNumericDecimal(const NScheme::TTypeInfo& logicalType);
+    enum class EComparisonOrder {
+        Default,
+        DecimalNumeric,
+    };
+
+    // Persisted extrema record this order so they are not reused under a different one.
+    static EComparisonOrder GetComparisonOrder(const NScheme::TTypeInfo& logicalType);
 
     template <bool notNull>
     static std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos,
@@ -122,7 +128,7 @@ public:
     template <typename T>
     static std::partial_ordering CompareValueNotNull(const T& x, const T& y, [[maybe_unused]] const NScheme::TTypeInfo& logicalType) {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
-            if (IsNumericDecimal(logicalType)) {
+            if (GetComparisonOrder(logicalType) == EComparisonOrder::DecimalNumeric) {
                 AFL_VERIFY(x.size() == 16 && y.size() == 16);
                 const auto high = ReadUnaligned<i64>(x.data() + sizeof(ui64)) <=> ReadUnaligned<i64>(y.data() + sizeof(ui64));
                 if (high != 0) {

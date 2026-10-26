@@ -10,8 +10,8 @@ public:
         return kMinMaxClassName;
     }
 
-    static bool Skip(
-        NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op);
+    static bool Skip(const NArrow::NAccessor::TMinMax& chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
+        const NArrow::NSSA::TIndexCheckOperation& op, const NScheme::TTypeInfo& logicalType);
 
 private:
     using TBase = TSkipIndex;

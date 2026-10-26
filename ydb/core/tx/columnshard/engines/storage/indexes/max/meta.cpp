@@ -5,7 +5,6 @@
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/formats/arrow/scalar/serialization.h>
-#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
@@ -17,27 +16,13 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
     const auto& logicalType = column.GetTypeInfo();
     std::shared_ptr<arrow::Scalar> result;
-    const bool numericDecimal = NArrow::TComparator::IsNumericDecimal(logicalType);
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
-            if (numericDecimal) {
-                const auto& chunk = cReader.GetCurrentChunk();
-                for (ui32 i = 0; i < chunk->GetRecordsCount(); ++i) {
-                    auto current = chunk->GetScalar(i);
-                    AFL_VERIFY(current);
-                    if (!result || !result->is_valid || (current->is_valid && NArrow::ScalarCompare(*result, *current, logicalType) < 0)) {
-                        result = std::move(current);
-                    }
-                }
-
-                continue;
-            }
-
-            auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar();
+            auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar(logicalType);
             AFL_VERIFY(currentScalar);
-            if (!result || NArrow::ScalarCompare(*result, *currentScalar, logicalType) == -1) {
+            if (!result || !result->is_valid || (currentScalar->is_valid && NArrow::ScalarCompare(*result, *currentScalar, logicalType) < 0)) {
                 result = currentScalar;
             }
         }
@@ -55,7 +40,7 @@ std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(const std::vecto
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& d : data) {
         std::shared_ptr<arrow::Scalar> current = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(d, dataType).DetachResult();
-        if (!result || NArrow::ScalarCompare(*result, *current, logicalType) == -1) {
+        if (!result || !result->is_valid || (current->is_valid && NArrow::ScalarCompare(*result, *current, logicalType) < 0)) {
             result = current;
         }
     }

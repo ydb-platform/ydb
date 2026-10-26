@@ -293,7 +293,8 @@ protected:
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    virtual TMinMax DoGetMinMaxScalars() const = 0;
+
+    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -457,14 +458,14 @@ public:
         return DoGetScalar(index);
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
+    std::shared_ptr<arrow::Scalar> GetMaxScalar(const NScheme::TTypeInfo& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
-        return GetMinMaxScalars().Max();
+        return GetMinMaxScalars(logicalType).Max();
     }
 
-    TMinMax GetMinMaxScalars() const {
+    TMinMax GetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
-        return DoGetMinMaxScalars();
+        return DoGetMinMaxScalars(logicalType);
     }
 
     std::optional<ui64> GetRawSize() const {

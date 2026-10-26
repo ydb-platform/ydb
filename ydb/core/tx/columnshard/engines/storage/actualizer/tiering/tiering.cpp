@@ -195,10 +195,11 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
                 NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
                 const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
                 if (!data.empty()) {
-                    auto type = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type();
+                    const auto& column = portionSchema->GetIndexInfo().GetColumnFeaturesVerified(*TieringColumnId);
+                    const auto& type = column.GetArrowField()->type();
                     auto minmax = NArrow::NAccessor::TMinMax::MakeNull(type);
                     for (auto&& d : data) {
-                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type));
+                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type), column.GetTypeInfo());
                     }
                     max = minmax.Max();
                 }

@@ -11,6 +11,9 @@ PEERDIR(
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/helpers
     ydb/library/formats/arrow/simple_builder
+    ydb/core/formats/arrow/accessor/dictionary
+    ydb/core/formats/arrow/accessor/plain
+    ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/hash
     ydb/core/formats/arrow/printer
@@ -41,6 +44,7 @@ CFLAGS(
 
 SRCS(
     comparison_ut.cpp
+    minmax_ut.cpp
     ut_arrow.cpp
     ut_buffer_over_string.cpp
     ut_column_filter.cpp

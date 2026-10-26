@@ -149,8 +149,8 @@ TJsonValueView TDictionaryArray::GetJsonValueView(const ui32 index, const NSubCo
     return NSubColumns::ArrayElementToJsonValueView(*ArrayDictionary, GetIndexImpl(index), valueType);
 }
 
-TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
-    return TMinMax::Compute(ArrayDictionary);
+TMinMax TDictionaryArray::DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+    return TMinMax::Compute(ArrayDictionary, logicalType);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

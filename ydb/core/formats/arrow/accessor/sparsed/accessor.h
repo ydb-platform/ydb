@@ -109,7 +109,7 @@ public:
 
     ui32 GetFirstIndexNotDefault() const;
 
-    TMinMax GetMinMaxScalars() const;
+    TMinMax GetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const;
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const;
 
@@ -164,7 +164,7 @@ private:
     }
 
 protected:
-    virtual TMinMax DoGetMinMaxScalars() const override;
+    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const override;
 
     virtual ui32 DoGetNullsCount() const override {
         return Record.GetNullsCount();

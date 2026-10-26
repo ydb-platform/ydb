@@ -30,6 +30,51 @@ TEST_F(TWebAssemblyTest, Create)
     }
 }
 
+TEST_F(TWebAssemblyTest, IsolatedRealmMemoryAndImports)
+{
+    auto application = CreateEmptyImage();
+    auto auth = application->CreateIsolatedRealm(64 * 1024 * 1024);
+    const TString module = R"((module
+        (import "env" "memory" (memory i64 1))
+        (func (export "read") (result i64) (i64.load (i64.const 1024)))
+        (func (export "write") (param i64) (i64.store (i64.const 1024) (local.get 0)))
+    ))";
+    application->AddModule(module, "application");
+    auth->AddModule(module, "auth");
+    TCompartmentFunction<void(ui64)> writeSecret(auth.get(), "write");
+    TCompartmentFunction<ui64()> readApplication(application.get(), "read");
+    TCompartmentFunction<ui64()> readAuth(auth.get(), "read");
+    writeSecret(123456);
+    EXPECT_EQ(readApplication(), 0u);
+    EXPECT_EQ(readAuth(), 123456u);
+    EXPECT_NE(application->GetHostPointer(1024, 8), auth->GetHostPointer(1024, 8));
+    auth->AddModule(TString(R"((module (func (export "private_auth_export") (result i64) (i64.const 7))))"), "private");
+    EXPECT_THROW(application->AddModule(TString(R"((module
+        (import "private" "private_auth_export" (func (result i64))))")), std::exception);
+    EXPECT_THROW(application->Clone(), std::exception);
+    EXPECT_THROW(auth->Clone(), std::exception);
+    // The child can outlive the application; the last realm owns collection.
+    application.reset();
+    EXPECT_EQ(readAuth(), 123456u);
+}
+
+TEST_F(TWebAssemblyTest, IsolatedRealmLimitsAndLifetime)
+{
+    auto application = CreateEmptyImage();
+    EXPECT_THROW(application->CreateIsolatedRealm(1), std::exception);
+    {
+        auto auth = application->CreateIsolatedRealm(64 * 1024 * 1024);
+        auth->AddModule(TString(R"((module
+            (import "env" "memory" (memory i64 1))
+            (func (export "grow") (result i64) (memory.grow (i64.const 1024)))))"));
+        TCompartmentFunction<ui64()> grow(auth.get(), "grow");
+        EXPECT_EQ(grow(), ui64(-1));
+    }
+    application->AddModule(TString(R"((module (func (export "alive") (result i64) (i64.const 42))))"));
+    TCompartmentFunction<ui64()> alive(application.get(), "alive");
+    EXPECT_EQ(alive(), 42u);
+}
+
 TEST_F(TWebAssemblyTest, StandardTagSection)
 {
     // Type 1 is the tag signature. Type 0 makes an accidentally hardcoded index visible.

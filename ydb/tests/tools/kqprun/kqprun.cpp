@@ -1,4 +1,7 @@
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/fq/libs/wasm_services/mock/tvm.h>
+#include <ydb/core/fq/libs/wasm_services/query/module_source.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/apps/ydbd/export/export.h>
@@ -479,6 +482,10 @@ class TMain: public TMainBase {
 
     TDuration PingPeriod;
     bool VerbositySet = false;
+    TVector<TString> WasmModules;
+    bool WasmStore = false;
+    bool MockTvm = false;
+    ui32 MockTvmDelayMs = 100;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
 
@@ -1035,6 +1042,17 @@ protected:
             .NoArgument()
             .SetFlag(&ExecutionOptions.RunAsDeamon);
 
+        options
+            .AddLongOption("wasm-service-module",
+                "Load a local WASM service module; adjacent <file>.manifest.json is required; repeat for multiple modules")
+            .RequiredArgument("file")
+            .EmplaceTo(&WasmModules);
+        options.AddLongOption("wasm-service-store", "Enable WASM services using the existing UDF Store").NoArgument().SetFlag(&WasmStore);
+        options.AddLongOption("mock-tvm", "Use fake TVM tickets for local tests only").NoArgument().SetFlag(&MockTvm);
+        options.AddLongOption("mock-tvm-delay-ms", "Delay fake TVM ticket completion; requires --mock-tvm")
+            .RequiredArgument("milliseconds")
+            .StoreResult(&MockTvmDelayMs);
+
         RegisterKikimrOptions(options, RunnerOptions.YdbSettings);
     }
 
@@ -1059,6 +1077,47 @@ protected:
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& appConfig = RunnerOptions.YdbSettings.AppConfig;
+        auto& wasm = *appConfig.MutableFederatedQueryConfig()->MutableWasmServices();
+        Y_ENSURE(!WasmStore || WasmModules.empty(), "Use local WASM modules or UDF Store, not both");
+        if (!WasmModules.empty()) {
+            Y_ENSURE(!wasm.ModulesSize() && wasm.GetModulePath().empty(), "Specify WASM modules in CLI or configuration, not both");
+            wasm.SetEnabled(true);
+            wasm.SetModuleSource(NFq::NConfig::TWasmServicesConfig::LOCAL_FILES);
+            for (const auto& path : WasmModules) {
+                auto& module = *wasm.AddModules();
+                module.SetModulePath(path);
+                module.SetManifestPath(path + ".manifest.json");
+            }
+        }
+        if (WasmStore) {
+            Y_ENSURE(!wasm.ModulesSize() && wasm.GetModulePath().empty(), "UDF Store does not accept local module paths");
+            wasm.SetEnabled(true);
+            wasm.SetModuleSource(NFq::NConfig::TWasmServicesConfig::UDF_STORE);
+            auto& store = *appConfig.MutableUdfStoreConfig();
+            store.SetEnabled(true);
+            store.SetEnableWasmUdf(true);
+            appConfig.MutableFeatureFlags()->SetEnableWasmCompileController(true);
+        }
+        if (wasm.GetEnabled()) {
+            // Validate configuration before starting the embedded database.
+            NFq::NWasmServices::CreateServiceModuleSource(wasm);
+            auto& flags = *appConfig.MutableFeatureFlags();
+            flags.SetEnableExternalDataSources(true);
+            flags.SetEnableScriptExecutionOperations(true);
+            flags.SetEnableSchemaSecrets(true);
+            auto& sources = *appConfig.MutableQueryServiceConfig();
+            bool available = false;
+            for (const auto& type : sources.GetAvailableExternalDataSources()) {
+                available |= type == "ExternalService";
+            }
+            if (!available) {
+                sources.AddAvailableExternalDataSources("ExternalService");
+            }
+        }
+        if (MockTvm) {
+            Y_ENSURE(wasm.GetEnabled(), "--mock-tvm requires WASM services");
+            RunnerOptions.YdbSettings.WasmTvmProvider = NFq::NWasmServices::CreateMockTvmTicketProvider(TDuration::MilliSeconds(MockTvmDelayMs));
+        }
         auto& queryService = *appConfig.MutableQueryServiceConfig();
         if (ExecutionOptions.ResultsRowsLimit) {
             queryService.SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);

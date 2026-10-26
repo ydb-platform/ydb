@@ -196,11 +196,13 @@ struct TEvPrivate {
         using TColumnIdsByRequest = THashMap<TPortionRequest, std::set<ui32>>;
         YDB_READONLY_DEF(TColumnIdsByRequest, Requests);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
+        YDB_READONLY(ui64, Cookie, 0);
 
     public:
-        explicit TEvAskColumnData(TColumnIdsByRequest&& requests, const std::shared_ptr<TCallback>& callback)
+        explicit TEvAskColumnData(TColumnIdsByRequest&& requests, const std::shared_ptr<TCallback>& callback, const ui64 cookie)
             : Requests(std::move(requests))
             , Callback(callback)
+            , Cookie(cookie)
         {
             AFL_VERIFY(Callback);
             AFL_VERIFY(Requests.size());

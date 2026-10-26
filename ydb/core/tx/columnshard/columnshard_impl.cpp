@@ -1854,7 +1854,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(SelfId(), address, columnId),
                     TStringBuilder() << "portion " << address.DebugString() << " not found");
             }
-            ev->Get()->GetCallback()->OnReceiveData(SelfId(), ev->Cookie, {}, {}, std::move(errorAddresses));
+            ev->Get()->GetCallback()->OnReceiveData(SelfId(), ev->Get()->GetCookie(), {}, {}, std::move(errorAddresses));
             continue;
         }
         NOlap::NDataFetcher::TRequestInput rInput({ portionInfo }, actualIndexInfo, portion.GetConsumer(), "", nullptr, TabletID());
@@ -1863,8 +1863,8 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
             std::make_shared<TExecutor>(ev->Get()->GetCallback(), address, SelfId(),
-                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns), ev->Cookie), env,
-            NConveyorComposite::ESpecialTaskCategory::Deduplication);
+                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns), ev->Get()->GetCookie()),
+            env, NConveyorComposite::ESpecialTaskCategory::Deduplication);
     }
 }
 

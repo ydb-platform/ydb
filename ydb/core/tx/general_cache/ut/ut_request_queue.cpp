@@ -3,7 +3,10 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <util/digest/numeric.h>
+
+#include <algorithm>
 #include <util/generic/hash.h>
 
 namespace NGeneralCacheUt {
@@ -223,7 +226,8 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         }
 
         harness.Finish(harness.Processor->Asks[1]);
-        NGeneralCacheUt::AssertIds(harness.Processor->Asks[2].Ids(), { 1, 2, 3, 4, 5 }, 1);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 3);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(2).Ids(), { 1, 2, 3, 4, 5 }, 1);
         harness.Finish(harness.Processor->Asks[2]);
         UNIT_ASSERT(callback->Ready);
         UNIT_ASSERT(!callback->HasErrors);
@@ -323,13 +327,14 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!second->Ready);
 
         auto third = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
-        UNIT_ASSERT(third->Ready);
-        UNIT_ASSERT(!third->HasErrors);
+        UNIT_ASSERT(!third->Ready);
 
         THashMap<NGeneralCacheUt::TAddress, TString> real;
         real.emplace(address, "real");
         harness.Manager->OnRequestResult(1, std::move(real), {}, {}, freshAsk.Cookie);
         UNIT_ASSERT(second->Ready);
+        UNIT_ASSERT(third->Ready);
+        UNIT_ASSERT(!third->HasErrors);
     }
 
     Y_UNIT_TEST(DeadSourceEntriesStayWhenEvictionIsOff) {

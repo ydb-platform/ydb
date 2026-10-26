@@ -440,11 +440,14 @@ private:
     }
 
     TSourceInfo& UpsertSourceInfo(const TSourceId sourceId, const NActors::TActorId& owner) {
+        if (auto* existing = MutableSourceInfoOptional(sourceId)) {
+            if (existing->GetOwner() != owner) {
+                AbortSource(sourceId);
+            }
+        }
         auto it = SourcesInfo.find(sourceId);
         if (it == SourcesInfo.end()) {
             it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, owner, ObjectsProcessor)).first;
-        } else {
-            AFL_VERIFY(it->second.GetOwner() == owner);
         }
         return it->second;
     }
@@ -558,11 +561,6 @@ public:
             for (const auto& address : i.second) {
                 AFL_VERIFY(TPolicy::GetRequestOwner(address) == owner);
             }
-            if (auto* existing = MutableSourceInfoOptional(i.first)) {
-                if (existing->GetOwner() != owner) {
-                    AbortSource(i.first);
-                }
-            }
             auto& sourceInfo = UpsertSourceInfo(i.first, owner);
             sourceInfo.EnqueueRequest(request);
             sourceInfo.DrainQueue();
@@ -594,7 +592,6 @@ public:
 
         auto* sourceInfo = MutableSourceInfoOptional(sourceId);
         if (sourceInfo && hasOwner && sourceInfo->GetOwner() != owner) {
-            AddObjectsToCache(add);
             return;
         }
         CleanUseless(add.size());
@@ -621,7 +618,6 @@ public:
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
             if (sourceInfo->GetCookie() != sourceCookie) {
-                AddObjectsToCache(add);
                 return;
             }
         }

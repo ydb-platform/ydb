@@ -874,7 +874,7 @@ namespace NActors {
         TSet<TActorId> EdgeActors;
         THashMap<TEventMailboxId, TActorId, TEventMailboxId::THash> EdgeActorByMailbox;
         TDuration DispatchTimeout;
-        bool FastSimulatedTime = true;
+        bool FastSimulatedTime = false;
         TDuration ReschedulingDelay;
         TEventObserver ObserverFunc;
         TEventObserverCollection ObserverFuncs;

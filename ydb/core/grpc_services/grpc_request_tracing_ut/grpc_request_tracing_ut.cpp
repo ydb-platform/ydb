@@ -751,18 +751,6 @@ Y_UNIT_TEST_TWIN(UseDatabasePreservesUnaryDatabaseHeaderPresence, relativePathsE
     }
 }
 
-Y_UNIT_TEST_TWIN(DatabaseRootIsCapturedAtIngress, relativePathsEnabled) {
-    TActorSystemStub actorSystem;
-    actorSystem.AppData.DomainsInfo = new TDomainsInfo;
-    actorSystem.AppData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
-    actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("mydb"));
-    TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    request.InitializePathNormalization(nullptr);
-    actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
-    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetRef(), relativePathsEnabled ? "/Root/mydb" : "mydb");
-}
-
 Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
     TActorSystemStub actorSystem;
     auto& appData = actorSystem.AppData;

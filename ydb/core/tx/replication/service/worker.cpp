@@ -163,6 +163,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         void Registered() {
             InitDone = true;
+        }
+
+        void ResetCreateAttempt() {
             CreateAttempt = 0;
         }
 
@@ -185,6 +188,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             YDB_LOG_INFO("Handshake with reader",
                 {"sender", ev->Sender});
 
+            // This handshake only confirms creation of the SDK session wrapper.
+            // Keep the retry budget until the reader actually delivers data.
             Reader.Registered();
             if (!InFlightData && !TerminateWriter) {
                 Send(Reader, new TEvWorker::TEvPoll());
@@ -194,6 +199,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 {"sender", ev->Sender});
 
             Writer.Registered();
+            Writer.ResetCreateAttempt();
             if (InFlightData) {
                 Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             } else if (TerminateWriter) {
@@ -266,6 +272,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             Send(Parent, MakeEvStatusFromReaderStats(std::move(ev->Get()->Stats)));
         }
 
+        Reader.ResetCreateAttempt();
         if (Writer) {
             Send(ev->Forward(Writer));
         }

@@ -17,10 +17,10 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
     return result;
 }
 
-std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+std::unique_ptr<NCommon::TDataSourceLease> TConstructor::DoExtractNextImpl(
+    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     auto constructor = PopObjectWithAccessor();
-    std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
-    return result;
+    return std::make_unique<NCommon::TDataSourceLease>(constructor.MutableObject().Construct(context, constructor.DetachAccessor()));
 }
 
 TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,

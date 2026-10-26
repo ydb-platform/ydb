@@ -1,15 +1,18 @@
 #pragma once
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/yexception.h>
 #include <util/system/types.h>
-#include <util/datetime/base.h>
+
+#include <set>
 
 namespace NYql::NDq {
 
@@ -29,14 +32,16 @@ struct TEvRetryQueuePrivate {
     struct TEvRetry : NActors::TEventLocal<TEvRetry, EvRetry> {
         explicit TEvRetry(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        { }
+        {}
+
         const ui64 EventQueueId;
     };
 
     struct TEvEvHeartbeat : NActors::TEventLocal<TEvEvHeartbeat, EvHeartbeat> {
         explicit TEvEvHeartbeat(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        { }
+        {}
+
         const ui64 EventQueueId;
     };
 
@@ -44,12 +49,10 @@ struct TEvRetryQueuePrivate {
 };
 
 template <class T>
-concept TProtobufEvent =
-    std::is_base_of_v<google::protobuf::Message, typename T::ProtoRecordType>;
+concept TProtobufEvent = std::is_base_of_v<google::protobuf::Message, typename T::ProtoRecordType>;
 
 template <class T>
-concept TIsMessageTransportMetaRef =
-    std::is_same_v<T, const NYql::NDqProto::TMessageTransportMeta&>;
+concept TIsMessageTransportMetaRef = std::is_same_v<T, const NYql::NDqProto::TMessageTransportMeta&>;
 
 template <class T>
 concept THasTransportMeta = requires(T& ev) {
@@ -60,9 +63,8 @@ template <class T>
 concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta<T>;
 
 class TRetryEventsQueue {
-
 public:
-    enum class ESessionState{
+    enum class ESessionState {
         WrongSession,       // event RecipientId != Sender (event is not from this queue)
         Disconnected,
         SessionClosed       // recipientId does not exist anymore
@@ -71,14 +73,15 @@ public:
     class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
     public:
         using TPtr = TIntrusivePtr<IRetryableEvent>;
+
         virtual ~IRetryableEvent() = default;
         virtual THolder<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const = 0;
         virtual ui64 GetSeqNo() const = 0;
     };
 
-    TRetryEventsQueue() {}
-
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, bool useConnect = true);
+    // Ordered input rejects gaps and requires the peer to replay the original events.
+    // Unordered input processes each event immediately, but confirms only a contiguous prefix.
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, bool useConnect = true, bool ordered = true);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -93,7 +96,9 @@ public:
             return;
         }
 
+        Y_VALIDATE(RecipientId, "Recipient is not set");
         IRetryableEvent::TPtr retryableEvent = Store(RecipientId, SenderId, std::move(ev), cookie);
+
         if (Connected) {
             SendRetryable(retryableEvent);
         } else {
@@ -107,8 +112,9 @@ public:
     }
 
     template <TProtobufEventWithTransportMeta T>
-    bool OnEventReceived(const T* ev) { // Returns true if event was not processed (== it was received first time).
+    bool OnEventReceived(const T* ev) { // Returns true if the event should be processed.
         LastReceivedDataTime = TInstant::Now();
+
         if (LocalRecipient) {
             return true;
         }
@@ -124,7 +130,9 @@ public:
                 ReceivedEventsSeqNos.erase(ReceivedEventsSeqNos.begin());
             }
             return true;
-        } else if (seqNo > MyConfirmedSeqNo) {
+        }
+
+        if (!Ordered && seqNo > MyConfirmedSeqNo) {
             if (ReceivedEventsSeqNos.size() > TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT) {
                 throw yexception()
                     << "Too wide window of reordered events: " << ReceivedEventsSeqNos.size()
@@ -134,11 +142,12 @@ public:
             }
             return ReceivedEventsSeqNos.insert(seqNo).second;
         }
+
+        // Reject duplicates and, for ordered input, gaps until the peer replays them.
         return false;
     }
 
-    bool RemoveConfirmedEvents() {
-        RemoveConfirmedEvents(MyConfirmedSeqNo);
+    bool HasPendingEvents() const {
         return !Events.empty();
     }
 
@@ -175,8 +184,7 @@ private:
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
-        {
-        }
+        {}
 
         ui64 GetSeqNo() const override {
             return Event->Record.GetTransportMeta().GetSeqNo();
@@ -229,6 +237,7 @@ private:
     TInstant LastReceivedDataTime = TInstant::Now();
     TInstant LastSentDataTime = TInstant::Now();
     bool UseConnect = true;
+    bool Ordered = true;
 };
 
 } // namespace NYql::NDq

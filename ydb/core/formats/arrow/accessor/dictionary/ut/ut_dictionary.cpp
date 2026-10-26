@@ -58,14 +58,14 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(5, 3));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab"])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab",null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(7, 2));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
         }
         {
@@ -102,6 +102,23 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([["B","C"]])");
         AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["B","C"])");
         AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
+    }
+
+    Y_UNIT_TEST(SlicePreservesNullDictionaryEntry) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "Alpha");
+        builder.AddRecord(2, "Alpha");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dictionary = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(dictionary->GetDictionary()->null_count(), 1);
+
+        auto slice = std::static_pointer_cast<TDictionaryArray>(dictionary->ISlice(1, 2));
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->null_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetPositions()->null_count(), 1);
+        UNIT_ASSERT(slice->GetPositions()->IsNull(0));
+        UNIT_ASSERT(!slice->GetPositions()->IsNull(1));
     }
 
     Y_UNIT_TEST(Serialization) {
@@ -289,5 +306,72 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
             "actual", PrepareToCompare(visited[0]->ToString()));
+    }
+
+    void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
+        TChunkConstructionData info(
+            source->GetRecordsCount(), nullptr, source->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(source, info).DetachResult());
+
+        std::shared_ptr<arrow::Array> decoded;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> array) {
+            decoded = std::move(array);
+        });
+
+        AFL_VERIFY(!HasNulls(decoded));
+        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abc");
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesBooleanDataSize) {
+        TTrivialArray::TPlainBuilder<arrow::BooleanType> builder;
+        builder.AddValue(0, true);
+        builder.AddValue(1, false);
+        builder.AddValue(2, true);
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(SlicedSingleValueWithNullPositionsIsNotOneValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        dictionaryBuilder.AddNull(1);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddNull(1);
+        positionsBuilder.AddValue(2, 0);
+
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(3)->GetChunkedArray()->chunk(0));
+        auto sliced = dictionary->ISlice(0, 3);
+        UNIT_ASSERT(sliced->GetType() == IChunkedArray::EType::Dictionary);
+        sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
+            UNIT_ASSERT_VALUES_EQUAL(values->length(), 2);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sliced->GetNullsCount(), 1);
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = sliced->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && !*oneValue);
+    }
+
+    Y_UNIT_TEST(AllNullPositionsAreOneNullValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(1)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0));
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = dictionary->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value && !value->is_valid);
+        UNIT_ASSERT(value->type->Equals(arrow::utf8()));
     }
 };

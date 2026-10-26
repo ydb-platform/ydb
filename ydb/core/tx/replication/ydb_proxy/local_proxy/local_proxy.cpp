@@ -139,6 +139,17 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
 }
 
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeConsumerRequest::TPtr& ev) {
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
+
+    // The DescribeConsumer rpc handler requires a grpc request context, it cannot be called in-process
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue("DescribeConsumer is not supported by the local proxy");
+    NYdb::NTopic::TDescribeConsumerResult result(NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)), {});
+    Send(ev->Sender, new TEvYdbProxy::TEvDescribeConsumerResponse(std::move(result)), 0, ev->Cookie);
+}
+
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
         {"ev", ev->Get()->ToString()});
@@ -199,6 +210,7 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
+        hFunc(TEvYdbProxy::TEvDescribeConsumerRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     default:

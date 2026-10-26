@@ -436,12 +436,14 @@ void TFastPathService::ScheduleAfterDelay(
 
 TPersistResultFuture TFastPathService::UpdateVChunkState(
     const TVChunkConfig& cfg,
-    TDirtyMapStateProto state)
+    TDirtyMapStateProto state,
+    TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds)
 {
     auto event =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
             cfg,
-            std::move(state));
+            std::move(state),
+            std::move(deletedDDiskIds));
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;

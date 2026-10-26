@@ -1,6 +1,8 @@
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
+#include <util/system/datetime.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -34,11 +36,22 @@ void TPartitionActor::ExecuteUpdateVChunkState(
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    for (const auto& request: args.UpdateStateRequests) {
+    ui64 nextRecordId = DeletedDDiskStorage.GetNextRecordId();
+    for (auto& request: args.UpdateStateRequests) {
+        request.DeletedDDiskRecords = DeletedDDiskStorage.MakeRecords(
+            nextRecordId,
+            request.VChunkIndex,
+            Executor()->Generation(),
+            TInstant::Now().MicroSeconds(),
+            request.DeletedDDiskIds);
+
         if (!request.VChunkConfig.Empty()) {
             db.StoreVChunkConfig(request.VChunkConfig);
         }
         db.StoreDirtyMapState(request.VChunkIndex, request.DirtyMapState);
+        for (const auto& record: request.DeletedDDiskRecords) {
+            db.AddDeletedDDisk(record);
+        }
     }
 }
 
@@ -47,6 +60,7 @@ void TPartitionActor::CompleteUpdateVChunkState(
     TTxPartition::TUpdateVChunkState& args)
 {
     for (auto& request: args.UpdateStateRequests) {
+        DeletedDDiskStorage.AddPersisted(request.DeletedDDiskRecords);
         if (!request.VChunkConfig.Empty()) {
             VChunkConfigs[request.VChunkIndex] = request.VChunkConfig;
         }

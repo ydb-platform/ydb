@@ -816,6 +816,15 @@ namespace NKikimr::NBsController {
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+
+        // the wiped VDisk restores its data from the other ones, the VDisks not ready may miss data too
+        TBlobStorageGroupInfo::TGroupVDisks dataless(group->Topology.get(), vslot->GetShortVDiskId());
+        for (const TVSlotInfo *slot : group->VDisksInGroup) {
+            if (!slot->IsReady) {
+                dataless |= {group->Topology.get(), slot->GetShortVDiskId()};
+            }
+        }
+        CheckBridgedPartDataRestorable(*group, dataless);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {

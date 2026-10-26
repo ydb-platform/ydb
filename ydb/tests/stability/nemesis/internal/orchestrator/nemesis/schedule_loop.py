@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Iterable, List
 
 import requests
@@ -268,7 +268,7 @@ class OrchestratorNemesisSchedule:
                         "target": cmd.target.to_dict(),
                         "execution_id": cmd.execution_id,
                         "scenario_id": cmd.scenario_id,
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     }
                 )
             if metrics is not None:

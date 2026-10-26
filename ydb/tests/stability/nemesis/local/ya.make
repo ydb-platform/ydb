@@ -13,6 +13,7 @@ PEERDIR(
     ydb/tests/library
     ydb/public/sdk/python
     contrib/python/Flask
+    contrib/python/PyYAML
 )
 
 END()

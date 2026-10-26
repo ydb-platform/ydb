@@ -1,5 +1,6 @@
 #include <ydb/core/persqueue/pqtablet/partition/mlp/mlp_common.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+#include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -528,12 +529,118 @@ Y_UNIT_TEST(DirectMove_MissingSourceOffset) {
     CreateSourceAndDlqTopics(setup);
 
     // No writes to source topic — read returns an empty result set.
-    auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}});
+    // A missing body was deleted by retention, so the move is successful.
+    auto response = RunDirectMover(setup, TString(kDlqTopic), {
+        {.Offset = 0, .SeqNo = 1},
+        {.Offset = 0, .SeqNo = 2},
+    });
     const auto* result = response->Get();
-    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
-    UNIT_ASSERT(result->ErrorDescription.Contains("empty read result")
-        || result->ErrorDescription.Contains("Fetch message failed"));
-    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+}
+
+Y_UNIT_TEST(DirectMove_MissingOffsetThenExistingMessage) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    const auto msg = "keep-me";
+    setup->Write(TString(kSourceTopic), msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    // Offset 1 is at the partition end, so the read is empty. Offset 0 is still there.
+    auto response = RunDirectMover(setup, TString(kDlqTopic), {
+        {.Offset = 1, .SeqNo = 1},
+        {.Offset = 0, .SeqNo = 2},
+    });
+    const auto* result = response->Get();
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].first, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+    ExpectDlqContains(setup, msg);
+}
+
+Y_UNIT_TEST(DirectMove_MissingOffsetWhilePreviousWriteInFlight) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    const auto msg = "keep-body";
+    setup->Write(TString(kSourceTopic), msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    auto& runtime = setup->GetRuntime();
+    const ui64 tabletId = GetTabletId(setup, TString(kDatabase), TString(kSourceTopic), 0);
+    const auto parent = runtime.AllocateEdgeActor();
+
+    // Hold the DLQ write of the first message until the following missing offset
+    // has been fetched. The mover then records the missing offset in Processed
+    // while that write is still in flight, and appends the real message only
+    // after the write ack. MarkDLQMoved rejects a later seqno while the earlier
+    // one is still queued and the consumer AFL_ENSURE crashes.
+    TAutoPtr<IEventHandle> heldWrite;
+    ui32 writesSeen = 0;
+    ui32 readResponses = 0;
+    TActorId moverId;
+    TTestActorRuntime::TEventObserver previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (previous) {
+            const auto action = previous(ev);
+            if (!ev || action != TTestActorRuntime::EEventAction::PROCESS) {
+                return action;
+            }
+        }
+        if (!moverId) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (ev->GetTypeRewrite() == TEvPartitionWriter::TEvWriteRequest::EventType
+                && ev->Sender == moverId) {
+            if (writesSeen == 0) {
+                ++writesSeen;
+                heldWrite = ev.Release();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        if (ev->GetTypeRewrite() == TEvPersQueue::TEvResponse::EventType
+                && ev->Recipient == moverId) {
+            ++readResponses;
+            if (readResponses == 2 && heldWrite) {
+                runtime.Send(heldWrite.Release());
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    moverId = runtime.Register(CreateDLQMover({
+        .ParentActorId = parent,
+        .Database = TString(kDatabase),
+        .TabletId = tabletId,
+        .PartitionId = 0,
+        .ConsumerName = TString(kConsumer),
+        .ConsumerGeneration = 1,
+        .DestinationTopic = TString(kDlqTopic),
+        .Messages = {
+            {.Offset = 0, .SeqNo = 1},
+            {.Offset = 1, .SeqNo = 2},
+        },
+    }));
+    runtime.EnableScheduleForActor(moverId);
+
+    auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPDLQMoverResponse>(parent, TDuration::Seconds(30));
+    UNIT_ASSERT(response);
+    const auto* result = response->Get();
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].first, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+    ExpectDlqContains(setup, msg);
 }
 
 Y_UNIT_TEST(DirectMove_BigMessage) {

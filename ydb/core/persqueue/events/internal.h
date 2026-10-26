@@ -248,6 +248,7 @@ struct TEvPQ {
         EvProcessBatchKeysResult,
         EvResetOffsetRequest,
         EvResetOffsetResponse,
+        EvMLPEnricherFinished,
         EvEnd,
     };
 
@@ -1995,6 +1996,10 @@ struct TEvPQ {
 
     struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
         TEvTopicSqsActionMetrics() = default;
+    };
+
+    // The message enricher has sent every read reply. The consumer resumes queue processing.
+    struct TEvMLPEnricherFinished : TEventLocal<TEvMLPEnricherFinished, EvMLPEnricherFinished> {
     };
 };
 

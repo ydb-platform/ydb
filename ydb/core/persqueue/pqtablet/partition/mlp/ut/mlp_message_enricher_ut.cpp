@@ -1,8 +1,11 @@
 #include "mlp_message_enricher.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/protos/pqdata_mlp.pb.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -48,6 +51,7 @@ void AssertEnrichedResponse(
 struct TTopicFixture {
     std::shared_ptr<TTopicSdkTestSetup> Setup;
     ui64 TabletId = 0;
+    TActorId Parent;
     std::vector<TString> Bodies;
     TInstant FirstReceive = TInstant::MilliSeconds(1'700'000'000'000ull);
 
@@ -78,6 +82,7 @@ struct TTopicFixture {
         }
 
         TabletId = GetTabletId(Setup, TString(kDatabase), TString(kTopic), 0);
+        Parent = Runtime().AllocateEdgeActor();
     }
 
     NActors::TTestActorRuntime& Runtime() {
@@ -86,11 +91,31 @@ struct TTopicFixture {
 
     TActorId RegisterEnricher(std::deque<TReadResult> replies) {
         const auto enricherId = Runtime().Register(
-            CreateMessageEnricher(TabletId, 0, TString(kConsumer), std::move(replies)));
+            CreateMessageEnricher(TabletId, 0, TString(kConsumer), std::move(replies), Parent));
         Runtime().EnableScheduleForActor(enricherId);
         Runtime().DispatchEvents();
         return enricherId;
     }
+
+    void ExpectFinished() {
+        auto finished = Runtime().GrabEdgeEvent<TEvPQ::TEvMLPEnricherFinished>(Parent, TDuration::Seconds(5));
+        UNIT_ASSERT(finished);
+    }
+};
+
+class THoldingPipeCache : public TActorBootstrapped<THoldingPipeCache> {
+public:
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+    void HandleForward(TEvPipeCache::TEvForward::TPtr&) {
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvPipeCache::TEvForward, HandleForward);
+        IgnoreFunc(TEvPipeCache::TEvUnlink);
+    )
 };
 
 } // namespace
@@ -192,6 +217,7 @@ Y_UNIT_TEST(EnrichEmptyReplies) {
     UNIT_ASSERT_VALUES_EQUAL(response1->Cookie, 11);
     UNIT_ASSERT_VALUES_EQUAL(response0->Get()->Record.MessageSize(), 0);
     UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.MessageSize(), 0);
+    fx.ExpectFinished();
 }
 
 Y_UNIT_TEST(EnrichAllOffsetsMissing) {
@@ -203,15 +229,29 @@ Y_UNIT_TEST(EnrichAllOffsetsMissing) {
     replies.push_back(TReadResult(edge, 7, MakeReadMessages({5, 6})));
     fx.RegisterEnricher(std::move(replies));
 
-    // Past-end reads may surface as empty results ("Messages were not found") or as a failed
-    // fetch that shuts the enricher down with SCHEME_ERROR.
-    auto error = runtime.GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(edge, TDuration::Seconds(10));
-    UNIT_ASSERT(error);
-    UNIT_ASSERT_VALUES_EQUAL(error->Cookie, 7);
-    const auto status = error->Get()->Record.GetStatus();
-    UNIT_ASSERT(status == Ydb::StatusIds::INTERNAL_ERROR || status == Ydb::StatusIds::SCHEME_ERROR);
-    UNIT_ASSERT(error->Get()->Record.GetErrorMessage().Contains("Messages were not found")
-        || error->Get()->Record.GetErrorMessage().Contains("Shutdown"));
+    // Offsets past the end are an empty read. A failed fetch still shuts the enricher down.
+    TAutoPtr<IEventHandle> handle;
+    runtime.WaitForEdgeEvents([&](NActors::TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        const auto type = event->GetTypeRewrite();
+        if (type != TEvPQ::TEvMLPReadResponse::EventType
+                && type != TEvPQ::TEvMLPErrorResponse::EventType) {
+            return false;
+        }
+        handle = event;
+        return true;
+    }, {edge}, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(handle, "enricher did not answer");
+    UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 7);
+    if (handle->GetTypeRewrite() == TEvPQ::TEvMLPErrorResponse::EventType) {
+        const auto& error = handle->Get<TEvPQ::TEvMLPErrorResponse>()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(error.GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
+        UNIT_ASSERT(error.GetErrorMessage().Contains("Shutdown"));
+        fx.ExpectFinished();
+        return;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(handle->Get<TEvPQ::TEvMLPReadResponse>()->Record.MessageSize(), 0);
+    fx.ExpectFinished();
 }
 
 Y_UNIT_TEST(EnrichGapInOffsets) {
@@ -229,6 +269,27 @@ Y_UNIT_TEST(EnrichGapInOffsets) {
         {0, fx.Bodies[0]},
         {2, fx.Bodies[2]},
     });
+}
+
+Y_UNIT_TEST(EnrichPastEndOffsetKeepsEarlierMessage) {
+    TTopicFixture fx(2);
+    auto& runtime = fx.Runtime();
+    const auto dataEdge = runtime.AllocateEdgeActor();
+    const auto missingEdge = runtime.AllocateEdgeActor();
+
+    // Offset 2 is the partition end, so its read is empty. Offset 0 is present.
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(dataEdge, 1, MakeReadMessages({0, 2})));
+    replies.push_back(TReadResult(missingEdge, 2, MakeReadMessages({2})));
+    fx.RegisterEnricher(std::move(replies));
+
+    auto dataResponse = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(dataEdge, TDuration::Seconds(5));
+    auto missingResponse = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(missingEdge, TDuration::Seconds(5));
+    UNIT_ASSERT(dataResponse);
+    UNIT_ASSERT(missingResponse);
+    AssertEnrichedResponse(*dataResponse->Get(), {{0, fx.Bodies[0]}});
+    UNIT_ASSERT_VALUES_EQUAL(missingResponse->Get()->Record.MessageSize(), 0);
+    fx.ExpectFinished();
 }
 
 Y_UNIT_TEST(EnrichOverlappingRepliesDifferentSlices) {
@@ -260,7 +321,7 @@ Y_UNIT_TEST(EnrichDeliveryProblemOnWrongTablet) {
     replies.push_back(TReadResult(edge, 55, MakeReadMessages({0})));
 
     const auto enricherId = runtime.Register(
-        CreateMessageEnricher(/*tabletId=*/999999999ull, 0, TString(kConsumer), std::move(replies)));
+        CreateMessageEnricher(/*tabletId=*/999999999ull, 0, TString(kConsumer), std::move(replies), fx.Parent));
     runtime.EnableScheduleForActor(enricherId);
     runtime.DispatchEvents();
 
@@ -269,6 +330,7 @@ Y_UNIT_TEST(EnrichDeliveryProblemOnWrongTablet) {
     UNIT_ASSERT_VALUES_EQUAL(error->Cookie, 55);
     UNIT_ASSERT_VALUES_EQUAL(error->Get()->Record.GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT(error->Get()->Record.GetErrorMessage().Contains("Shutdown"));
+    fx.ExpectFinished();
 }
 
 Y_UNIT_TEST(EnrichPoisonSendsShutdown) {
@@ -281,7 +343,7 @@ Y_UNIT_TEST(EnrichPoisonSendsShutdown) {
 
     // Register against a non-existent tablet so enrichment stays in-flight, then poison.
     const auto enricherId = runtime.Register(
-        CreateMessageEnricher(/*tabletId=*/999999998ull, 0, TString(kConsumer), std::move(replies)));
+        CreateMessageEnricher(/*tabletId=*/999999998ull, 0, TString(kConsumer), std::move(replies), fx.Parent));
     runtime.EnableScheduleForActor(enricherId);
     runtime.Send(new IEventHandle(enricherId, edge, new TEvents::TEvPoison()));
     runtime.DispatchEvents();
@@ -291,6 +353,8 @@ Y_UNIT_TEST(EnrichPoisonSendsShutdown) {
     UNIT_ASSERT_VALUES_EQUAL(error->Cookie, 77);
     UNIT_ASSERT_VALUES_EQUAL(error->Get()->Record.GetStatus(), Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT(error->Get()->Record.GetErrorMessage().Contains("Shutdown"));
+
+    fx.ExpectFinished();
 }
 
 Y_UNIT_TEST(EnrichMixedEmptyAndNonEmptyReplies) {
@@ -371,6 +435,60 @@ Y_UNIT_TEST(EnrichSequentialActors) {
     }
 }
 
+Y_UNIT_TEST(DeadlineAnswersOutstandingAndSignalsParent) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.SetScheduledLimit(1000);
+
+    ui32 finishedCount = 0;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPQ::TEvMLPEnricherFinished::EventType) {
+            ++finishedCount;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    auto pipe = runtime.Register(new THoldingPipeCache());
+    runtime.EnableScheduleForActor(pipe);
+    runtime.RegisterService(MakePipePerNodeCacheID(false), pipe);
+
+    const auto parent = runtime.AllocateEdgeActor();
+    const auto pending0 = runtime.AllocateEdgeActor();
+    const auto pending1 = runtime.AllocateEdgeActor();
+    const auto emptyEdge = runtime.AllocateEdgeActor();
+
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(pending0, 1, MakeReadMessages({0})));
+    replies.push_back(TReadResult(pending1, 2, MakeReadMessages({1})));
+    replies.push_back(TReadResult(emptyEdge, 3, {}));
+
+    const auto startedAt = runtime.GetCurrentTime();
+    const auto enricherId = runtime.Register(
+        CreateMessageEnricher(1, 0, TString(kConsumer), std::move(replies), parent));
+    runtime.EnableScheduleForActor(enricherId);
+
+    auto empty = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(emptyEdge, TDuration::Seconds(5));
+    UNIT_ASSERT(empty);
+    UNIT_ASSERT_VALUES_EQUAL(empty->Cookie, 3);
+    UNIT_ASSERT_VALUES_EQUAL(empty->Get()->Record.MessageSize(), 0);
+
+    auto error0 = runtime.GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(pending0, TDuration::Seconds(5));
+    auto error1 = runtime.GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(pending1, TDuration::Seconds(5));
+    UNIT_ASSERT(error0);
+    UNIT_ASSERT(error1);
+    UNIT_ASSERT_VALUES_EQUAL(error0->Cookie, 1);
+    UNIT_ASSERT_VALUES_EQUAL(error1->Cookie, 2);
+    UNIT_ASSERT_VALUES_EQUAL(error0->Get()->Record.GetStatus(), Ydb::StatusIds::TIMEOUT);
+    UNIT_ASSERT_VALUES_EQUAL(error1->Get()->Record.GetStatus(), Ydb::StatusIds::TIMEOUT);
+    UNIT_ASSERT(error0->Get()->Record.GetErrorMessage().Contains("deadline"));
+    UNIT_ASSERT(error1->Get()->Record.GetErrorMessage().Contains("deadline"));
+    UNIT_ASSERT(runtime.GetCurrentTime() >= startedAt + MessageEnricherDeadline);
+
+    auto finished = runtime.GrabEdgeEvent<TEvPQ::TEvMLPEnricherFinished>(parent, TDuration::Seconds(5));
+    UNIT_ASSERT(finished);
+    UNIT_ASSERT_VALUES_EQUAL(finishedCount, 1u);
+}
+
 Y_UNIT_TEST(EnrichSingleOffset) {
     TTopicFixture fx(1);
     auto& runtime = fx.Runtime();
@@ -383,6 +501,8 @@ Y_UNIT_TEST(EnrichSingleOffset) {
     auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(response);
     AssertEnrichedResponse(*response->Get(), {{0, fx.Bodies[0]}});
+
+    fx.ExpectFinished();
 }
 
 } // Y_UNIT_TEST_SUITE(TMLPEnricherTests)

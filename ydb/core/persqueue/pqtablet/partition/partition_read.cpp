@@ -923,6 +923,19 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     PQ_ENSURE(read->Offset <= GetEndOffset());
 
     const TString& user = read->ClientId;
+    const auto* consumerConfig = GetConsumer(Config, user);
+    if (consumerConfig
+        && consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
+        && read->MaxTimeLagMs > 0)
+    {
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "reading only messages from the last " << read->MaxTimeLagMs
+            << " ms is not supported for shared consumer '" << user << "'",
+            read->ReplyTo);
+        return;
+    }
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
     if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {

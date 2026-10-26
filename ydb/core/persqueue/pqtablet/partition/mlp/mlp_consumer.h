@@ -74,6 +74,7 @@ private:
     bool InStateWork() const;
 
     void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
+    void Handle(TEvPQ::TEvMLPEnricherFinished::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr&);
 
@@ -124,6 +125,7 @@ private:
     ui64 LastCommittedOffset = 0;
 
     TActorId DLQMoverActorId;
+    TActorId MessageEnricherActorId;
 
     std::unique_ptr<TStorage> Storage;
 

@@ -444,7 +444,8 @@ public:
     void SendRequest(const TActorContext& ctx) {
         // all the preconditions are checked by distconf on the root node
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableConvertToBridge();
+        request->Record.MutableConvertToBridge()->SetSkipStoragePoolConversion(
+            GetProtoRequest()->skip_storage_pool_conversion());
         ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
     }
 

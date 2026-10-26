@@ -16,7 +16,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
     ydb/public/api/protos
     yql/essentials/providers/common/structured_token

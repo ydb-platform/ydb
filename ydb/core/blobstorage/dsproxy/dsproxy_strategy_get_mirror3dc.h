@@ -90,9 +90,10 @@ class TMirror3dcGetStrategy : public IStrategy {
             readState.HasErrors ? readState.Uncertain : readState.Failed);
         // TODO(kruall): recheck phantom check logic
         if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
-            return EStrategyOutcome::Error("Mirror-3-dc replies cannot establish blob absence");
+            state->WholeSituation = S::Error;
+        } else {
+            state->WholeSituation = S::Absent;
         }
-        state->WholeSituation = S::Absent;
         return EStrategyOutcome::DONE;
     }
 
@@ -137,9 +138,10 @@ class TMirror3dcGetStrategy : public IStrategy {
         }
         if (checker.GetBlobState(readState.Parts, readState.Uncertain) == G::EBS_DISINTEGRATED
                 || (PhantomCheck && readState.HasErrors)) {
-            return EStrategyOutcome::Error("Mirror-3-dc replies cannot establish blob absence");
+            state->WholeSituation = S::Error;
+        } else {
+            state->WholeSituation = S::Absent;
         }
-        state->WholeSituation = S::Absent;
         return EStrategyOutcome::DONE;
     }
 
@@ -165,12 +167,10 @@ public:
 
         TReadState readState(info.GetTopology(), MustRestoreFirst
             ? TIntervalSet<i32>(0, state.Id.BlobSize()) : state.Whole.Needed);
-        std::array<bool, 3> recovering;
         for (ui32 part = 0; part < 3; ++part) {
             const ui32 realm = info.GetVDiskId(state.Disks[part].OrderNumber).FailRealm;
             const auto realmState = info.GetFailRealmState(realm);
             readState.Included[part] = realmState != R::F;
-            recovering[part] = realmState == R::R;
             if (readState.Included[part]) {
                 const auto& data = state.Parts[part];
                 state.Whole.Data.CopyFrom(data.Data, data.Here() & (readState.Needed - state.Whole.Here()));
@@ -194,16 +194,11 @@ public:
                     readState.Parts.AddItem(disk, part, info.Type);
                     break;
                 case S::Error:
-                    if (recovering[part]) {
-                        break;
-                    }
                     readState.HasErrors = true;
                     readState.Failed += G::TSubgroupVDisks(&info.GetTopology(), disk);
                     [[fallthrough]];
                 case S::Lost:
-                    if (!recovering[part]) {
-                        readState.Uncertain += G::TSubgroupVDisks(&info.GetTopology(), disk);
-                    }
+                    readState.Uncertain += G::TSubgroupVDisks(&info.GetTopology(), disk);
                     break;
                 case S::Unknown:
                     readState.Unknown += G::TSubgroupVDisks(&info.GetTopology(), disk);

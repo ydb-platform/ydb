@@ -27,8 +27,6 @@ PEERDIR(
     ydb/core/fq/libs/events
     ydb/core/util
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/common/arrow
-    ydb/library/yql/providers/common/arrow/interface
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/generic/pushdown

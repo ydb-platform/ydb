@@ -3,6 +3,7 @@
 
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -141,7 +142,9 @@ private:
                     const auto header = this->Request_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
                     const auto database = this->Request_->GetDatabaseName();
                     if (header && database) {
-                        const TString rawDatabase = CGIUnescapeRet(*header);
+                        const TString rawDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
+                            ? PrependDomainIfNeeded("/" + AppData()->DomainsInfo->Domain->Name, CGIUnescapeRet(*header))
+                            : CGIUnescapeRet(*header);
                         const TString logicalDatabase = NKikimr::CanonizePath(rawDatabase);
                         const TString logicalName(NKikimr::ExtractBase(logicalDatabase));
                         const TString physicalName(NKikimr::ExtractBase(*database));

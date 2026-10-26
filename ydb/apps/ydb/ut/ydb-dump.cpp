@@ -82,14 +82,12 @@ Y_UNIT_TEST(NotNullTypeDump) {
         database.prepend('/');
     }
     ui32 index = 0;
-    for (const TString& spelling : {database}) {
-        for (const TString& source : {TString("."), TString(tableName), database + "/" + tableName}) {
-            const auto tableDumpPath = GetOutputPath() / ("dump_table_" + ToString(index++));
-            RunYdb({"-v", "-e", "grpc://" + GetYdbEndpoint(), "-d", spelling,
-                "tools", "dump", "--scheme-only", "--path", source, "--output", tableDumpPath.GetPath()},
-                TList<TString>(), true, false);
-            UNIT_ASSERT_C((tableDumpPath / tableName / "scheme.pb").Exists(), spelling << ": " << source);
-        }
+    for (const TString& source : {TString("."), TString(tableName), database + "/" + tableName}) {
+        const auto tableDumpPath = GetOutputPath() / ("dump_table_" + ToString(index++));
+        RunYdb({"-v", "-e", "grpc://" + GetYdbEndpoint(), "-d", database,
+            "tools", "dump", "--scheme-only", "--path", source, "--output", tableDumpPath.GetPath()},
+            TList<TString>(), true, false);
+        UNIT_ASSERT_C((tableDumpPath / tableName / "scheme.pb").Exists(), database << ": " << source);
     }
 }
 

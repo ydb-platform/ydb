@@ -60,14 +60,20 @@ struct TEvents {
     class TEvKillSource: public NActors::TEventLocal<TEvKillSource, EvKillSource> {
     private:
         const TSourceId SourceId;
+        const NActors::TActorId Owner;
 
     public:
-        TEvKillSource(const TSourceId sourceId)
-            : SourceId(sourceId) {
+        TEvKillSource(const TSourceId sourceId, const NActors::TActorId& owner)
+            : SourceId(sourceId)
+            , Owner(owner) {
         }
 
         TSourceId GetSourceId() const {
             return SourceId;
+        }
+
+        const NActors::TActorId& GetOwner() const {
+            return Owner;
         }
     };
 };

@@ -15,6 +15,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     private:
         const NActors::TActorId OwnerActorId;
         const ui64 TabletId;
+        const ui64 Cookie;
         const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> Callback;
         THashSet<TAddress> RequestedAddresses;
 
@@ -25,15 +26,16 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
-            Callback->OnReceiveData(TabletId, std::move(objects), std::move(RequestedAddresses), {});
+            Callback->OnReceiveData(TabletId, Cookie, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:
-        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId,
+        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId, const ui64 cookie,
             const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>& callback,
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
             , TabletId(tabletId)
+            , Cookie(cookie)
             , Callback(callback)
             , RequestedAddresses(std::move(requestedAddresses))
         {
@@ -46,7 +48,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                     errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug()
                                                             << ". The main reason is the relocation of the tablet.";
                 }
-                Callback->OnReceiveData(TabletId, {}, {}, std::move(errorAddresses));
+                Callback->OnReceiveData(TabletId, Cookie, {}, {}, std::move(errorAddresses));
             }
         }
     };
@@ -98,18 +100,18 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
                 NActors::TActivationContext::Send(
                     i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, selfPtr, std::move(requested))), 0, cookie);
+                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, cookie, selfPtr, std::move(requested))), 0, cookie);
             }
         }
 
-        virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses,
+        virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
             THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errors) const override {
             if (NActors::TActorSystem::IsStopped()) {
                 return;
             }
             NActors::TActivationContext::Send(
                 ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvObjectsInfo>(
-                                    sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
+                                    sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
         }
 
     public:

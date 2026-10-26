@@ -13,8 +13,6 @@ namespace NKikimr::NOlap::NGeneralCache {
 
 class TGlobalPortionAddress {
 private:
-    // Where a cache miss is served from. Not part of the cache key: a tablet restarted on this
-    // node gets a new actor id, and the entries loaded by the previous actor must still match.
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY(ui64, TabletId, 0);
     TPortionAddress InternalPortionAddress;
@@ -42,10 +40,13 @@ public:
     using TSourceId = ui64;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
-    // A tablet that left the node keeps its entries until the LRU limit. Same-node restart reuses them.
     static constexpr bool EvictCacheWhenSourceGone = false;
 
     static TSourceId GetSourceId(const TAddress& address);
+
+    static NActors::TActorId GetRequestOwner(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
 
     static EConsumer DefaultConsumer();
 

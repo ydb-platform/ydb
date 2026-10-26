@@ -12,6 +12,7 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <algorithm>
 #include <map>
 
 namespace NKikimr::NGeneralCache::NPrivate {
@@ -139,10 +140,10 @@ private:
     using TRequest = TRequest<TPolicy>;
 
     const TSourceId SourceId;
+    const NActors::TActorId Owner;
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    // Key is GetCacheRequestPriority(consumer). Higher keys are dispatched first.
     std::map<ui32, std::deque<std::shared_ptr<TRequest>>> RequestsByPriority;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
@@ -154,9 +155,14 @@ public:
         return Cookie;
     }
 
-    TSourceInfo(const std::shared_ptr<TManagerCounters>& counters, const TSourceId& sourceId,
+    const NActors::TActorId& GetOwner() const {
+        return Owner;
+    }
+
+    TSourceInfo(const std::shared_ptr<TManagerCounters>& counters, const TSourceId& sourceId, const NActors::TActorId& owner,
         const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>>& objectsProcessor)
         : SourceId(sourceId)
+        , Owner(owner)
         , Counters(counters)
         , ObjectsProcessor(objectsProcessor) {
     }
@@ -252,7 +258,6 @@ public:
                 ui64 queued = 0;
                 bool finished = false;
                 for (const auto& objAddr : addresses) {
-                    // Already sent addresses are failed with the in-flight set below.
                     if (IsRequestAttached(objAddr, request)) {
                         continue;
                     }
@@ -289,13 +294,10 @@ public:
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
-    // One FETCH_ON_LOAD carries every portion. A pop sends at most DirectInflightSourceLimit
-    // new addresses and puts the rest back at the front of its priority. Higher priorities
-    // go first. Only the high priority may start while a lower one already filled the limit,
-    // so a scan is not stuck behind prefetch and inflight can briefly reach about twice the limit.
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
         const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
+        const ui64 highPriorityInflightLimit = sourceLimit * 2;
         ui64 highPriorityAdded = 0;
         const TMonotonic now = TMonotonic::Now();
 
@@ -304,7 +306,7 @@ public:
             auto& queue = it->second;
             while (!queue.empty() && Counters->CheckTotalLimit()) {
                 if (highPriority) {
-                    if (highPriorityAdded >= sourceLimit) {
+                    if (highPriorityAdded >= sourceLimit || RequestedObjects.size() >= highPriorityInflightLimit) {
                         break;
                     }
                 } else if (RequestedObjects.size() >= sourceLimit) {
@@ -340,7 +342,9 @@ public:
                 if (firstDispatch) {
                     Counters->DirectRequests->Inc();
                 }
-                const ui64 budget = highPriority ? (sourceLimit - highPriorityAdded) : (sourceLimit - RequestedObjects.size());
+                const ui64 budget = highPriority
+                    ? std::min(sourceLimit - highPriorityAdded, highPriorityInflightLimit - RequestedObjects.size())
+                    : (sourceLimit - RequestedObjects.size());
                 auto& consumerAddresses = requestedAddresses[request->GetConsumer()];
                 ui64 newAddresses = 0;
                 ui64 leftQueue = 0;
@@ -353,7 +357,7 @@ public:
                     if (itAddress == RequestedObjects.end()) {
                         if (newAddresses >= budget) {
                             partial = true;
-                            continue;
+                            break;
                         }
                         itAddress = RequestedObjects.emplace(addr, std::vector<std::shared_ptr<TRequest>>()).first;
                         Counters->GetTotalInFlight()->Inc();
@@ -435,10 +439,12 @@ private:
         return nullptr;
     }
 
-    TSourceInfo& UpsertSourceInfo(const TSourceId sourceId) {
+    TSourceInfo& UpsertSourceInfo(const TSourceId sourceId, const NActors::TActorId& owner) {
         auto it = SourcesInfo.find(sourceId);
         if (it == SourcesInfo.end()) {
-            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, ObjectsProcessor)).first;
+            it = SourcesInfo.emplace(sourceId, TSourceInfo(Counters, sourceId, owner, ObjectsProcessor)).first;
+        } else {
+            AFL_VERIFY(it->second.GetOwner() == owner);
         }
         return it->second;
     }
@@ -521,6 +527,15 @@ public:
         }
     }
 
+    void AbortSource(const TSourceId sourceId, const NActors::TActorId& owner) {
+        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
+            if (sourceInfo->GetOwner() != owner) {
+                return;
+            }
+        }
+        AbortSource(sourceId);
+    }
+
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "add_request"});
@@ -538,7 +553,17 @@ public:
             Counters->RequestCacheMiss->Inc();
         }
         for (auto&& i : request->GetWaitBySource()) {
-            auto& sourceInfo = UpsertSourceInfo(i.first);
+            AFL_VERIFY(!i.second.empty());
+            const auto owner = TPolicy::GetRequestOwner(*i.second.begin());
+            for (const auto& address : i.second) {
+                AFL_VERIFY(TPolicy::GetRequestOwner(address) == owner);
+            }
+            if (auto* existing = MutableSourceInfoOptional(i.first)) {
+                if (existing->GetOwner() != owner) {
+                    AbortSource(i.first);
+                }
+            }
+            auto& sourceInfo = UpsertSourceInfo(i.first, owner);
             sourceInfo.EnqueueRequest(request);
             sourceInfo.DrainQueue();
         }
@@ -549,13 +574,37 @@ public:
             {"event", "objects_info"});
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
+        bool hasOwner = false;
+        NActors::TActorId owner;
+        auto rememberOwner = [&](const TAddress& address) {
+            const auto addressOwner = TPolicy::GetRequestOwner(address);
+            if (!hasOwner) {
+                owner = addressOwner;
+                hasOwner = true;
+            } else {
+                AFL_VERIFY(owner == addressOwner);
+            }
+        };
+        for (const auto& item : add) {
+            rememberOwner(item.first);
+        }
+        for (const auto& address : remove) {
+            rememberOwner(address);
+        }
+
+        auto* sourceInfo = MutableSourceInfoOptional(sourceId);
+        if (sourceInfo && hasOwner && sourceInfo->GetOwner() != owner) {
+            AddObjectsToCache(add);
+            return;
+        }
         CleanUseless(add.size());
         AddObjectsToCache(add);
         RemoveObjectsFromCache(remove);
-
-        auto& sourceInfo = UpsertSourceInfo(sourceId);
-        sourceInfo.AddObjects(std::move(add), true, now);
-        sourceInfo.RemoveObjects(std::move(remove), true, now);
+        if (!sourceInfo) {
+            return;
+        }
+        sourceInfo->AddObjects(std::move(add), true, now);
+        sourceInfo->RemoveObjects(std::move(remove), true, now);
         const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
         if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
             DrainQueue();
@@ -564,12 +613,18 @@ public:
         }
     }
 
-    void OnRequestResult(
-        const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
+    void OnRequestResult(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& removed,
+        THashMap<TAddress, TString>&& failed, const ui64 sourceCookie) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "on_result"});
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
+        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
+            if (sourceInfo->GetCookie() != sourceCookie) {
+                AddObjectsToCache(add);
+                return;
+            }
+        }
         CleanUseless(add.size());
         AddObjectsToCache(add);
         RemoveObjectsFromCache(removed);

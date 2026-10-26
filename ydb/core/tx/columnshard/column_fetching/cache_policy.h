@@ -71,6 +71,10 @@ public:
         return address.GetTabletActorId();
     }
 
+    static NActors::TActorId GetRequestOwner(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
+
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;
     }

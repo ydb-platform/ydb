@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/tx/columnshard/data_accessor)
 
 SRCS(
     ut_manager.cpp
+    ut_cache_key.cpp
 )
 
 PEERDIR(

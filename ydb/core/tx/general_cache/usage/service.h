@@ -22,10 +22,10 @@ private:
     using TSelf = TServiceOperator<TPolicy>;
 
 public:
-    static void KillSource(const TSourceId sourceId) {
+    static void KillSource(const TSourceId sourceId, const NActors::TActorId& owner) {
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvKillSource(sourceId));
+        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvKillSource(sourceId, owner));
     }
 
     static void AskObjects(const EConsumer consumer, THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback) {

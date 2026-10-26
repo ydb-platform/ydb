@@ -2,7 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4 ram:4)
+REQUIREMENTS(cpu:1 ram:4)
 
 SRCS(
     selector_equivalence_ut.cpp

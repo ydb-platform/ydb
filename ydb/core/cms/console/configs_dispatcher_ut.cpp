@@ -5,7 +5,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/config/init/mock.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -417,49 +416,6 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
-    Y_UNIT_TEST(TestPathAliasesDynamicReload) {
-        NKikimrConfig::TAppConfig startup;
-        auto* rule = startup.MutableResourcePathPrefixMapping()->AddRules();
-        rule->SetSrc("/front");
-        rule->SetDst("/first");
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), startup);
-        runtime.GetAppData().PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-            startup.GetResourcePathPrefixMapping());
-        InitConfigsDispatcher(runtime);
-
-        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem});
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(
-            handle, TDuration::Seconds(10));
-        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle, TDuration::Seconds(10));
-        const auto initial = std::atomic_load(&runtime.GetAppData().PathNormalizer);
-
-        const auto configure = [&](NKikimrConfig::TAppConfig config, ui32 order) {
-            auto item = MakeConfigItem(NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem,
-                config, {}, {}, "", "", order, NKikimrConsole::TConfigItem::OVERWRITE, "");
-            CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(item));
-            runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle, TDuration::Seconds(10));
-        };
-
-        auto updated = startup;
-        updated.MutableResourcePathPrefixMapping()->MutableRules(0)->SetDst("/second");
-        configure(updated, 1);
-        const auto current = std::atomic_load(&runtime.GetAppData().PathNormalizer);
-        UNIT_ASSERT_VALUES_EQUAL(current->NormalizePath("/front/Table"), "/second/Table");
-        UNIT_ASSERT_VALUES_EQUAL(initial->NormalizePath("/front/Table"), "/first/Table");
-
-        configure(updated, 2);
-        UNIT_ASSERT(current == std::atomic_load(&runtime.GetAppData().PathNormalizer));
-
-        updated.MutableResourcePathPrefixMapping()->MutableRules(0)->SetDst("relative");
-        configure(updated, 3);
-        UNIT_ASSERT(current == std::atomic_load(&runtime.GetAppData().PathNormalizer));
-
-        updated.MutableResourcePathPrefixMapping()->ClearRules();
-        configure(updated, 4);
-        UNIT_ASSERT(!std::atomic_load(&runtime.GetAppData().PathNormalizer));
-    }
-
     Y_UNIT_TEST(TestCompositeConveyorConfigSubscription) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;

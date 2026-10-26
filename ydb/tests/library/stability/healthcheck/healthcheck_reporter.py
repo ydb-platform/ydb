@@ -9,6 +9,7 @@ import traceback
 import requests
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+from dataclasses import dataclass
 from ydb.tests.library.stability.utils.utils import unpack_resource
 
 
@@ -21,19 +22,49 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+@dataclass(frozen=True)
+class HealthCheckEndpoint:
+    logical_host: str
+    connect_host: str
+    grpc_port: int = 2135
+
+
+def _healthcheck_endpoint(value: str | HealthCheckEndpoint) -> HealthCheckEndpoint:
+    if isinstance(value, HealthCheckEndpoint):
+        return value
+    return HealthCheckEndpoint(
+        logical_host=str(value),
+        connect_host=str(value),
+    )
+
+
 class HealthCheckReporter():
     # Hard cap for terminating in-flight healthcheck subprocesses on stop.
     _KILL_GRACE_SECONDS = 2
     _OUTPUT_LOG_LIMIT = 2000
 
-    def __init__(self, hosts: list[str], store_results: bool = False):
+    def __init__(
+        self,
+        hosts: list[str | HealthCheckEndpoint],
+        store_results: bool = False,
+        publish_results: bool = True,
+    ):
         self.stop = False
         self.healthcheck_thread: threading.Thread = None
         self.ydb_path = os.path.join(os.getcwd(), 'ydb_cli_hc')
-        self.hosts = hosts
+        self.endpoints = [_healthcheck_endpoint(host) for host in hosts]
+        logical_hosts = [endpoint.logical_host for endpoint in self.endpoints]
+        if len(set(logical_hosts)) != len(logical_hosts):
+            raise ValueError("Healthcheck logical_host values must be unique")
+        # Kept for callers that inspect the configured host identities.
+        self.hosts = logical_hosts
+        self._endpoint_by_logical_host = {
+            endpoint.logical_host: endpoint for endpoint in self.endpoints
+        }
         self.hc_request_timeout_seconds = 45
         self.hc_period_seconds = 15
         self.store_results = store_results
+        self.publish_results = publish_results
         self.last_results = {}
         # Monotonic start of the last stored tick (not end): a ~50s tick must not look post-fault.
         self.last_update: float | None = None
@@ -71,7 +102,7 @@ class HealthCheckReporter():
     def start_healthchecks(self):
         self.stop = False
         self._stop_event.clear()
-        max_workers = min(len(self.hosts), 10) if self.hosts else 1
+        max_workers = min(len(self.endpoints), 10) if self.endpoints else 1
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self.healthcheck_thread = threading.Thread(target=self.__execute_healthcheck_thr, args=())
         self.healthcheck_thread.start()
@@ -156,13 +187,14 @@ class HealthCheckReporter():
         else:
             logger.info("healthcheck tick: %d hosts in %.1fs — %s", len(results), elapsed, summary)
 
-    def __run_one_healthcheck(self, host):
+    def __run_one_healthcheck(self, endpoint: HealthCheckEndpoint):
+        logical_host = endpoint.logical_host
         if self.stop:
-            return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+            return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
 
         cmd = [
             self.ydb_path,
-            '--endpoint', f'grpc://{host}:2135',
+            '--endpoint', f'grpc://{endpoint.connect_host}:{endpoint.grpc_port}',
             'monitoring', 'healthcheck',
             '--format', 'json',
         ]
@@ -190,36 +222,44 @@ class HealthCheckReporter():
                 stdout, stderr = proc.communicate(timeout=1)
                 logger.error(
                     "Healthcheck for %s timed out after %ss. stdout: %r, stderr: %r",
-                    host, self.hc_request_timeout_seconds,
+                    logical_host, self.hc_request_timeout_seconds,
                     self.__shorten(stdout), self.__shorten(stderr),
                 )
-                return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+                return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
 
             if proc.returncode != 0:
                 if self.stop:
                     # We SIGTERM'd it ourselves in stop_healthchecks(); not a cluster problem.
-                    logger.debug("Healthcheck for %s killed on shutdown (rc=%s)", host, proc.returncode)
-                    return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+                    logger.debug(
+                        "Healthcheck for %s killed on shutdown (rc=%s)",
+                        logical_host,
+                        proc.returncode,
+                    )
+                    return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
                 # The CLI reports the actual reason (transport error, auth, misuse, ...)
                 # on stderr; without it a bare exit code says nothing.
                 logger.error(
                     "Healthcheck for %s failed: rc=%s after %.1fs, cmd=%s, stderr: %r, stdout: %r",
-                    host, proc.returncode, time.monotonic() - started_at, ' '.join(cmd),
+                    logical_host, proc.returncode, time.monotonic() - started_at, ' '.join(cmd),
                     self.__shorten(stderr), self.__shorten(stdout),
                 )
-                return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+                return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
 
             try:
-                return host, json.loads(stdout)
+                return logical_host, json.loads(stdout)
             except json.JSONDecodeError as e:
                 logger.error(
                     "Healthcheck for %s returned rc=0 but unparseable output (%s). stdout: %r, stderr: %r",
-                    host, e, self.__shorten(stdout), self.__shorten(stderr),
+                    logical_host, e, self.__shorten(stdout), self.__shorten(stderr),
                 )
-                return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+                return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
         except Exception:
-            logger.error(f"Unexpected error during healthcheck for {host}: {traceback.format_exc()}")
-            return host, {'self_check_result': 'HC_REQUEST_ERROR'}
+            logger.error(
+                "Unexpected error during healthcheck for %s: %s",
+                logical_host,
+                traceback.format_exc(),
+            )
+            return logical_host, {'self_check_result': 'HC_REQUEST_ERROR'}
         finally:
             if proc is not None:
                 with self._active_procs_lock:
@@ -227,12 +267,12 @@ class HealthCheckReporter():
 
     def __execute_healthcheck(self):
         results = {}
-        if self._executor is None or not self.hosts:
+        if self._executor is None or not self.endpoints:
             return results
 
         future_to_host = {
-            self._executor.submit(self.__run_one_healthcheck, host): host
-            for host in self.hosts
+            self._executor.submit(self.__run_one_healthcheck, endpoint): endpoint.logical_host
+            for endpoint in self.endpoints
         }
 
         # Use as_completed with a single overall timeout so total latency stays
@@ -261,8 +301,11 @@ class HealthCheckReporter():
         return results
 
     def __publish_healthcheck_results(self, results):
+        if not self.publish_results:
+            return
         for host, host_result in results.items():
-            target_url = f"http://{host}:3124/write"
+            endpoint = self._endpoint_by_logical_host[host]
+            target_url = f"http://{endpoint.connect_host}:3124/write"
             self_check_result = host_result.get('self_check_result', 'UNSPECIFIED')
             host_metric = {
                 "labels": {

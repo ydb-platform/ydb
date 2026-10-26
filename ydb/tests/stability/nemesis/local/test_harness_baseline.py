@@ -10,9 +10,16 @@ from ydb.tests.library.common.delayed import wait_tablets_state_by_id
 from ydb.tests.library.common.types import Erasure, TabletStates, TabletTypes
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.stability.healthcheck.healthcheck_reporter import (
+    HealthCheckEndpoint,
+    HealthCheckReporter,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import use_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_tablets import (
     ClusterKillDataShardNemesis,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
+    build_snapshot,
 )
 from ydb.tests.stability.nemesis.routers import agent_router
 
@@ -188,3 +195,46 @@ def test_embedded_agent_api_allows_only_datashard_chaos(local_cluster):
         driver.stop()
 
     assert recovered[0].rows[0]["value"] == "before-chaos"
+
+
+def test_healthcheck_uses_the_live_harness_grpc_port(local_cluster):
+    node = local_cluster.nodes[1]
+    reporter = HealthCheckReporter(
+        [
+            HealthCheckEndpoint(
+                logical_host="node-1",
+                connect_host=node.host,
+                grpc_port=node.grpc_port,
+            )
+        ],
+        store_results=True,
+        publish_results=False,
+    )
+    reporter.hc_period_seconds = 0.2
+    reporter.hc_request_timeout_seconds = 30
+
+    updates = []
+    last_update = None
+    reporter.start_healthchecks()
+    try:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and len(updates) < 2:
+            if reporter.last_update is not None and reporter.last_update != last_update:
+                result = reporter.last_results.get("node-1")
+                if result is not None:
+                    updates.append((reporter.last_update, result))
+                    last_update = reporter.last_update
+            time.sleep(0.05)
+    finally:
+        reporter.stop_healthchecks()
+
+    assert len(updates) >= 2
+    assert all(result["self_check_result"] == "GOOD" for _, result in updates)
+    snapshot = build_snapshot(
+        reporter.last_results,
+        now=time.monotonic(),
+        last_update=reporter.last_update,
+        max_age_sec=5,
+    )
+    assert snapshot.fresh is True
+    assert snapshot.answering == frozenset({"node-1"})

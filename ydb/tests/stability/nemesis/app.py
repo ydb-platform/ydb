@@ -18,13 +18,20 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems im
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.metrics import NemesisMetrics
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import cluster_yaml_path
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    cluster_yaml_path,
+    local_harness_mode,
+    require_cluster,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml
 from ydb.tests.stability.nemesis.internal.orchestrator.agent_endpoints import resolve_agent_endpoints
 from ydb.tests.stability.nemesis.internal.config import AgentSettings
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal import config
-from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
+from ydb.tests.library.stability.healthcheck.healthcheck_reporter import (
+    HealthCheckEndpoint,
+    HealthCheckReporter,
+)
 from flask import Flask, current_app, jsonify
 import atexit
 import logging
@@ -103,7 +110,22 @@ def _initialize_app_body():
         orchestrator_router.hosts = loaded_hosts
         # Resolve once at boot: agent HTTP must not depend on live DNS (DnsNemesis).
         orchestrator_router.host_endpoints = resolve_agent_endpoints(loaded_hosts)
-        orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
+        healthcheck_targets = loaded_hosts
+        if local_harness_mode():
+            cluster = require_cluster()
+            healthcheck_targets = [
+                HealthCheckEndpoint(
+                    logical_host=str(node.host),
+                    connect_host=str(node.host),
+                    grpc_port=int(node.grpc_port),
+                )
+                for node in cluster.nodes.values()
+            ]
+        orchestrator_router.healthcheck_reporter = HealthCheckReporter(
+            healthcheck_targets,
+            store_results=True,
+            publish_results=not local_harness_mode(),
+        )
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
         # Surfaced to the stability test report via GET /api/problems.

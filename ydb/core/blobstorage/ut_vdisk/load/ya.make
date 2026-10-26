@@ -9,6 +9,8 @@ REQUIREMENTS(cpu:4)
 
 SRCS(
     ../defaults.h
+    ../gen_restarts.cpp
+    ../gen_restarts.h
     vdisk_load_ut.cpp
 )
 

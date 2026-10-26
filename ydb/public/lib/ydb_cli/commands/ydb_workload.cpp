@@ -383,7 +383,8 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
-    Params.DbPath = config.Database;
+    Params.DbPath = ".";
+    AdjustPathToDatabase(Params.DbPath, config);
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
@@ -427,7 +428,8 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
         Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
-    Params.DbPath = config.Database;
+    Params.DbPath = ".";
+    AdjustPathToDatabase(Params.DbPath, config);
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);

@@ -1621,6 +1621,14 @@ public:
                     return false;
                 }
             }
+
+            // Unsafe truncate is represented by a sink and has no entry in TableOps.
+            for (const auto& tx : phyQuery.GetTransactions()) {
+                if (FindTableTruncateSink(tx)) {
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Client data writes are disabled");
+                    return false;
+                }
+            }
         }
 
         auto checkSchemeTx = [&]() {

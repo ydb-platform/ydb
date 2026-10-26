@@ -247,6 +247,40 @@ void CreateAndFillSharded(TSession& session) {
 
 Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
+    Y_UNIT_TEST_QUAD(ClientModificationsDisabled, UseQueryService, MixedQuery) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+        kikimr.RunCall([&] { CreateAndFill(session); });
+
+        TString query = UnsafeTruncateQuery();
+        if constexpr (MixedQuery) {
+            query += CountQuery();
+        }
+
+        auto& featureFlags = kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableClientModifications(false);
+
+        auto rejected = kikimr.RunCall([&] {
+            return ExecuteQuery(session, query, AutoCommit<UseQueryService>()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::PRECONDITION_FAILED,
+            rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Client data writes are disabled");
+        UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 3u);
+
+        featureFlags.SetEnableClientModifications(true);
+
+        auto allowed = kikimr.RunCall([&] {
+            return ExecuteQuery(session, query, AutoCommit<UseQueryService>()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(allowed.GetStatus(), EStatus::SUCCESS, allowed.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 0u);
+    }
+
     Y_UNIT_TEST_TWIN(FeatureFlagDisabled, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ false);
         auto client = GetClient<UseQueryService>(kikimr);

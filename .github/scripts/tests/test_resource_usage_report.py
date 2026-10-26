@@ -1,6 +1,8 @@
 import tempfile
 import unittest
 import json
+import os
+import struct
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +17,23 @@ def chunk(path="ydb/example", **metrics):
 def assign_owners(suites):
     for suite in suites:
         suite["owners"] = "TEAM:@ydb-platform/core"
+
+
+def elf(path, kind=2, program_type=0, static_pie=False, size=1024):
+    """Minimal ELF headers for file classification; never executed."""
+    data = bytearray(size)
+    data[:6] = b"\x7fELF\x02\x01"
+    struct.pack_into("<H", data, 16, kind)
+    struct.pack_into("<Q", data, 32, 64)
+    struct.pack_into("<HH", data, 54, 56, int(bool(program_type)))
+    struct.pack_into("<I", data, 64, program_type)
+    if static_pie:
+        struct.pack_into("<Q", data, 72, 128)
+        struct.pack_into("<Q", data, 96, 32)
+        struct.pack_into("<QQ", data, 128, 0x6FFFFFFB, 0x08000000)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    path.chmod(0o755)
 
 
 class ResourceUsageTest(unittest.TestCase):
@@ -105,6 +124,37 @@ class ResourceUsageTest(unittest.TestCase):
             usage = json.loads((Path(tmp) / "out/usage.json").read_text())
             self.assertEqual(usage["totals"]["cpu_seconds"], 3)
             self.assertTrue((Path(tmp) / "out/suites.csv").is_file())
+
+    def test_binary_size_is_per_suite_not_per_chunk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            elf(root / "ydb/a/custom_test_name", size=2048)
+            (root / "ydb/a/alias").symlink_to("custom_test_name")
+            os.link(root / "ydb/a/custom_test_name", root / "ydb/a/hardlink")
+            elf(root / "ydb/a/shared.so", kind=3)  # Executable permission does not make a DSO a program.
+            elf(root / "ydb/a/test-results/dependency", size=8192)
+            elf(root / "ydb/b/test", kind=3, program_type=3, size=1024)
+            data = report.build_usage([chunk("ydb/a") for _ in range(10)] + [chunk("ydb/b"), chunk("ydb/missing")],
+                                      {"core": "area/core"}, assign_owners, build_output=root)
+            suites = {r["suite_folder"]: r for r in data["suites"]}
+            self.assertEqual(suites["ydb/a"]["binary_bytes"], 2048)
+            self.assertEqual(suites["ydb/b"]["binary_bytes"], 1024)
+            self.assertIsNone(suites["ydb/missing"]["binary_bytes"])
+            self.assertEqual(data["totals"]["binary_bytes"], 3072)
+            self.assertEqual(data["totals"]["binary_bytes_suites"], 2)
+            self.assertEqual(data["areas"][0]["binary_bytes"], 3072)
+            self.assertAlmostEqual(suites["ydb/a"]["binary_bytes_pct_total"], 200 / 3)
+            self.assertEqual(suites["ydb/a"]["binary_bytes_pct_total"], suites["ydb/a"]["binary_bytes_pct_area"])
+
+    def test_binary_symlink_targets_and_static_pie(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            elf(root / "cache/program", kind=3, program_type=2, static_pie=True, size=4096)
+            (root / "out/ydb/test").mkdir(parents=True)
+            (root / "out/ydb/test/test").symlink_to(root / "cache/program")
+            (root / "out/ydb/test/broken").symlink_to(root / "absent")
+            self.assertEqual(report.suite_binaries(root / "out", "ydb/test"), {"ydb/test/test": 4096})
+            self.assertEqual(report.suite_binaries(root / "out", "../cache"), {})
 
 
 if __name__ == "__main__":

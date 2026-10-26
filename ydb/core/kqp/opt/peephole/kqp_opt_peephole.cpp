@@ -448,17 +448,16 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>();
-                bool isBlockChannel = false;
-                if (connection && scalarHashShuffleCount <= 1) {
-                    const auto& output = connection.Cast().Output();
-                    const auto& inputProgram = programs.at(output.Stage().Ref().UniqueId());
-                    const bool alreadyBlock = IsWideSequenceBlockType(*inputProgram.Lambda().Body().Ref().GetTypeAnn());
-                    const bool canPropagateBlock = CanPropagateWideBlockThroughChannel(output, programs, ctx, typesCtx);
-                    isBlockChannel = alreadyBlock || canPropagateBlock;
-                }
-                if (isBlockChannel) {
-                    argsMap.emplace(oldArg.Raw(), KqpRebuildBlockInput(oldArg, newArg, ctx).Ptr());
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
+                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
+                {
+                    TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
+                        .Callable("WideFromBlocks")
+                            .Add(0, newArg.Ptr())
+                        .Seal()
+                        .Build();
+
+                    argsMap.emplace(oldArg.Raw(), newArgNode);
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
 
@@ -531,8 +530,24 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             return {};
         }
 
+        {
+            status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &nonDetParamBindings);
+
+            if (status != TStatus::Ok) {
+                ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()),
+                    "Failed to replace non deterministic functions with params for KQP transaction"));
+                return {};
+            }
+        }
+
         optimizedStages.emplace(stage.Ref().UniqueId());
         YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), TKqpProgram(newProgram)).second);
+    }
+
+    TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
+
+    for (const auto& [_, binding] : nonDetParamBindings) {
+        bindings.emplace_back(std::move(binding));
     }
 
     TVector<TDqPhyStage> newStages;
@@ -540,27 +555,14 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
     // Rebuild stages only after all new programs are ready.
     for (const auto& stage : topSortedStages) {
-        auto program = programs.at(stage.Ref().UniqueId()).Ptr();
-        auto status = ReplaceNonDetFunctionsWithParams(program, ctx, &nonDetParamBindings);
-        if (status != TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()),
-                "Failed to replace non deterministic functions with params for KQP transaction"));
-            return {};
-        }
-
         auto newStage = Build<TDqPhyStage>(ctx, stage.Pos())
             .InitFrom(stage)
             .Inputs(ctx.ReplaceNodes(stage.Inputs().Ptr(), stagesMap))
-            .Program(ctx.DeepCopyLambda(TKqpProgram(program).Lambda().Ref()))
+            .Program(ctx.DeepCopyLambda(programs.at(stage.Ref().UniqueId()).Lambda().Ref()))
             .Done();
 
         newStages.emplace_back(newStage);
         stagesMap.emplace(stage.Raw(), newStage.Ptr());
-    }
-
-    TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
-    for (const auto& [_, binding] : nonDetParamBindings) {
-        bindings.emplace_back(std::move(binding));
     }
 
     return Build<TKqpPhysicalTx>(ctx, tx.Pos())
@@ -707,13 +709,6 @@ private:
 };
 
 } // anonymous namespace
-
-TExprBase KqpRebuildBlockInput(const TCoArgument& oldArg, const TCoArgument& newArg, TExprContext& ctx) {
-    if (IsWideSequenceBlockType(*oldArg.Ref().GetTypeAnn())) {
-        return newArg;
-    }
-    return Build<TCoWideFromBlocks>(ctx, oldArg.Pos()).Input(newArg).Done();
-}
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
     TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,

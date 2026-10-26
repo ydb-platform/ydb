@@ -1,14 +1,12 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NOpt {
-NYql::NNodes::TExprBase KqpRebuildBlockInput(
-    const NYql::NNodes::TCoArgument& oldArg, const NYql::NNodes::TCoArgument& newArg, NYql::TExprContext& ctx);
 NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(
     const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx);
@@ -105,32 +103,6 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson("[[24u]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(RebuildBlockInputDoesNotUnpackTwice) {
-        using namespace NYql;
-        using namespace NYql::NNodes;
-
-        TExprContext ctx;
-        const auto pos = ctx.AppendPosition({});
-        const auto* valueType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-        const auto* rowType = ctx.MakeType<TStreamExprType>(
-            ctx.MakeType<TMultiExprType>(TTypeAnnotationNode::TListType{valueType}));
-        const auto* blockType = ctx.MakeType<TStreamExprType>(
-            ctx.MakeType<TMultiExprType>(TTypeAnnotationNode::TListType{
-                ctx.MakeType<TBlockExprType>(valueType), ctx.MakeType<TScalarExprType>(valueType)}));
-        auto arg = TCoArgument(ctx.NewArgument(pos, "input"));
-        arg.MutableRef().SetTypeAnn(rowType);
-        auto body = arg.Ptr();
-
-        for (size_t pass = 0; pass < 2; ++pass) {
-            const auto newArg = TCoArgument(ctx.NewArgument(pos, "input"));
-            newArg.MutableRef().SetTypeAnn(blockType);
-            body = ctx.ReplaceNode(std::move(body), arg.Ref(), NOpt::KqpRebuildBlockInput(arg, newArg, ctx).Ptr());
-            UNIT_ASSERT(body->IsCallable("WideFromBlocks"));
-            UNIT_ASSERT_VALUES_EQUAL(body->HeadPtr().Get(), newArg.Raw());
-            arg = newArg;
-        }
     }
 
     Y_UNIT_TEST(IdentityPackUnpackIsEliminated) {

@@ -74,6 +74,7 @@ END()
 
 RECURSE_FOR_TESTS(
     local
+    local_multinode
 )
 
 RECURSE_FOR_TESTS(

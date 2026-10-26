@@ -141,6 +141,7 @@ RECURSE(
     pg_ext
     pg_settings
     poly_args
+    spark_meta
     sql_types
     url_lister
     url_preprocessing

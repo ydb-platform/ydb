@@ -156,8 +156,9 @@ private:
     void Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelDropStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);

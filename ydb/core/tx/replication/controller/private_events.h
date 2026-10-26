@@ -46,7 +46,10 @@ struct TEvPrivate {
         EvPrepareAttachDstResult,
         EvRestoreSession,
         EvBootPersistedWorkers,
+        EvCompleteDstAttachment,
+        EvUpdateYdbProxy,
         EvCancelCreateStream,
+        EvCancelDropStream,
 
         EvEnd,
     };
@@ -176,6 +179,16 @@ struct TEvPrivate {
     struct TEvPrepareAttachDstResult: public TEventLocal<TEvPrepareAttachDstResult, EvPrepareAttachDstResult> {
         TEvPrepareAttachDstResult() = default;
         TString ToString() const override;
+    };
+
+    struct TEvCompleteDstAttachment: public TEventLocal<TEvCompleteDstAttachment, EvCompleteDstAttachment> {};
+
+    struct TEvUpdateYdbProxy: public TEventLocal<TEvUpdateYdbProxy, EvUpdateYdbProxy> {
+        const TActorId YdbProxy;
+
+        explicit TEvUpdateYdbProxy(const TActorId& ydbProxy)
+            : YdbProxy(ydbProxy)
+        {}
     };
 
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
@@ -315,9 +328,6 @@ struct TEvPrivate {
     struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
     };
 
-    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
-    };
-
     struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {
     };
 
@@ -325,6 +335,12 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
+    };
+
+    struct TEvCancelDropStream: public TEventLocal<TEvCancelDropStream, EvCancelDropStream> {
     };
 
     struct TEvBootPersistedWorkers: public TEventLocal<TEvBootPersistedWorkers, EvBootPersistedWorkers> {

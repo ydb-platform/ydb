@@ -91,6 +91,9 @@ public:
         virtual EDstState GetDstState() const = 0;
         virtual void SetDstState(const EDstState value) = 0;
 
+        virtual bool IsExpectedDstCreator(const TActorId& actorId) const = 0;
+        virtual bool IsExpectedDstAlterer(const TActorId& actorId) const = 0;
+
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
         virtual const TPathId& GetPendingDstPathId() const = 0;
@@ -102,9 +105,9 @@ public:
         virtual void SetStreamConsumerName(const TString& value) = 0;
         virtual TString GetStreamPath() const = 0;
 
-        virtual bool IsStreamCreator(const TActorId& actorId) const = 0;
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+        virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
         virtual void SetStreamSchemaChanges(bool value) = 0;
@@ -155,12 +158,17 @@ public:
     TVector<ITarget*> GetTargets() const;
     TVector<TString> GetTargetTablePaths() const;
 
+    bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
+    void FinishTargetDiscovery();
+
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
 
     ui64 GetId() const;
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
+    void AddTargetDescriber(const TActorId& actorId);
+    void RemoveTargetDescriber(const TActorId& actorId);
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
@@ -178,9 +186,10 @@ public:
     ui64 GetNextTargetId() const;
 
     void UpdateSecret(const TString& secretValue);
-    ui64 GetExpectedSecretResolverCookie() const;
+    bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
     void UpdateResourceId(const TString& value);
+    bool IsExpectedResourceIdResolver(const TActorId& actorId) const;
 
     void SetDatabase(const TString& value);
     const TString& GetDatabase() const;

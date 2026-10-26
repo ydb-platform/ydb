@@ -13,6 +13,8 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <ydb/core/tablet_flat/flat_scan_events.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/library/aclib/user_context.h>
@@ -3439,6 +3441,118 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& record = doneResponse->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record;
         RebootTablet(runtime, record.GetTablePathId().GetOwnerId(), edgeActor);
         WaitFor(runtime, [&]{ return done; }, "done");
+    }
+
+    void InitialScanRetry(bool queued) {
+        using TEvResourceBroker = NResourceBroker::TEvResourceBroker;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+        const auto shard = GetTableShards(server, edgeActor, "/Root/Table").at(0);
+        const auto schemeShard = ResolveTableId(server, edgeActor, "/Root/Table").PathId.OwnerId;
+
+        ui64 scanTaskId = 0;
+        TActorId scanExecutor;
+        auto observeTask = runtime.AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& ev) {
+            if (ev->Get()->Task.Type == runtime.GetAppData().DataShardConfig.GetCdcInitialScanTaskName()) {
+                scanTaskId = ev->Get()->Task.TaskId;
+                scanExecutor = ev->Sender;
+            }
+        });
+        THolder<IEventHandle> blockedStart;
+        auto blockStart = runtime.AddObserver<TEvResourceBroker::TEvResourceAllocated>([&](auto& ev) {
+            if (queued && scanTaskId && ev->Get()->TaskId == scanTaskId && ev->GetRecipientRewrite() == scanExecutor) {
+                blockedStart.Reset(ev.Release());
+            }
+        });
+        TBlockEvents<NTabletFlatExecutor::NOps::TEvResult> blockFinish(runtime, [&](auto& ev) {
+            // Client scan serials are even; system scans (e.g. compactions) are odd.
+            return !queued && !(ev->Get()->Serial & 1) && ev->GetRecipientRewrite() == scanExecutor;
+        });
+        // The obsolete SchemeShard must not finalize the stream before its restart.
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanResponse> blockDone(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        runtime.WaitFor("paused initial scan", [&] {
+            return queued ? bool(blockedStart) : !blockFinish.empty();
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
+            NLs::StreamInitialScanProgress(1, 0),
+        });
+
+        bool retrySeen = false;
+        TActorId requester;
+        auto observeRetry = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            retrySeen = true;
+            requester = ev->Sender;
+        });
+        RebootTablet(runtime, schemeShard, edgeActor);
+        runtime.WaitFor("initial scan retry after SchemeShard restart", [&] { return retrySeen; });
+        // A request handled while queued or after scanner exit must update the subscriber.
+        // The counter request is a mailbox barrier before releasing the held scan event.
+        GetAppCounters(runtime, shard);
+        observeRetry.Remove();
+
+        ui64 readyTxId = 0;
+        auto observeReady = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
+                    readyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+        bool done = false;
+        auto observeDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Recipient == requester &&
+                ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE)
+            {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStats().GetRowsProcessed(), 2);
+                UNIT_ASSERT(ev->Get()->Record.GetStats().GetBytesProcessed() > 0);
+                done = true;
+            }
+        });
+        blockDone.Stop(); // discard any response addressed to the old SchemeShard
+        blockStart.Remove();
+        if (blockedStart) {
+            runtime.Send(blockedStart.Release(), 0, true);
+        }
+        blockFinish.Stop().Unblock();
+        runtime.WaitFor("completion addressed to restarted SchemeShard", [&] { return done; }, TDuration::Seconds(10));
+
+        runtime.WaitFor("initial scan finalization", [&] { return readyTxId; }, TDuration::Seconds(10));
+        WaitTxNotification(server, edgeActor, readyTxId);
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanRetryWhileQueued) {
+        InitialScanRetry(true);
+    }
+
+    Y_UNIT_TEST(InitialScanRetryAfterScannerExit) {
+        InitialScanRetry(false);
     }
 
     // https://github.com/ydb-platform/ydb/issues/18806

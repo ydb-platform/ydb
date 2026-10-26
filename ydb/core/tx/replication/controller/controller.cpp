@@ -2,12 +2,12 @@
 #include "controller_impl.h"
 #include "event_util.h"
 
-#include <util/generic/algorithm.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -83,6 +83,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
+        HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
+        HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
         HFunc(TEvPrivate::TEvPrepareAttachDst, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
@@ -101,7 +103,6 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
-        HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
         HFunc(TEvPrivate::TEvRequestDropStream, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
@@ -341,14 +342,6 @@ void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TAc
     ProcessCreateStreamQueue(ctx);
 }
 
-void TController::Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx) {
-    // Poison may arrive before or after the permission grant. Reclaim both
-    // forms of ownership without interpreting cancellation as a target error.
-    Erase(RequestedCreateStream, ev->Sender);
-    InflightCreateStream.erase(ev->Sender);
-    ProcessCreateStreamQueue(ctx);
-}
-
 void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
@@ -356,6 +349,14 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
     InflightCreateStream.erase(ev->Sender);
     ProcessCreateStreamQueue(ctx);
     RunTxCreateStreamResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx) {
+    // The request and cancellation come from the same actor in that order.
+    // A grant may already be in flight, so remove both queued and active entries.
+    std::erase(RequestedCreateStream, ev->Sender);
+    InflightCreateStream.erase(ev->Sender);
+    ProcessCreateStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx) {
@@ -373,6 +374,12 @@ void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActor
     InflightDropStream.erase(ev->Sender);
     ProcessDropStreamQueue(ctx);
     RunTxDropStreamResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvCancelDropStream::TPtr& ev, const TActorContext& ctx) {
+    std::erase(RequestedDropStream, ev->Sender);
+    InflightDropStream.erase(ev->Sender);
+    ProcessDropStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {

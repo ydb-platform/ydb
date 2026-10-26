@@ -6,7 +6,6 @@
 
 namespace NYql::NUdf {
 
-using TUdfModuleWrapperList = TVector<TUdfModuleWrapper>;
-const TUdfModuleWrapperList& GetStaticUdfModuleWrapperList();
+const TVector<const TYqlUdfStaticLibrary*>& GetStaticUdfLibraryList();
 
 } // namespace NYql::NUdf

@@ -71,7 +71,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/scheme
-    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
     ydb/services/keyvalue

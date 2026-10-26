@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -76,7 +77,8 @@ struct TAssignment {
 
 class TMembershipFixture {
 public:
-    TMembershipFixture(const char* name, size_t partitions)
+    TMembershipFixture(const char* name, size_t partitions,
+                       NTopic::IRetryPolicy::TPtr discoveryRetryPolicy = NTopic::IRetryPolicy::GetNoRetryPolicy())
         : Partitions(partitions)
         , Setup(std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
               TString(name), false, ::NPersQueue::TTestServer::LOGGED_SERVICES,
@@ -115,7 +117,7 @@ public:
 
         TFederatedTopicClientSettings clientSettings;
         clientSettings.FederationDiscoveryInterval(TDuration::MilliSeconds(200));
-        clientSettings.RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy());
+        clientSettings.RetryPolicy(std::move(discoveryRetryPolicy));
         Client = std::make_unique<TFederatedTopicClient>(*Driver, clientSettings);
     }
 
@@ -135,7 +137,49 @@ public:
     }
 
     void FailNextDiscoveries() {
-        FailDiscovery.store(true);
+        FailDiscoveries(-1);
+    }
+
+    // count < 0 fails every following discovery, count == 0 stops failing.
+    void FailDiscoveries(int count, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::UNAVAILABLE) {
+        FailureStatus.store(status);
+        FailuresLeft.store(count);
+    }
+
+    int PendingFailures() const {
+        return FailuresLeft.load();
+    }
+
+    // Pumps the session until a data event carrying `text` arrives and hands it to the caller.
+    std::optional<TReadSessionEvent::TDataReceivedEvent> WaitForData(IFederatedReadSession& session, const std::string& text) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline) {
+            if (!session.WaitEvent().Wait(TDuration::MilliSeconds(200))) {
+                continue;
+            }
+            while (auto event = session.GetEvent(false)) {
+                if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    for (const auto& message : data->GetMessages()) {
+                        if (message.GetData() == text) {
+                            return std::move(*data);
+                        }
+                    }
+                    continue;
+                }
+                if (Handle(*event)) {
+                    return std::nullopt;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    int FailedResponses() const {
+        return Failed.load();
+    }
+
+    int SucceededResponses() const {
+        return Succeeded.load();
     }
 
     std::shared_ptr<IFederatedReadSession> StartReader() {
@@ -154,11 +198,13 @@ public:
     }
 
     bool Pump(IFederatedReadSession& session) {
-        bool closed = false;
+        // A closed session returns its close event on every call.
         while (auto event = session.GetEvent(false)) {
-            closed = Handle(*event) || closed;
+            if (Handle(*event)) {
+                return true;
+            }
         }
-        return closed;
+        return false;
     }
 
     bool WaitUntil(IFederatedReadSession& session, const std::function<bool()>& predicate) {
@@ -237,6 +283,8 @@ public:
 
     const size_t Partitions;
     std::unordered_map<std::string, int> OriginStarts;
+    // Partition sessions closed with ConnectionLost, by read source database.
+    std::unordered_map<std::string, int> Lost;
     std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> Setup;
     std::unordered_map<ui64, TAssignment> Assignments;
     std::vector<std::string> Messages;
@@ -270,7 +318,16 @@ private:
             return false;
         }
         if (auto* closed = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
-            Assignments.erase(closed->GetFederatedPartitionSession()->GetPartitionId());
+            const auto session = closed->GetFederatedPartitionSession();
+            const std::string database = session->GetReadSourceDatabaseName();
+            if (closed->GetReason() == NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::ConnectionLost) {
+                ++Lost[database];
+            }
+            // Another database may already have taken the partition over.
+            auto it = Assignments.find(session->GetPartitionId());
+            if (it != Assignments.end() && it->second.Database == database) {
+                Assignments.erase(it);
+            }
             return false;
         }
         if (auto* sessionClosed = std::get_if<TSessionClosedEvent>(&event)) {
@@ -282,14 +339,19 @@ private:
     }
 
     TFederationDiscoveryServiceMock::TGrpcResult Compose() {
-        if (FailDiscovery.load()) {
+        int left = FailuresLeft.load();
+        while (left != 0 && !FailuresLeft.compare_exchange_weak(left, left > 0 ? left - 1 : left)) {
+        }
+        if (left != 0) {
+            ++Failed;
             Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
             auto* op = response.mutable_operation();
-            op->set_status(Ydb::StatusIds::UNAVAILABLE);
+            op->set_status(FailureStatus.load());
             op->set_ready(true);
             op->set_id("federation-membership");
             return {std::move(response), grpc::Status::OK};
         }
+        ++Succeeded;
 
         std::vector<TDbSpec> databases;
         with_lock (Lock) {
@@ -322,7 +384,10 @@ private:
     TFederationDiscoveryServiceMock Fds;
     std::unique_ptr<grpc::Server> Server;
     std::atomic<bool> Stop{false};
-    std::atomic<bool> FailDiscovery{false};
+    std::atomic<int> FailuresLeft{0};
+    std::atomic<Ydb::StatusIds::StatusCode> FailureStatus{Ydb::StatusIds::UNAVAILABLE};
+    std::atomic<int> Failed{0};
+    std::atomic<int> Succeeded{0};
     TAdaptiveLock Lock;
     std::vector<TDbSpec> Databases;
     std::thread Responder;
@@ -358,6 +423,40 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         fixture.SetDatabases({TDbSpec{"dc1"}});
         UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }),
             "dc2 should stop being read while dc1 keeps the partitions");
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.Lost["dc2"] >= 1; }),
+            "partition sessions of the database that left should be closed as lost");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
+    }
+
+    Y_UNIT_TEST(LeavingDatabaseReportsLostPartitionsToHandler) {
+        TMembershipFixture fixture(__FUNCTION__, 2);
+        fixture.SetDatabases({TDbSpec{"dc1"}, TDbSpec{"dc2"}});
+
+        TAdaptiveLock lock;
+        std::unordered_map<std::string, int> lostByHandler;
+        TFederatedReadSessionSettings settings;
+        settings.FederatedEventHandlers_.PartitionSessionClosedHandler([&](TReadSessionEvent::TPartitionSessionClosedEvent& event) {
+            if (event.GetReason() == NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::ConnectionLost) {
+                with_lock (lock) {
+                    ++lostByHandler[event.GetFederatedPartitionSession()->GetReadSourceDatabaseName()];
+                }
+            }
+        });
+        auto session = fixture.StartReader(std::move(settings));
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] {
+            return fixture.Assignments.size() == fixture.Partitions && fixture.HasDatabase("dc1") && fixture.HasDatabase("dc2");
+        }));
+
+        fixture.SetDatabases({TDbSpec{"dc1"}});
+        auto lostOn = [&](const std::string& database) {
+            with_lock (lock) {
+                return lostByHandler[database];
+            }
+        };
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return lostOn("dc2") >= 1; }),
+            "PartitionSessionClosedHandler should get the partitions of the database that left");
+        UNIT_ASSERT_VALUES_EQUAL(lostOn("dc1"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Lost["dc2"], 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
     }
 
@@ -390,24 +489,40 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
     }
 
-    Y_UNIT_TEST(UnavailableDatabaseIsDroppedUntilItReturns) {
+    Y_UNIT_TEST(UnavailableDatabaseKeepsItsSubsession) {
         TMembershipFixture fixture(__FUNCTION__, 2);
         auto session = fixture.StartReader();
         UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
-
-        fixture.Write("while-up");
-        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.Saw("while-up"); }));
+        const int startsBefore = fixture.OriginStarts["dc1"];
 
         fixture.SetDatabases({TDbSpec{"dc1", TDbStatus::DatabaseInfo_Status_UNAVAILABLE}});
-        Sleep(TDuration::Seconds(1));
-        fixture.Write("while-down");
-        UNIT_ASSERT_C(fixture.StaysSilent(*session, "while-down", TDuration::Seconds(3)),
-            "an unavailable database should not be read");
+        const int responses = fixture.SucceededResponses();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.SucceededResponses() >= responses + 3; }));
+        fixture.Write("while-unavailable");
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.Saw("while-unavailable"); }),
+            "a listed database that turns UNAVAILABLE should keep its subsession");
+        UNIT_ASSERT_C(fixture.AllOn("dc1"), "partitions should stay where they were");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.OriginStarts["dc1"], startsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Lost["dc1"], 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
+    }
 
-        fixture.SetDatabases({TDbSpec{"dc1", TDbStatus::DatabaseInfo_Status_AVAILABLE}});
-        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.Saw("while-down"); }),
-            "the database should be read again after it becomes available");
+    Y_UNIT_TEST(UnavailableDatabaseIsOpenedOnceAvailable) {
+        TMembershipFixture fixture(__FUNCTION__, 2);
+        fixture.SetDatabases({TDbSpec{"dc1"}, TDbSpec{"dc2", TDbStatus::DatabaseInfo_Status_UNAVAILABLE}});
+        auto session = fixture.StartReader();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
+
+        const int responses = fixture.SucceededResponses();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.SucceededResponses() >= responses + 3; }));
+        UNIT_ASSERT_C(fixture.AllOn("dc1") && !fixture.HasDatabase("dc2"),
+            "a database that is UNAVAILABLE from the start should not be opened");
+
+        fixture.SetDatabases({TDbSpec{"dc1"}, TDbSpec{"dc2"}});
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] {
+            return fixture.Assignments.size() == fixture.Partitions && fixture.HasDatabase("dc1") && fixture.HasDatabase("dc2");
+        }), "dc2 should be opened once it is AVAILABLE");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
     }
 
     Y_UNIT_TEST(ReadOnlyDatabaseStaysReadable) {
@@ -463,7 +578,7 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         TFederatedReadSessionSettings::TReadOriginalSettings original;
         original.AddDatabase("missing");
         settings.ReadOriginal(std::move(original));
-        settings.FederatedEventHandlers_.HandlersExecutor(executor);
+        settings.EventHandlers_.HandlersExecutor(executor);
         settings.FederatedEventHandlers_.SessionClosedHandler([&](const TSessionClosedEvent& event) {
             handlerStatus = event.GetStatus();
         });
@@ -547,6 +662,79 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT_C(handlerCalls.load() >= 1, "explicit Close should still deliver SessionClosedHandler");
     }
 
+    Y_UNIT_TEST(ExplicitCloseKeepsQueuedHandlers) {
+        TMembershipFixture fixture(__FUNCTION__, 1);
+        auto executor = std::make_shared<TManualExecutor>();
+        std::atomic<int> acks{0};
+        TFederatedReadSessionSettings settings;
+        settings.EventHandlers_.HandlersExecutor(executor);
+        settings.FederatedEventHandlers_.CommitOffsetAcknowledgementHandler([&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
+            ++acks;
+        });
+        auto session = fixture.StartReader(std::move(settings));
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
+
+        fixture.Write("to-commit");
+        auto data = fixture.WaitForData(*session, "to-commit");
+        UNIT_ASSERT(data);
+        data->Commit();
+        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline && executor->Size() == 0) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(executor->Size() >= 1, "the commit acknowledgement handler should be queued");
+
+        session->Close(TDuration::Zero());
+        executor->Drain();
+        UNIT_ASSERT_VALUES_EQUAL_C(acks.load(), 1, "a handler queued before Close should still get its event");
+    }
+
+    Y_UNIT_TEST(BadRequestAfterSuccessKeepsMembership) {
+        TMembershipFixture fixture(__FUNCTION__, 2);
+        fixture.SetDatabases({TDbSpec{"dc1"}, TDbSpec{"dc2"}});
+        auto session = fixture.StartReader();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] {
+            return fixture.Assignments.size() == fixture.Partitions && fixture.HasDatabase("dc1") && fixture.HasDatabase("dc2");
+        }));
+
+        const int failed = fixture.FailedResponses();
+        fixture.FailDiscoveries(-1, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.FailedResponses() >= failed + 3; }),
+            "discovery should keep polling after BAD_REQUEST");
+        UNIT_ASSERT_C(fixture.HasDatabase("dc1") && fixture.HasDatabase("dc2"),
+            "BAD_REQUEST after a federated answer must not replace the membership");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Lost["dc1"], 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Lost["dc2"], 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
+
+        fixture.SetDatabases({TDbSpec{"dc1"}});
+        fixture.FailDiscoveries(0);
+        UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1") && fixture.Lost["dc2"] >= 1; }),
+            "membership updates should resume once discovery answers again");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
+    }
+
+    Y_UNIT_TEST(DiscoveryRetryBudgetIsRestoredAfterSuccess) {
+        // One retry per outage. Without a reset the second outage would find the budget spent.
+        TMembershipFixture fixture(__FUNCTION__, 1,
+            NTopic::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(50), TDuration::MilliSeconds(50), 1));
+        auto session = fixture.StartReader();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
+
+        for (int outage = 0; outage < 3; ++outage) {
+            fixture.FailDiscoveries(1);
+            UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.PendingFailures() == 0; }));
+            const int succeeded = fixture.SucceededResponses();
+            UNIT_ASSERT_C(fixture.WaitUntil(*session, [&] { return fixture.SucceededResponses() > succeeded; }),
+                "discovery should recover after outage " << outage);
+            UNIT_ASSERT_VALUES_EQUAL_C(fixture.SessionClosedEvents, 0, "outage " << outage);
+        }
+
+        fixture.Write("after-outages");
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.Saw("after-outages"); }));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
+    }
+
     Y_UNIT_TEST(DiscoveryFailureNotifiesThroughHandlersExecutor) {
         TMembershipFixture fixture(__FUNCTION__, 1);
         auto executor = std::make_shared<TManualExecutor>();
@@ -554,7 +742,7 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         EStatus handlerStatus = EStatus::STATUS_UNDEFINED;
 
         TFederatedReadSessionSettings settings;
-        settings.FederatedEventHandlers_.HandlersExecutor(executor);
+        settings.EventHandlers_.HandlersExecutor(executor);
         settings.FederatedEventHandlers_.SessionClosedHandler([&](const TSessionClosedEvent& event) {
             ++handlerCalls;
             handlerStatus = event.GetStatus();
@@ -563,14 +751,20 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
 
         fixture.FailNextDiscoveries();
-        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
-        while (TInstant::Now() < deadline && executor->Size() == 0) {
+        auto deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline && fixture.SessionClosedEvents == 0) {
             fixture.Pump(*session);
             Sleep(TDuration::MilliSeconds(50));
         }
-        UNIT_ASSERT_C(executor->Size() >= 1, "terminal close should be posted to the handlers executor");
+        UNIT_ASSERT_C(fixture.SessionClosedEvents >= 1, "a failed discovery should close the session");
+        // The executor runs nothing until drained, so the discovery thread did not call the handler.
         UNIT_ASSERT_VALUES_EQUAL(handlerCalls.load(), 0);
 
+        deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline && handlerCalls.load() == 0) {
+            executor->Drain();
+            Sleep(TDuration::MilliSeconds(50));
+        }
         executor->Drain();
         UNIT_ASSERT_VALUES_EQUAL(handlerCalls.load(), 1);
         UNIT_ASSERT(handlerStatus != EStatus::SUCCESS);

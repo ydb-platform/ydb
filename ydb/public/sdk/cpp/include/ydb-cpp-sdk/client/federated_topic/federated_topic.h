@@ -408,8 +408,10 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! Databases to read from.
     //! Default (empty) value means reading from all available databases.
     //! The session tracks federation membership for its whole lifetime: a database that
-    //! appears and is readable is subscribed, a database that disappears or is no longer
-    //! readable is unsubscribed. Refresh period is TFederatedTopicClientSettings::FederationDiscoveryInterval.
+    //! appears and is readable is subscribed, a database that disappears from the federation
+    //! is unsubscribed and its partition sessions are closed with the ConnectionLost reason.
+    //! A listed database that becomes unavailable stays subscribed.
+    //! Refresh period is TFederatedTopicClientSettings::FederationDiscoveryInterval.
     //! Adding duplicates or unavailable databases is okay, they will be ignored.
     struct TReadOriginalSettings {
         //! Add reading from specified database if it's available.

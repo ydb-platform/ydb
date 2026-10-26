@@ -1,4 +1,4 @@
-* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it (or are no longer readable) are dropped. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
+* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
 
 ## v3.25.0
 

@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -139,25 +140,34 @@ public:
         }
     }
 
+    struct TRetiredPartitionSession {
+        NTopic::TPartitionSession::TPtr PartitionSession;
+        TFederatedPartitionSession::TPtr FederatedPartitionSession;
+    };
+
     // Drops cached partition sessions for a read source that is no longer polled and
     // bumps its generation. A callback queued by the closed subsession keeps the old
     // generation, so LocateFederate will not put that subsession back into the cache.
-    // Callers that already hold a TFederatedPartitionSession::TPtr keep it.
-    void RetireReadSource(const std::shared_ptr<TDbInfo>& db) {
+    // Returns the dropped sessions: the user has seen them and never got their close event.
+    std::vector<TRetiredPartitionSession> RetireReadSource(const std::shared_ptr<TDbInfo>& db) {
+        std::vector<TRetiredPartitionSession> retired;
         if (!db) {
-            return;
+            return retired;
         }
         with_lock(Lock) {
             ++MutableGenerationLocked(*db);
             for (auto it = FederatedPartitionSessions.begin(); it != FederatedPartitionSessions.end();) {
                 const auto& partitionSession = it->second;
                 if (SameReadSource(partitionSession, *db)) {
+                    // The cached federated session owns the partition session, so the raw key is alive.
+                    retired.push_back(TRetiredPartitionSession{NTopic::TPartitionSession::TPtr(it->first), partitionSession});
                     it = FederatedPartitionSessions.erase(it);
                 } else {
                     ++it;
                 }
             }
         }
+        return retired;
     }
 
 private:
@@ -269,7 +279,7 @@ private:
     bool ValidateSettings();
 
     // Re-reads federation membership, opens subsessions for new readable databases
-    // and returns sessions that must be closed outside the lock.
+    // and closes subsessions for databases that left the federation.
     void UpdateFederationState();
 
     std::vector<TSubSession> OpenSubSessions(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos);
@@ -277,7 +287,9 @@ private:
     void RefreshMirroredTopics();
     std::string CurrentTopicSetKey() const;
 
-    bool IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db);
+    // Matches the database against DatabasesToReadFrom, ignoring its status.
+    bool IsDatabaseSelected(const std::shared_ptr<TDbInfo>& db);
+    static bool IsDatabaseReadable(const TDbInfo& db);
     static bool SameReadTarget(const TDbInfo& current, const TDbInfo& desired);
 
     struct TClosingSubsession {
@@ -298,8 +310,19 @@ private:
     // retire=true swallows subsession close callbacks. Used when one database leaves.
     // Whole-session shutdown leaves retire=false so the existing handlers still run.
     void DetachSubsessions(std::vector<TClosingSubsession>& toClose, bool retire);
-    // Closes subsessions, then drops their cached partition sessions. Outside Lock.
-    void CloseSubsessions(std::vector<TClosingSubsession>& toClose, TDuration timeout, bool& lastCloseResult);
+
+    enum class ESubsessionClose {
+        // The database left the federation: drop its events and report its partitions as lost.
+        Leave,
+        // The whole session is going away and the subsession was retired: drop its events.
+        Discard,
+        // Explicit Close(): handlers already queued on the executor still get their events.
+        Graceful,
+    };
+    // Outside Lock.
+    void CloseSubsessions(std::vector<TClosingSubsession>& toClose, TDuration timeout, bool& lastCloseResult, ESubsessionClose mode);
+    void ReportLostPartitions(std::vector<TEventFederator::TRetiredPartitionSession> lost);
+    void Post(std::function<void()> callback) const;
     void NotifySessionClosed() const;
 
     NTopic::TSessionClosedEvent MakeSessionClosedEvent() const;
@@ -325,6 +348,9 @@ private:
     const TInstant StartSessionTime = TInstant::Now();
     const TDuration FederationDiscoveryInterval;
     const std::vector<NTopic::TTopicReadSettings> OriginalTopics;
+    // The executor subsessions run handlers on. Session-level callbacks use it too,
+    // so they are ordered with data handlers instead of running beside them.
+    const IExecutor::TPtr HandlersExecutor;
 
     TAdaptiveLock Lock;
 
@@ -342,6 +368,9 @@ private:
     // SetValue happens outside Lock: a subscriber may take Lock.
     std::vector<TWakeup> Wakeups;
     ui64 NextWakeupId = 1;
+    // Events produced by the federated session itself, returned by GetEvents
+    // before subsession events. Only used when no handler takes them.
+    std::deque<TReadSessionEvent::TEvent> PendingEvents;
 
     // Exiting.
     bool Closing = false;

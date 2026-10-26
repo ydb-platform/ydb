@@ -215,6 +215,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamFormat, stream, value) {
     stream << NKikimrSchemeOp::ECdcStreamFormat_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamCompression, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamCompression_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamState, stream, value) {
     stream << NKikimrSchemeOp::ECdcStreamState_Name(value);
 }

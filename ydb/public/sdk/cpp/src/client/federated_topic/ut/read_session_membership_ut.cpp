@@ -207,6 +207,20 @@ public:
         return false;
     }
 
+    // True once the session has gone quiet: a fresh WaitEvent stays blocked for a whole
+    // discovery interval. Used before asserting that something stopped being read, where a
+    // fixed sleep would race the refresh.
+    bool WaitUntilIdle(IFederatedReadSession& session) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline) {
+            if (!session.WaitEvent().Wait(TDuration::Seconds(1))) {
+                return true;
+            }
+            Pump(session);
+        }
+        return false;
+    }
+
     bool WaitUntil(IFederatedReadSession& session, const std::function<bool()>& predicate) {
         const auto deadline = TInstant::Now() + TDuration::Seconds(20);
         while (TInstant::Now() < deadline) {
@@ -471,7 +485,8 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
             "a message written while dc1 is readable should be delivered");
 
         fixture.SetDatabases({});
-        Sleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(fixture.WaitUntilIdle(*session),
+            "the session should go idle once the federation is empty");
         fixture.Write("while-down");
         UNIT_ASSERT_C(fixture.StaysSilent(*session, "while-down", TDuration::Seconds(3)),
             "an empty federation should stop reading without closing the session");
@@ -531,11 +546,8 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.AllOn("dc1"); }));
 
         fixture.SetDatabases({TDbSpec{"dc1", TDbStatus::DatabaseInfo_Status_READ_ONLY}});
-        const auto deadline = TInstant::Now() + TDuration::Seconds(2);
-        while (TInstant::Now() < deadline) {
-            fixture.Pump(*session);
-            Sleep(TDuration::MilliSeconds(100));
-        }
+        const int responses = fixture.SucceededResponses();
+        UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.SucceededResponses() >= responses + 3; }));
         UNIT_ASSERT_C(fixture.AllOn("dc1"), "READ_ONLY is still a readable federation database");
         UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
     }
@@ -558,7 +570,8 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT(fixture.WaitUntil(*session, [&] { return fixture.Saw("from-dc1"); }));
 
         fixture.SetDatabases({TDbSpec{"dc2"}});
-        Sleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(fixture.WaitUntilIdle(*session),
+            "the session should go idle once the only requested database leaves");
         fixture.Write("while-dc1-is-gone");
         UNIT_ASSERT_C(fixture.StaysSilent(*session, "while-dc1-is-gone", TDuration::Seconds(3)),
             "dc2 is not requested, so removing dc1 should leave nothing to read");
@@ -621,9 +634,8 @@ Y_UNIT_TEST_SUITE(ReadSessionMembership) {
         UNIT_ASSERT(closed);
         UNIT_ASSERT_VALUES_EQUAL(std::get<TSessionClosedEvent>(*closed).GetStatus(), EStatus::BAD_REQUEST);
 
-        fixture.Pump(*healthy);
-        Sleep(TDuration::Seconds(1));
-        fixture.Pump(*healthy);
+        const int responses = fixture.SucceededResponses();
+        UNIT_ASSERT(fixture.WaitUntil(*healthy, [&] { return fixture.SucceededResponses() >= responses + 3; }));
         UNIT_ASSERT_C(fixture.AllOn("dc1"), "the healthy reader must keep the observer snapshot without BAD_REQUEST");
         UNIT_ASSERT_VALUES_EQUAL(fixture.SessionClosedEvents, 0);
     }

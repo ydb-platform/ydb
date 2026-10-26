@@ -16,6 +16,7 @@
 #include <limits>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
@@ -44,7 +45,9 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
                                            const std::shared_ptr<TDbInfo>& db,
                                            std::shared_ptr<TEventFederator> federator,
                                            std::shared_ptr<std::atomic<bool>> retired,
-                                           ui64 readSourceGeneration) {
+                                           ui64 readSourceGeneration,
+                                           std::shared_ptr<std::atomic<bool>> closed,
+                                           std::shared_ptr<std::atomic<bool>> closeEventDelivered) {
     NTopic::TReadSessionSettings SubsessionSettings = settings;
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
@@ -57,11 +60,11 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
 
-#define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
-if (settings.FederatedEventHandlers_.name##_) {                                                             \
-    SubsessionSettings.EventHandlers_.name(                                                                 \
-        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator, readSourceGeneration)); \
-}
+#define MAYBE_CONVERT_HANDLER(type, name)                                                                                          \
+    if (settings.FederatedEventHandlers_.name##_) {                                                                                \
+        SubsessionSettings.EventHandlers_.name(                                                                                    \
+            WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator, readSourceGeneration)); \
+    }
 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler);
@@ -80,15 +83,24 @@ if (settings.FederatedEventHandlers_.name##_) {                                 
     auto sessionClosedHandler = settings.FederatedEventHandlers_.SessionClosedHandler_;
     auto commonHandler = settings.FederatedEventHandlers_.CommonHandler_;
     SubsessionSettings.EventHandlers_.SessionClosedHandler(
-        [retired = std::move(retired), sessionClosedHandler, commonHandler](const NTopic::TSessionClosedEvent& ev) {
+        [retired = std::move(retired), closed = std::move(closed), closeEventDelivered = std::move(closeEventDelivered),
+         sessionClosedHandler, commonHandler](const NTopic::TSessionClosedEvent& ev) {
+            // The subsession queue never drops this event. Remember the closure so the next refresh
+            // replaces the subsession, but count the event as delivered only when a user handler got it:
+            // otherwise GetEvents must return it once.
+            if (closed) {
+                closed->store(true);
+            }
             if (retired->load()) {
                 return;
             }
             if (sessionClosedHandler) {
+                closeEventDelivered->store(true);
                 sessionClosedHandler(ev);
                 return;
             }
             if (commonHandler) {
+                closeEventDelivered->store(true);
                 TReadSessionEvent::TEvent event = ev;
                 commonHandler(event);
             }
@@ -118,9 +130,10 @@ TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSession
     , OriginalTopics(settings.Topics_)
     , HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_
                            ? Settings.EventHandlers_.HandlersExecutor_
-                           : SubClientSettings.DefaultHandlersExecutor_)
+                           : SubClientSettings.DefaultHandlersExecutor_
+                                 ? SubClientSettings.DefaultHandlersExecutor_
+                                 : NYdb::CreateThreadPoolExecutor(1))
 {
-    Y_ABORT_UNLESS(HandlersExecutor);
 }
 
 TStringBuilder TFederatedReadSessionImpl::GetLogPrefix() const {
@@ -172,10 +185,13 @@ std::vector<TFederatedReadSessionImpl::TSubSession> TFederatedReadSessionImpl::O
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
         auto retired = std::make_shared<std::atomic<bool>>(false);
+        auto closed = std::make_shared<std::atomic<bool>>(false);
+        auto closeEventDelivered = std::make_shared<std::atomic<bool>>(false);
         // Capture the generation before the read session can queue callbacks.
         const ui64 generation = EventFederator->CurrentGeneration(db);
-        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator, retired, generation));
-        opened.emplace_back(std::move(subsession), db, std::move(retired), generation);
+        auto subsession = subclient->CreateReadSession(
+            FromFederated(Settings, db, EventFederator, retired, generation, closed, closeEventDelivered));
+        opened.emplace_back(std::move(subsession), db, std::move(retired), generation, std::move(closed), std::move(closeEventDelivered));
     }
     return opened;
 }
@@ -192,7 +208,7 @@ void TFederatedReadSessionImpl::RefreshMirroredTopics() {
     Settings.Topics_ = OriginalTopics;
     for (const auto& topic : OriginalTopics) {
         for (const auto& db : FederationState->DbInfos) {
-            if (AsciiEqualsIgnoreCase(db->name(), dbToReadFrom)) {
+            if (AsciiEqualsIgnoreCase(db->name(), dbToReadFrom) || !IsDatabaseReadable(*db)) {
                 continue;
             }
             auto mirroredTopic = topic;
@@ -250,7 +266,7 @@ void TFederatedReadSessionImpl::CloseSubsessions(std::vector<TClosingSubsession>
     for (auto& sub : toClose) {
         if (sub.Session) {
             // TODO substract from user timeout
-            lastCloseResult = sub.Session->Close(timeout);
+            lastCloseResult = sub.Session->Close(timeout) && lastCloseResult;
         }
     }
     toClose.clear();
@@ -458,12 +474,32 @@ void TFederatedReadSessionImpl::UpdateFederationState() {
                     SawEligibleDatabase = true;
                 }
 
+                // A discovery response may repeat a database, and nothing validates that.
+                std::vector<std::shared_ptr<TDbInfo>> unique;
+                unique.reserve(selected.size());
+                for (const auto& db : selected) {
+                    bool duplicate = false;
+                    for (const auto& earlier : unique) {
+                        if (SameReadTarget(*earlier, *db)) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate) {
+                        unique.push_back(db);
+                    }
+                }
+                selected = std::move(unique);
+
                 std::vector<bool> used(SubSessions.size(), false);
                 for (const auto& db : selected) {
                     size_t found = SubSessions.size();
                     if (!topicsChanged) {
                         for (size_t i = 0; i < SubSessions.size(); ++i) {
-                            if (!used[i] && SubSessions[i].DbInfo && SameReadTarget(*SubSessions[i].DbInfo, *db)) {
+                            // A subsession that already closed can never deliver again. Leave it
+                            // unmatched, so it is dropped below and this database is opened again.
+                            if (!used[i] && SubSessions[i].DbInfo && !SubSessions[i].IsClosed()
+                                && SameReadTarget(*SubSessions[i].DbInfo, *db)) {
                                 found = i;
                                 break;
                             }
@@ -483,7 +519,9 @@ void TFederatedReadSessionImpl::UpdateFederationState() {
                     if (used[i]) {
                         kept.push_back(std::move(SubSessions[i]));
                     } else {
-                        if (SubSessions[i].DbInfo) {
+                        if (SubSessions[i].IsClosed() && SubSessions[i].DbInfo) {
+                            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Reopen closed subsession of database '" << SubSessions[i].DbInfo->name() << "'");
+                        } else if (SubSessions[i].DbInfo) {
                             LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading database '" << SubSessions[i].DbInfo->name() << "'");
                         } else {
                             LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading database '<unknown>'");
@@ -600,6 +638,7 @@ NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
         NThreading::TFuture<void> ready = NThreading::MakeFuture();
         if (auto self = selfCtx->LockShared()) {
             std::vector<NThreading::TFuture<void>> waiters;
+            std::vector<TWakeup> evicted;
             {
                 std::lock_guard guard(self->Lock);
                 if (self->Closing || !self->PendingEvents.empty()) {
@@ -609,12 +648,22 @@ NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
                 auto promise = NThreading::NewPromise<void>();
                 waiters.push_back(promise.GetFuture());
                 self->Wakeups.push_back(TWakeup{*wakeupId, std::move(promise)});
+                // A caller that waits with a timeout and drops the future never completes it, so its
+                // promise would stay here until the next membership change. Past the cap, complete the
+                // oldest: abandoned waits are released and a genuinely blocked reader just waits again.
+                while (self->Wakeups.size() > MaxPendingWakeups) {
+                    evicted.push_back(std::move(self->Wakeups.front()));
+                    self->Wakeups.erase(self->Wakeups.begin());
+                }
                 for (const auto& sub : self->SubSessions) {
-                    if (sub.Session) {
+                    // A closed subsession keeps its close event queued forever, so its WaitEvent is
+                    // always ready and would turn a blocking read into a busy loop.
+                    if (sub.Session && !sub.IsDrained()) {
                         waiters.emplace_back(sub.Session->WaitEvent());
                     }
                 }
             }
+            SignalWakeups(std::move(evicted));
             ready = NThreading::WaitAny(std::move(waiters));
         } else {
             return ready;
@@ -674,8 +723,19 @@ std::vector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool
                 const size_t steps = block ? SubSessions.size() : 1;
                 for (size_t step = 0; step < steps && result.empty(); ++step) {
                     auto sub = SubSessions[SubsessionIndex];
-                    if (sub.Session) {
+                    if (sub.Session && !sub.IsDrained()) {
                         for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
+                            if (std::holds_alternative<NTopic::TSessionClosedEvent>(ev)) {
+                                // The queue returns this event on every call. Hand it over once and then
+                                // leave the subsession out of the waits, so a blocking read blocks again
+                                // instead of spinning on it. The next refresh opens a replacement.
+                                if (sub.Closed) {
+                                    sub.Closed->store(true);
+                                }
+                                if (sub.CloseEventDelivered) {
+                                    sub.CloseEventDelivered->store(true);
+                                }
+                            }
                             if (auto federated = EventFederator->LocateFederate(std::move(ev), sub.DbInfo, sub.Generation)) {
                                 result.push_back(std::move(*federated));
                             }

@@ -447,7 +447,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numF
                 if (situation == TBlobState::ESituation::Present) {
                     placed++;
                 } else if (situation == TBlobState::ESituation::Sent) {
-                    if (!replaceUnresponsive) {
+                    if (!replaceUnresponsive && (!considerSlowAsError || !disk.IsSlow)) {
                         placed++;
                     }
                 } else if (!considerSlowAsError || !disk.IsSlow) {

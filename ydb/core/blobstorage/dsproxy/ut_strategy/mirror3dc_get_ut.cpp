@@ -199,6 +199,31 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
+    Y_UNIT_TEST(LegacyRestoreReplacesSlowPendingWrite) {
+        for (ui32 cookie = 0; cookie < 3; ++cookie) {
+            TTest t({R::N0, R::N0, R::N0}, cookie);
+            UNIT_ASSERT(t.RunRestore(false, true) == EStrategyOutcome::IN_PROGRESS);
+            t.Data(0);
+            for (ui32 disk = 1; disk < 9; ++disk) {
+                t.Reply(disk, S::Absent);
+            }
+            UNIT_ASSERT(t.RunRestore(false, true) == EStrategyOutcome::IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(t.PutMask(), 0b000000110);
+            t.Blackboard.AddPutOkResponse(TLogoBlobID(t.Id, 3), t.Blackboard[t.Id].Disks[2].OrderNumber);
+
+            // A pending write is kept until its disk is marked slow by acceleration.
+            UNIT_ASSERT(t.RunRestore(false, true) == EStrategyOutcome::IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(t.PutMask(), 0);
+            t.Blackboard[t.Id].Disks[1].IsSlow = true;
+            UNIT_ASSERT(t.RunRestore(false, true) == EStrategyOutcome::IN_PROGRESS);
+            UNIT_ASSERT_VALUES_EQUAL(t.PutMask(), 0b000010000);
+            UNIT_ASSERT(t.Blackboard[t.Id].Disks[1].DiskParts[1].Situation == S::Sent);
+
+            t.ConfirmPuts();
+            UNIT_ASSERT(t.RunRestore(false, true) == EStrategyOutcome::DONE);
+        }
+    }
+
     Y_UNIT_TEST(RestoreFailsWhenWriteQuorumBecomesUnattainable) {
         TTest t({R::N0, R::F, R::F}); // E = 0 permits data recovery; W still needs two copies in N.
         t.ReadFoundData();

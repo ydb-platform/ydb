@@ -4234,8 +4234,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     if (!IsSupportive()) {
         Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
-    TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-    TotalPartitionWriteSpeedInMessages = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
+    TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = Config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
 
     CreateCompacter();
     InitializeMLPConsumers();

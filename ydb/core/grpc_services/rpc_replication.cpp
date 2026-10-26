@@ -48,7 +48,7 @@ private:
         SetAuthToken(ev, *TBase::Request_);
         SetDatabase(ev.get(), *TBase::Request_);
         ev->Record.MutableDescribePath()->SetPath(
-            TBase::Request_->NormalizePath(TBase::GetProtoRequest()->path()));
+            TBase::Request_->GetDatabaseRelativePath(TBase::GetProtoRequest()->path()));
 
         TBase::Send(MakeTxProxyID(), ev.release());
         TBase::Become(&TThis::StateDescribeScheme);

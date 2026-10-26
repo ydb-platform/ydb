@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/mon)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE == "thread")
     SUPPRESSIONS(tsan.supp)

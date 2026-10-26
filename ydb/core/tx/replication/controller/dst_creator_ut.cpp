@@ -193,7 +193,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
             const bool owned = free ? TableOwnership : test.Owner != EOwner::Legacy;
             UNIT_ASSERT_VALUES_EQUAL(config.HasOwner(), owned);
-            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), owned ? owner : TPathId{});
+            if (owned) {
+                UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), owner);
+            }
             UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         }
     }
@@ -923,9 +925,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 *tx.MutableAlterTable()->MutableReplicationConfig(),
                 EReplicationMode::ReadOnly,
                 EConsistencyLevel::Row);
-            const auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
-                pathId.OwnerId,
-                std::move(request));
+            // A new generation may still be initializing. The pipe waits for
+            // SchemeShard to become active before delivering the request.
+            runtime.SendToPipe(pathId.OwnerId, env.GetSender(), request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(env.GetSender());
             const auto status = result->Get()->Record.GetStatus();
             // A scavenged path is empty; a retained tombstone is deleted.
             UNIT_ASSERT_C(

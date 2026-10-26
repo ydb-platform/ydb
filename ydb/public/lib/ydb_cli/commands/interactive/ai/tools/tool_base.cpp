@@ -68,15 +68,14 @@ TDatabaseToolBase::TDatabaseToolBase(const TString& database, const NJson::TJson
 
 TString TDatabaseToolBase::CanonizePath(const TString& path) const {
     const auto result = Strip(path);
-    if (result.StartsWith('/')) {
-        return CanonizeAbsolutePath(result);
+    if (!Database.StartsWith('/')) {
+        return result.StartsWith('/') ? CanonizeAbsolutePath(result) : result;
     }
-    if (Database.StartsWith('/')) {
-        return JoinYdbPath({Database, result});
+    auto canonical = CanonizeYdbPath(result);
+    if (!result.StartsWith('/') || !canonical.StartsWith(Database)) {
+        canonical = JoinYdbPath({Database, result});
     }
-
-    // Only the server can resolve a relative database against the cluster root.
-    return result;
+    return canonical;
 }
 
 } // namespace NYdb::NConsoleClient::NAi

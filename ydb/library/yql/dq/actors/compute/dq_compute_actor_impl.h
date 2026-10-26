@@ -212,15 +212,11 @@ public:
     }
 
 protected:
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
-        IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        bool ownMemoryQuota = true, bool passExceptions = false,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
-        NWilson::TTraceId traceId = {},
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
-        const TGUCSettings::TPtr& GUCSettings = nullptr)
+    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TComputeRuntimeSettings& settings,
+        const TComputeMemoryLimits& memoryLimits, bool ownMemoryQuota = true, bool passExceptions = false,
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr, NWilson::TTraceId traceId = {},
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr, const TGUCSettings::TPtr& GUCSettings = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -235,7 +231,10 @@ protected:
         , WatermarkGeneratorTracker(LogPrefix, taskCounters)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
-        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor,
+              traceId            ? std::move(traceId)
+              : settings.TraceId ? settings.TraceId->Clone()
+                                 : NWilson::TTraceId{}, "ComputeActor")
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
@@ -247,6 +246,7 @@ protected:
 
         if (ComputeActorSpan) {
             ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
+            ComputeActorSpan.Attribute("task_id", i64(Task.GetId()));
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
         }
 

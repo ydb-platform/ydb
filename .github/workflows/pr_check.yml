@@ -233,11 +233,11 @@ jobs:
       matrix:
         include:
           - build_preset: relwithdebinfo
-            threads_count: 64
+            threads_count: 96
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo-fat ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout

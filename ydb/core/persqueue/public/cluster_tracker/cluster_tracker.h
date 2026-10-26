@@ -41,19 +41,27 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TString DebugString() const;
 
     const TVector<TCluster>& GetClusters(TStringBuf authority) const;
-    // Read clusters for an account. Unknown account or an empty read list: every non-FNX
-    // cluster plus FNX clusters assigned to the account (writeClusters). A non-empty read
-    // list: only those clusters, plus the same assigned FNX clusters.
+    // Read clusters for an account. Unknown account or no cluster with CanRead: every non-FNX
+    // cluster plus FNX clusters with CanWrite. Otherwise only CanRead clusters, plus those FNX clusters.
     TVector<TCluster> GetReadClusters(TStringBuf account) const;
     void MarkFnxFromBalancers();
     void BuildVisibleClusters();
 
     struct TAccountClusters {
-        TVector<TString> Read;
-        TVector<TString> Write;
+        struct TClusterAccess {
+            TString Name;
+            bool CanRead = false;
+            bool CanWrite = false;
+
+            bool operator==(const TClusterAccess& rhs) const {
+                return Name == rhs.Name && CanRead == rhs.CanRead && CanWrite == rhs.CanWrite;
+            }
+        };
+
+        TVector<TClusterAccess> Clusters;
 
         bool operator==(const TAccountClusters& rhs) const {
-            return Read == rhs.Read && Write == rhs.Write;
+            return Clusters == rhs.Clusters;
         }
     };
 

@@ -1,11 +1,11 @@
 #include "cluster_tracker.h"
 
-#include <util/generic/hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr::NPQ::NClusterTracker {
 
 void TClustersList::MarkFnxFromBalancers() {
-    THashSet<TString> fnxNames;
+    absl::flat_hash_set<TString> fnxNames;
     for (const auto& [_, names] : Balancers) {
         fnxNames.insert(names.begin(), names.end());
     }
@@ -26,7 +26,7 @@ void TClustersList::BuildVisibleClusters() {
     }
 
     for (const auto& [host, extraFnxNames] : Balancers) {
-        THashSet<TString> extraFnx(extraFnxNames.begin(), extraFnxNames.end());
+        absl::flat_hash_set<TString> extraFnx(extraFnxNames.begin(), extraFnxNames.end());
         auto& visible = ClustersByBalancer[host];
         visible.reserve(Clusters.size());
         for (const auto& cluster : Clusters) {
@@ -45,16 +45,17 @@ TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf accou
         spec = &it->second;
     }
 
-    THashSet<TString> readNames;
-    THashSet<TString> accountFnx;
+    absl::flat_hash_set<TString> readNames;
+    absl::flat_hash_set<TString> writeNames;
+    bool hasReadList = false;
     if (spec) {
-        readNames.insert(spec->Read.begin(), spec->Read.end());
-        if (!spec->Write.empty()) {
-            THashSet<TString> writeNames(spec->Write.begin(), spec->Write.end());
-            for (const auto& cluster : Clusters) {
-                if (cluster.IsFnx && writeNames.contains(cluster.Name)) {
-                    accountFnx.insert(cluster.Name);
-                }
+        for (const auto& access : spec->Clusters) {
+            if (access.CanRead) {
+                hasReadList = true;
+                readNames.insert(access.Name);
+            }
+            if (access.CanWrite) {
+                writeNames.insert(access.Name);
             }
         }
     }
@@ -62,9 +63,8 @@ TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf accou
     TVector<TCluster> visible;
     visible.reserve(Clusters.size());
     for (const auto& cluster : Clusters) {
-        const bool hasReadList = spec && !spec->Read.empty();
         const bool listed = hasReadList && readNames.contains(cluster.Name);
-        const bool assignedFnx = cluster.IsFnx && accountFnx.contains(cluster.Name);
+        const bool assignedFnx = cluster.IsFnx && writeNames.contains(cluster.Name);
         const bool everyCommunal = !hasReadList && !cluster.IsFnx;
         if (listed || assignedFnx || everyCommunal) {
             visible.push_back(cluster);

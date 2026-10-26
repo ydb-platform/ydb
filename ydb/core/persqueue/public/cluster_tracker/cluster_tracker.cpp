@@ -486,14 +486,31 @@ private:
             if (name.empty()) {
                 continue;
             }
+            auto readNames = ParseFnxClusterCsv(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
+            auto writeNames = ParseFnxClusterCsv(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
+            absl::flat_hash_map<TString, TClustersList::TAccountClusters::TClusterAccess> byName;
+            TVector<TString> order;
+            auto add = [&](TVector<TString>& names, bool canRead, bool canWrite) {
+                for (auto& clusterName : names) {
+                    clusterName.to_lower();
+                    if (clusterName.empty()) {
+                        continue;
+                    }
+                    const auto [it, inserted] = byName.try_emplace(clusterName);
+                    if (inserted) {
+                        it->second.Name = clusterName;
+                        order.push_back(clusterName);
+                    }
+                    it->second.CanRead = it->second.CanRead || canRead;
+                    it->second.CanWrite = it->second.CanWrite || canWrite;
+                }
+            };
+            add(readNames, true, false);
+            add(writeNames, false, true);
             TClustersList::TAccountClusters spec;
-            spec.Read = ParseFnxClusterCsv(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
-            spec.Write = ParseFnxClusterCsv(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
-            for (auto& clusterName : spec.Read) {
-                clusterName.to_lower();
-            }
-            for (auto& clusterName : spec.Write) {
-                clusterName.to_lower();
+            spec.Clusters.reserve(order.size());
+            for (const auto& clusterName : order) {
+                spec.Clusters.push_back(byName.at(clusterName));
             }
             clustersList->Accounts[name] = std::move(spec);
             clustersList->AccountVersion = std::max<i64>(

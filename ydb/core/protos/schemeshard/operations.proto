@@ -227,5 +227,8 @@ enum EOperationType {
     // Internal repair of legacy unique-index implementation tables.
     ESchemeOpRepairIndexShadowData = 140;
 
+    // Vector index consistent build: take a main table snapshot and switch the index to WriteOnly
+    ESchemeOpPrepareVectorIndex = 141;
+
     // Some entries are grouped by semantics, so are out of order
 }

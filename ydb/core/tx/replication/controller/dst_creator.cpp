@@ -327,9 +327,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         AllocateTxId();
     }
 
-    void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
+    void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig,
+            bool preserveUnownedReplica = false) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+        if (!preserveUnownedReplica && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
             PathId.ToProto(replicationConfig.MutableOwner());
         }
     }
@@ -379,7 +380,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         tx.SetInternal(true);
         DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
+        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig(), PreserveUnownedReplica);
         ExecuteSchemeTx(tx);
     }
 
@@ -552,11 +553,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     return PrepareDropIndex(index, record);
                 }
             }
-            if (CanResumeReplica(desc.GetTable())
-                && (!AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()
-                    || InitialScan || AttachmentComplete
-                    || !desc.GetTable().GetReplicationConfig().HasOwner()))
-            {
+            if (CanResumeReplica(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
                 return Success();
             }
             if (InitialScan) {
@@ -568,6 +565,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
+            PreserveUnownedReplica = IsReplica(desc.GetTable())
+                && !desc.GetTable().GetReplicationConfig().HasOwner();
             Attaching = true;
             return PrepareAttachment();
         }
@@ -1081,6 +1080,7 @@ private:
     bool NeedToCheck = false;
     bool Attaching = false;
     bool AttachmentComplete = false;
+    bool PreserveUnownedReplica = false;
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TPathId PendingDstPathId;

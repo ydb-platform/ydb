@@ -410,6 +410,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
+                case EIndexType::GlobalHnsw: // API-only type; creation is not available yet.
                 case EIndexType::Unknown: {
                     UNIT_ASSERT(false);
                 }
@@ -3578,6 +3579,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
             case EIndexTypeLocalCountMinSketch:
+            case EIndexTypeGlobalHnsw: // API-only type until the lifecycle is implemented.
             case EIndexTypeInvalid:
                 break; // not applicable
         }
@@ -5245,6 +5247,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
             case EIndexTypeLocalCountMinSketch:
+            case EIndexTypeGlobalHnsw: // API-only type until the lifecycle is implemented.
             case EIndexTypeInvalid:
                 break; // not applicable
         }

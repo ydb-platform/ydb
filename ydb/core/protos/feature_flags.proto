@@ -474,4 +474,6 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
     optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    // Gate for HNSW creation and acceleration once the implementation is included.
+    optional bool EnableHnswIndex = 383 [default = false];
 }

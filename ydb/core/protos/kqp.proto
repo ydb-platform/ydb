@@ -253,8 +253,6 @@ message TKqpTableMetadataProto {
     optional bool StatsLoaded = 15;
 }
 
-// Internal SQL ALTER request. Column metadata never passes through the public
-// ColumnMeta format, which intentionally has no generated-expression payload.
 message TKqpAlterTableRequest {
     optional string path = 1;
     repeated TKqpColumnMetadataProto add_columns = 2;

@@ -349,6 +349,7 @@ Release date: July 14, 2025.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory during graceful datashard restarts, reducing `ABORTED` errors caused by lock loss during table balancing.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the `ABORTED` status during graceful datashard restarts.
 * [Added](https://github.com/ydb-platform/ydb/pull/6342) support for removing `NOT NULL` constraints from a table column using the `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` statement.
+* Added support for default values in [ADD COLUMN](./yql/reference/syntax/alter_table/columns.md?version=v25.1) in `ALTER TABLE` (`DEFAULT`). Enabled by setting the `enable_add_colums_with_defaults` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/9168) a limit of 100,000 concurrent session-creation requests in the coordination service.
 * [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum number of columns in the primary key from 20 to 30.
 * Improved diagnostics and introspection of memory errors ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).

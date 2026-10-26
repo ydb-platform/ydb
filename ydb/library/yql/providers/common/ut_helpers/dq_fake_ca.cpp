@@ -1,7 +1,6 @@
 #include "dq_fake_ca.h"
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/system/env.h>
@@ -9,7 +8,6 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <algorithm>
 #include <thread>
 
 namespace NYql::NDq {
@@ -80,30 +78,10 @@ NKikimr::NMiniKQL::THolderFactory& TFakeActor::GetHolderFactory() {
     return HolderFactory;
 }
 
-TRuntimePtr CreateLocalActorRuntime(bool useRealThreads) {
-    auto runtime = std::make_unique<NActors::TTestActorRuntimeBase>(1, useRealThreads);
-    runtime->SetupNodeSubSystems = [](ui32, NActors::TActorSystemSetup* setup) {
-        // The runtime adds its default services after SetupNodeSubSystems. Remove
-        // the poller once construction is complete, before any services start.
-        setup->OnActorSystemCreated.emplace_back([setup](NActors::TActorSystem*) {
-            std::erase_if(setup->LocalServices, [](const auto& service) {
-                return service.first == NActors::MakePollerActorId();
-            });
-        });
-    };
-    return runtime;
-}
-
 TFakeCASetup::TFakeCASetup(ui32 nodeCount)
-    : TFakeCASetup(std::make_unique<NActors::TTestActorRuntimeBase>(nodeCount, true))
-{
-}
-
-TFakeCASetup::TFakeCASetup(TRuntimePtr runtime)
-    : Runtime(std::move(runtime))
+    : Runtime(new NActors::TTestActorRuntimeBase(nodeCount, true))
     , FakeActorId(0, "FakeActor")
 {
-    const ui32 nodeCount = Runtime->GetNodeCount();
     if (nodeCount > 1) {
         auto nameserver = MakeIntrusive<TTableNameserverSetup>();
         for (ui32 node = 0; node < nodeCount; ++node) {

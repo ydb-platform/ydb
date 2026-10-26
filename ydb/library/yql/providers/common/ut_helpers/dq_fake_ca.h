@@ -20,11 +20,6 @@ namespace NYql::NDq {
 class TFakeActor;
 
 using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntimeBase>;
-
-// Single-node runtime for tests with external socket I/O (for example, gRPC).
-// Keeps actor scheduling but does not start the unused Interconnect poller.
-TRuntimePtr CreateLocalActorRuntime(bool useRealThreads = true);
-
 using TCallback = std::function<void(TFakeActor&)>;
 template <typename T>
 using TReadValueParser = std::function<std::vector<T>(const NUdf::TUnboxedValue&)>;
@@ -197,7 +192,6 @@ private:
 
 struct TFakeCASetup {
     explicit TFakeCASetup(ui32 nodeCount = 1);
-    explicit TFakeCASetup(TRuntimePtr runtime);
     ~TFakeCASetup();
 
     // Passes away async input / output actors owned by the fake compute actor while the actor

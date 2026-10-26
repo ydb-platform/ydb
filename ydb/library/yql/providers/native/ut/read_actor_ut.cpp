@@ -146,8 +146,7 @@ TReadResult Batch(ui64 value) {
 
 Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(DiscardedReadMayReleasePayloadReentrantly) {
-        auto runtimeHolder = CreateLocalActorRuntime(false);
-        auto& runtime = *runtimeHolder;
+        NActors::TTestActorRuntimeBase runtime;
         const NActors::TActorId fakeActorId(0, "FakeActor");
         runtime.AddLocalService(fakeActorId,
             NActors::TActorSetupCmd(new TFakeActor(std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()),
@@ -216,7 +215,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(InitialPollBeforeBootstrapWaitsForInitialization) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
         Init(setup, [stream](const auto&) {
@@ -233,7 +232,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(SingleOversizedRowUsesExplicitRowAllowance) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         Init(setup, [stream](const auto&) {
             return stream;
@@ -255,7 +254,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(RowAllowanceCannotAdmitOversizedMultiRowBatch) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
         Init(setup, [stream](const auto&) {
@@ -277,7 +276,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(CancellationBeforeDemandDoesNotStartRemoteOperation) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         std::atomic<ui32> attempts = 0;
         Init(setup, [&](const auto&) {
             ++attempts;
@@ -288,7 +287,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(PositiveDemandBoundsOneReadAndOneBatch) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         Init(setup, [stream](const auto&) {
             return stream;
@@ -316,7 +315,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(LocalDeadlineIsNotRestartedByRetry) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto first = std::make_shared<TStream>();
         auto second = std::make_shared<TStream>();
         std::atomic<ui32> attempts = 0;
@@ -340,7 +339,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(FailureAfterDeliveryCannotOpenAnotherSnapshot) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         std::atomic<ui32> attempts = 0;
         Init(setup, [&](const auto&) {
@@ -361,7 +360,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(DeadlineCancelsPendingRead) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         Init(setup, [stream](const auto&) {
             return stream;
@@ -376,7 +375,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(LateCallbackAfterActorSystemDestructionIsSafe) {
-        auto setup = std::make_unique<TFakeCASetup>(CreateLocalActorRuntime());
+        auto setup = std::make_unique<TFakeCASetup>();
         auto stream = std::make_shared<TStream>();
         auto callbackStarted = NThreading::NewPromise();
         auto continueCallback = NThreading::NewPromise();
@@ -406,7 +405,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     }
 
     Y_UNIT_TEST(OnlyEofCompletesTheInput) {
-        TFakeCASetup setup(CreateLocalActorRuntime());
+        TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         Init(setup, [stream](const auto&) {
             return stream;

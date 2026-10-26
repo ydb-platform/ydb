@@ -12,10 +12,6 @@ TModuleBytecode GetBuiltinMinimalRuntimeSdk();
 
 TModuleBytecode GetBuiltinYtQlUdfs();
 
-// Returns empty Data when the builtin SDK resource is absent or empty.
-TModuleBytecode FindBuiltinSdk();
-
-// Requires a non-empty builtin SDK resource.
 TModuleBytecode GetBuiltinSdk();
 
 ////////////////////////////////////////////////////////////////////////////////

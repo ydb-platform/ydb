@@ -3,12 +3,10 @@
 #include <ydb/library/wasm/api/function.h>
 #include <ydb/library/wasm/api/memory_pool.h>
 #include <ydb/library/wasm/api/pointer.h>
-#include <ydb/library/wasm/engine/builtins.h>
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <WAVM/IR/Module.h>
 #include <WAVM/WASM/WASM.h>
-#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/gtest/gtest.h>
 #include <util/generic/scope.h>
 
@@ -23,75 +21,6 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TWebAssemblyTest: public ::testing::Test {};
-
-TEST_F(TWebAssemblyTest, BuiltinSdkRequiresNonEmptyResource)
-{
-    constexpr auto resource = "libemscripten-system-libraries-dll.so";
-    if (NResource::Has(resource) && !NResource::Find(resource).empty()) {
-        EXPECT_FALSE(GetBuiltinSdk().Data.Empty());
-    } else {
-        try {
-            GetBuiltinSdk();
-            FAIL() << "An absent or empty SDK resource must be rejected";
-        } catch (const std::exception& ex) {
-            EXPECT_NE(std::string(ex.what()).find("is missing or empty"), std::string::npos);
-        }
-    }
-}
-
-TEST_F(TWebAssemblyTest, CustomSdkDoesNotRequireBuiltinSdk)
-{
-    // (module (func (export "answer") (result i32) i32.const 42))
-    const ui8 binary[] = {
-        0x00,
-        0x61,
-        0x73,
-        0x6d,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x05,
-        0x01,
-        0x60,
-        0x00,
-        0x01,
-        0x7f,
-        0x03,
-        0x02,
-        0x01,
-        0x00,
-        0x07,
-        0x0a,
-        0x01,
-        0x06,
-        'a',
-        'n',
-        's',
-        'w',
-        'e',
-        'r',
-        0x00,
-        0x00,
-        0x0a,
-        0x06,
-        0x01,
-        0x04,
-        0x00,
-        0x41,
-        0x2a,
-        0x0b,
-    };
-    const TModuleBytecode sdk{
-        .Format = EBytecodeFormat::Binary,
-        .Data = TSharedRef::FromString(TString(reinterpret_cast<const char*>(binary), sizeof(binary))),
-        .ObjectCode = {},
-    };
-    auto compartment = CreateImageFromSdk(sdk);
-    auto answer = TCompartmentFunction<i32()>(compartment.get(), "answer");
-    EXPECT_EQ(answer(), 42);
-}
 
 TEST_F(TWebAssemblyTest, Create)
 {

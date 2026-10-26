@@ -1530,8 +1530,7 @@ private:
 
 std::unique_ptr<IWebAssemblyCompartment> CreateImageFromSdk(const TModuleBytecode& bytecode)
 {
-    const auto builtinSdk = FindBuiltinSdk();
-    if (!builtinSdk.Data.Empty() && bytecode == builtinSdk) {
+    if (bytecode == GetBuiltinSdk()) {
         return CreateStandardRuntimeImage();
     }
 

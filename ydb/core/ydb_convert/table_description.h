@@ -7,8 +7,13 @@
 #include <ydb/core/protos/forced_compaction.pb.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+namespace NKikimrKqp {
+    class TKqpAlterTableRequest;
+}
 
 namespace NYql{
     struct TKikimrTableMetadata;
@@ -74,6 +79,39 @@ bool BuildAlterTableSetColumnConstraintRequest(const Ydb::Table::AlterTableReque
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
+// Internal SQL request builders. Public overloads share their implementations.
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const NKikimrKqp::TKqpAlterTableRequest* req);
+bool BuildAlterTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+     const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const NKikimrKqp::TKqpAlterTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData);
+
+bool BuildAlterTableAddIndexRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+    ui64 flags,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableBloomFilterModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool BuildAlterTableSetColumnConstraintRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableCompactRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
 // out
 void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
@@ -86,10 +124,16 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSch
 void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in);
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
+    const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
 bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
 bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out,
+    const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
     const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);

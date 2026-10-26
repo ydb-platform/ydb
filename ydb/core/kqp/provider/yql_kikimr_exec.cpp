@@ -1785,10 +1785,10 @@ public:
 
 bool ParseCompressionSettings(
     const TExprList& columnSource,
-    Ydb::Table::ColumnMeta* columnDest,
+    NKikimrKqp::TKqpColumnMetadataProto* columnDest,
     TExprContext& ctx) {
 
-    auto compression = columnDest->mutable_compression();
+    auto compression = columnDest->MutableCompression();
     const auto settings = columnSource.Item(1).Cast<TExprList>();
     for (const auto setting : settings) {
         const auto sKV = setting.Cast<TExprList>();
@@ -1797,28 +1797,28 @@ bool ParseCompressionSettings(
         if (key == "algorithm" && settingVal.IsCallable("String")) {
             const auto algoVal = settingVal.Child(0)->Content();
             if (algoVal == "lz4") {
-                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+                compression->SetAlgorithm("lz4");
             } else if (algoVal == "zstd") {
-                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+                compression->SetAlgorithm("zstd");
             } else if (algoVal == "off") {
-                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+                compression->SetAlgorithm("off");
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
                     << "Unknown compression algorithm: " << algoVal));
                 return false;
             }
         } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
-            compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
+            compression->SetLevel(FromString<i64>(settingVal.Child(0)->Content()));
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
-                << " Column: \"" << columnDest->name()
+                << " Column: \"" << columnDest->GetName()
                 << "\". Setting: \"" << key
                 << "\". Only algorithm and level settings supported for column COMPRESSION"));
             return false;
         }
     }
 
-    if (compression->has_compression_level() && !compression->has_algorithm()) {
+    if (compression->HasLevel() && !compression->HasAlgorithm()) {
         ctx.AddError(TIssue(ctx.GetPosition(settings.Pos()), TStringBuilder()
             << "compression level specified without an algorithm"));
         return false;
@@ -2053,7 +2053,7 @@ public:
             }
 
             ui64 alterTableFlags = 0; //additional flags to pass options without public api modification
-            Ydb::Table::AlterTableRequest alterTableRequest;
+            NKikimrKqp::TKqpAlterTableRequest alterTableRequest;
             alterTableRequest.set_path(table.Metadata->Name);
 
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
@@ -2092,7 +2092,7 @@ public:
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        add_column->set_name(TString(columnName));
+                        add_column->SetName(TString(columnName));
 
                         auto typeNode = columnTuple.Item(1);
                         auto columnType = typeNode.Ref().GetTypeAnn();
@@ -2104,7 +2104,7 @@ public:
                             : type;
 
                         TString error;
-                        if (!SetColumnType(actualType, notNull, *add_column->mutable_type(), error)) {
+                        if (!SetColumnType(actualType, notNull, *add_column, error)) {
                             ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), error));
                             return SyncError();
                         }
@@ -2214,7 +2214,7 @@ public:
                                 }
 
                                 for (auto family : families) {
-                                    add_column->set_family(TString(family.Value()));
+                                    add_column->AddFamily(TString(family.Value()));
                                 }
 
                                 if (columnBuild) {
@@ -2261,7 +2261,7 @@ public:
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
 
                         auto alter_columns = alterTableRequest.add_alter_columns();
-                        alter_columns->set_name(TString(columnName));
+                        alter_columns->SetName(TString(columnName));
 
                         const TString columnNameStr(columnName.Value());
                         const bool isGenerated = generatedColumns.contains(columnNameStr);
@@ -2300,7 +2300,7 @@ public:
                                         TStringBuilder() << "Unsupported value to set default: " << defaultExpr));
                                     return SyncError();
                                 }
-                                alter_columns->set_empty_default(google::protobuf::NullValue());
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
                             } else {
                                 auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
                                 auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
@@ -2309,8 +2309,8 @@ public:
                                         TStringBuilder() << "Unsupported function to set default: " << func));
                                     return SyncError();
                                 }
-                                auto fromSequence = alter_columns->mutable_from_sequence();
-                                fromSequence->set_name(arg);
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE);
+                                alter_columns->SetDefaultFromSequence(arg);
                             }
                         } else if (alterColumnAction == "setFamily") {
                             if (table.Metadata->IsOlap()) {
@@ -2325,7 +2325,7 @@ public:
                                 return SyncError();
                             }
                             for (auto family : families) {
-                                alter_columns->set_family(TString(family.Value()));
+                                alter_columns->AddFamily(TString(family.Value()));
                             }
                         } else if (alterColumnAction == "changeColumnConstraints") {
                             auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
@@ -2347,7 +2347,7 @@ public:
                             auto value = constraint.Item(0).Cast<TCoAtom>();
 
                             if (value == "drop_not_null") {
-                                alter_columns->set_not_null(false);
+                                alter_columns->SetNotNull(false);
                             } else if (value == "set_not_null") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2377,9 +2377,10 @@ public:
 
                             bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
                             if (isNull) {
-                                alter_columns->set_empty_default(google::protobuf::NullValue());
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
                             } else {
-                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->mutable_from_literal());
+                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->MutableDefaultFromLiteral());
                                 if (err) {
                                     ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
                                     return SyncError();
@@ -2392,7 +2393,7 @@ public:
                                 return SyncError();
                             }
 
-                            alter_columns->set_empty_default(google::protobuf::NullValue());
+                            alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
                         } else if (alterColumnAction == "changeCompression") {
                             if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
                                 return SyncError();
@@ -4478,7 +4479,7 @@ private:
 
     bool ParseEncodingSettings(
         const TExprList& alterColumnList,
-        Ydb::Table::ColumnMeta* columnDest,
+        NKikimrKqp::TKqpColumnMetadataProto* columnDest,
         TExprContext& ctx,
         EKikimrTableKind tableKind)
     {
@@ -4489,7 +4490,7 @@ private:
         }
 
         if (encodingList.Empty()) {
-            columnDest->add_encoding();
+            columnDest->AddEncoding();
             return true;
         } else if (encodingList.Size() > 1) {
             ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
@@ -4517,9 +4518,9 @@ private:
                     << "ENCODING(DICT) is disabled."));
                 return false;
             }
-            columnDest->add_encoding()->mutable_dictionary();
+            columnDest->AddEncoding()->MutableDictionary();
         } else if (encodingName == "off") {
-            columnDest->add_encoding()->mutable_off();
+            columnDest->AddEncoding()->MutablePlain();
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
             return false;

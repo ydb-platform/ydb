@@ -349,6 +349,192 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TChangeStoragePoolBridgeMode& cmd,
+            TStatus& /*status*/) {
+        const TBoxStoragePoolId id(cmd.GetBoxId(), cmd.GetStoragePoolId());
+        const auto it = StoragePools.Get().find(id);
+        if (it == StoragePools.Get().end()) {
+            throw TExError() << "StoragePoolId# " << id << " not found";
+        } else if (it->second.DDisk) {
+            throw TExError() << "can't change BridgeMode of DDisk pool";
+        }
+        const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
+
+        const auto& details = Self.StorageConfig
+            ? Self.StorageConfig->GetClusterStateDetails()
+            : NKikimrBridge::TClusterStateDetails::default_instance();
+        if (!BridgeInfo || BridgeInfo->IsImplicit || details.GetBscConversionPending()) {
+            throw TExError() << "BridgeMode change requires a bridged cluster with BSC conversion complete";
+        } else if (!details.GetNonUniformStorageEnabled()) {
+            throw TExError() << "BridgeMode change requires bridge_config.enable_non_uniform_storage";
+        } else if (details.HasPendingPileOperation()) {
+            throw TExError() << "BridgeMode can't be changed while the set of piles is being changed";
+        } else if (it->second.BridgeMode == cmd.GetBridgeMode()) {
+            return; // the pool has this mode already
+        }
+
+        // new groups and parts of the pool are placed by its new mode
+        auto& pool = StoragePools.Unshare().at(id);
+        pool.BridgeMode = cmd.GetBridgeMode();
+        pool.Generation = nextGen;
+
+        if (cmd.GetBridgeMode()) {
+            MakeStoragePoolGroupsBridged(id);
+        } else {
+            MakeStoragePoolGroupsOrdinary(id, cmd.GetRetainPileName());
+        }
+        Callbacks.push_back([&self = Self] { self.CheckBridgeGroupModes(); });
+    }
+
+    template<typename TCallback>
+    void TBlobStorageController::TConfigState::ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId,
+            TCallback&& callback) {
+        const auto& storagePoolGroups = StoragePoolGroups.Get();
+        for (auto it = storagePoolGroups.lower_bound({storagePoolId, Min<TGroupId>()});
+                it != storagePoolGroups.end() && it->first == storagePoolId; ++it) {
+            const TGroupInfo *group = Groups.Find(it->second);
+            Y_ABORT_UNLESS(group);
+            callback(*group);
+        }
+    }
+
+    void TBlobStorageController::TConfigState::MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId) {
+        // ordinary groups become inline piles in the piles they reside in
+        ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
+            if (group.BridgeGroupInfo || group.BridgePileId) {
+                return; // the group is bridged already, or it is a part of bridged one
+            } else if (group.BlocksBridgeConversion()) {
+                throw TExError() << "GroupId# " << group.ID << " is being decommitted or recommissioned, it can't be"
+                    " made bridged";
+            } else if (!group.IsBridgeConversionCandidate()) {
+                return; // virtual group has its data in other groups
+            }
+            std::optional<TBridgePileId> pileId;
+            for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                const auto *pile = BridgeInfo->GetPileForNode(vslot->VSlotId.NodeId);
+                if (!pile) {
+                    throw TExError() << "GroupId# " << group.ID << " has VDisk on NodeId# " << vslot->VSlotId.NodeId
+                        << " which belongs to no pile";
+                } else if (pileId && *pileId != pile->BridgePileId) {
+                    throw TExError() << "GroupId# " << group.ID << " resides in several piles, it can't be made"
+                        " bridged";
+                }
+                pileId = pile->BridgePileId;
+            }
+            Groups.FindForUpdate(group.ID)->MakeInlinePile(*pileId);
+            GroupContentChanged.insert(group.ID);
+        });
+
+        // bridged groups get their parts in every pile of the cluster; they rely on the parts they have until these
+        // parts are synced (the ones of the groups being made ordinary just before are not dropped then, they get
+        // synced too); parts are created right away, so that the change fails when there are not enough resources
+        std::vector<TBridgeGroupPart> parts;
+        ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
+            if (!group.BridgeGroupInfo) {
+                return; // virtual group, or a part of bridged one
+            }
+            const auto& state = group.BridgeGroupInfo->GetBridgeGroupState();
+            bool complete = true;
+            for (const auto& pile : BridgeInfo->Piles) {
+                if (pile.State == NKikimrBridge::TClusterState::INACTIVE) {
+                    continue;
+                } else if (const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId); !part) {
+                    const auto *pss = Self.FindPileSyncState(pile.BridgePileId);
+                    parts.push_back({group.ID, pile.BridgePileId, pss ? pss->GetBecameUnsyncedGeneration() : 0});
+                    complete = false;
+                } else if (part->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                    complete = false;
+                }
+            }
+            if (complete) {
+                return; // nothing to sync
+            }
+            // the group of ordinary pool has the only part, or the one it keeps while being made ordinary
+            const auto authorityPileId = NBridge::GetAuthorityPileId(state);
+            if (!authorityPileId) {
+                throw TExError() << "GroupId# " << group.ID << " has no part it relies on";
+            }
+            auto *mutableState = Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState();
+            authorityPileId.CopyToProto(mutableState, &NKikimrBridge::TGroupState::SetAuthorityPileId);
+            GroupContentChanged.insert(group.ID);
+        });
+        std::vector<std::tuple<TGroupId, TGroupId>> added;
+        Self.AddBridgeGroupParts(*this, parts, &added);
+
+        // parts get synced from the authority ones, unsynced parts of the groups being made ordinary get synced as well
+        std::vector<std::tuple<TGroupId, TGroupId>> targets;
+        ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
+            if (group.BridgeGroupInfo && group.BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                        targets.emplace_back(group.ID, TGroupId::FromProto(&pile,
+                            &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                    }
+                });
+            }
+        });
+        Callbacks.push_back([&self = Self, targets = std::move(targets)] {
+            for (const auto& [proxyGroupId, targetGroupId] : targets) {
+                const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(targetGroupId, proxyGroupId,
+                    targetGroupId);
+                if (inserted) {
+                    self.SyncersRequiringAction.PushBack(&it->second);
+                }
+                // the part is not going to be deleted anymore, it gets the whole delay when dropped again
+                self.DroppedBridgePartsSince.erase(targetGroupId);
+            }
+        });
+    }
+
+    void TBlobStorageController::TConfigState::MakeStoragePoolGroupsOrdinary(TBoxStoragePoolId storagePoolId,
+            const TString& retainPileName) {
+        std::optional<TBridgePileId> retainPileId;
+        if (retainPileName) {
+            for (const auto& pile : BridgeInfo->Piles) {
+                if (!pile.IsFreeSlot && pile.Name == retainPileName) {
+                    retainPileId = pile.BridgePileId;
+                }
+            }
+            if (!retainPileId) {
+                throw TExError() << "pile " << retainPileName << " not found";
+            }
+        }
+
+        // every bridged group relies on the part it keeps from now on, the others are deleted afterwards
+        ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
+            if (!group.BridgeGroupInfo) {
+                return; // ordinary or virtual group, or a part of bridged one
+            }
+            const auto& state = group.BridgeGroupInfo->GetBridgeGroupState();
+            const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
+            TBridgePileId pileId;
+            if (retainPileId) {
+                pileId = *retainPileId;
+            } else if (authorityPileId) {
+                pileId = authorityPileId;
+            } else if (group.IsInlinePile()) {
+                pileId = group.BridgePileId;
+            } else if (BridgeInfo->PrimaryPile) {
+                pileId = BridgeInfo->PrimaryPile->BridgePileId;
+            }
+            const auto *part = NBridge::GetGroupPile(state, pileId);
+            const auto *pile = BridgeInfo->FindPile(pileId);
+            if (!part || !pile) {
+                throw TExError() << "GroupId# " << group.ID << " has no part in BridgePileId# " << pileId;
+            } else if (part->GetStage() != NKikimrBridge::TGroupState::SYNCED ||
+                    (pileId != authorityPileId && pile->State != NKikimrBridge::TClusterState::SYNCHRONIZED) ||
+                    !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                throw TExError() << "GroupId# " << group.ID << " part in pile " << pile->Name << " is not synchronized";
+            } else if (pileId == authorityPileId && !state.GetAuthorityPileId()) {
+                return; // the only part of the group
+            }
+            auto *mutableState = Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState();
+            pileId.CopyToProto(mutableState, &NKikimrBridge::TGroupState::SetAuthorityPileId);
+            GroupContentChanged.insert(group.ID);
+        });
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/, TStatus& status) {
         // first, scan through all existing groups that are not defined as a part of storage pools and check
         // their respective VDisks; as a first step, prepare set of groups inside storage pools

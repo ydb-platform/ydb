@@ -3,6 +3,7 @@
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

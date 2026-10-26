@@ -197,7 +197,7 @@ def test_change_message_visibility(clients, topic, batch):
         bodies = [cluster + '-first', cluster + '-second'] if batch else [cluster + '-single']
         _send(client, url, bodies)
         messages = _receive(client, url, len(bodies))
-        _assert_empty(client, url) # because messages visibility equals to 60s
+        _assert_empty(client, url)  # because messages visibility equals to 60s
         if batch:
             response = client.change_message_visibility_batch(
                 QueueUrl=url, Entries=[

@@ -212,14 +212,17 @@ private:
 class TSchemaRequestGate: public TActorBootstrapped<TSchemaRequestGate> {
 public:
     enum class ERequest { Describe, Attach };
+    enum class EAction { Block, Reject };
 
     TSchemaRequestGate(const TActorId& pipeCache, const TActorId& notify, TPathId pathId,
-            ERequest request = ERequest::Describe)
+            ERequest request = ERequest::Describe, EAction action = EAction::Block)
         : PipeCache(pipeCache)
         , Notify(notify)
         , PathId(pathId)
         , Request(request)
+        , Action(action)
     {
+        UNIT_ASSERT(action == EAction::Block || request == ERequest::Attach);
     }
 
     void Bootstrap() {
@@ -243,6 +246,13 @@ private:
             }
         }
         if (matchesPath) {
+            if (Action == EAction::Reject) {
+                const auto& record = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(ev->Get()->Ev.Get())->Record;
+                Send(ev->Sender, new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                    NKikimrScheme::StatusPreconditionFailed, record.GetTxId(), PathId.OwnerId,
+                    "Table is owned by another replication"));
+                return;
+            }
             Pending.push_back(std::move(ev));
             Send(Notify, new TEvents::TEvWakeup(Blocked));
             return;
@@ -273,6 +283,7 @@ private:
     const TActorId Notify;
     const TPathId PathId;
     const ERequest Request;
+    const EAction Action;
     TVector<TEvPipeCache::TEvForward::TPtr> Pending;
 };
 
@@ -3781,6 +3792,10 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             0,
             oldRequest->Cookie));
         runtime.Send(newRequest->Forward(env.GetYdbProxy()));
+        const auto prepare = runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(prepare->Sender, creator);
+        UNIT_ASSERT_VALUES_EQUAL(prepare->Get()->DstPathId, dstPathId);
+        env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, dstPathId);
@@ -4107,24 +4122,14 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         }));
         const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
         UNIT_ASSERT(WaitFor([&] { return SourceStreamsReady(env, info, 1); }));
-        auto rejectTakeover = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& record = ev->Get()->Record;
-                if (record.TransactionSize() != 1) {
-                    return;
-                }
-                const auto& alter = record.GetTransaction(0).GetAlterTable();
-                if (!alter.GetReplicationConfig().HasOwner()
-                    || TPathId::FromProto(alter.GetPathId()) != dstPathId)
-                {
-                    return;
-                }
-                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
-                    new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
-                        NKikimrScheme::StatusPreconditionFailed, record.GetTxId(), dstPathId.OwnerId,
-                        "Table is owned by another replication")));
-                ev.Reset();
-            });
+        const auto pipeService = MakePipePerNodeCacheID(false);
+        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+        const auto rejectTakeover = runtime.Register(new TSchemaRequestGate(pipeCache, env.GetSender(), dstPathId,
+            TSchemaRequestGate::ERequest::Attach, TSchemaRequestGate::EAction::Reject));
+        runtime.RegisterService(pipeService, rejectTakeover);
+        Y_DEFER {
+            runtime.RegisterService(pipeService, pipeCache);
+        };
         auto initialResume = MakeAlterReplicationRequest(info, 106);
         initialResume->Record.MutableSwitchState()->MutableStandBy();
         const auto initiallyResumed = env.Send<TEvController::TEvAlterReplicationResult>(
@@ -4135,10 +4140,6 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
         }));
         AssertAttachmentPaths(env, {info, targetId, dstPathId, {}}, dstPathId);
-        rejectTakeover.Remove();
-
-        const auto pipeService = MakePipePerNodeCacheID(false);
-        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
         const auto gate = runtime.Register(new TSchemaRequestGate(pipeCache, env.GetSender(), dstPathId,
             TSchemaRequestGate::ERequest::Attach));
         runtime.RegisterService(pipeService, gate);

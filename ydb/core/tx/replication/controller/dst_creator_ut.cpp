@@ -1136,10 +1136,19 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     false,
                     pathId));
             }
-            for (ui32 i = 0; i < 2; ++i) {
-                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
+            for (ui32 completed = 0; completed < 2;) {
+                TAutoPtr<IEventHandle> event;
+                const auto [prepare, result] = env.GetRuntime().GrabEdgeEvents<
+                    TEvPrivate::TEvPrepareAttachDst, TEvPrivate::TEvCreateDstResult>(event);
+                if (prepare) {
+                    UNIT_ASSERT_VALUES_EQUAL(prepare->DstPathId, pathId);
+                    env.SendAsync(event->Sender, new TEvPrivate::TEvPrepareAttachDstResult());
+                } else {
+                    UNIT_ASSERT(result);
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                    UNIT_ASSERT_VALUES_EQUAL(result->DstPathId, pathId);
+                    ++completed;
+                }
             }
         }
     }

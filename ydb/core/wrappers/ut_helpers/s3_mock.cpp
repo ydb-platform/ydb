@@ -3,6 +3,7 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/xml/document/xml-document.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
 #include <util/string/builder.h>
@@ -418,6 +419,9 @@ TS3Mock::TRequest::TRequest(TS3Mock* parent)
 }
 
 bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
+    // CI experiment: add real HTTP latency to every S3 mock request.
+    Sleep(TDuration::MilliSeconds(100));
+
     TStringBuf requestString(RequestString);
     TStringBuf methodStr = requestString.NextTok(' ');
     TStringBuf uriStr = requestString.NextTok(' ');

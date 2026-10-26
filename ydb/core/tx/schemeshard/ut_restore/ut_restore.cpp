@@ -23,6 +23,7 @@
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
@@ -3473,6 +3474,8 @@ value {
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
 
         auto waitReadyToReboot = [&]() {
+            const auto realStart = NActors::TMonotonic::Now();
+            const auto simulatedStart = runtime.GetCurrentTime();
             if (!readyToReboot) {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
@@ -3480,6 +3483,9 @@ value {
                 });
                 runtime.DispatchEvents(opts, TDuration::Seconds(10));
             }
+            Cerr << "Reboot wait: ready=" << readyToReboot
+                 << ", real=" << (NActors::TMonotonic::Now() - realStart)
+                 << ", simulated=" << (runtime.GetCurrentTime() - simulatedStart) << Endl;
             return readyToReboot;
         };
 

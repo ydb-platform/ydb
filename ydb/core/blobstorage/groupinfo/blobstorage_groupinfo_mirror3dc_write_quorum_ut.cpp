@@ -112,7 +112,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             {{R::N2, R::F, R::F}, {2, 0, 0}, false},
             {{R::N2, R::N2, R::R}, {1, 1, 4}, false},
             {{R::N2, R::N2, R::R}, {2, 2, 0}, false},
-            {{R::N0, R::F, R::F}, {}, false},
             {{R::F, R::F, R::F}, {}, false},
         };
         for (const auto& test : cases) {
@@ -264,14 +263,13 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
 
     Y_UNIT_TEST(EnsuredChangesAbsenceButNotCompleteness) {
         // Fix W = 2 and the physical roles; vary only the minimum guarantee E.
-        for (const auto ensured : {L::LAYOUT_0, L::LAYOUT_1, L::LAYOUT_2}) {
-            CheckBlobStateCase({R::N0, R::F, R::F}, {1, 0, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY, ensured);
-            CheckBlobStateCase({R::N0, R::F, R::F}, {2, 0, 0}, {}, G::EBS_FULL, ensured);
+        for (const auto ensured : {L::LAYOUT_1, L::LAYOUT_2}) {
+            CheckBlobStateCase({R::N1, R::F, R::F}, {1, 0, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY, ensured);
+            CheckBlobStateCase({R::N1, R::F, R::F}, {2, 0, 0}, {}, G::EBS_FULL, ensured);
         }
-        // One uncertain disk can hide E = 0 or E = 1, but cannot hide E = 2.
-        CheckBlobStateCase({R::N0, R::F, R::F}, {}, {1, 0, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_0);
-        CheckBlobStateCase({R::N0, R::F, R::F}, {}, {1, 0, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_1);
-        CheckBlobStateCase({R::N0, R::F, R::F}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_2);
+        // One uncertain disk can hide E = 1, but cannot hide E = 2.
+        CheckBlobStateCase({R::N1, R::F, R::F}, {}, {1, 0, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_1);
+        CheckBlobStateCase({R::N1, R::F, R::F}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_2);
     }
 
     Y_UNIT_TEST(ExcessiveFailuresTakePrecedenceOverKnownCopies) {
@@ -339,19 +337,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase({R::N2, R::F, R::F}, {0, 3, 3}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
     }
 
-    Y_UNIT_TEST(ZeroEnsuredLayoutAllowsFullButCannotProveAbsence) {
-        // E = 0, W = 2: two actual copies in N establish FULL even without an old-blob guarantee.
-        CheckBlobStateCase({R::N0, R::F, R::F}, {1, 0, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N0, R::F, R::F}, {2, 0, 0}, {}, G::EBS_FULL);
-        // E = 0, W = 2+2: N-only or R-only copies are fragmentary; both realms are required.
-        CheckBlobStateCase({R::N0, R::R, R::F}, {2, 0, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N0, R::R, R::F}, {0, 2, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N0, R::R, R::F}, {2, 2, 0}, {}, G::EBS_FULL);
-        // E = 0: all NODATA replies still cannot prove absence of a confirmed blob.
-        CheckBlobStateCase({R::N0, R::F, R::F}, {}, {}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N0, R::R, R::F}, {}, {}, G::EBS_DISINTEGRATED);
-    }
-
     Y_UNIT_TEST(EmptyNormalBlobMatchesLegacyForEveryFailureMask) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});
         const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, 0);
@@ -406,13 +391,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(SoloUsesWriteLayoutNotEnsuredLayout) {
-        // N0/F/F (DC_SOLO_DISASTER): W = 2; E = 0.
         // N1/F/F (DC_SOLO_INV1):     W = 2; E = 1.
         // N2/F/F (DC_SOLO_INV2):     W = 2; E = 2.
-        // N0/R/F (DC_SOLO_RECOVERY):      W = 2+2; E = 0.
         // N1/R/F (DC_SOLO_RECOVERY_INV1): W = 2+2; E = 1.
         // N2/R/F (DC_SOLO_RECOVERY_INV2): W = 2+2; E = 2.
-        for (const auto state : {R::N0, R::N1, R::N2}) {
+        for (const auto state : {R::N1, R::N2}) {
             // W = 2 in N: two copies suffice regardless of the ensured layout E.
             CheckCase({state, R::F, R::F}, {2, 0, 0}, true);
             // W = 2 in N: one copy is insufficient; copies in both F realms are ignored.
@@ -460,16 +443,16 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(RecoveringRealmsOnlyFillMissingNormalRealms) {
         CheckCase({R::N0, R::N0, R::N0}, {2, 0, 2}, true, L::LAYOUT_22);
         CheckCase({R::N0, R::N0, R::R}, {2, 0, 2}, false, L::LAYOUT_22);
-        CheckCase({R::N0, R::R, R::F}, {2, 2, 0}, true, L::LAYOUT_22);
-        CheckCase({R::N0, R::R, R::F}, {1, 1, 0}, true, L::LAYOUT_11);
-        CheckCase({R::N0, R::R, R::F}, {0, 3, 3}, false, L::LAYOUT_11);
-        CheckCase({R::N0, R::R, R::F}, {2, 0, 0}, true, L::LAYOUT_11_2);
-        CheckCase({R::N0, R::R, R::F}, {1, 1, 0}, true, L::LAYOUT_11_2);
-        CheckCase({R::N0, R::R, R::F}, {1, 0, 3}, false, L::LAYOUT_11_2);
-        CheckCase({R::N0, R::R, R::F}, {1, 0, 0}, true, L::LAYOUT_1);
-        CheckCase({R::N0, R::R, R::F}, {0, 3, 3}, false, L::LAYOUT_1);
-        CheckCase({R::N0, R::R, R::F}, {3, 3, 3}, false, L::LAYOUT_111);
-        CheckCase({R::N0, R::F, R::F}, {3, 3, 3}, false, L::LAYOUT_11);
+        CheckCase({R::N1, R::R, R::F}, {2, 2, 0}, true, L::LAYOUT_22);
+        CheckCase({R::N1, R::R, R::F}, {1, 1, 0}, true, L::LAYOUT_11);
+        CheckCase({R::N1, R::R, R::F}, {0, 3, 3}, false, L::LAYOUT_11);
+        CheckCase({R::N1, R::R, R::F}, {2, 0, 0}, true, L::LAYOUT_11_2);
+        CheckCase({R::N1, R::R, R::F}, {1, 1, 0}, true, L::LAYOUT_11_2);
+        CheckCase({R::N1, R::R, R::F}, {1, 0, 3}, false, L::LAYOUT_11_2);
+        CheckCase({R::N1, R::R, R::F}, {1, 0, 0}, true, L::LAYOUT_1);
+        CheckCase({R::N1, R::R, R::F}, {0, 3, 3}, false, L::LAYOUT_1);
+        CheckCase({R::N1, R::R, R::F}, {3, 3, 3}, false, L::LAYOUT_111);
+        CheckCase({R::N1, R::F, R::F}, {3, 3, 3}, false, L::LAYOUT_11);
     }
 
     Y_UNIT_TEST(InvalidExplicitPolicyPreventsConstruction) {

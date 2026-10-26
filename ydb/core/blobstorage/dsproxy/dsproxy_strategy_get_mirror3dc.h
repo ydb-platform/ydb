@@ -90,9 +90,10 @@ class TMirror3dcGetStrategy : public IStrategy {
             readState.HasErrors ? readState.Uncertain : readState.Failed);
         // TODO(kruall): recheck phantom check logic
         if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
-            return EStrategyOutcome::Error("Mirror-3-dc replies cannot establish blob absence");
+            state->WholeSituation = S::Error;
+        } else {
+            state->WholeSituation = S::Absent;
         }
-        state->WholeSituation = S::Absent;
         return EStrategyOutcome::DONE;
     }
 
@@ -137,9 +138,10 @@ class TMirror3dcGetStrategy : public IStrategy {
         }
         if (checker.GetBlobState(readState.Parts, readState.Uncertain) == G::EBS_DISINTEGRATED
                 || (PhantomCheck && readState.HasErrors)) {
-            return EStrategyOutcome::Error("Mirror-3-dc replies cannot establish blob absence");
+            state->WholeSituation = S::Error;
+        } else {
+            state->WholeSituation = S::Absent;
         }
-        state->WholeSituation = S::Absent;
         return EStrategyOutcome::DONE;
     }
 

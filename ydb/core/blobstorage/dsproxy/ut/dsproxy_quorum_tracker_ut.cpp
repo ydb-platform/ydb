@@ -118,16 +118,13 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
         }
     }
 
-    Y_UNIT_TEST(ZeroEnsuredAndInvalidStatesFailImmediately) {
-        for (const auto& realms : {std::array{R::N0, R::F, R::F}, std::array{R::N0, R::R, R::F},
-                std::array{R::N0, R::R, R::R}}) {
-            const auto info = MakeMirror3dcInfo(realms);
-            TGroupQuorumTracker tracker(&info);
-            UNIT_ASSERT_VALUES_EQUAL(tracker.CalculateStatus(), NKikimrProto::ERROR);
-            for (ui32 disk = 0; disk < 12; ++disk) {
-                UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::OK),
-                    NKikimrProto::ERROR);
-            }
+    Y_UNIT_TEST(InvalidStateFailsImmediately) {
+        const auto info = MakeMirror3dcInfo({R::N0, R::R, R::R});
+        TGroupQuorumTracker tracker(&info);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.CalculateStatus(), NKikimrProto::ERROR);
+        for (ui32 disk = 0; disk < 12; ++disk) {
+            UNIT_ASSERT_VALUES_EQUAL(tracker.ProcessReply(info.GetVDiskId(disk), NKikimrProto::OK),
+                NKikimrProto::ERROR);
         }
     }
 

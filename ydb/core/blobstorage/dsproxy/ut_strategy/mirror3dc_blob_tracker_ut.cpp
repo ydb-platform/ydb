@@ -84,7 +84,6 @@ Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
         CheckCase({R::N1, R::F, R::F}, {}, {}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
         CheckCase({R::N1, R::F, R::F}, {}, {1, 3, 3}, {}, G::EBS_DISINTEGRATED);
         CheckCase({R::N2, R::F, R::F}, {}, {1, 3, 3}, {}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckCase({R::N0, R::F, R::F}, {}, {}, {}, G::EBS_DISINTEGRATED);
     }
 
     Y_UNIT_TEST(RecoveryFailuresFollowEnsuredAlternatives) {

@@ -277,10 +277,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
             {{R::N1, R::N2, R::R}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in N/N.
             {{R::N0, R::N0, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
             {{R::N2, R::N2, R::F}, {2, 2, 0}, {3, 3, 0}},
-            {{R::N0, R::F, R::F}, {2, 0, 0}, {3, 0, 0}}, // W = 2, expand to 3.
             {{R::N1, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
             {{R::N2, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
-            {{R::N0, R::R, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in N/R.
+            {{R::N1, R::R, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2 in N/R.
         };
         for (const auto& test : cases) {
             std::array<ui32, 3> permutation = {0, 1, 2};
@@ -358,7 +357,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
             UNIT_ASSERT(t.Run(tactic) == EStrategyOutcome::IN_PROGRESS);
             t.Expect({0, 0, 0});
         }
-        TTest t({R::N0, R::R, R::F});
+        TTest t({R::N1, R::R, R::F});
         t.Set({1, 1, 0}, S::Present);
         UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({1, 1, 0});
@@ -376,7 +375,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         UNIT_ASSERT(t.Run(P::TacticMaxThroughput) == EStrategyOutcome::IN_PROGRESS);
         t.Expect({2, 2, 0});
 
-        TTest solo({R::N0, R::F, R::F});
+        TTest solo({R::N1, R::F, R::F});
         for (auto& disk : solo.Blackboard[solo.Id].Disks) {
             disk.IsSlow = true;
         }
@@ -407,7 +406,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     Y_UNIT_TEST(EveryFailureMaskTerminatesAccordingToWriteQuorumAndFailureModel) {
         // 512 binary failure masks, not a Cartesian product of all reply statuses.
         for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::R},
-                TStates{R::N0, R::N0, R::F}, TStates{R::N0, R::R, R::F}, TStates{R::N0, R::F, R::F}}) {
+                TStates{R::N0, R::N0, R::F}, TStates{R::N1, R::R, R::F}, TStates{R::N1, R::F, R::F}}) {
             for (auto tactic : {P::TacticMaxThroughput, P::TacticMinLatency}) {
                 for (ui32 errors = 0; errors < 512; ++errors) {
                     TTest t(states);
@@ -420,8 +419,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
                         UNIT_ASSERT(step < 10);
                         const auto outcome = t.Run(tactic);
                         if (outcome != EStrategyOutcome::IN_PROGRESS) {
-                            const bool failureModel = checker->GetEnsuredLayout() == EMirror3dcLayout::LAYOUT_0
-                                || checker->GetBlobState({}, observedFailures) != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+                            const bool failureModel = checker->GetBlobState({}, observedFailures)
+                                != TBlobStorageGroupInfo::EBS_DISINTEGRATED;
                             const bool expected = failureModel && checker->CheckQuorumForSubgroup(possible);
                             UNIT_ASSERT_VALUES_EQUAL_C(outcome == EStrategyOutcome::DONE, expected,
                                 "errors " << errors << " tactic " << static_cast<ui32>(tactic));

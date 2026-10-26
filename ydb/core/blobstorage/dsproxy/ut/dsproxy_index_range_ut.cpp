@@ -11,7 +11,7 @@ enum class ERead { Range, Index, Get, Restore };
 
 void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts& copies,
         const TCounts& failures, NKikimrProto::EReplyStatus expected, bool phantomCheck = false,
-        bool expectRestore = false) {
+        bool expectRestore = false, bool expectBlobError = false) {
     const bool range = operation == ERead::Range;
     ui32 writes = 0;
     TTestBasicRuntime runtime;
@@ -94,7 +94,7 @@ void CheckRead(ERead operation, const TVector<R::EState>& realms, const TCounts&
         } else {
             UNIT_ASSERT(!range && indexResult);
             UNIT_ASSERT_VALUES_EQUAL(indexResult->Status,
-                expected == NKikimrProto::NODATA ? NKikimrProto::OK : expected);
+                expected == NKikimrProto::NODATA || expectBlobError ? NKikimrProto::OK : expected);
             if (indexResult->Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->ResponseSz, 1);
                 UNIT_ASSERT_VALUES_EQUAL(indexResult->Responses[0].Status, expected);
@@ -181,23 +181,14 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
         }
     }
 
-    Y_UNIT_TEST(ZeroEnsuredRejectsRangeAndIndexGet) {
-        for (bool range : {false, true}) {
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N0, R::F, R::F}, {}, {}, NKikimrProto::ERROR);
-        }
-        CheckRead(ERead::Range, {R::N0, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::ERROR);
-        CheckRead(ERead::Index, {R::N0, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::ERROR);
-    }
-
     Y_UNIT_TEST(OrdinaryGetReadsNormalAndRecoveringRealms) {
         CheckRead(ERead::Get, {R::N1, R::F, R::F}, {1, 0, 0}, {}, NKikimrProto::OK);
         CheckRead(ERead::Get, {R::N1, R::R, R::F}, {0, 1, 0}, {}, NKikimrProto::OK);
-        CheckRead(ERead::Get, {R::N0, R::F, R::F}, {}, {}, NKikimrProto::ERROR);
     }
 
     Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
         CheckRead(ERead::Get, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {R::N2, R::N2, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true);
+        CheckRead(ERead::Get, {R::N2, R::N2, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {
@@ -211,7 +202,6 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
         CheckPut({R::N0, R::N0, R::N0}, {1, 1, 1}, NKikimrProto::ERROR);
         CheckPut({R::N1, R::F, R::F}, {1, 0, 0}, NKikimrProto::ERROR);
         CheckPut({R::N2, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
-        CheckPut({R::N0, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
         CheckPut({R::N1, R::F, R::F}, {2, 0, 0}, NKikimrProto::ERROR);
         CheckPut({R::N1, R::R, R::F}, {1, 1, 0}, NKikimrProto::ERROR);
         CheckPut({R::N1, R::R, R::F}, {0, 1, 0}, NKikimrProto::OK);

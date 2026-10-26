@@ -49,7 +49,8 @@ struct TDSProxyEnv {
     }
 
     void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex,
-            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1)
+            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1,
+            const TVector<TBlobStorageGroupInfo::TDynamicInfo::EFailRealmState>& failRealmStates = {})
     {
         GroupId = groupId;
         NodeIdx = nodeIndex;
@@ -64,6 +65,13 @@ struct TDSProxyEnv {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, 3, 3, &VDisks, encryptionMode);
         } else {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, type.BlobSubgroupSize(), 1, &VDisks, encryptionMode);
+        }
+
+        if (!failRealmStates.empty()) {
+            auto dynamic = Info->GetDynamicInfo();
+            dynamic.FailRealmStates = failRealmStates;
+            Info = MakeIntrusive<TBlobStorageGroupInfo>(Info->PickTopology(), std::move(dynamic), "",
+                TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         }
 
         RealProxyActorId = MakeBlobStorageProxyID(groupId);

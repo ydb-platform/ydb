@@ -5,6 +5,7 @@
 #include "dsproxy_vdisk_mock_ut.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
 
@@ -613,6 +614,36 @@ void SetLogPriorities(TTestBasicRuntime &runtime) {
     }
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_CRIT);
     runtime.SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_CRIT);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
+    Y_UNIT_TEST(NonNormalRealmsUseNaiveFallback) {
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        for (const auto first : {R::N0, R::N1, R::N2, R::R, R::F}) {
+            for (const auto second : {R::N0, R::N1, R::N2, R::R, R::F}) {
+                for (const auto third : {R::N0, R::N1, R::N2, R::R, R::F}) {
+                    const auto state = GetMirror3dcGroupState(first, second, third);
+                    if (!state || *state == EMirror3dcGroupState::NORMAL) {
+                        continue;
+                    }
+                    TTestArgs args;
+                    args.MakeDefault(TErasureType::ErasureMirror3dc);
+                    TTestBasicRuntime runtime{1, false};
+                    SetLogPriorities(runtime);
+                    SetupRuntime(runtime);
+                    TDSProxyEnv env;
+                    env.Configure(runtime, args.GType, args.CurrentGroupId, 0,
+                        TBlobStorageGroupInfo::EEM_NONE, {first, second, third});
+                    auto patch = CreatePatch(runtime, env, args);
+                    auto actor = env.CreatePatchRequestActor(patch, true);
+                    runtime.Register(actor.release(), 0, 0, TMailboxType::Simple, 0, env.FakeProxyActorId);
+                    ConductNaivePatch(runtime, args, ENaivePatchCase::Ok);
+                }
+            }
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -11,6 +11,8 @@
 #include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
@@ -18,6 +20,7 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -43,6 +46,24 @@ namespace NKikimr::NViewer {
 using namespace NNodeWhiteboard;
 
 namespace {
+
+bool IsPathParameter(TStringBuf name) {
+    return name == "database" || name == "database_path" || name == "tenant" || name == "path" || name == "topic";
+}
+
+TString NormalizePathValue(TStringBuf key, TStringBuf value, const NPathAliasing::TPathNormalizer& normalizer, bool pathList = false) {
+    if (pathList && key == "path") {
+        auto paths = StringSplitter(value).Split(',').ToList<TString>();
+        for (auto& path : paths) {
+            path = normalizer.NormalizePath(path);
+        }
+        return JoinSeq(',', paths);
+    }
+    if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
+        return normalizer.NormalizePath(CanonizePath(TString(value)));
+    }
+    return normalizer.NormalizePath(value);
+}
 
 enum class EViewerEndpointAccessType {
     Administration,
@@ -73,6 +94,37 @@ TString GetLegacyJsonPathAlias(TStringBuf path) {
     return TStringBuilder() << '/' << prefix << "/json/" << rest;
 }
 
+}
+
+TCgiParameters NormalizePathParameters(TCgiParameters params, bool pathList) {
+    if (HasAppData() && AppData()->PathNormalizer && AppData()->PathNormalizer->HasRules()) {
+        for (auto& [key, value] : params) {
+            if (IsPathParameter(key)) {
+                value = NormalizePathValue(key, value, *AppData()->PathNormalizer, pathList);
+            }
+        }
+    }
+    return params;
+}
+
+void NormalizePathParameters(NJson::TJsonValue& params, bool pathList) {
+    if (!params.IsMap() || !HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+        return;
+    }
+    for (auto& [key, value] : params.GetMapSafe()) {
+        if (!IsPathParameter(key)) {
+            continue;
+        }
+        if (value.IsString()) {
+            value = NormalizePathValue(key, value.GetString(), *AppData()->PathNormalizer, pathList);
+        } else if (value.IsArray()) {
+            for (auto& item : value.GetArraySafe()) {
+                if (item.IsString()) {
+                    item = NormalizePathValue(key, item.GetString(), *AppData()->PathNormalizer);
+                }
+            }
+        }
+    }
 }
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);

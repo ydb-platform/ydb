@@ -53,7 +53,7 @@ namespace NTable {
      * YEAR(c) = 2025 is a single range [2025-01-01, 2026-01-01).
      */
     struct TTierRule {
-        ui32 TierId = 0;
+        ui32 TierId = 0; // id of the table family that keeps the tier placement
         TVector<TTierRange> Ranges;
 
         bool operator==(const TTierRule&) const = default;
@@ -76,6 +76,7 @@ namespace NTable {
         bool operator==(const TTieringPolicy&) const = default;
     };
 
+    // Replaces the whole content of the proto with the policy
     void TieringPolicyToProto(const TTieringPolicy& policy, NTabletFlatScheme::TTieringPolicySettings& proto);
     TTieringPolicy TieringPolicyFromProto(const NTabletFlatScheme::TTieringPolicySettings& proto);
 

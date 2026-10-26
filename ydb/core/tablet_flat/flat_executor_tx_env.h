@@ -56,6 +56,9 @@ namespace NTabletFlatExecutor {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(!NTable::NPage::IsIndexPage(location.Type),
+                "Index page " << location << " is requested as a data page");
+
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
             return TryGetPage(location, partStore->PageCollections.at(part->DataSlot(groupId)).Get());
@@ -63,6 +66,9 @@ namespace NTabletFlatExecutor {
 
         const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(location.Type == NTable::NPage::EPage::Undef || NTable::NPage::IsIndexPage(location.Type),
+                "Page " << location << " is requested as an index page");
+
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
             return TryGetPage(location, partStore->PageCollections.at(part->IndexSlot(groupId)).Get());

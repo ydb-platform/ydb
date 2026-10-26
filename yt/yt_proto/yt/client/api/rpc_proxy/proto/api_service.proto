@@ -1021,6 +1021,7 @@ message TRspPullRows
     repeated TReplicationRowIndex end_replication_row_indexes = 4;
     required TRowsetDescriptor rowset_descriptor = 5;
     optional bool versioned = 6 [default = true];
+    repeated NYT.NProto.TError subrequest_errors = 7;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2044,6 +2045,8 @@ message TReqReshardTable
 
     optional bool enable_slicing = 5;
     optional double slicing_accuracy = 6;
+
+    repeated int64 cumulative_data_weights = 7;
 
     optional TMutatingOptions mutating_options = 103;
     optional TTabletRangeOptions tablet_range_options = 104;

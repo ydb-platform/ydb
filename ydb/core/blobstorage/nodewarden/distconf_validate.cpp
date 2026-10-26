@@ -155,6 +155,10 @@ namespace NKikimr::NStorage {
         if (auto error = ValidateConfig(proposed)) {
             return TStringBuilder() << "proposed config validation failed: " << *error;
         }
+        if (current.GetClusterStateDetails().GetNonUniformStorageEnabled()
+                && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()) {
+            return "non-uniform storage activation can't be disabled";
+        }
 
         THashMap<ui32, std::tuple<TString, ui16>> currentNodeMap;
         for (const auto& node : current.GetAllNodes()) {
@@ -453,6 +457,15 @@ namespace NKikimr::NStorage {
         if (config.HasBlobStorageConfig()) {
             if (auto error = ValidateConfig(config.GetBlobStorageConfig(), nodeIds)) {
                 return error;
+            }
+        }
+
+        if (const auto& details = config.GetClusterStateDetails(); details.GetNonUniformStorageEnabled()) {
+            if (!config.HasClusterState() || details.GetBscConversionPending()) {
+                return "non-uniform storage requires a bridged cluster with BSC conversion complete";
+            }
+            if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelNonUniformStorage) {
+                return "non-uniform storage requires the corresponding bridge feature level";
             }
         }
 

@@ -43,6 +43,9 @@ TString ExtractHttpDatabaseParam(
     if (method != "POST" || body.empty()) {
         return {};
     }
+    if (AsciiEqualsIgnoreCase(contentType, "application/x-www-form-urlencoded")) {
+        return TCgiParameters(body).Get(DATABASE_PARAM);
+    }
     if (!contentType.empty() && !AsciiEqualsIgnoreCase(contentType, "application/json")) {
         return {};
     }

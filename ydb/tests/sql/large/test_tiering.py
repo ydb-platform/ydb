@@ -10,6 +10,10 @@ import time
 
 class TestYdbS3TTL(TestBase, S3Base):
 
+    @classmethod
+    def get_disabled_feature_flags(cls):
+        return super().get_disabled_feature_flags() + ["disable_old_secret_creation"]
+
     def test_basic_tiering_operations(self):
         """
         Tests basic data tiering functionality with S3 storage.

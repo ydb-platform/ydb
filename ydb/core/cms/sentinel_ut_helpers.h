@@ -71,6 +71,10 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
+    TActorId GetSentinelActor() const {
+        return Sentinel;
+    }
+
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));

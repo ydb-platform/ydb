@@ -27,6 +27,7 @@ namespace {
 } // namespace
 
     void TieringPolicyToProto(const TTieringPolicy& policy, NTabletFlatScheme::TTieringPolicySettings& proto) {
+        proto.Clear();
         proto.SetColumnTag(policy.ColumnTag);
         proto.SetUnit(policy.Unit);
         for (const auto& rule : policy.Rules) {

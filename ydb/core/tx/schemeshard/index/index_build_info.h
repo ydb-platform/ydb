@@ -876,7 +876,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactIndex(IndexType);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the

@@ -74,7 +74,7 @@ THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& i
 
     // Without row-id mode, these indexes require exactly one integer PK column,
     // as validated when the index is created.
-    if (NTableIndex::IsCompactIndex(index.Type)) {
+    if (NTableIndex::IsCompactFulltextIndex(index.Type)) {
         for (const auto columnId : table.KeyColumnIds) {
             columns.insert(table.Columns.at(columnId).Name);
         }

@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NTableIndex {
 
-bool IsCompactIndex(NKikimrSchemeOp::EIndexType indexType) {
+bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType) {
     return indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
         || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
         || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;

@@ -18,6 +18,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/base64
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
@@ -45,6 +46,7 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
+    ydb/core/fq/libs/wasm_services/query
     ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/core/util
@@ -62,6 +64,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
+    ydb/library/yql/providers/function/provider
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/provider

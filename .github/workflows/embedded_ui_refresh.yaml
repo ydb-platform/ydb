@@ -31,6 +31,28 @@ jobs:
       TEMP_ASSET_DIR: /tmp/asset
     steps:
       - uses: actions/checkout@v5
+      - name: Select PR branch
+        id: pr-branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const tag = process.env.TAG_NAME;
+            // Keep existing open refresh PRs on their original branches.
+            for (const prefix of ['update-embedded-ui-', 'embedded-ui-', 'embedded-ui-refresh-']) {
+              const branch = `${prefix}${tag}`;
+              const { data: pulls } = await github.rest.pulls.list({
+                ...context.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${branch}`,
+                base: context.payload.repository.default_branch,
+                per_page: 1,
+              });
+              if (pulls.length) {
+                core.setOutput('name', branch);
+                return;
+              }
+            }
+            core.setOutput('name', `robots/embedded-ui/update-embedded-ui-${tag}`);
       - name: Asset Download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,7 +91,7 @@ jobs:
         with:
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           commit-message: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
-          branch: update-embedded-ui-${{ env.TAG_NAME }}
+          branch: ${{ steps.pr-branch.outputs.name }}
           delete-branch: true
           title: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
           body: |

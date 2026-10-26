@@ -162,10 +162,15 @@ struct TNodeStatusComputer {
     ui32 BadStateLimit;
     ui32 GoodStateLimit;
     ui32 PrettyGoodStateLimit;
+    bool HasObservedState = false;
 
     ui32 GetCurrentNodeState() const;
     bool Compute();
     void AddState(ENodeState newState);
+
+    bool IsReady() const {
+        return HasObservedState;
+    }
 
     bool MaybeBad() const { return CurrentState == ENodeState::BAD && StateCounter < BadStateLimit; }
     bool DefinitelyBad() const { return CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit; }

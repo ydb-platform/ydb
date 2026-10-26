@@ -68,6 +68,9 @@ message TEvNodeConfigPush {
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
     reserved 5;
+    optional uint32 SubtreeHeight = 6;
+    optional uint64 RequestedCommittedConfigGeneration = 7;
+    optional bool SupportsMetadataOnlyCollect = 8;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -78,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.
@@ -87,6 +91,7 @@ message TEvNodeConfigUnbind {
 // Propagate query to the tree bottom and collect replies.
 message TEvNodeConfigScatter {
     message TCollectConfigs {
+        bool MetadataOnly = 1;
     }
 
     message TProposeStorageConfig {
@@ -100,6 +105,7 @@ message TEvNodeConfigScatter {
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
     optional bool Targeted = 5; // set when issuing updates to newly added nodes
+    optional uint64 TimeoutUs = 8;
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
@@ -129,6 +135,7 @@ message TEvNodeConfigGather {
         repeated TPersistentConfig ProposedConfigs = 3;
         repeated TDiskIdentifier NoMetadata = 4;
         repeated TDiskIdentifier Errors = 5;
+        bool MetadataOnly = 6;
     }
 
     message TProposeStorageConfig {
@@ -186,13 +193,22 @@ message TEvNodeConfigInvokeOnRoot {
         TStorageConfig Config = 1;
     }
 
-    message TQueryConfig
-    {}
+    message TQueryConfig {
+        // Recollect persistent configs before replying; ignored by older roots.
+        bool RequireFresh = 1;
+        uint32 RefillNodeId = 2;
+    }
 
     // Return a scepter only for a local root with a configured static group.
     // Do not forward or wait for root operations.
     message TQueryWorkingRoot
     {}
+
+    message TValidateTargetedProposition {
+        TStorageConfigMeta Config = 1;
+        uint64 ScatterCookie = 2;
+        fixed64 TaskId = 3;
+    }
 
     message TReassignGroupDisk {
         NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
@@ -350,6 +366,7 @@ message TEvNodeConfigInvokeOnRoot {
         TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
         TDemandRetroTrace DemandRetroTrace = 23;
         TQueryWorkingRoot QueryWorkingRoot = 24;
+        TValidateTargetedProposition ValidateTargetedProposition = 27;
     }
 }
 
@@ -370,6 +387,8 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
+        // Confirms that this root honored RequireFresh.
+        bool Fresh = 2;
     }
 
     message TFetchStorageConfig {
@@ -387,6 +406,10 @@ message TEvNodeConfigInvokeOnRootResult {
         NKikimrBlobStorage.TVSlotId TargetSlotId = 2;
     }
 
+    message TValidateTargetedProposition {
+        bool Confirmed = 1;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -399,6 +422,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
         TReassignGroupDisk ReassignGroupDisk = 13;
+        TValidateTargetedProposition ValidateTargetedProposition = 14;
     }
 }
 
@@ -412,4 +436,9 @@ message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
+}
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
 }

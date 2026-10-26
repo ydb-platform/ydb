@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include "distconf_quorum.h"
 #include "node_warden_impl.h"
 
 #include <ydb/core/config/validation/validators.h>
@@ -262,7 +263,39 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()});
     }
 
+    void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == VStatusTimeoutCookie) {
+            if (!PendingVDiskIds.empty()) {
+                throw TExError() << "Timed out waiting for VDisk status before group reassignment";
+            }
+            return;
+        }
+        if (ev->Cookie == ConfigValidationTimeoutCookie) {
+            if (WaitingForConfigValidation) {
+                throw TExError() << "Timed out waiting for BSC or Console before config proposition"
+                    << (ControllerOp == EControllerOp::OTHER ? "" : "; BSC request may already be applied");
+            }
+            return;
+        }
+        HandleWakeup();
+    }
+
     void TInvokeRequestHandlerActor::HandleWakeup() {
+        if (RecoveryProposition) {
+            return;
+        }
+        if (ConfigAwaitingCommit) {
+            if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
+                throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
+            }
+            if (ScatterTasks.empty()) {
+                CollectCommittedConfig();
+            }
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                                                                              SelfId(), {}, nullptr, 0));
+            return;
+        }
+
         YDB_LOG_DEBUG("FetchStorageConfig: timed out",
             {"marker", "NWDC87"},
             {"selfId", SelfId()});
@@ -317,6 +350,8 @@ namespace NKikimr::NStorage {
         if (!NewYaml && !NewStorageYaml) {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
+            } else if (!IsDryRun && Self->SelfManagementEnabled && Self->StorageConfig->GetGeneration()) {
+                return StartCommitConfirmation();
             } else { // finish this request prematurely: no configs are actually changed
                 return Finish(TResult::OK, std::nullopt);
             }
@@ -412,8 +447,8 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
-            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+    void TInvokeRequestHandlerActor::ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion) {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& request = op->Command.GetReplaceStorageConfig();
@@ -460,6 +495,18 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
             throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
+    }
+
+    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+        ValidateReplaceStorageConfig(storageConfigYaml, expectedMainYamlVersion, expectedStorageYamlVersion);
+
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& request = op->Command.GetReplaceStorageConfig();
+        const bool targetDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
+            ? request.GetSwitchDedicatedStorageSection()
+            : storageConfigYaml.has_value();
 
         // update main config yaml in the StorageConfig
         if (NewYaml) {
@@ -490,6 +537,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
+        WaitingForConfigValidation = false;
 
         if (IsDryRun) {
             return Finish(TResult::OK, std::nullopt);
@@ -502,6 +550,96 @@ namespace NKikimr::NStorage {
 
         return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr,
             /*fromBootstrap=*/ EnablingDistconf);
+    }
+
+    void TInvokeRequestHandlerActor::StartCommitConfirmation() {
+        if (ControllerPipeId) {
+            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
+        }
+        ConfigAwaitingCommit = Self->StorageConfig;
+        FullCommitConfirmationNeeded = false;
+        CommitConfirmationDeadline = TActivationContext::Monotonic() + TDuration::Seconds(30);
+        HandleWakeup();
+    }
+
+    void TInvokeRequestHandlerActor::CollectCommittedConfig() {
+        auto needsRecovery = [this] {
+            return !Self->BridgeInfo && (Self->ConfigRecoveryRequired
+                || Self->IsBelowKnownAppliedConfig(*ConfigAwaitingCommit));
+        };
+        const bool metadataOnly = !FullCommitConfirmationNeeded && !needsRecovery();
+        TEvScatter task;
+        task.MutableCollectConfigs()->SetMetadataOnly(metadataOnly);
+        const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, metadataOnly, needsRecovery](TEvGather *res) {
+            if (!res->HasCollectConfigs() || res->GetCollectConfigs().GetMetadataOnly() != metadataOnly) {
+                throw TExError() << "Incorrect CollectConfigs response";
+            }
+            if (TStorageConfigMeta(*Self->StorageConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
+                throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
+            }
+            if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                return;
+            }
+
+            bool needFullConfig = needsRecovery();
+            for (const auto *configs : {&res->GetCollectConfigs().GetCommittedConfigs(),
+                                       &res->GetCollectConfigs().GetProposedConfigs()}) {
+                for (const auto& item : *configs) {
+                    const auto& config = item.GetConfig();
+                    if (!metadataOnly && !Self->CheckFingerprint(config)) {
+                        throw TExError() << "Persistent configuration fingerprint mismatch";
+                    }
+                    Self->MaxObservedConfigGeneration = Max(Self->MaxObservedConfigGeneration, config.GetGeneration());
+                    needFullConfig |= config.GetGeneration() > ConfigAwaitingCommit->GetGeneration()
+                        || (config.GetGeneration() == ConfigAwaitingCommit->GetGeneration()
+                            && config.GetFingerprint() != ConfigAwaitingCommit->GetFingerprint());
+                }
+            }
+            if (metadataOnly && needFullConfig) {
+                FullCommitConfirmationNeeded = true;
+                return;
+            }
+
+            std::vector<TSuccessfulDisk> successfulDisks;
+            for (const auto& item : res->GetCollectConfigs().GetCommittedConfigs()) {
+                const auto& config = item.GetConfig();
+                if (config.GetGeneration() > ConfigAwaitingCommit->GetGeneration()) {
+                    throw TExRace() << "Newer committed configuration found; replace may already be applied";
+                }
+                if (config.GetGeneration() != ConfigAwaitingCommit->GetGeneration()) {
+                    continue;
+                }
+                if (config.GetFingerprint() != ConfigAwaitingCommit->GetFingerprint()) {
+                    throw TExError() << "Conflicting committed configurations of generation " << config.GetGeneration();
+                }
+                for (const auto& disk : item.GetDisks()) {
+                    successfulDisks.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                                                 disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                }
+            }
+
+            const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
+                Self->BridgePileNameMap, TBridgePileId(), *Self->Cfg, false);
+            if (!Self->BridgeInfo && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
+                auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
+                if (result.ErrorReason || !result.RecoveredConfig) {
+                    return;
+                }
+                if (result.RequiresRecoveryProposition) {
+                    return StartRecoveryProposition(result);
+                }
+                Self->ConfigRecoveryRequired = false;
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
+                    throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
+                }
+                FullCommitConfirmationNeeded = false;
+            }
+            if (committedQuorum) {
+                Finish(TResult::OK, std::nullopt);
+            }
+        });
     }
 
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
@@ -530,6 +668,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::ConnectToController() {
+        WaitingForConfigValidation = true;
+        TActivationContext::Schedule(TDuration::Minutes(10), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, ConfigValidationTimeoutCookie));
         ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
             NTabletPipe::TClientRetryPolicy::WithRetries()));
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -539,6 +680,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
+        if (msg.ClientId != ControllerPipeId) {
+            return;
+        }
         YDB_LOG_DEBUG("Received TEvClientConnected",
             {"marker", "NWDC65"},
             {"selfId", SelfId()},
@@ -554,6 +698,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
+        if (msg.ClientId != ControllerPipeId) {
+            return;
+        }
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "NWDC79"},
             {"selfId", SelfId()},
@@ -603,6 +750,9 @@ namespace NKikimr::NStorage {
                 break;
 
             case EControllerOp::DISABLE_DISTCONF:
+                ValidateReplaceStorageConfig(Self->StorageConfigYaml,
+                    Self->MainConfigYamlVersion ? *Self->MainConfigYamlVersion + 1 : 0,
+                    Self->StorageConfig->GetExpectedStorageYamlVersion());
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
                 record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
@@ -744,6 +894,8 @@ namespace NKikimr::NStorage {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
+            } else if (r.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;

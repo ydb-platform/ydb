@@ -472,14 +472,14 @@ public:
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
         if (desc.GetConfig().HasTransferSpecific()) {
-            desc.MutableConfig()->ClearSkipInitialScan();
-        } else {
-            desc.MutableConfig()->SetSkipInitialScan(AppData()->ReplicationConfig.GetSkipInitialScan());
+            desc.MutableConfig()->ClearInitialScan();
+        } else if (!desc.GetConfig().HasInitialScan()) {
+            desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
         }
-        if (desc.GetConfig().GetSkipInitialScan()) {
-            desc.MutableState()->MutablePaused();
-        } else {
+        if (desc.GetConfig().GetInitialScan()) {
             desc.MutableState()->MutableStandBy();
+        } else {
+            desc.MutableState()->MutablePaused();
         }
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications.Set(path->PathId, replication);

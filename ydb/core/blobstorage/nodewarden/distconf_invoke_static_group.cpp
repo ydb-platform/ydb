@@ -139,6 +139,9 @@ namespace NKikimr::NStorage {
         for (const ui32 nodeId : nodesToConnect) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
         }
+
+        TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, VStatusTimeoutCookie));
     }
 
     void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
@@ -174,7 +177,7 @@ namespace NKikimr::NStorage {
             {"record", record},
             {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
-            throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
+            return;
         }
         if (record.GetJoinedGroup() && record.GetReplicated()) {
             *SuccessfulVDisks |= {&GroupInfo->GetTopology(), vdiskId};
@@ -197,6 +200,10 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+        if (const auto& error = ev->Get()->ErrorReason) {
+            // static groups can't be placed without knowing PDisks of BSC, they would get conflicting ones otherwise
+            throw TExError() << "Can't get base config: " << *error;
+        }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
         CheckReassignGroupDisk();
     }

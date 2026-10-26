@@ -249,6 +249,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
+    optional bool EnableTenantSystemTabletBackup = 362 [default = true];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = true];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
@@ -307,7 +308,7 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = true];
     optional bool EnableJsonIndexAutoSelect = 267 [default = true];
-    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
+    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = false];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions

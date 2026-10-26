@@ -13,6 +13,7 @@
 #include <util/network/socket.h>
 #include <util/system/event.h>
 #include <util/system/thread.h>
+#include <util/string/ascii.h>
 
 #include <atomic>
 #include <thread>
@@ -202,6 +203,78 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
             resp.OutTo(params.Output);
 
             return true;
+        }
+    };
+
+    struct TObservedRedirectRequest {
+        TString Path;
+        TString UserAgent;
+        TString RequestId;
+        bool HasNotForwarded;
+    };
+
+    class TRedirectHeaders: public TRequestReplier {
+        ui16 Port_;
+        TVector<TObservedRedirectRequest>* Requests_;
+
+    public:
+        TRedirectHeaders(ui16 port, TVector<TObservedRedirectRequest>* requests)
+            : Port_(port)
+            , Requests_(requests)
+        {
+        }
+
+        bool DoReply(const TReplyParams& params) override {
+            const auto path = TParsedHttpFull(params.Input.FirstLine()).Path;
+            const auto& headers = params.Input.Headers();
+            Requests_->push_back({
+                TString(path),
+                GetHeaderValue(headers, "User-Agent"),
+                GetHeaderValue(headers, "X-Request-ID"),
+                headers.HasHeader("X-Not-Forwarded"),
+            });
+
+            if (path == "/redirect_headers") {
+                params.Output << "HTTP/1.1 307 Internal Redirect\r\n"
+                                 "Location: http://localhost:"
+                              << Port_
+                              << "/redirect_headers_target\r\n";
+                if (const auto* requestId = headers.FindHeader("X-Request-ID")) {
+                    params.Output << "X-Request-ID: " << requestId->Value() << "\r\n";
+                }
+                params.Output << "\r\n";
+                return true;
+            }
+
+            THttpResponse resp(HTTP_FORBIDDEN);
+            if (const auto* requestId = headers.FindHeader("X-Request-ID")) {
+                resp.AddHeader("X-Request-ID", requestId->Value());
+            }
+            resp.SetContent("denied");
+            resp.OutTo(params.Output);
+            return true;
+        }
+
+    private:
+        static TString GetHeaderValue(const THttpHeaders& headers, TStringBuf name) {
+            const auto* header = headers.FindHeader(name);
+            return header ? header->Value() : TString();
+        }
+    };
+
+    class TFourArgumentProcessResponseClient: public TSimpleHttpClient {
+        bool* Processed_;
+
+    public:
+        TFourArgumentProcessResponseClient(const TString& host, ui16 port, bool* processed)
+            : TSimpleHttpClient(host, port)
+            , Processed_(processed)
+        {
+        }
+
+    private:
+        void ProcessResponse(const TStringBuf, THttpInput&, IOutputStream*, const unsigned) const override {
+            *Processed_ = true;
         }
     };
 
@@ -486,6 +559,128 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
         UNIT_ASSERT_VALUES_EQUAL("bang", s.Str());
         Sleep(TDuration::MilliSeconds(500));
         UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+    }
+
+    static void TestRedirectHeaders(TStringBuf userAgentHeader, TStringBuf requestIdHeader) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+        TVector<TObservedRedirectRequest> requests;
+        NMock::TMockServer server(createOptions(port, true), [port, &requests]() { return new TRedirectHeaders(port, &requests); });
+
+        TRedirectableHttpClient cl("localhost", port);
+        TKeepAliveHttpClient::THeaders headers = {
+            {TString(userAgentHeader), "test-agent"},
+            {TString(requestIdHeader), "test-request-id"},
+            {"X-Not-Forwarded", "secret"},
+        };
+        TStringStream output;
+        TString error;
+
+        try {
+            cl.DoGet("/redirect_headers", &output, headers);
+        } catch (const THttpRequestException& e) {
+            error = e.what();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(2, requests.size());
+        UNIT_ASSERT_VALUES_EQUAL("/redirect_headers", requests[0].Path);
+        UNIT_ASSERT_VALUES_EQUAL("test-agent", requests[0].UserAgent);
+        UNIT_ASSERT_VALUES_EQUAL("test-request-id", requests[0].RequestId);
+        UNIT_ASSERT(requests[0].HasNotForwarded);
+        UNIT_ASSERT_VALUES_EQUAL("/redirect_headers_target", requests[1].Path);
+        UNIT_ASSERT_VALUES_EQUAL("test-agent", requests[1].UserAgent);
+        UNIT_ASSERT_VALUES_EQUAL("test-request-id", requests[1].RequestId);
+        UNIT_ASSERT(!requests[1].HasNotForwarded);
+        UNIT_ASSERT_C(error.Contains("Got 403 at http://localhost/redirect_headers_target"), error);
+        UNIT_ASSERT_C(error.Contains("\nX-Request-ID: test-request-id"), error);
+        UNIT_ASSERT_VALUES_EQUAL("denied", output.Str());
+    }
+
+    Y_UNIT_TEST(redirectableForwardsSelectedHeadersAndReportsResponseRequestId) {
+        TestRedirectHeaders("User-Agent", "X-Request-ID");
+        TestRedirectHeaders("uSeR-aGeNt", "x-request-id");
+    }
+
+    template <class TClient>
+    static void TestResponseRequestId() {
+        const TVector<TVector<TString>> headerCases = {
+            {},
+            {"X-Request-ID"},
+            {"x-ReQuEsT-iD"},
+            {"X-Amz-Request-Id"},
+            {"x-aMz-ReQuEsT-iD"},
+            {"X-Request-ID", "X-Amz-Request-Id"},
+        };
+        for (const auto& headerNames : headerCases) {
+            TPortManager pm;
+            ui16 port = pm.GetPort(80);
+            NMock::TMockServer server(createOptions(port, true), []() {
+                class TErrorResponse: public TRequestReplier {
+                public:
+                    bool DoReply(const TReplyParams& params) override {
+                        THttpResponse resp(HTTP_FORBIDDEN);
+                        for (TStringBuf name : {TStringBuf("X-Request-ID"), TStringBuf("X-Amz-Request-Id")}) {
+                            if (const auto* requestId = params.Input.Headers().FindHeader(name)) {
+                                resp.AddHeader(requestId->Name(), requestId->Value());
+                            }
+                        }
+                        resp.SetContent("denied");
+                        resp.OutTo(params.Output);
+                        return true;
+                    }
+                };
+                return new TErrorResponse;
+            });
+            TClient client("localhost", port);
+            TStringStream output;
+            TString error;
+            TKeepAliveHttpClient::THeaders headers;
+            for (const auto& headerName : headerNames) {
+                headers.emplace(headerName, "request-id-from-request");
+            }
+            try {
+                client.DoGet("/error", &output, headers);
+            } catch (const THttpRequestException& e) {
+                UNIT_ASSERT_VALUES_EQUAL(e.GetStatusCode(), HTTP_FORBIDDEN);
+                error = e.what();
+            }
+
+            UNIT_ASSERT_C(error.Contains("Got 403 at "), error);
+            UNIT_ASSERT_C(error.Contains("Full http response:\n"), error);
+            for (const auto& headerName : headerNames) {
+                const TStringBuf responseHeader = AsciiEqualsIgnoreCase(headerName, "X-Amz-Request-Id")
+                                                      ? TStringBuf("X-Amz-Request-Id")
+                                                      : TStringBuf("X-Request-ID");
+                UNIT_ASSERT_C(error.Contains(TString("\n") + responseHeader + ": request-id-from-request"), error);
+            }
+            if (headerNames.empty()) {
+                UNIT_ASSERT_C(!error.Contains("X-Request-ID"), error);
+                UNIT_ASSERT_C(!error.Contains("X-Amz-Request-Id"), error);
+            }
+            UNIT_ASSERT_VALUES_EQUAL("denied", output.Str());
+        }
+    }
+
+    Y_UNIT_TEST(simpleReportsResponseRequestId) {
+        TestResponseRequestId<TSimpleHttpClient>();
+    }
+
+    Y_UNIT_TEST(redirectableReportsResponseRequestId) {
+        TestResponseRequestId<TRedirectableHttpClient>();
+    }
+
+    Y_UNIT_TEST(fourArgumentProcessResponseOverrideRemainsSupported) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+        NMock::TMockServer server(createOptions(port, true), []() { return new TPong; });
+        bool processed = false;
+        TFourArgumentProcessResponseClient client("localhost", port, &processed);
+        TStringStream output;
+
+        client.DoGet("/ping", &output);
+
+        UNIT_ASSERT(processed);
+        UNIT_ASSERT_VALUES_EQUAL("pong", output.Str());
     }
 
     Y_UNIT_TEST(keepaliveSuccessful) {

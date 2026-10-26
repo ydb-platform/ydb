@@ -1238,7 +1238,13 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
-            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location;
+            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
+
+            void SetLocation(const TString& serialized) {
+                Location = serialized;
+                RequiredLocation = std::make_shared<const TNodeLocation>(TNodeLocation::FromSerialized, serialized);
+            }
 
             static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
 
@@ -1261,7 +1267,7 @@ public:
                     result.Kind = rowset.template GetValue<T::Kind>();
                 }
                 if (rowset.template HaveValue<T::Location>()) {
-                    result.Location = rowset.template GetValue<T::Location>();
+                    result.SetLocation(rowset.template GetValue<T::Location>());
                 }
                 return result;
             }
@@ -1280,7 +1286,7 @@ public:
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
                     && (!Kind || *Kind == kind)
-                    && (!Location || MatchPDiskLocation(location, TNodeLocation::ParseLocation(*Location)));
+                    && (!RequiredLocation || MatchPDiskLocation(location, *RequiredLocation));
             }
 
             bool MatchPDisk(const TPDiskInfo& pdisk, const TNodeLocation& location) const {
@@ -1326,7 +1332,19 @@ public:
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind, Location);
+            void Save(IOutputStream* s) const {
+                ::SaveMany(s, Type, SharedWithOs, ReadCentric, Kind, Location);
+            }
+
+            void Load(IInputStream* s) {
+                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
+                Location.Clear();
+                RequiredLocation.reset();
+                if (location) {
+                    SetLocation(*location);
+                }
+            }
         };
 
         Table::Name::Type Name;

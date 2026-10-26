@@ -21,6 +21,11 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(Targets.at(id), {}), 0, id);
     }
 
+    void Reply() {
+        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result)));
+        PassAway();
+    }
+
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -57,8 +62,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
         }
 
         if (Result.size() == Targets.size()) {
-            Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result)));
-            PassAway();
+            Reply();
         }
     }
 
@@ -84,6 +88,13 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (!YdbProxy || Targets.empty()) {
+            return Reply();
+        }
+
+        // Source statistics are optional: even a live proxy may never receive
+        // a response from the source. Return the available results on timeout.
+        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
         for (const auto& [id, _] : Targets) {
             DescribeTarget(id);
         }
@@ -96,7 +107,8 @@ public:
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvWakeup, Reply);
+            sFunc(TEvents::TEvPoison, Reply);
         }
     }
 
@@ -164,7 +176,12 @@ public:
             return true;
         }
 
-        if (record.GetIncludeStats() && !Replication->GetConfig().HasTransferSpecific()) {
+        if (record.GetIncludeStats()
+            && !Replication->GetConfig().HasTransferSpecific()
+            && Replication->GetState() != TReplication::EState::Done
+            && Replication->GetDesiredState() != TReplication::EState::Done
+            && Replication->GetYdbProxy())
+        {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
                 if (!target) {
@@ -195,6 +212,7 @@ public:
             return true;
         }
 
+        Replication->RemoveTargetDescriber(PrivEv->Sender);
         return DescribeReplication(Replication, false);
     }
 
@@ -317,8 +335,12 @@ public:
             ctx.Send(Sender, Result.Release());
         } else if (TargetsToDescribe) {
             Y_ABORT_UNLESS(Replication);
-            ctx.Register(new TTargetDescriber(Sender, ctx.SelfID,
-                Replication->GetId(), Replication->GetYdbProxy(), std::move(TargetsToDescribe)));
+            Replication->AddTargetDescriber(ctx.Register(new TTargetDescriber(
+                Sender,
+                ctx.SelfID,
+                Replication->GetId(),
+                Replication->GetYdbProxy(),
+                std::move(TargetsToDescribe))));
         }
     }
 

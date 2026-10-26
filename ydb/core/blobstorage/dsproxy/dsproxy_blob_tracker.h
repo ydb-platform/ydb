@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 
 namespace NKikimr {
 
@@ -98,13 +99,33 @@ namespace NKikimr {
             }
         }
 
-        TBlobStorageGroupInfo::EBlobState GetBlobState(const TBlobStorageGroupInfo *info, bool *lostByIngress) const {
-            const auto& checker = info->GetQuorumChecker();
-            TBlobStorageGroupInfo::EBlobState state = checker.GetBlobState(PresentParts, FaultyDisks);
+        TBlobStorageGroupInfo::EBlobState GetBlobState(const TBlobStorageGroupInfo *info, bool *lostByIngress,
+                const TBlobStorageGroupInfo::TGroupVDisks* failedGroupDisks = nullptr) const {
+            const bool mirror3dc = info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
+            const auto checker = mirror3dc ? TMirror3dcWriteQuorumChecker::TryCreate(*info, FullId.Hash())
+                : std::nullopt;
+            auto faultyDisks = FaultyDisks;
+            if (mirror3dc && failedGroupDisks) {
+                TBlobStorageGroupInfo::TVDiskIds subgroup;
+                info->PickSubgroup(FullId.Hash(), &subgroup, nullptr);
+                for (ui32 disk = 0; disk < subgroup.size(); ++disk) {
+                    if ((*failedGroupDisks)[info->GetOrderNumber(subgroup[disk])]) {
+                        faultyDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology(), disk);
+                    }
+                }
+            }
+            const auto getBlobState = [&](const TSubgroupPartLayout& parts,
+                    const TBlobStorageGroupInfo::TSubgroupVDisks& failed) {
+                if (mirror3dc) {
+                    return checker ? checker->GetBlobState(parts, failed) : TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+                }
+                return info->GetQuorumChecker().GetBlobState(parts, failed);
+            };
+            TBlobStorageGroupInfo::EBlobState state = getBlobState(PresentParts, faultyDisks);
 
             if (state == TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY || state == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
                 // if the blob seems lost/never written according to fitting parts, fall back to all seen parts
-                state = checker.GetBlobState(PresentUnconditionally, FaultyDisks);
+                state = getBlobState(PresentUnconditionally, faultyDisks);
                 if (state == TBlobStorageGroupInfo::EBS_FULL) { // but restore this blob's layout correctly then
                     state = TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
                 }
@@ -112,7 +133,7 @@ namespace NKikimr {
 
             // check if the blob was completely written according to returned Ingress information
             const bool fullByIngress = HasIngress &&
-                checker.GetBlobState(TSubgroupPartLayout::CreateFromIngress(Ingress, info->Type),
+                getBlobState(TSubgroupPartLayout::CreateFromIngress(Ingress, info->Type),
                 TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology())) == TBlobStorageGroupInfo::EBS_FULL;
 
             // in case we have an ingress and we don't have all the replicas, we can update the state accoring to ingress

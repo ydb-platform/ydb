@@ -269,18 +269,20 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             .Libraries = Libraries_,
         };
         auto state = NWasm::LoadWasmFromManifest(params);
-        auto module = NWasm::BuildWasmSoModule(state);
-        if (!module) {
+        // Service-only modules live in the catalog populated above, without an
+        // empty synchronous UDF registration. Mixed modules use both paths.
+        auto module = ParsedManifest_.Functions.empty() ? nullptr : NWasm::BuildWasmSoModule(state);
+        if (!ParsedManifest_.Functions.empty() && !module) {
             ReplyError("BuildWasmSoModule returned null");
             return;
         }
-        // Unique path so multiple WASM modules can be registered in one registry.
-        // Drop the previous body first: re-uploading a module keeps its name, so
-        // AddModule would otherwise collide with the copy already registered.
+        // A replacement may also remove the module's synchronous functions.
         if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry_.Get())) {
             dynamicRegistry->RemoveModule(Name_);
         }
-        FunctionRegistry_->AddModule(TStringBuilder() << "wasm:" << Name_, Name_, std::move(module));
+        if (module) {
+            FunctionRegistry_->AddModule(TStringBuilder() << "wasm:" << Name_, Name_, std::move(module));
+        }
         YDB_LOG_INFO("TWasmArtifactLoadActor: registered wasm UDF with libraries",
             {"name", Name_},
             {"requiredLibraries", JoinSeq(",", ParsedManifest_.RequiredLibraries)});

@@ -204,15 +204,14 @@ Y_UNIT_TEST_F(FederationMirroredFromEmptyClusterRejected, TNameResolverFixture) 
 }
 
 Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
-    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
     UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName(TString{Database}, "account/topic", "dc1", "", true)),
+        Ok(ResolveName(TString{Database}, "account/topic", "dc1", "")),
         "/Root/Db/account/topic");
     UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName(TString{Database}, "/account/topic", "dc1", "", true)),
-        "/account/topic");
+        Ok(ResolveName(TString{Database}, "/account/topic", "dc1", "")),
+        "/Root/Db/account/topic");
     UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName(TString{Database}, "/Root/Db/account/topic", "dc1", "", true)),
+        Ok(ResolveName(TString{Database}, "/Root/Db/account/topic", "dc1", "")),
         "/Root/Db/account/topic");
 }
 
@@ -229,6 +228,7 @@ Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) 
             {"Root/other/topic", canonicalDatabase + "/Root/other/topic"},
             {"/Root/other/topic", "/Root/other/topic"},
             {"/Root2/topic", "/Root2/topic"},
+            {"/rt3.dc1--account--topic", "/rt3.dc1--account--topic"},
             {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
         };
         for (const auto& [name, expected] : cases) {
@@ -404,11 +404,10 @@ Y_UNIT_TEST_F(FccNormalizesDoubleSlashInLegacyLookingName, TNameResolverFixture)
         "/Root/Db/account--a/b");
 }
 
-Y_UNIT_TEST_F(FccKeepsLeadingSlashOnLiteralRt3, TNameResolverFixture) {
-    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
+Y_UNIT_TEST_F(FccStripsLeadingSlashOnLiteralRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName(TString{Database}, "/rt3.dc1--account--topic", "dc1", "", true)),
-        "/rt3.dc1--account--topic");
+        Ok(ResolveName(TString{Database}, "/rt3.dc1--account--topic", "dc1", "")),
+        "/Root/Db/rt3.dc1--account--topic");
 }
 
 Y_UNIT_TEST_F(FccDoesNotMirrorLegacyLookingName, TNameResolverFixture) {

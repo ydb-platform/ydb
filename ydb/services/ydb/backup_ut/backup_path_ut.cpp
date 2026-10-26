@@ -373,7 +373,6 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExplicitDuplicatedItemsImpl(TBackupTestFixture& f, bool /*isOlap*/) {
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
@@ -386,7 +385,6 @@ void ExplicitDuplicatedItemsImpl(TBackupTestFixture& f, bool /*isOlap*/) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
@@ -1226,7 +1224,6 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
     const TString prefix = traits.FilePrefix();
@@ -1681,7 +1678,6 @@ void ExportWholeDatabaseWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void EncryptedExportWithExplicitDestinationPathImpl(TBackupTestFixture& f, bool isOlap) {
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
     const TString encExt = traits.EncryptedFileExtension();

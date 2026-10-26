@@ -16,12 +16,12 @@ DATA(
     arcadia/ydb/tests/functional/sqs/common
 )
 
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 IF (SANITIZER_TYPE)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:4)
 ELSE()
-    SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
 ENDIF()
 

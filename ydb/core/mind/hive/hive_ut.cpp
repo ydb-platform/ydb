@@ -10401,6 +10401,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         BeforePromotion,
         BeforeDisconnect,
         DisconnectBeforeResync,
+        DisconnectWithDeadNodes,
     };
 
     void TestBridgeDemotion(EBridgeHiveRestart hiveRestart) {
@@ -10498,6 +10499,23 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), NUM_TABLETS);
 
+        if (hiveRestart == EBridgeHiveRestart::DisconnectWithDeadNodes) {
+            // pile 0 dies unseen by the old Hive: the new one loads its tablets as Unknown, and no Local resyncs them
+            bridge.Unsubscribe(hiveActor);
+            bridge.Disconnect(0);
+            TBlockEvents<TEvLocal::TEvStatus> blockStatusDead(runtime, [](auto&& ev) {
+                return ev->Get()->Record.GetStatus() == TEvLocal::TEvStatus::StatusDead;
+            });
+            for (ui32 nodeIndex = 0; nodeIndex < numNodes; nodeIndex += 2) {
+                SendKillLocal(runtime, nodeIndex);
+            }
+            UNIT_ASSERT_C(waitUntil([&] { return blockStatusDead.size() >= numNodes / 2; }), "pile 0 Locals did not die");
+            UNIT_ASSERT_VALUES_EQUAL_C(tabletsInPile(getDistribution(), 0), NUM_TABLETS, "the old Hive saw the nodes die");
+            RebootTablet(runtime, hiveTablet, senderA);
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets of dead nodes stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
         if (hiveRestart == EBridgeHiveRestart::DisconnectBeforeResync) {
             bridge.Unsubscribe(hiveActor); // the old Hive must not see the disconnect
             bridge.Disconnect(0);
@@ -10553,6 +10571,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestBridgeDisconnectBeforeResync) {
         TestBridgeDemotion(EBridgeHiveRestart::DisconnectBeforeResync);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectWithDeadNodes) {
+        TestBridgeDemotion(EBridgeHiveRestart::DisconnectWithDeadNodes);
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

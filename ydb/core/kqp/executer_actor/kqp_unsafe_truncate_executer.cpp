@@ -65,24 +65,17 @@ public:
     TKqpUnsafeTruncateExecuter(
             TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
-            TIntrusivePtr<TUserRequestContext> requestContext, TTxAllocatorState::TPtr txAlloc)
-        : PhyTx(std::move(phyTx))
-        , Target(target)
+            TTxAllocatorState::TPtr txAlloc)
+        : Target(target)
         , Database(database)
         , UserToken(std::move(userToken))
         , UserLockTxId(userLockTxId)
-        , RequestContext(std::move(requestContext))
-        , TxAlloc(std::move(txAlloc))
     {
-        YQL_ENSURE(PhyTx);
-        YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_GENERIC);
-        YQL_ENSURE(PhyTx->HasUnsafeTruncate());
-
-        MainTablePath = PhyTx->GetUnsafeTruncate().GetTablePath();
-        YQL_ENSURE(!MainTablePath.empty());
+        YQL_ENSURE(phyTx);
+        MainTablePath = phyTx->GetUnsafeTruncate().GetTablePath();
 
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
-            TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
+            std::move(txAlloc), TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
     }
 
     void Bootstrap() {
@@ -357,10 +350,7 @@ private:
             }
         }
 
-        if (ShardTables.empty()) {
-            ReplySuccess();
-            return;
-        }
+        YQL_ENSURE(!ShardTables.empty());
 
         for (const auto& [shardId, tables] : ShardTables) {
             TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
@@ -760,13 +750,10 @@ private:
     }
 
 private:
-    const TKqpPhyTxHolder::TConstPtr PhyTx;
     const TActorId Target;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const ui64 UserLockTxId;
-    const TIntrusivePtr<TUserRequestContext> RequestContext;
-    const TTxAllocatorState::TPtr TxAlloc;
 
     TString MainTablePath;
     TVector<TTableToTruncate> Tables;
@@ -793,11 +780,11 @@ private:
 IActor* CreateKqpUnsafeTruncateExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
-    TIntrusivePtr<TUserRequestContext> requestContext, TTxAllocatorState::TPtr txAlloc)
+    TTxAllocatorState::TPtr txAlloc)
 {
     return new TKqpUnsafeTruncateExecuter(
         std::move(phyTx), target, database, std::move(userToken), userLockTxId,
-        std::move(requestContext), std::move(txAlloc));
+        std::move(txAlloc));
 }
 
 } // namespace NKikimr::NKqp

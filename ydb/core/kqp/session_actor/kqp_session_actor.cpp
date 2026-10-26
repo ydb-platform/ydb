@@ -1623,10 +1623,9 @@ public:
             }
         }
 
-        // Scheme operations and unsafe truncate do not use the regular table write sinks.
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
-                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && !FindTableTruncateSink(tx)) {
+                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
                     return false;
                 }
             }
@@ -2161,7 +2160,6 @@ public:
                 "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
         }
 
-        YQL_ENSURE(tx->StagesSize() == 1);
         SendToUnsafeTruncateExecuter(tx);
     }
 
@@ -2419,7 +2417,7 @@ public:
 
         auto executerActor = CreateKqpUnsafeTruncateExecuter(
             tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,
-            QueryState->UserRequestContext, QueryState->QueryData->GetAllocState());
+            QueryState->QueryData->GetAllocState());
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

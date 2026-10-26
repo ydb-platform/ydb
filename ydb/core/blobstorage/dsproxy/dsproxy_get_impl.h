@@ -44,7 +44,6 @@ class TGetImpl {
     bool IsNoData = false;
     bool IsReplied = false;
     bool AcquireBlockedGeneration = false;
-    bool AcceleratingPut = false;
 
     TBlackboard Blackboard;
 
@@ -177,7 +176,7 @@ public:
         return Info->GetOrderNumber(vdiskId);
     }
 
-    TAutoPtr<TEvBlobStorage::TEvGetResult> GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets);
+    void GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets);
 
     void OnVGetResult(TLogContext &logCtx, TEvBlobStorage::TEvVGetResult &ev,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
@@ -315,9 +314,7 @@ public:
     void AcceleratePut(TLogContext &logCtx, ui32 slowDisksMask,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts) {
-        AcceleratingPut = true;
         AccelerateGet(logCtx, slowDisksMask, outVGets, outVPuts);
-        AcceleratingPut = false;
     }
 
     ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx);

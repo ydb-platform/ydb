@@ -21,8 +21,6 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
-    const std::optional<TMirror3dcWriteQuorumChecker> Mirror3dcChecker;
-    THashMap<ui64, TBlobStorageGroupInfo::TGroupVDisks> FailedDisks;
     TVector<TBlobStatusTracker> BlobStatus;
     ui32 VGetsInFlight;
 
@@ -99,31 +97,19 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         const ui64 queueId = record.GetCookie();
         Y_ABORT_UNLESS(queueId > 0);
 
-        if (Mirror3dcChecker) {
-            auto& failedDisks = FailedDisks.at(queueId);
-            if (status != NKikimrProto::OK) {
-                failedDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-            }
-            // E=0 still permits known copies; absence is decided separately for each requested blob.
-            if (Mirror3dcChecker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0
-                    && !TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, failedDisks)) {
-                ErrorReason = "Index read exceeds the ensured failure model";
+        auto it = QuorumTracker.find(queueId);
+        Y_ABORT_UNLESS(it != QuorumTracker.end());
+
+        switch (NKikimrProto::EReplyStatus newStatus = it->second.ProcessReply(vdisk, status)) {
+            case NKikimrProto::ERROR:
                 return ReplyAndDie(NKikimrProto::ERROR);
-            }
-        } else {
-            auto it = QuorumTracker.find(queueId);
-            Y_ABORT_UNLESS(it != QuorumTracker.end());
-            switch (NKikimrProto::EReplyStatus newStatus = it->second.ProcessReply(vdisk, status)) {
-                case NKikimrProto::ERROR:
-                    return ReplyAndDie(NKikimrProto::ERROR);
 
-                case NKikimrProto::OK:
-                case NKikimrProto::UNKNOWN:
-                    break;
+            case NKikimrProto::OK:
+            case NKikimrProto::UNKNOWN:
+                break;
 
-                default:
-                    Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
-            }
+            default:
+                Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
 
         for (const auto& result : record.GetResult()) {
@@ -284,7 +270,6 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , DoNotReportIndexRestoreGetMissingBlobs(params.Common.Event->DoNotReportIndexRestoreGetMissingBlobs)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
-        , Mirror3dcChecker(TMirror3dcWriteQuorumChecker::TryCreate(*Info, 0))
         , VGetsInFlight(0)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , RestoreQueriesStarted(0)
@@ -306,10 +291,6 @@ public:
     }
 
     void Bootstrap() override {
-        if (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc && !Mirror3dcChecker) {
-            ErrorReason = "Invalid mirror-3-dc index read state";
-            return ReplyAndDie(NKikimrProto::ERROR);
-        }
         auto makeQueriesList = [this] {
             TStringStream str;
             str << "{";
@@ -332,8 +313,7 @@ public:
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Mirror3dcChecker
-                    && Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
                 continue;
             }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
@@ -355,11 +335,7 @@ public:
                 if (Info->BelongsToSubgroup(vd, id.Hash())) {
                     if (!vget) {
                         const ui64 cookie = queueId++;
-                        if (Mirror3dcChecker) {
-                            FailedDisks.try_emplace(cookie, &Info->GetTopology());
-                        } else if (!QuorumTracker.count(cookie)) {
-                            QuorumTracker.emplace(cookie, Info.Get());
-                        }
+                        QuorumTracker.try_emplace(cookie, Info.Get());
 
                         vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                                     vd,

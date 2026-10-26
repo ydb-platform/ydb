@@ -82,11 +82,9 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
-                        const bool mirror3dc = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc;
                         using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-                        const auto realmState = mirror3dc
-                            ? Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm) : R::N0;
-                        if (mirror3dc && realmState == R::F) {
+                        const auto realmState = Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm);
+                        if (realmState == R::F) {
                             continue;
                         }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
@@ -113,10 +111,6 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                                         << " State# " << blobState.ToString());
                                     [[fallthrough]];
                                 case TBlobState::ESituation::Error:
-                                    if (mirror3dc && realmState == R::R) {
-                                        break;
-                                    }
-                                    [[fallthrough]];
                                 case TBlobState::ESituation::Present:
                                 case TBlobState::ESituation::Sent:
                                     possiblyPresent.AddItem(idxInSubgroup, partIdx, Info->Type);
@@ -258,7 +252,7 @@ TString TGetImpl::DumpFullState() const {
     return str.Str();
 }
 
-TAutoPtr<TEvBlobStorage::TEvGetResult> TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
+void TGetImpl::GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
     Y_ABORT_UNLESS(QuerySize != 0, "internal consistency error");
 
     // TODO(cthulhu): query politics
@@ -278,8 +272,8 @@ TAutoPtr<TEvBlobStorage::TEvGetResult> TGetImpl::GenerateInitialRequests(TLogCon
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> outVPuts;
     bool workDone = Step(logCtx, outVGets, outVPuts, getResult);
     Y_ABORT_UNLESS(outVPuts.empty());
-    Y_ABORT_UNLESS(getResult || workDone);
-    return getResult;
+    Y_ABORT_UNLESS(getResult.Get() == nullptr);
+    Y_ABORT_UNLESS(workDone);
 }
 
 void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets) {
@@ -359,7 +353,7 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
     return Blackboard.RunStrategy(logCtx,
-        TMirror3dcGetStrategy(NodeLayout, PhantomCheck, MustRestoreFirst, AcceleratingPut), AccelerationParams);
+        TMirror3dcGetStrategy(NodeLayout, PhantomCheck, MustRestoreFirst, false), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {

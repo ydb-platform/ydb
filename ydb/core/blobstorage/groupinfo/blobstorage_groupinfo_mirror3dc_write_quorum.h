@@ -130,7 +130,7 @@ public:
             failedDisks, G::TGroupFailDomains::EDiskCondition::ANY);
         std::array<ui32, 3> uncertain{};
         for (ui32 realm = 0; realm < 3; ++realm) {
-            if (realms[realm] != R::R && realms[realm] != R::F) {
+            if (realms[realm] != R::F) {
                 for (const auto& domain : topology.FailRealms[realm].FailDomains) {
                     uncertain[realm] += failedDomains[domain.FailDomainOrderNumber];
                 }
@@ -195,7 +195,7 @@ public:
     }
 
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
-    // R contributes only known copies; failures in R and copies in F are ignored.
+    // R participates only in layout alternatives that need it; F never contributes.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
             const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const {
@@ -212,7 +212,7 @@ public:
             if (Realms[realm] != R::F) {
                 // A mirror part can recover the blob even when stored in the wrong position.
                 hasCopy |= bool(present & (1u << disk));
-                uncertain[realm] += Realms[realm] != R::R && failedDisks[disk];
+                uncertain[realm] += failedDisks[disk];
             }
         }
 

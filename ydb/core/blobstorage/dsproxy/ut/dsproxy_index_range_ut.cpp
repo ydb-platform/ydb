@@ -168,33 +168,36 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
             CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA);
             CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::ERROR);
             CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::N2, R::R}, {}, {1, 1, 3}, NKikimrProto::NODATA);
+            CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::N2, R::R}, {}, {1, 1, 3}, NKikimrProto::ERROR);
             CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::N2, R::R}, {}, {2, 2, 3}, NKikimrProto::ERROR);
         }
     }
 
-    Y_UNIT_TEST(ZeroEnsuredCannotProveRangeCompleteness) {
+    Y_UNIT_TEST(AbsenceExcludesAllEnsuredAlternativesIncludingRecoveryRealm) {
+        for (auto operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
+            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {1, 1, 1}, NKikimrProto::ERROR);
+            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {2, 0, 2}, NKikimrProto::NODATA);
+            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {1, 1, 0}, NKikimrProto::NODATA);
+        }
+    }
+
+    Y_UNIT_TEST(ZeroEnsuredRejectsRangeAndIndexGet) {
         for (bool range : {false, true}) {
             CheckRead(range ? ERead::Range : ERead::Index, {R::N0, R::F, R::F}, {}, {}, NKikimrProto::ERROR);
         }
         CheckRead(ERead::Range, {R::N0, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::ERROR);
-        CheckRead(ERead::Index, {R::N0, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Index, {R::N0, R::F, R::F}, {2, 0, 0}, {}, NKikimrProto::ERROR);
     }
 
-    Y_UNIT_TEST(InvalidStateReturnsErrorWithoutSendingReads) {
-        for (auto operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
-            CheckRead(operation, {R::F, R::F, R::F}, {}, {}, NKikimrProto::ERROR);
-        }
-    }
     Y_UNIT_TEST(OrdinaryGetReadsNormalAndRecoveringRealms) {
         CheckRead(ERead::Get, {R::N1, R::F, R::F}, {1, 0, 0}, {}, NKikimrProto::OK);
         CheckRead(ERead::Get, {R::N1, R::R, R::F}, {0, 1, 0}, {}, NKikimrProto::OK);
         CheckRead(ERead::Get, {R::N0, R::F, R::F}, {}, {}, NKikimrProto::ERROR);
     }
 
-    Y_UNIT_TEST(PhantomCheckIgnoresFailedAndRecoveringRealms) {
+    Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
         CheckRead(ERead::Get, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {R::N2, R::N2, R::R}, {}, {0, 0, 3}, NKikimrProto::NODATA, true);
+        CheckRead(ERead::Get, {R::N2, R::N2, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {
@@ -204,11 +207,14 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
         }
     }
 
-    Y_UNIT_TEST(OrdinaryPutUsesWriteQuorumAndSkipsFailedRealms) {
-        CheckPut({R::N0, R::N0, R::N0}, {1, 1, 1}, NKikimrProto::OK);
-        CheckPut({R::N1, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
+    Y_UNIT_TEST(OrdinaryPutChecksFailureModelAndWriteQuorumAndSkipsFailedRealms) {
+        CheckPut({R::N0, R::N0, R::N0}, {1, 1, 1}, NKikimrProto::ERROR);
+        CheckPut({R::N1, R::F, R::F}, {1, 0, 0}, NKikimrProto::ERROR);
+        CheckPut({R::N2, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
+        CheckPut({R::N0, R::F, R::F}, {1, 0, 0}, NKikimrProto::OK);
         CheckPut({R::N1, R::F, R::F}, {2, 0, 0}, NKikimrProto::ERROR);
-        CheckPut({R::N1, R::R, R::F}, {1, 1, 0}, NKikimrProto::OK);
+        CheckPut({R::N1, R::R, R::F}, {1, 1, 0}, NKikimrProto::ERROR);
+        CheckPut({R::N1, R::R, R::F}, {0, 1, 0}, NKikimrProto::OK);
         CheckPut({R::N1, R::R, R::F}, {0, 2, 0}, NKikimrProto::ERROR);
     }
 

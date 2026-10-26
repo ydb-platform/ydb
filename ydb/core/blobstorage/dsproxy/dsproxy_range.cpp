@@ -382,8 +382,7 @@ public:
         // issue queries to all VDisks
         for (const auto& vdisk : Info->GetVDisks()) {
             const auto id = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-                    && Info->GetFailRealmState(id.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+            if (Info->GetFailRealmState(id.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
                 continue;
             }
             SendQueryToVDisk(id, From, To);

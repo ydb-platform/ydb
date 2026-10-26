@@ -87,9 +87,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
         CheckCase({R::N0, R::F, R::F}, {}, {}, {}, G::EBS_DISINTEGRATED);
     }
 
-    Y_UNIT_TEST(RecoveryFailuresAreIgnored) {
+    Y_UNIT_TEST(RecoveryFailuresFollowEnsuredAlternatives) {
         for (auto status : {NKikimrProto::ERROR, NKikimrProto::NOT_YET, NKikimrProto::VDISK_ERROR_STATE}) {
-            CheckCase({R::N2, R::N2, R::R}, {}, {1, 1, 3}, {},
+            CheckCase({R::N2, R::N2, R::R}, {}, {1, 1, 1}, {},
+                G::EBS_DISINTEGRATED, false, status);
+            CheckCase({R::N2, R::N2, R::R}, {}, {2, 0, 2}, {},
                 G::EBS_UNRECOVERABLE_FRAGMENTARY, false, status);
             CheckCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, {},
                 G::EBS_DISINTEGRATED, false, status);

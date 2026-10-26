@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(RecoveryNegativeRepliesDoNotViolateFailureModel) {
+    Y_UNIT_TEST(RecoveryNegativeRepliesFollowEnsuredAlternatives) {
         for (bool restore : {false, true}) {
             for (const auto recoveryReply : {S::Absent, S::Error, S::Lost}) {
                 for (ui32 errorsPerNormalRealm = 0; errorsPerNormalRealm <= 2; ++errorsPerNormalRealm) {
@@ -416,10 +416,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                                 : disk / 3 < errorsPerNormalRealm ? S::Error : S::Absent);
                         }
                         const auto outcome = restore ? t.RunRestore() : t.Run();
-                        // Only 2+2 errors in N/N hide E; negative replies in R do not contribute.
-                        UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.Value), ui32(errorsPerNormalRealm == 2
+                        const bool hidden = errorsPerNormalRealm == 2
+                            || (errorsPerNormalRealm == 1 && recoveryReply != S::Absent);
+                        UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.Value), ui32(hidden
                             ? EStrategyOutcome::ERROR : EStrategyOutcome::DONE));
-                        if (errorsPerNormalRealm < 2) {
+                        if (!hidden) {
                             UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Absent);
                         }
                         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
@@ -429,18 +430,21 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         }
     }
 
-    Y_UNIT_TEST(RecoveryErrorsDoNotFailPhantomCheck) {
+    Y_UNIT_TEST(RecoveryErrorsFailConservativePhantomCheck) {
         for (const auto recoveryReply : {S::Error, S::Lost}) {
             TTest t({R::N2, R::N2, R::R});
             for (ui32 disk = 0; disk < 9; ++disk) {
                 t.Reply(disk, t.Realm(disk) == 2 ? recoveryReply : S::Absent);
             }
-            UNIT_ASSERT(t.Run(true) == EStrategyOutcome::DONE);
-            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Absent);
+            UNIT_ASSERT(t.Run(true) == (recoveryReply == S::Error
+                ? EStrategyOutcome::ERROR : EStrategyOutcome::DONE));
+            if (recoveryReply == S::Lost) {
+                UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Absent);
+            }
         }
     }
 
-    Y_UNIT_TEST(RecoveryErrorsDoNotPreventCompletingExistingWriteQuorum) {
+    Y_UNIT_TEST(RecoveryErrorsCanViolateFailureModelDespiteExistingWriteQuorum) {
         TTest t({R::N2, R::N2, R::R});
         for (ui32 disk = 0; disk < 9; ++disk) {
             if (t.Realm(disk) != 2 && disk / 3 < 2) {
@@ -449,12 +453,12 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 t.Reply(disk, S::Error);
             }
         }
-        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
-        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Present);
+        UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::ERROR);
+        UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation != S::Present);
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
-    Y_UNIT_TEST(RestoreDoesNotWaitForUnknownRepliesInRecoveryRealm) {
+    Y_UNIT_TEST(RestoreWaitsWhileUnknownRecoveryReplyCanHideEnsuredLayout) {
         for (const auto recoveryReply : {S::Absent, S::Unknown, S::Error, S::Lost}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t({R::N2, R::N2, R::R}, cookie);
@@ -469,7 +473,15 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     }
                 }
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-                // Unknown in N/N allows restoration; replies from R do not affect this check.
+                if (recoveryReply == S::Unknown) {
+                    UNIT_ASSERT_VALUES_EQUAL(t.PutMask(), 0);
+                    for (ui32 disk = 0; disk < 3; ++disk) {
+                        if (t.Realm(disk) == 2) {
+                            t.Reply(disk, S::Absent);
+                        }
+                    }
+                    UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
+                }
                 UNIT_ASSERT(t.PutMask());
                 t.ConfirmPuts();
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
@@ -585,7 +597,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                 UNIT_ASSERT(checker);
                 G::TSubgroupVDisks failed(&t.Info->GetTopology());
                 for (ui32 disk = 0; disk < 9; ++disk) {
-                    if ((mask & (1u << disk)) && states[t.Realm(disk)] != R::R) {
+                    if (mask & (1u << disk)) {
                         failed += G::TSubgroupVDisks(&t.Info->GetTopology(), disk);
                     }
                 }

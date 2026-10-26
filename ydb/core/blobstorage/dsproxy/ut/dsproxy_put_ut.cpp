@@ -750,23 +750,23 @@ Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_2_1_0_VdiskErrors) {
     TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 6, NKikimrProto::OK);
 }
 
-Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_1_1_1_VdiskErrors) {
+Y_UNIT_TEST(TestMirror3dcPutStatusErrorWith_1_1_1_VdiskErrors) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 1, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 2, 1, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 6, NKikimrProto::OK);
+    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 3, NKikimrProto::ERROR);
 }
 
-Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_2_2_0_VdiskErrors) {
+Y_UNIT_TEST(TestMirror3dcPutStatusErrorWith_2_2_0_VdiskErrors) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 0, 2, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 1, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 1, 2, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 7, NKikimrProto::OK);
+    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 5, NKikimrProto::ERROR);
 }
 
 Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_3_1_0_VdiskErrors) {

@@ -1295,7 +1295,7 @@ public:
     }
 
     TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
+        const TMaybe<TString>&, ui64 flags, TAuxSettings&& settings)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
@@ -1313,6 +1313,8 @@ public:
         const auto opType = *ops.begin();
         auto tablePromise = NewPromise<TGenericResult>();
         if (opType == EAlterOperationKind::AddIndex) {
+            auto* buildSettings = std::get_if<NKikimrIndexBuilder::TIndexBuildSettings>(&settings);
+            YQL_ENSURE(buildSettings);
             auto &phyQuery =
                 *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto &phyTx = *phyQuery.AddTransactions();
@@ -1413,7 +1415,7 @@ public:
         auto profilesFuture = Gateway->GetTableProfiles();
         auto sessionCtx = SessionCtx;
         profilesFuture.Subscribe(
-            [tablePromise, sessionCtx, alterReq = std::move(req), buildSettings = std::move(buildSettings)](
+            [tablePromise, sessionCtx, alterReq = std::move(req), settings = std::move(settings)](
                 const TFuture<IKqpGateway::TKqpTableProfilesResult> &future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -1441,9 +1443,27 @@ public:
                     return;
                 }
 
-                if (buildSettings.has_column_build_operation()) {
-                    buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
-                    phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
+                if (const auto* familySettings = std::get_if<TFamilySettings>(&settings)) {
+                    auto* partitionConfig = modifyScheme.MutableAlterTable()->MutablePartitionConfig();
+                    NKikimrSchemeOp::TFamilyDescription* family = nullptr;
+                    for (auto& candidate : *partitionConfig->MutableColumnFamilies()) {
+                        if (candidate.GetName() == "default" || (!candidate.HasName() && candidate.GetId() == 0)) {
+                            family = &candidate;
+                            break;
+                        }
+                    }
+                    if (!family) {
+                        family = partitionConfig->AddColumnFamilies();
+                        family->SetId(0);
+                    }
+                    family->MutableStorageConfig()->SetExternalThreshold(familySettings->ExternalThreshold);
+                }
+
+                if (const auto* buildSettings = std::get_if<NKikimrIndexBuilder::TIndexBuildSettings>(&settings);
+                    buildSettings && buildSettings->has_column_build_operation()) {
+                    auto buildOperation = *buildSettings;
+                    buildOperation.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
+                    phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildOperation);
                 } else {
                     phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
                 }
@@ -1463,7 +1483,7 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
+        const TMaybe<TString>& requestType, ui64 flags, TAuxSettings&& settings) override
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -1486,7 +1506,7 @@ public:
             }
         }
 
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(settings));
         if (IsPrepare())
             return prepareFuture;
 

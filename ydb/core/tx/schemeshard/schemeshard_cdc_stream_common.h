@@ -30,6 +30,12 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
 
 bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type);
 
+// Only for the Ready -> Ready index metadata update accompanying a CDC operation.
+void MaybeGuardIndexWithBaseCdcScanLock(
+    NKikimrSchemeOp::TModifyScheme& tx,
+    const TPath& indexPath,
+    TOperationContext& context);
+
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,

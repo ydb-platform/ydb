@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
 
         NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
 
-        auto manager = std::make_shared<TActorAccessorsManager>(tabletActorId);
+        auto manager = std::make_shared<TActorAccessorsManager>(tabletActorId, 1);
 
         auto subscriber = std::make_shared<TTestSubscriber>();
         auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
 
         NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
 
-        auto manager = std::make_shared<TActorAccessorsManager>(tabletActorId);
+        auto manager = std::make_shared<TActorAccessorsManager>(tabletActorId, 1);
 
         auto subscriber = std::make_shared<TTestSubscriber>();
         auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());

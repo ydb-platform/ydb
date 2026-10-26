@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/blobs_action/counters/request_priority.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -57,12 +58,14 @@ public:
     }
 };
 
-class TColumnDataCachePolicy {
+class TColumnDataCachePolicy: public NBlobOperations::TCacheRequestPriority {
 public:
     using TAddress = TGlobalColumnAddress;
     using TObject = std::shared_ptr<NArrow::NAccessor::IChunkedArray>;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
     using TSourceId = TActorId;
+
+    static constexpr bool EvictCacheWhenSourceGone = true;
 
     static TSourceId GetSourceId(const TAddress& address) {
         return address.GetTabletActorId();

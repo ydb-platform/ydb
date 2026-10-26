@@ -12,6 +12,8 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <map>
+
 namespace NKikimr::NGeneralCache::NPrivate {
 
 template <class TPolicy>
@@ -140,7 +142,8 @@ private:
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    YDB_READONLY_DEF(std::deque<std::shared_ptr<TRequest>>, RequestsQueue);
+    // Key is TPolicy::GetRequestPriority. Higher keys are dispatched first.
+    std::map<ui32, std::deque<std::shared_ptr<TRequest>>> RequestsByPriority;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
@@ -158,9 +161,22 @@ public:
         , ObjectsProcessor(objectsProcessor) {
     }
 
+    bool IsRequestAttached(const TAddress& address, const std::shared_ptr<TRequest>& request) const {
+        const auto it = RequestedObjects.find(address);
+        if (it == RequestedObjects.end()) {
+            return false;
+        }
+        for (const auto& queued : it->second) {
+            if (queued.get() == request.get()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        RequestsQueue.emplace_back(request);
+        RequestsByPriority[TPolicy::GetRequestPriority(request->GetConsumer())].emplace_back(request);
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -229,14 +245,32 @@ public:
 
     void Abort() {
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : RequestsQueue) {
-            auto addresses = i->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(addresses.size());
-            for (auto&& objAddr : addresses) {
-                Y_UNUSED(i->AddError(objAddr, "source broken: " + ::ToString(SourceId)));
+        const TString error = "source broken: " + ::ToString(SourceId);
+        auto abortQueue = [&](std::deque<std::shared_ptr<TRequest>>& queue) {
+            for (auto&& request : queue) {
+                const auto addresses = request->GetWaitBySource(SourceId);
+                ui64 queued = 0;
+                bool finished = false;
+                for (const auto& objAddr : addresses) {
+                    // Already sent addresses are failed with the in-flight set below.
+                    if (IsRequestAttached(objAddr, request)) {
+                        continue;
+                    }
+                    ++queued;
+                    finished = request->AddError(objAddr, error) || finished;
+                }
+                Counters->GetQueueObjectsCount()->Sub(queued);
+                if (finished && RequestsInProgress.erase(request->GetRequestId())) {
+                    Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+                }
             }
+            queue.clear();
+        };
+        for (auto& [priority, queue] : RequestsByPriority) {
+            Y_UNUSED(priority);
+            abortQueue(queue);
         }
-        RequestsQueue.clear();
+        RequestsByPriority.clear();
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -255,34 +289,96 @@ public:
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
+    // One FETCH_ON_LOAD carries every portion. A pop sends at most DirectInflightSourceLimit
+    // new addresses and puts the rest back at the front of its priority. Higher priorities
+    // go first. Only the high priority may start while a lower one already filled the limit,
+    // so a scan is not stuck behind prefetch and inflight can briefly reach about twice the limit.
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
-        THashSet<TAddress>* consumerAddresses = nullptr;
-        std::optional<EConsumer> currentConsumer;
-        while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
-               Counters->CheckTotalLimit()) {
-            auto request = std::move(RequestsQueue.front());
-            RequestsQueue.pop_front();
-            auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(sourceWaitObjects.size());
-            if (request->IsAborted()) {
-                Counters->AbortedRequests->Inc();
-                continue;
-            }
-            AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
-            if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
-                consumerAddresses = &requestedAddresses[request->GetConsumer()];
-            }
-            Counters->DirectRequests->Inc();
-            for (auto&& i : sourceWaitObjects) {
-                auto it = RequestedObjects.find(i);
-                if (it == RequestedObjects.end()) {
-                    it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
-                    Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(consumerAddresses->emplace(i).second);
-                    Counters->DirectObjects->Inc();
+        const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
+        ui64 highPriorityAdded = 0;
+        const TMonotonic now = TMonotonic::Now();
+
+        for (auto it = RequestsByPriority.rbegin(); it != RequestsByPriority.rend(); ++it) {
+            const bool highPriority = it->first >= TPolicy::RequestPriorityHigh;
+            auto& queue = it->second;
+            while (!queue.empty() && Counters->CheckTotalLimit()) {
+                if (highPriority) {
+                    if (highPriorityAdded >= sourceLimit) {
+                        break;
+                    }
+                } else if (RequestedObjects.size() >= sourceLimit) {
+                    break;
                 }
-                it->second.emplace_back(request);
+                auto request = queue.front();
+                queue.pop_front();
+                const auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
+                if (request->IsAborted()) {
+                    const bool started = RequestsInProgress.contains(request->GetRequestId());
+                    const auto addresses = sourceWaitObjects;
+                    ui64 queuedLeft = 0;
+                    bool finished = false;
+                    for (const auto& addr : addresses) {
+                        if (IsRequestAttached(addr, request)) {
+                            continue;
+                        }
+                        ++queuedLeft;
+                        if (started) {
+                            finished = request->AddError(addr, "request aborted") || finished;
+                        }
+                    }
+                    Counters->GetQueueObjectsCount()->Sub(queuedLeft);
+                    Counters->AbortedRequests->Inc();
+                    if (finished) {
+                        AFL_VERIFY(RequestsInProgress.erase(request->GetRequestId()));
+                        Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+                    }
+                    continue;
+                }
+
+                const bool firstDispatch = RequestsInProgress.emplace(request->GetRequestId()).second;
+                if (firstDispatch) {
+                    Counters->DirectRequests->Inc();
+                }
+                const ui64 budget = highPriority ? (sourceLimit - highPriorityAdded) : (sourceLimit - RequestedObjects.size());
+                auto& consumerAddresses = requestedAddresses[request->GetConsumer()];
+                ui64 newAddresses = 0;
+                ui64 leftQueue = 0;
+                bool partial = false;
+                for (const auto& addr : sourceWaitObjects) {
+                    if (IsRequestAttached(addr, request)) {
+                        continue;
+                    }
+                    auto itAddress = RequestedObjects.find(addr);
+                    if (itAddress == RequestedObjects.end()) {
+                        if (newAddresses >= budget) {
+                            partial = true;
+                            continue;
+                        }
+                        itAddress = RequestedObjects.emplace(addr, std::vector<std::shared_ptr<TRequest>>()).first;
+                        Counters->GetTotalInFlight()->Inc();
+                        AFL_VERIFY(consumerAddresses.emplace(addr).second);
+                        Counters->DirectObjects->Inc();
+                        ++newAddresses;
+                    }
+                    itAddress->second.emplace_back(request);
+                    ++leftQueue;
+                }
+                Counters->GetQueueObjectsCount()->Sub(leftQueue);
+                if (highPriority) {
+                    highPriorityAdded += newAddresses;
+                }
+                if (partial) {
+                    queue.emplace_front(std::move(request));
+                    break;
+                }
+            }
+        }
+        for (auto it = RequestsByPriority.begin(); it != RequestsByPriority.end();) {
+            if (it->second.empty()) {
+                it = RequestsByPriority.erase(it);
+            } else {
+                ++it;
             }
         }
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
@@ -391,6 +487,9 @@ public:
     }
 
     void CleanUseless(const ui32 countLimit) {
+        if constexpr (!TPolicy::EvictCacheWhenSourceGone) {
+            return;
+        }
         for (ui32 idx = 0; idx < countLimit; ++idx) {
             auto it = Cache.FindOldest();
             if (it == Cache.End()) {

@@ -177,10 +177,10 @@ public:
         return std::move(Subscriber);
     }
 
-    THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId) const {
+    THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId, const ui64 tabletId) const {
         THashSet<NGeneralCache::TGlobalPortionAddress> result;
         for (auto&& [_, p] : Portions) {
-            AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
+            AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, tabletId, p->GetAddress())).second);
         }
         return result;
     }

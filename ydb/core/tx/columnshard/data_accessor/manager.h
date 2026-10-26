@@ -92,32 +92,36 @@ private:
         };
 
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::AskObjects(request->GetConsumer(),
-            request->BuildAddresses(GetTabletActorId()),
+            request->BuildAddresses(GetTabletActorId(), TabletId),
             std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
     }
 
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), accessor->GetPortionInfo().GetAddress());
+        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), TabletId, accessor->GetPortionInfo().GetAddress());
         add.emplace(address, std::move(accessor));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
-            GetTabletActorId(), std::move(add), std::move(remove));
+            TabletId, std::move(add), std::move(remove));
     }
 
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), portion->GetAddress()));
+        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), TabletId, portion->GetAddress()));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
-            GetTabletActorId(), std::move(add), std::move(remove));
+            TabletId, std::move(add), std::move(remove));
     }
 
+    const ui64 TabletId;
+
 public:
-    TActorAccessorsManager(const NActors::TActorId& tabletActorId)
+    TActorAccessorsManager(const NActors::TActorId& tabletActorId, const ui64 tabletId)
         : TBase(tabletActorId)
+        , TabletId(tabletId)
     {
         AFL_VERIFY(!!tabletActorId);
+        AFL_VERIFY(TabletId);
     }
 };
 

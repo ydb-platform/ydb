@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/request_priority.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -12,7 +13,10 @@ namespace NKikimr::NOlap::NGeneralCache {
 
 class TGlobalPortionAddress {
 private:
+    // Where a cache miss is served from. Not part of the cache key: a tablet restarted on this
+    // node gets a new actor id, and the entries loaded by the previous actor must still match.
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
+    YDB_READONLY(ui64, TabletId, 0);
     TPortionAddress InternalPortionAddress;
 
 public:
@@ -22,7 +26,7 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress);
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress);
 
     bool operator==(const TGlobalPortionAddress& item) const;
 
@@ -31,12 +35,15 @@ public:
     const TString Debug() const;
 };
 
-class TPortionsMetadataCachePolicy {
+class TPortionsMetadataCachePolicy: public NBlobOperations::TCacheRequestPriority {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = std::shared_ptr<TPortionDataAccessor>;
-    using TSourceId = NActors::TActorId;
+    using TSourceId = ui64;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
+
+    // A tablet that left the node keeps its entries until the LRU limit. Same-node restart reuses them.
+    static constexpr bool EvictCacheWhenSourceGone = false;
 
     static TSourceId GetSourceId(const TAddress& address);
 

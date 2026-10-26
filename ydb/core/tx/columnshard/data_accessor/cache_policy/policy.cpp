@@ -5,6 +5,8 @@
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
+#include <util/digest/numeric.h>
+
 namespace NKikimr::NOlap::NGeneralCache {
 
 std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>
@@ -12,24 +14,26 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     class TAccessorsCallback: public NDataAccessorControl::IAccessorCallback {
     private:
         const NActors::TActorId OwnerActorId;
+        const ui64 TabletId;
         const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> Callback;
         THashSet<TAddress> RequestedAddresses;
 
         virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) override {
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
-                const TAddress address(OwnerActorId, i->GetPortionInfo().GetAddress());
+                const TAddress address(OwnerActorId, TabletId, i->GetPortionInfo().GetAddress());
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
-            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
+            Callback->OnReceiveData(TabletId, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:
-        TAccessorsCallback(const NActors::TActorId& ownerActorId,
+        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId,
             const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>& callback,
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
+            , TabletId(tabletId)
             , Callback(callback)
             , RequestedAddresses(std::move(requestedAddresses))
         {
@@ -42,7 +46,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                     errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug()
                                                             << ". The main reason is the relocation of the tablet.";
                 }
-                Callback->OnReceiveData(OwnerActorId, {}, {}, std::move(errorAddresses));
+                Callback->OnReceiveData(TabletId, {}, {}, std::move(errorAddresses));
             }
         }
     };
@@ -51,7 +55,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     private:
         using TAddress = TGlobalPortionAddress;
         using TObject = std::shared_ptr<TPortionDataAccessor>;
-        using TSourceId = NActors::TActorId;
+        using TSourceId = ui64;
         using EConsumer = TPortionsMetadataCachePolicy::EConsumer;
         using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>;
 
@@ -86,9 +90,15 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
+                auto requested = i.second.ExtractRequestedAddresses();
+                AFL_VERIFY(!requested.empty());
+                const ui64 tabletId = requested.begin()->GetTabletId();
+                for (const auto& addr : requested) {
+                    AFL_VERIFY(addr.GetTabletId() == tabletId);
+                }
                 NActors::TActivationContext::Send(
                     i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
+                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, selfPtr, std::move(requested))), 0, cookie);
             }
         }
 
@@ -124,26 +134,29 @@ TInternalPathId TGlobalPortionAddress::GetPathId() const {
     return InternalPortionAddress.GetPathId();
 }
 
-TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
+TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress)
     : TabletActorId(actorId)
+    , TabletId(tabletId)
     , InternalPortionAddress(internalAddress)
 {
+    AFL_VERIFY(TabletId);
 }
 
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
-    return TabletActorId == item.TabletActorId && InternalPortionAddress == item.InternalPortionAddress;
+    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress;
 }
 
 TGlobalPortionAddress::operator size_t() const {
-    return TabletActorId.Hash() ^ THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress);
+    return CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress));
 }
 
 const TString TGlobalPortionAddress::Debug() const {
-    return TStringBuilder{} << "TabletActorId: " << TabletActorId << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
+    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", InternalPortionAddress: {"
+                            << InternalPortionAddress.Debug() << "}";
 }
 
 TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress& address) {
-    return address.GetTabletActorId();
+    return address.GetTabletId();
 }
 
 TPortionsMetadataCachePolicy::EConsumer TPortionsMetadataCachePolicy::DefaultConsumer() {

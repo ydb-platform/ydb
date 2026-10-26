@@ -13,8 +13,9 @@ General format of the command:
 * `kind`: The type of operation. Possible values:
 
   * `buildindex`: The build index operations.
-  * `export/s3`: The export operations.
-  * `import/s3`: The import operations.
+  * `export/s3`: The [export operations to S3](export-import/export-s3.md).
+  * `import/s3`: The [import operations from S3](export-import/import-s3.md).
+  * `scriptexec`: The script execution operations.
 
 View a description of the command to get a list of long-running operations:
 

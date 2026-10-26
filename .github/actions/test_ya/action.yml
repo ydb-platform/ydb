@@ -88,6 +88,13 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Pin comparison sources
+      shell: bash
+      run: |
+        # Keep source and mute-list revisions identical to baseline #56690,
+        # even if main advances before this experimental PR is checked out.
+        git checkout --detach "${{ github.event.pull_request.head.sha }}"
+
     - name: comment-build-start
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
@@ -208,8 +215,7 @@ runs:
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
-        trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
-        trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
+        . .github/scripts/utils/disk_pressure_experiment.sh
 
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
@@ -550,6 +556,8 @@ runs:
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
 
+          start_disk_pressure
+
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
           # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
@@ -561,6 +569,7 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          stop_disk_pressure
           if [ $RC -eq 0 ]; then
             analytics end "$YA_MAKE_NAME"
           else

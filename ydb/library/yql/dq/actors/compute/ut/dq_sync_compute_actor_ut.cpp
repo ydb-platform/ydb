@@ -1,12 +1,7 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include "mock_lookup_factory.h"
 
-#include <util/generic/hash_set.h>
-#include <util/string/cast.h>
-#include <util/system/guard.h>
-#include <util/system/mutex.h>
-
-#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -22,6 +17,12 @@
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash_set.h>
+#include <util/string/cast.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
@@ -32,12 +33,9 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-
-#include "mock_lookup_factory.h"
-
 
 using namespace NYql::NNodes;
 
@@ -57,50 +55,64 @@ void SegmentationFaultHandler(int) {
     abort();
 }
 
-struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
+struct TMockHttpRequest: NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
     THttpHeaders Headers;
+
     TMockHttpRequest() {
         Params.Scan("view=dump");
     }
+
     IOutputStream& Output() override {
         return Out;
     }
+
     HTTP_METHOD GetMethod() const override {
         return HTTP_METHOD_GET;
     }
+
     TStringBuf GetPath() const override {
         return "";
     }
+
     TStringBuf GetPathInfo() const override {
         return "";
     }
+
     TStringBuf GetUri() const override {
         return "";
     }
+
     const TCgiParameters& GetParams() const override {
         return Params;
     }
+
     const TCgiParameters& GetPostParams() const override {
         return Params;
     }
+
     TStringBuf GetPostContent() const override {
         return "";
     }
+
     const THttpHeaders& GetHeaders() const override {
         return Headers;
     }
+
     TStringBuf GetHeader(TStringBuf name) const override {
         const auto* header = Headers.FindHeader(name);
         return header ? header->Value() : TStringBuf();
     }
+
     TStringBuf GetCookie(TStringBuf) const override {
         return "";
     }
+
     TString GetRemoteAddr() const override {
         return "::";
     }
+
     TString GetServiceTitle() const override {
         return "";
     }
@@ -117,18 +129,16 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
 struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
         : NActors::TTestActorRuntimeBase(1, true)
-    {}
+    {
+    }
 
     void Start() {
         signal(SIGSEGV, &SegmentationFaultHandler);
         SetDispatchTimeout(TDuration::Seconds(20));
         InitNodes();
         SetLogBackend(NActors::CreateStderrBackend());
-        AppendToLogSettings(
-                NKikimrServices::EServiceKikimr_MIN,
-                NKikimrServices::EServiceKikimr_MAX,
-                NKikimrServices::EServiceKikimr_Name<NActors::NLog::EComponent>
-                );
+        AppendToLogSettings(NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX,
+            NKikimrServices::EServiceKikimr_Name<NActors::NLog::EComponent>);
 
         if (TESTS_VERBOSE) {
             SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
@@ -147,7 +157,7 @@ using namespace NKikimr::NMiniKQL;
 static const TString MockSinkType = "MockSink";
 
 struct TEvMockSinkPrivate {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvAckCommitState = EvBegin,
@@ -163,6 +173,10 @@ struct TEvMockSinkPrivate {
 struct TMockSinkState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TMockSinkState>;
 
+    std::atomic<ui64> SinkCheckpoints = 0;
+    std::atomic<ui64> TransformCheckpoints = 0;
+    std::atomic<ui64> TransformWatermark = 0;
+    NActors::TActorId TransformActor;
     std::atomic<ui64> SendDataCalls = 0;
     std::atomic<ui64> Rows = 0;
     std::atomic<bool> Finished = false;
@@ -196,7 +210,8 @@ public:
         , OutputIndex(outputIndex)
         , Callbacks(callbacks)
         , State(std::move(state))
-    {}
+    {
+    }
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -230,12 +245,10 @@ private:
         return EgressStats;
     }
 
-    void SendData(
-        TUnboxedValueBatch&& batch,
-        i64 /* dataSize */,
-        const TMaybe<NDqProto::TCheckpoint>& /* checkpoint */,
-        bool finished
-    ) override {
+    void SendData(TUnboxedValueBatch&& batch, i64 /* dataSize */, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+        if (checkpoint) {
+            ++State->SinkCheckpoints;
+        }
         ++State->SendDataCalls;
         State->Rows += batch.RowCount();
         batch.clear();
@@ -304,7 +317,8 @@ public:
     explicit TMockCheckpointCoordinator(TMockCoordinatorState::TPtr state)
         : NActors::TActor<TMockCheckpointCoordinator>(&TMockCheckpointCoordinator::StateFunc)
         , State(std::move(state))
-    {}
+    {
+    }
 
 private:
     STATEFN(StateFunc) {
@@ -333,14 +347,107 @@ private:
     const TMockCoordinatorState::TPtr State;
 };
 
+// Holds barriers until explicitly released, to catch direct injection into a
+// transformed sink. The production WASM transform waits for native I/O instead.
+class TBarrierTransform final: public NActors::TActorBootstrapped<TBarrierTransform>, public IDqComputeActorAsyncOutput {
+public:
+    TBarrierTransform(IDqAsyncIoFactory::TOutputTransformArguments& args, TMockSinkState::TPtr state)
+        : Output(args.TransformOutput)
+        , Alloc(args.Alloc)
+        , Callbacks(args.Callback)
+        , Index(args.OutputIndex)
+        , State(std::move(state))
+    {
+    }
+
+    void Bootstrap() {
+        State->TransformActor = SelfId();
+        Become(&TBarrierTransform::Work);
+    }
+    STRICT_STFUNC(Work,
+        cFunc(NActors::TEvents::TEvWakeup::EventType, Release);
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);)
+
+    void Release() {
+        auto guard = Guard(*Alloc);
+        Y_ENSURE(Barrier);
+        Output->Consume(std::move(*Barrier));
+        Barrier.Clear();
+        Output->Flush();
+        Callbacks->ResumeExecution();
+    }
+
+    ui64 GetOutputIndex() const override {
+        return Index;
+    }
+
+    i64 GetFreeSpace() const override {
+        return Barrier ? 0 : 1_MB;
+    }
+
+    const TDqAsyncStats& GetEgressStats() const override {
+        return Stats;
+    }
+
+    void SendData(TUnboxedValueBatch&& batch, i64 size, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+        SendDataWithWatermark(std::move(batch), size, Nothing(), checkpoint, finished);
+    }
+
+    void SendDataWithWatermark(TUnboxedValueBatch&& batch, i64, const TMaybe<NDqProto::TWatermark>& watermark,
+        const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+        batch.ForEachRow([&](NUdf::TUnboxedValue& row) {
+            Output->Consume(std::move(row));
+        });
+        if (watermark) {
+            Output->Consume(NDqProto::TWatermark(*watermark));
+            State->TransformWatermark = watermark->GetTimestampUs();
+        }
+        if (checkpoint) {
+            Barrier = checkpoint;
+            ++State->TransformCheckpoints;
+        }
+        if (finished) {
+            Output->Finish();
+            Callbacks->OnAsyncOutputFinished(Index);
+        }
+        Output->Flush();
+        Callbacks->ResumeExecution();
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
+
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {
+    }
+
+    void PassAway() override {
+        auto guard = Guard(*Alloc);
+        Output.Reset();
+        TActorBootstrapped::PassAway();
+    }
+
+private:
+    IDqOutputConsumer::TPtr Output;
+    std::shared_ptr<TScopedAlloc> Alloc;
+    ICallbacks* Callbacks;
+    ui64 Index;
+    TMockSinkState::TPtr State;
+    TMaybe<NDqProto::TCheckpoint> Barrier;
+    TDqAsyncStats Stats;
+};
+
 NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(TMockSinkState::TPtr sinkState = nullptr) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterMockProviderFactories(*factory);
     RegisterDqInputTransformLookupActorFactory(*factory);
-    factory->RegisterSink(MockSinkType, [sinkState = std::move(sinkState)](IDqAsyncIoFactory::TSinkArguments&& args) {
+    factory->RegisterOutputTransform("BarrierTransform", [sinkState](IDqAsyncIoFactory::TOutputTransformArguments&& args) {
+        auto* actor = new TBarrierTransform(args, sinkState);
+        return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>{ actor, actor };
+    });
+    factory->RegisterSink(MockSinkType, [sinkState](IDqAsyncIoFactory::TSinkArguments&& args) {
         Y_ENSURE(sinkState, "MockSink is used by the task, but no sink state was provided");
         auto* actor = new TMockSinkActor(args.OutputIndex, args.Callback, sinkState);
-        return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> { actor, actor };
+        return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>{ actor, actor };
     });
     return factory;
 }
@@ -361,7 +468,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     static constexpr TStringBuf GraphId = "test-graph";
     TActorSystem ActorSystem;
     NActors::TActorId EdgeActor;
-    std::unordered_map<ui64, NActors::TActorId> SrcEdgeActor; // ChannelId -> actor
+    std::unordered_map<ui64, NActors::TActorId> SrcEdgeActor;   // ChannelId -> actor
     NActors::TActorId DstEdgeActor;
     NActors::TActorId CheckpointCoordinator;
     TMockCoordinatorState::TPtr CoordinatorState = MakeIntrusive<TMockCoordinatorState>();
@@ -373,7 +480,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     THolderFactory HolderFactory;
     TDefaultValueBuilder Vb;
-    bool IsWide; // BEWARE Wide tests are partially unimplemented
+    bool IsWide;   // BEWARE Wide tests are partially unimplemented
     NDqProto::EDataTransportVersion TransportVersion;
     TStructType* RowType = nullptr;
     TMultiType* WideRowType = nullptr;
@@ -383,10 +490,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TMockSinkState::TPtr SinkState = MakeIntrusive<TMockSinkState>();
     IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
-    TSyncComputeActorTestFixture(
-            NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
-            bool isWide = false
-        )
+    TSyncComputeActorTestFixture(NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, bool isWide = false)
         : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
@@ -400,10 +504,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         auto keyType = TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv);
         auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);
-        RowType = TStructTypeBuilder(TypeEnv)
-                .Add("id", keyType)
-                .Add("ts", tsType)
-                .Build();
+        RowType = TStructTypeBuilder(TypeEnv).Add("id", keyType).Add("ts", tsType).Build();
         TVector<TType*> inputTypes(Reserve(RowType->GetMembersCount()));
         for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
             inputTypes.emplace_back(RowType->GetMemberType(i));
@@ -411,11 +512,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         WideRowType = TMultiType::Create(inputTypes.size(), inputTypes.data(), TypeEnv);
 
         RowTransformedType = TStructTypeBuilder(TypeEnv)
-                .Add("e.id", keyType)
-                .Add("e.ts", tsType)
-                .Add("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv), TypeEnv))
-                .Add("u.key", TOptionalType::Create(keyType, TypeEnv))
-                .Build();
+                                 .Add("e.id", keyType)
+                                 .Add("e.ts", tsType)
+                                 .Add("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv), TypeEnv))
+                                 .Add("u.key", TOptionalType::Create(keyType, TypeEnv))
+                                 .Build();
         TVector<TType*> outputTypes(Reserve(RowTransformedType->GetMembersCount()));
         for (ui32 i = 0; i < RowTransformedType->GetMembersCount(); ++i) {
             outputTypes.emplace_back(RowTransformedType->GetMemberType(i));
@@ -444,44 +545,21 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         TExprContext ctx;
         TPositionHandle pos;
         auto lambda = Build<TCoLambda>(ctx, pos)
-            .Args({"in_stream"})
-            .Body<TCoMap>()
-                .Input({"in_stream"})
-                .Lambda()
-                    .Args({"val"})
-                    .Body<TCoAsStruct>()
-                        .Add<TCoNameValueTuple>()
-                            .Name().Build("id")
-                            .Value<TCoMul>()
-                                .Left<TCoMember>()
-                                    .Name().Build("id")
-                                    .Struct("val")
-                                .Build()
-                                .Right<TCoMember>()
-                                    .Name().Build("id")
-                                    .Struct("val")
-                                .Build()
-                            .Build()
-                        .Build()
-                        .Add<TCoNameValueTuple>()
-                            .Name().Build("ts")
-                            .Value<TCoMember>()
-                                .Name().Build("ts")
-                                .Struct("val")
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
+                          .Args({ "in_stream" })
+                          .Body<TCoMap>()
+                          .Input({ "in_stream" })
+                          .Lambda()
+                          .Args({ "val" })
+                          .Body<TCoAsStruct>()
+                          .Add<TCoNameValueTuple>()
+                          .Name()
+                          .Build("id") .Value<TCoMul>().Left<TCoMember>().Name().Build("id") .Struct("val").Build() .Right<TCoMember>().Name().Build("id") .Struct("val").Build() .Build()
+                                      .Build() .Add<TCoNameValueTuple>().Name().Build("ts") .Value<TCoMember>().Name().Build("ts") .Struct("val").Build() .Build() .Build() .Build() .Build() .Done();
         auto type = typeMaker(ctx);
         auto tsType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto inStructType = ctx.MakeType<TStructExprType>(
-            TVector<const TItemExprType*> {
-                ctx.MakeType<TItemExprType>("id", type),
-                ctx.MakeType<TItemExprType>("ts", tsType),
-            }
-        );
+        auto inStructType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            ctx.MakeType<TItemExprType>("id", type), ctx.MakeType<TItemExprType>("ts", tsType),
+        });
         auto inStreamType = ctx.MakeType<TStreamExprType>(inStructType);
         auto outStructType = inStructType;
         auto outStreamType = inStreamType;
@@ -515,16 +593,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             }
         }
         NCommon::TMkqlCommonCallableCompiler compiler;
-        program.SetRaw(NDq::BuildProgram(
-                    lambda,
-                    *ctx.MakeType<TStructExprType>(TVector<const TItemExprType*> {}),
-                    compiler,
-                    TypeEnv,
-                    *FunctionRegistry,
-                    ctx,
-                    /* reads */ {},
-                    TSpillingSettings {}
-                    ));
+        program.SetRaw(NDq::BuildProgram(lambda, *ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{}), compiler, TypeEnv,
+            *FunctionRegistry, ctx, /* reads */ {}, TSpillingSettings{}));
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         // Settings
         // LangVer
@@ -537,15 +607,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         TExprContext ctx;
         TPositionHandle pos;
         auto lambda = Build<TCoLambda>(ctx, pos)
-            .Args({"in_stream"})
-            .Body<TCoMap>()
-                .Input({"in_stream"})
-                .Lambda()
-                    .Args({"val"})
-                    .Body({"val"})
-                .Build()
-            .Build()
-        .Done();
+                          .Args({ "in_stream" })
+                          .Body<TCoMap>()
+                          .Input({ "in_stream" })
+                          .Lambda()
+                          .Args({ "val" })
+                          .Body({ "val" })
+                          .Build() .Build() .Done();
         auto type = typeMaker(ctx);
         auto inStreamType = ctx.MakeType<TStreamExprType>(type);
         auto outStreamType = inStreamType;
@@ -562,16 +630,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             }
         }
         NCommon::TMkqlCommonCallableCompiler compiler;
-        program.SetRaw(NDq::BuildProgram(
-                    lambda,
-                    *ctx.MakeType<TStructExprType>(TVector<const TItemExprType*> {}),
-                    compiler,
-                    TypeEnv,
-                    *FunctionRegistry,
-                    ctx,
-                    /* reads */ {},
-                    TSpillingSettings {}
-                    ));
+        program.SetRaw(NDq::BuildProgram(lambda, *ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{}), compiler, TypeEnv,
+            *FunctionRegistry, ctx, /* reads */ {}, TSpillingSettings{}));
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         // Settings
         // LangVer
@@ -599,10 +659,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         auto& rightSource = *settings.MutableRightSource();
         rightSource.SetProviderName("MockLookup");
-        auto rightType = TStructTypeBuilder(TypeEnv)
-            .Add("key", keyType)
-            .Add("data", valueType)
-            .Build();
+        auto rightType = TStructTypeBuilder(TypeEnv).Add("key", keyType).Add("data", valueType).Build();
         rightSource.SetSerializedRowType(SerializeNode(rightType, TypeEnv));
         Mock::TLookupSource lookupSource;
         lookupSource.SetMinValue(MinTransformedValue);
@@ -623,7 +680,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     // returns IDqOutputChannel::TPtr that can be used to inject data/checkpoints/watermarks into channel
     auto AddDummyInputChannel(NDqProto::TTaskInput& input, ui64 channelId) {
         auto& channel = *input.AddChannels();
-        input.MutableUnionAll(); // for side-effect
+        input.MutableUnionAll();   // for side-effect
         channel.SetId(channelId);
         const auto& [srcEdgeActor, inserted] = SrcEdgeActor.try_emplace(channelId);
         if (inserted) {
@@ -645,16 +702,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             LOG_D(msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
-        TDqChannelSettings settings = {
-            .RowType = (IsWide ? static_cast<TType*>(WideRowType) : RowType),
-            .HolderFactory = &HolderFactory,
+        TDqChannelSettings settings = { .RowType = (IsWide ? static_cast<TType*>(WideRowType) : RowType), .HolderFactory = &HolderFactory,
             .ChannelId = channelId,
             .DstStageId = ThisStageId,
             .Level = TCollectStatsLevel::Profile,
             .TransportVersion = TransportVersion,
             .MaxStoredBytes = 100,
-            .MaxChunkBytes = 100
-        };
+            .MaxChunkBytes = 100 };
 
         return CreateDqOutputChannel(settings, logFunc);
     }
@@ -679,7 +733,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     // returns IDqInputChannel::TPtr that can be used to simulating reading from this channel
     auto AddDummyOutputChannel(NDqProto::TDqTask& task, ui64 channelId, TType* type) {
         auto& output = *task.AddOutputs();
-        output.MutableBroadcast(); // for side-effect
+        output.MutableBroadcast();   // for side-effect
         auto& channel = *output.AddChannels();
         channel.SetId(channelId);
         auto& chEndpoint = *channel.MutableDstEndpoint();
@@ -696,15 +750,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        TDqChannelSettings settings = {
-            .RowType = type,
-            .HolderFactory = &HolderFactory,
-            .ChannelId = channelId,
-            .SrcStageId = ThisStageId,
+        TDqChannelSettings settings = { .RowType = type, .HolderFactory = &HolderFactory, .ChannelId = channelId, .SrcStageId = ThisStageId,
             .Level = TCollectStatsLevel::Profile,
             .TransportVersion = TransportVersion,
-            .MaxStoredBytes = 10_MB
-        };
+            .MaxStoredBytes = 10_MB };
 
         return CreateDqInputChannel(settings, TypeEnv);
     }
@@ -715,40 +764,28 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     auto CreateTaskRunnerActorFactory() {
-        TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
-            NYql::GetCommonDqFactory(),
-            NKikimr::NMiniKQL::GetYqlFactory()
-        };
-        NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
-        NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
-                NYql::CreateCommonDqTaskTransformFactory()
-                });
-        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
-        auto factory = NTaskRunnerProxy::CreateFactory(
-                FunctionRegistry.Get(),
-                dqCompFactory,
-                dqTaskTransformFactory,
-                patternCache, false);
-        return [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc&) {
+        TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = { NYql::GetCommonDqFactory(),
+            NKikimr::NMiniKQL::GetYqlFactory() };
+        NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory =
+            NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
+        NYql::TTaskTransformFactory dqTaskTransformFactory =
+            NYql::CreateCompositeTaskTransformFactory({ NYql::CreateCommonDqTaskTransformFactory() });
+        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(
+            NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
+        auto factory = NTaskRunnerProxy::CreateFactory(FunctionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, patternCache, false);
+        return [factory = factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task,
+                   NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc&) {
             return factory->Get(alloc, task, statsMode);
         };
     }
 
-    auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    auto CreateTestSyncComputeActor(
+        NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
-        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
-        auto actor = CreateDqComputeActor(
-                EdgeActor,
-                LogPrefix,
-                &task,
-                AsyncIoFactory ? AsyncIoFactory : CreateAsyncIoFactory(SinkState),
-                FunctionRegistry.Get(),
-                runtimeSettings,
-                memoryLimits,
-                CreateTaskRunnerActorFactory(),
-                {}
-                );
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{ TDuration::Seconds(1), TDuration::Seconds(1) };
+        auto actor = CreateDqComputeActor(EdgeActor, LogPrefix, &task, AsyncIoFactory ? AsyncIoFactory : CreateAsyncIoFactory(SinkState),
+            FunctionRegistry.Get(), runtimeSettings, memoryLimits, CreateTaskRunnerActorFactory(), {});
         UNIT_ASSERT(actor);
         return ActorSystem.Register(actor);
     }
@@ -793,13 +830,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     // cb(TUnboxedValue& value, ui32 column) is called for each value in a row
     // cbWatermark(TInstant watermark) is called for each received watermark
     // beforeFinalAck() is called before sending final ack (when CA is still definitely alive)
-    bool ReceiveData(
-        std::function<bool(const NUdf::TUnboxedValue& val, ui32 column)> cb,
-        std::function<void(TInstant)> cbWatermark,
-        std::function<void()> beforeFinalAck,
-        IDqInputChannel::TPtr dqInputChannel
-    ) {
-        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor}, TDuration::Seconds(20));
+    bool ReceiveData(std::function<bool(const NUdf::TUnboxedValue& val, ui32 column)> cb, std::function<void(TInstant)> cbWatermark,
+        std::function<void()> beforeFinalAck, IDqInputChannel::TPtr dqInputChannel) {
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({ DstEdgeActor }, TDuration::Seconds(20));
         if (!ev) {
             throw yexception() << "Failed";
         }
@@ -822,44 +855,45 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         TUnboxedValueBatch batch;
         TMaybe<TInstant> watermark;
-        const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
+        const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount()
+                                    : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
         while (dqInputChannel->Pop(batch, watermark)) {
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
-                    LOG_D("WideRow:");
-                    if (row) {
-                        UNIT_ASSERT_EQUAL(width, columns);
-                        for (ui32 col = 0; col < width; ++col) {
-                            const auto& item = row[col];
-                            if (!cb(item, col)) {
-                               return false;
+                        LOG_D("WideRow:");
+                        if (row) {
+                            UNIT_ASSERT_EQUAL(width, columns);
+                            for (ui32 col = 0; col < width; ++col) {
+                                const auto& item = row[col];
+                                if (!cb(item, col)) {
+                                    return false;
+                                }
                             }
+                        } else {
+                            LOG_D("null");
+                            UNIT_ASSERT(false);
                         }
-                    } else {
-                        LOG_D("null");
-                        UNIT_ASSERT(false);
-                    }
-                    return true;
-                })) {
+                        return true;
+                    })) {
                     return false;
                 }
             } else {
                 if (!batch.ForEachRow([this, cb, columns](const NUdf::TUnboxedValue& row) {
-                    LOG_D("Row:");
-                    if (row) {
-                        for (ui32 col = 0; col < columns; ++col) {
-                            const auto& item = row.GetElement(col);
-                            if (!cb(item, col)) {
-                               return false;
+                        LOG_D("Row:");
+                        if (row) {
+                            for (ui32 col = 0; col < columns; ++col) {
+                                const auto& item = row.GetElement(col);
+                                if (!cb(item, col)) {
+                                    return false;
+                                }
                             }
+                        } else {
+                            LOG_D("null");
+                            UNIT_ASSERT(false);
                         }
-                    } else {
-                        LOG_D("null");
-                        UNIT_ASSERT(false);
-                    }
-                    LOG_D("/");
-                    return true;
-                })) {
+                        LOG_D("/");
+                        return true;
+                    })) {
                     return false;
                 }
             }
@@ -874,7 +908,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             auto ack = new TEvDqCompute::TEvChannelDataAck;
             ack->Record.SetChannelId(channelData.GetChannelId());
             ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-            ack->Record.SetFreeSpace(3123); // XXX simulates limited channel size
+            ack->Record.SetFreeSpace(3123);   // XXX simulates limited channel size
             ack->Record.SetFinish(channelData.GetFinished());
             ActorSystem.Send(ev->Sender, ev->Recipient, ack);
         }
@@ -900,7 +934,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             ActorSystem.Send(syncCA, EdgeActor, evHttpInfo.Release());
         }
         {
-            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
+            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({ EdgeActor });
             UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
             TStringStream out;
             ev->Get()->Output(out);
@@ -910,15 +944,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
     static constexpr ui32 NoAckPeriod = 2;
 
-    void SendData(
-        std::function<std::tuple<IDqOutputChannel::TPtr, ui32*>(ui32, bool)> generator,
-        NActors::TActorId syncCA,
-        ui32 packets,
-        bool waitIntermediateAcks
-    ) {
+    void SendData(std::function<std::tuple<IDqOutputChannel::TPtr, ui32*>(ui32, bool)> generator, NActors::TActorId syncCA, ui32 packets,
+        bool waitIntermediateAcks) {
         for (ui32 packet = 1; packet <= packets; ++packet) {
             bool isFinal = packet == packets;
-            bool noAck = (packet % NoAckPeriod) == 0; // set noAck on even packets
+            bool noAck = (packet % NoAckPeriod) == 0;   // set noAck on even packets
 
             auto [dqOutputChannel, seqNo] = generator(packet, isFinal);
             if (isFinal) {
@@ -932,22 +962,22 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             chData.SetChannelId(channelId);
             if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
                 *chData.MutableData() = serializedBatch.Proto;
-                Y_ENSURE(serializedBatch.Payload.Empty()); // TODO
+                Y_ENSURE(serializedBatch.Payload.Empty());   // TODO
             }
             if (NDqProto::TWatermark watermark; dqOutputChannel->Pop(watermark)) {
                 *chData.MutableWatermark() = watermark;
-                noAck = false; // packet containing watermark must be acked
+                noAck = false;   // packet containing watermark must be acked
             }
             if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
                 *chData.MutableCheckpoint() = checkpoint;
-                noAck = false; // packet containing checkpoint must be acked
+                noAck = false;   // packet containing checkpoint must be acked
             }
             if (dqOutputChannel->IsFinished()) {
                 chData.SetFinished(true);
-                noAck = false; // final packet must be acked
+                noAck = false;   // final packet must be acked
             }
             evInputChannelData->Record.SetNoAck(noAck);
-            LOG_D("Sending " << packet << "/" << packets << " "  << chData);
+            LOG_D("Sending " << packet << "/" << packets << " " << chData);
             ActorSystem.Send(syncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
             if ((dqOutputChannel->IsFinished() || waitIntermediateAcks) && !noAck) {
                 WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
@@ -971,8 +1001,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     void WaitForSinkFinished(TDuration timeout = TDuration::Seconds(10)) {
         const auto deadline = TInstant::Now() + timeout;
         while (!SinkState->Finished.load()) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline,
-                "Compute actor has not finished sink in " << timeout << ": it is stuck");
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Compute actor has not finished sink in " << timeout << ": it is stuck");
             Sleep(TDuration::MilliSeconds(10));
         }
     }
@@ -981,7 +1010,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     NDqProto::TEvComputeActorState AbortComputeActor(NActors::TActorId computeActor) {
         ActorSystem.Send(computeActor, EdgeActor, TEvDq::TEvAbortExecution::Aborted("test is over").Release());
         auto finalState = ActorSystem.GrabEdgeEventIf<TEvDqCompute::TEvState>(EdgeActor, [](const TEvDqCompute::TEvState::TPtr& ev) {
-            return ev->Get()->Record.GetState() != NDqProto::COMPUTE_STATE_EXECUTING; // periodic stats
+            return ev->Get()->Record.GetState() != NDqProto::COMPUTE_STATE_EXECUTING;   // periodic stats
         });
         return finalState->Get()->Record;
     }
@@ -1004,7 +1033,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         auto syncCA = CreateTestSyncComputeActor(task);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
         return syncCA;
     }
 
@@ -1022,10 +1051,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         }
 
         const ui64 acksBefore = CoordinatorState->Acks.load();
-        ActorSystem.Send(syncCA, CheckpointCoordinator,
-            new TEvDqCompute::TEvNewCheckpointCoordinator(generation, TString(GraphId)));
-        WaitFor([this, acksBefore] { return CoordinatorState->Acks.load() > acksBefore; },
-            TStringBuilder() << "compute actor did not acknowledge checkpoint coordinator generation " << generation);
+        ActorSystem.Send(syncCA, CheckpointCoordinator, new TEvDqCompute::TEvNewCheckpointCoordinator(generation, TString(GraphId)));
+        WaitFor([this, acksBefore] {
+            return CoordinatorState->Acks.load() > acksBefore;
+        }, TStringBuilder() << "compute actor did not acknowledge checkpoint coordinator generation " << generation);
     }
 
     void SendCommitState(NActors::TActorId syncCA, ui64 checkpointId, ui64 generation, std::optional<ui64> checkpointGeneration = std::nullopt) {
@@ -1035,9 +1064,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     void ExpectStateCommitted(ui64 checkpointId, ui64 generation) {
-        WaitFor([this] { return CoordinatorState->Commits.load() > ConsumedCommits; },
-            TStringBuilder() << "compute actor did not report checkpoint " << generation << "." << checkpointId
-                << " as committed");
+        WaitFor([this] {
+            return CoordinatorState->Commits.load() > ConsumedCommits;
+        }, TStringBuilder() << "compute actor did not report checkpoint " << generation << "." << checkpointId << " as committed");
 
         const auto commitLog = CoordinatorState->GetCommitLog();
         UNIT_ASSERT_VALUES_EQUAL(commitLog.size(), ConsumedCommits + 1);
@@ -1055,8 +1084,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     void WaitForSinkCommitCalls(ui64 expected) {
-        WaitFor([this, expected] { return SinkState->CommitStateCalls.load() >= expected; },
-            TStringBuilder() << "compute actor did not call sink CommitState() " << expected << " time(s)");
+        WaitFor([this, expected] {
+            return SinkState->CommitStateCalls.load() >= expected;
+        }, TStringBuilder() << "compute actor did not call sink CommitState() " << expected << " time(s)");
     }
 
     void AckDeferredSinkCommits() {
@@ -1080,16 +1110,28 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
     }
 
-#if 0 // TODO: switch when inputtransform will be fixed; just log for now
+#if 0   // TODO: switch when inputtransform will be fixed; just log for now
 #define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
 #define WEAK_UNIT_ASSERT_LE_C UNIT_ASSERT_LE_C
 #define WEAK_UNIT_ASSERT_EQUAL_C UNIT_ASSERT_EQUAL_C
 #define WEAK_UNIT_ASSERT UNIT_ASSERT
 #else
-#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
+#define WEAK_UNIT_ASSERT_GT_C(A, B, C)                                  \
+    do {                                                                \
+        if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); \
+    } while (0)
+#define WEAK_UNIT_ASSERT_LE_C(A, B, C)                                    \
+    do {                                                                  \
+        if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); \
+    } while (0)
+#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C)                                 \
+    do {                                                                  \
+        if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); \
+    } while (0)
+#define WEAK_UNIT_ASSERT(A)                       \
+    do {                                          \
+        if (!(A)) LOG_E("Assert " #A " failed "); \
+    } while (0)
 #endif
     struct TStartCAResult {
         NActors::TActorId SyncCA;
@@ -1097,20 +1139,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         IDqInputChannel::TPtr DqInputChannel;
     };
 
-    TStartCAResult StartCA(
-        ui32 packets,
-        ui32 watermarkPeriod,
-        bool waitIntermediateAcks,
-        ui32 numChannels,
-        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
-        bool createSuspended = false
-    ) {
+    TStartCAResult StartCA(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE, bool createSuspended = false) {
         LogPrefix = TStringBuilder() << "Square Test for:"
-           << " packets=" << packets
-           << " watermarkPeriod=" << watermarkPeriod
-           << " waitIntermediateAcks=" << waitIntermediateAcks
-           << " channels=" << numChannels
-           << " ";
+                                     << " packets=" << packets << " watermarkPeriod=" << watermarkPeriod
+                                     << " waitIntermediateAcks=" << waitIntermediateAcks << " channels=" << numChannels << " ";
         NDqProto::TDqTask task;
         GenerateSquareProgram(task, [](TExprContext& ctx) {
             return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
@@ -1123,19 +1156,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.EnableScheduleForActor(syncCA, true);
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
 
-        return {syncCA, std::move(dqOutputChannels), std::move(dqInputChannel)};
+        return { syncCA, std::move(dqOutputChannels), std::move(dqInputChannel) };
     }
 
-    void BasicMultichannelTests(
-        ui32 packets,
-        ui32 watermarkPeriod,
-        bool waitIntermediateAcks,
-        ui32 numChannels,
-        auto& rng,
-        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
-        bool createSuspended = false
-    ) {
-        auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(packets, watermarkPeriod, waitIntermediateAcks, numChannels, statsMode, createSuspended);
+    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE, bool createSuspended = false) {
+        auto [syncCA, dqOutputChannels, dqInputChannel] =
+            StartCA(packets, watermarkPeriod, waitIntermediateAcks, numChannels, statsMode, createSuspended);
 
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;
@@ -1157,14 +1184,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqOutputChannel->Push(std::move(watermark));
                 expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
-            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
+            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets / numChannels, ui32{ 1 }) == 0) {
                 // when we have more than one active channels left, we may randomly finish it midway
                 dqOutputChannel->Finish();
                 activeChannels.pop_back();
             }
-            return std::pair { dqOutputChannel, &seqNo[channelIdx] };
-        },
-        syncCA, packets, waitIntermediateAcks);
+            return std::pair{ dqOutputChannel, &seqNo[channelIdx] };
+        }, syncCA, packets, waitIntermediateAcks);
         // Finish all unfinished channels (when we have more than one channel left, only one is forcibly finished on final packet)
         for (ui32 channelIdx = 0; channelIdx < numChannels; ++channelIdx) {
             auto dqOutputChannel = dqOutputChannels[channelIdx];
@@ -1177,36 +1203,36 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         TMap<ui32, ui32> receivedData;
         TMaybe<TInstant> watermark;
         while (ReceiveData(
-                [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
-                    UNIT_ASSERT(!!val);
-                    UNIT_ASSERT(val.IsEmbedded());
-                    if (RowType->GetMemberName(column) == "ts") {
-                        auto ts = val.Get<ui64>();
-                        if (watermark) {
-                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
-                        }
-                        return true;
+            [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
+                UNIT_ASSERT(!!val);
+                UNIT_ASSERT(val.IsEmbedded());
+                if (RowType->GetMemberName(column) == "ts") {
+                    auto ts = val.Get<ui64>();
+                    if (watermark) {
+                        UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
                     }
-                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
-                    auto data = val.Get<i32>();
-                    LOG_D(data);
-                    ++receivedData[data];
                     return true;
-                },
-                [this, &watermark](const auto& receivedWatermark) {
-                    watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
-                },
-                [this, &syncCA]() {
-                    DumpMonPage(syncCA, [this](auto&& str) {
-                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-                        // TODO add validation
-                        LOG_D(str);
-                    });
-                },
-                dqInputChannel))
-        {}
+                }
+                UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
+                auto data = val.Get<i32>();
+                LOG_D(data);
+                ++receivedData[data];
+                return true;
+            },
+            [this, &watermark](const auto& receivedWatermark) {
+                watermark = receivedWatermark;
+                LOG_D("Got watermark " << *watermark);
+            },
+            [this, &syncCA]() {
+                DumpMonPage(syncCA, [this](auto&& str) {
+                    UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                    UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                    // TODO add validation
+                    LOG_D(str);
+                });
+            }, dqInputChannel))
+        {
+        }
 
         UNIT_ASSERT_EQUAL_C(receivedData.size(), val, "expected size " << val << " != " << receivedData.size());
         for (; val > 0; --val) {
@@ -1216,7 +1242,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
                 UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark,
+                    "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
@@ -1228,33 +1255,25 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
     void InputTransformMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
-           << " packets=" << packets
-           << " watermarkPeriod=" << watermarkPeriod
-           << " waitIntermediateAcks=" << waitIntermediateAcks
-           << " channels=" << numChannels
-           << " ";
+                                     << " packets=" << packets << " watermarkPeriod=" << watermarkPeriod
+                                     << " waitIntermediateAcks=" << waitIntermediateAcks << " channels=" << numChannels << " ";
         NDqProto::TDqTask task;
         GenerateEmptyProgram(task, [](TExprContext& ctx) {
             auto keyType = ctx.MakeType<TDataExprType>(EDataSlot::Int32);
             auto tsType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
             auto valueType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-            auto structType = ctx.MakeType<TStructExprType>(
-                    TVector<const TItemExprType*> {
-                        ctx.MakeType<TItemExprType>("e.id", keyType),
-                        ctx.MakeType<TItemExprType>("e.ts", tsType),
-                        ctx.MakeType<TItemExprType>("u.data", ctx.MakeType<TOptionalExprType>(valueType)),
-                        ctx.MakeType<TItemExprType>("u.key", ctx.MakeType<TOptionalExprType>(keyType)),
-                    }
-            );
+            auto structType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+                ctx.MakeType<TItemExprType>("e.id", keyType), ctx.MakeType<TItemExprType>("e.ts", tsType),
+                ctx.MakeType<TItemExprType>("u.data", ctx.MakeType<TOptionalExprType>(valueType)),
+                ctx.MakeType<TItemExprType>("u.key", ctx.MakeType<TOptionalExprType>(keyType)),
+            });
             return structType;
         });
         TMap<i32, ui32> expectedData;
         auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
-        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
-        SetInputTransform(task,
-                TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
-                TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv)
-                );
+        auto dqInputChannel =
+            AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
+        SetInputTransform(task, TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv));
 
         auto syncCA = CreateTestSyncComputeActor(task);
         ActorSystem.EnableScheduleForActor(syncCA, true);
@@ -1290,14 +1309,13 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqOutputChannel->Push(std::move(watermark));
                 expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
-            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
+            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets / numChannels, ui32{ 1 }) == 0) {
                 // when we have more than one active channels left, we may randomly finish it midway
                 dqOutputChannel->Finish();
                 activeChannels.pop_back();
             }
-            return std::pair { dqOutputChannel, &seqNo[channelIdx] };
-        },
-        syncCA, packets, waitIntermediateAcks);
+            return std::pair{ dqOutputChannel, &seqNo[channelIdx] };
+        }, syncCA, packets, waitIntermediateAcks);
         // Finish all unfinished channels (when we have more than one channel left, only one is forcibly finished on final packet)
         for (ui32 channelIdx = 0; channelIdx < numChannels; ++channelIdx) {
             auto dqOutputChannel = dqOutputChannels[channelIdx];
@@ -1312,76 +1330,79 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         i32 col0 = ~0;
         TMaybe<TInstant> watermark;
         while (ReceiveData(
-                [this, &receivedData, &watermark, &col0](const NUdf::TUnboxedValue& val, ui32 column) {
-                    UNIT_ASSERT_LT(column, RowTransformedType->GetMembersCount());
-                    auto columnName = RowTransformedType->GetMemberName(column);
-                    if (columnName == "e.id") {
-                        UNIT_ASSERT(!!val);
-                        UNIT_ASSERT(val.IsEmbedded());
-                        LOG_D(column << " id = " << val.Get<i32>());
-                        col0 = val.Get<i32>();
-                        ++receivedData[val.Get<i32>()];
-                    } else if (columnName == "e.ts") {
-                        UNIT_ASSERT(!!val);
-                        UNIT_ASSERT(val.IsEmbedded());
-                        auto ts = val.Get<ui64>();
-                        LOG_D(column << " ts = " << ts);
-                        if (watermark) {
-                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
-                        }
-                    } else if (columnName == "u.key") {
-                        if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
-                            UNIT_ASSERT(!!val);
-                            auto cval = val.GetOptionalValue();
-                            UNIT_ASSERT(!!cval);
-                            UNIT_ASSERT(cval.IsEmbedded());
-                            auto data = cval.Get<i32>();
-                            LOG_D(column << " key = " << data);
-                            UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
-                        } else {
-                            UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
-                            LOG_D(column << " key IS NULL");
-                        }
-                    } else if (columnName == "u.data") {
-                        if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
-                            UNIT_ASSERT(!!val);
-                            const auto cval = val.GetOptionalValue();
-                            UNIT_ASSERT(!!cval);
-                            auto ref = TString(cval.AsStringRef());
-                            LOG_D(column << " data = '" << ref << "'");
-                            UNIT_ASSERT_EQUAL(ref, ToString(col0));
-                        } else {
-                            UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
-                            LOG_D(column << " data IS NULL");
-                        }
-                    } else {
-                        UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
+            [this, &receivedData, &watermark, &col0](const NUdf::TUnboxedValue& val, ui32 column) {
+                UNIT_ASSERT_LT(column, RowTransformedType->GetMembersCount());
+                auto columnName = RowTransformedType->GetMemberName(column);
+                if (columnName == "e.id") {
+                    UNIT_ASSERT(!!val);
+                    UNIT_ASSERT(val.IsEmbedded());
+                    LOG_D(column << " id = " << val.Get<i32>());
+                    col0 = val.Get<i32>();
+                    ++receivedData[val.Get<i32>()];
+                } else if (columnName == "e.ts") {
+                    UNIT_ASSERT(!!val);
+                    UNIT_ASSERT(val.IsEmbedded());
+                    auto ts = val.Get<ui64>();
+                    LOG_D(column << " ts = " << ts);
+                    if (watermark) {
+                        UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                     }
-                    return true;
-                },
-                [this, &watermark](const auto& receivedWatermark) {
-                    watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
-                },
-                [this, &syncCA]() {
-                    DumpMonPage(syncCA, [this](auto&& str) {
-                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-                        // TODO add validation
-                        LOG_D(str);
-                    });
-                },
-                dqInputChannel))
-        {}
-        UNIT_ASSERT_EQUAL_C(receivedData.size(), expectedData.size(), "received " << receivedData.size() << " != expected " << expectedData.size());
+                } else if (columnName == "u.key") {
+                    if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
+                        UNIT_ASSERT(!!val);
+                        auto cval = val.GetOptionalValue();
+                        UNIT_ASSERT(!!cval);
+                        UNIT_ASSERT(cval.IsEmbedded());
+                        auto data = cval.Get<i32>();
+                        LOG_D(column << " key = " << data);
+                        UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
+                    } else {
+                        UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
+                        LOG_D(column << " key IS NULL");
+                    }
+                } else if (columnName == "u.data") {
+                    if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
+                        UNIT_ASSERT(!!val);
+                        const auto cval = val.GetOptionalValue();
+                        UNIT_ASSERT(!!cval);
+                        auto ref = TString(cval.AsStringRef());
+                        LOG_D(column << " data = '" << ref << "'");
+                        UNIT_ASSERT_EQUAL(ref, ToString(col0));
+                    } else {
+                        UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
+                        LOG_D(column << " data IS NULL");
+                    }
+                } else {
+                    UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
+                }
+                return true;
+            },
+            [this, &watermark](const auto& receivedWatermark) {
+                watermark = receivedWatermark;
+                LOG_D("Got watermark " << *watermark);
+            },
+            [this, &syncCA]() {
+                DumpMonPage(syncCA, [this](auto&& str) {
+                    UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                    UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                    // TODO add validation
+                    LOG_D(str);
+                });
+            }, dqInputChannel))
+        {
+        }
+        UNIT_ASSERT_EQUAL_C(
+            receivedData.size(), expectedData.size(), "received " << receivedData.size() << " != expected " << expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
-            UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
+            UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal],
+                "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
         if (expectedWatermark) {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
                 UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
-                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark,
+                    "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
@@ -1392,14 +1413,14 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     auto GetRandomSeed() {
-        uint32_t seed = 0; // by default tests are reproducible (fixed-seed PRNG)
+        uint32_t seed = 0;   // by default tests are reproducible (fixed-seed PRNG)
         if (auto env = getenv("RANDOM_SEED")) {
             if (*env) {
                 // with non-empty $RANDOM_SEED use it as seed (to reproduce random test failures)
                 seed = ::FromString<uint32_t>(env);
             } else {
                 // with empty $RANDOM_SEED make tests truly random
-                seed = (std::random_device {})();
+                seed = (std::random_device{})();
                 Cerr << "RANDOM_SEED=" << seed << Endl;
             }
         }
@@ -1417,8 +1438,8 @@ public:
         std::atomic<ui64> LoadCalls = 0;
     };
 
-    TCheckpointedSource(const IDqAsyncIoFactory::TSourceArguments& args, ui64 endOffset, bool finish,
-        TIntrusivePtr<TState> state, TVector<ui64> timestamps)
+    TCheckpointedSource(
+        const IDqAsyncIoFactory::TSourceArguments& args, ui64 endOffset, bool finish, TIntrusivePtr<TState> state, TVector<ui64> timestamps)
         : TActor(&TCheckpointedSource::StateFunc)
         , InputIndex(args.InputIndex)
         , HolderFactory(args.HolderFactory)
@@ -1426,10 +1447,16 @@ public:
         , Finish(finish)
         , State(std::move(state))
         , Timestamps(std::move(timestamps))
-    {}
+    {
+    }
 
-    ui64 GetInputIndex() const override { return InputIndex; }
-    const TDqAsyncStats& GetIngressStats() const override { return IngressStats; }
+    ui64 GetInputIndex() const override {
+        return InputIndex;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats;
+    }
 
     i64 GetAsyncInputData(TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64) override {
         i64 bytes = 0;
@@ -1437,7 +1464,7 @@ public:
             NUdf::TUnboxedValue* items;
             auto row = HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(static_cast<i32>(++Offset));
-            items[1] = NUdf::TUnboxedValuePod(Timestamps.empty() ? ui64{1} : Timestamps.at(Offset - 1));
+            items[1] = NUdf::TUnboxedValuePod(Timestamps.empty() ? ui64{ 1 } : Timestamps.at(Offset - 1));
             batch.emplace_back(std::move(row));
             ++State->Rows;
             bytes += sizeof(i32) + sizeof(ui64);
@@ -1458,8 +1485,12 @@ public:
         ++State->LoadCalls;
     }
 
-    void CommitState(const NDqProto::TCheckpoint&) override {}
-    void PassAway() override { TActor::PassAway(); }
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
+
+    void PassAway() override {
+        TActor::PassAway();
+    }
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -1477,40 +1508,57 @@ private:
 };
 
 struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
-    enum class ESourceRestore { Explicit, Checkpoint, Empty };
+    enum class ESourceRestore {
+        Explicit,
+        Checkpoint,
+        Empty
+    };
 
     TSyncComputeActorRestoreFixture() {
         RowType = TStructTypeBuilder(TypeEnv)
-            .Add("id", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv))
-            .Add("ts", TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv))
-            .Build();
+                      .Add("id", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv))
+                      .Add("ts", TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv))
+                      .Build();
     }
 
     void GenerateSumProgram(NDqProto::TDqTask& task, i64 intervalUs = 10) {
         TProgramBuilder pb(TypeEnv, *FunctionRegistry);
         const auto input = pb.Arg(pb.NewStreamType(RowType));
         const auto interval = [&](i64 us) {
-            return pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
-                NUdf::TStringRef(reinterpret_cast<const char*>(&us), sizeof(us)));
+            return pb.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef(reinterpret_cast<const char*>(&us), sizeof(us)));
         };
-        const auto output = pb.MultiHoppingCore(input,
-            [&](TRuntimeNode) { return pb.NewDataLiteral<ui32>(0); },
-            [&](TRuntimeNode item) { return pb.Member(item, "ts"); },
-            [&](TRuntimeNode item) { return pb.Member(item, "id"); },
-            [&](TRuntimeNode item, TRuntimeNode state) { return pb.Add(state, pb.Member(item, "id")); },
-            [](TRuntimeNode state) { return state; },
-            [](TRuntimeNode state) { return state; },
-            [&](TRuntimeNode lhs, TRuntimeNode rhs) { return pb.Add(lhs, rhs); },
-            [&](TRuntimeNode, TRuntimeNode state, TRuntimeNode time) {
-                const auto windowEnd = pb.Unwrap(time,
-                    pb.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef("Missing window end")), "", 0, 0);
-                return pb.NewStruct({{"id", state}, {"ts", windowEnd}});
+        const auto output = pb.MultiHoppingCore(
+            input,
+            [&](TRuntimeNode) {
+                return pb.NewDataLiteral<ui32>(0);
             },
-            interval(10), interval(intervalUs), interval(intervalUs), pb.NewDataLiteral<bool>(true), pb.NewDataLiteral<bool>(false),
+            [&](TRuntimeNode item) {
+                return pb.Member(item, "ts");
+            },
+            [&](TRuntimeNode item) {
+                return pb.Member(item, "id");
+            },
+            [&](TRuntimeNode item, TRuntimeNode state) {
+                return pb.Add(state, pb.Member(item, "id"));
+            },
+            [](TRuntimeNode state) {
+                return state;
+            },
+            [](TRuntimeNode state) {
+                return state;
+            },
+            [&](TRuntimeNode lhs, TRuntimeNode rhs) {
+                return pb.Add(lhs, rhs);
+            },
+            [&](TRuntimeNode, TRuntimeNode state, TRuntimeNode time) {
+                const auto windowEnd =
+                    pb.Unwrap(time, pb.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef("Missing window end")), "", 0, 0);
+                return pb.NewStruct({ { "id", state }, { "ts", windowEnd } });
+            }, interval(10), interval(intervalUs), interval(intervalUs), pb.NewDataLiteral<bool>(true), pb.NewDataLiteral<bool>(false),
             {}, {}, {}, {}, /* checkMinWindowStart */ true);
         TStructLiteralBuilder program(TypeEnv);
         program.Add("Program", output);
-        program.Add("Inputs", pb.NewTuple({input}));
+        program.Add("Inputs", pb.NewTuple({ input }));
         program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
         task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
         task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
@@ -1523,7 +1571,7 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         auto factory = MakeIntrusive<TDqAsyncIoFactory>();
         factory->RegisterSource(TString(PqSource), [=](IDqAsyncIoFactory::TSourceArguments&& args) {
             auto* source = new TCheckpointedSource(args, endOffset, suspended, sourceState, timestamps);
-            return std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>{source, source};
+            return std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>{ source, source };
         });
         AsyncIoFactory = factory;
         task.SetId(taskId);
@@ -1531,26 +1579,31 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         auto actor = CreateTestSyncComputeActor(task);
         ActorSystem.EnableScheduleForActor(actor, true);
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
-        return std::pair{actor, sourceState};
+        return std::pair{ actor, sourceState };
     }
 
     void RegisterRestoreCoordinator(NActors::TActorId actor) {
-        ActorSystem.Send(actor, CheckpointCoordinator,
-            new TEvDqCompute::TEvNewCheckpointCoordinator(CoordinatorGeneration, TString(GraphId)));
+        ActorSystem.Send(actor, CheckpointCoordinator, new TEvDqCompute::TEvNewCheckpointCoordinator(CoordinatorGeneration, TString(GraphId)));
         UNIT_ASSERT(ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvNewCheckpointCoordinatorAck>(CheckpointCoordinator));
     }
 
     TVector<std::pair<i32, ui64>> ReadHoppingOutput(const IDqInputChannel::TPtr& output) {
         TVector<std::pair<i32, ui64>> rows;
         i32 sum = 0;
-        while (ReceiveData([&](const NUdf::TUnboxedValue& value, ui32 column) {
-            if (column == 0) {
-                sum = value.Get<i32>();
-            } else {
-                rows.emplace_back(sum, value.Get<ui64>());
-            }
-            return true;
-        }, [](TInstant) {}, [] {}, output)) {}
+        while (ReceiveData(
+            [&](const NUdf::TUnboxedValue& value, ui32 column) {
+                if (column == 0) {
+                    sum = value.Get<i32>();
+                } else {
+                    rows.emplace_back(sum, value.Get<ui64>());
+                }
+                return true;
+            },
+            [](TInstant) {
+            },
+            [] {
+            }, output)) {
+        }
         return rows;
     }
 
@@ -1566,7 +1619,9 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         auto donorOutput = AddDummyOutputChannel(donorTask, OutputChannelId, RowType);
         auto [donor, donorSource] = StartRestoreActor(donorTask, InputTaskId, 3, false);
         RegisterRestoreCoordinator(donor);
-        WaitFor([&] { return donorSource->Rows.load() == 3; }, "donor source did not emit its rows");
+        WaitFor([&] {
+            return donorSource->Rows.load() == 3;
+        }, "donor source did not emit its rows");
         ActorSystem.Send(donor, CheckpointCoordinator,
             new TEvDqCompute::TEvInjectCheckpoint(CheckpointId, CoordinatorGeneration, NDqProto::CHECKPOINT_TYPE_SNAPSHOT));
         auto save = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvSaveTaskState>(storage);
@@ -1627,7 +1682,7 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         UNIT_ASSERT_VALUES_EQUAL(record.GetTaskId(), ThisTaskId);
         UNIT_ASSERT_VALUES_EQUAL(record.GetCheckpoint().GetId(), CheckpointId);
         UNIT_ASSERT_VALUES_EQUAL(source->LoadCalls.load(), sourceRestore == ESourceRestore::Empty ? 0 : 1);
-        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0); // Restore must not start execution.
+        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0);   // Restore must not start execution.
 
         ActorSystem.Send(actor, CheckpointCoordinator, new TEvDqCompute::TEvRun());
         const auto rows = ReadHoppingOutput(output);
@@ -1645,17 +1700,17 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         NDqProto::TDqTask task;
         GenerateSumProgram(task, /* intervalUs */ 30);
         auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
-        auto [actor, source] = StartRestoreActor(task, ThisTaskId, 5, true, {95, 100, 110, 130, 140});
+        auto [actor, source] = StartRestoreActor(task, ThisTaskId, 5, true, { 95, 100, 110, 130, 140 });
         RegisterRestoreCoordinator(actor);
 
         // Same wire format as the recovery planner: only the lower bound, no keys or aggregate data.
         // Construct it here so these tests also work without the FQ recovery-planner changes.
         TString hoppingState;
         WriteUi32(hoppingState, static_cast<ui32>(EMkqlStateType::SIMPLE_BLOB));
-        WriteUi32(hoppingState, 3); // MultiHopping state version with MinWindowStartIndex.
-        WriteUi64(hoppingState, 10); // Minimum window start: 100 us / 10 us hop.
-        WriteUi32(hoppingState, 0); // Empty key map.
-        WriteBool(hoppingState, false); // Not finished.
+        WriteUi32(hoppingState, 3);   // MultiHopping state version with MinWindowStartIndex.
+        WriteUi64(hoppingState, 10);   // Minimum window start: 100 us / 10 us hop.
+        WriteUi32(hoppingState, 0);   // Empty key map.
+        WriteBool(hoppingState, false);   // Not finished.
         TString programState;
         TNodeStateHelper::AddNodeState(programState, hoppingState);
 
@@ -1667,15 +1722,15 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         sourcePlan.SetInputIndex(0);
         sourcePlan.SetStateType(restoreSource ? STATE_TYPE_FOREIGN : STATE_TYPE_EMPTY);
         if (restoreSource) {
-            sourcePlan.SetState("1"); // Start reading at the event exactly on the 100 us boundary.
+            sourcePlan.SetState("1");   // Start reading at the event exactly on the 100 us boundary.
             sourcePlan.SetStateVersion(TCheckpointedSource::StateVersion);
         }
         ActorSystem.Send(actor, CheckpointCoordinator,
             new TEvDqCompute::TEvRestoreFromCheckpoint(CheckpointId, CoordinatorGeneration, CoordinatorGeneration, plan));
         auto restored = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(CheckpointCoordinator);
         UNIT_ASSERT(restored);
-        UNIT_ASSERT_C(restored->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK,
-            restored->Get()->Record.DebugString());
+        UNIT_ASSERT_C(
+            restored->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK, restored->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(source->LoadCalls.load(), restoreSource ? 1 : 0);
 
@@ -1683,7 +1738,7 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
         const auto rows = ReadHoppingOutput(output);
         // Only complete windows starting at or after 100 us, including for the new key.
         // The event at 95 us must not contribute, while the one at 100 us must contribute.
-        const TVector<std::pair<i32, ui64>> expected = {{5, 130}, {7, 140}, {9, 150}, {9, 160}, {5, 170}};
+        const TVector<std::pair<i32, ui64>> expected = { { 5, 130 }, { 7, 140 }, { 9, 150 }, { 9, 160 }, { 5, 170 } };
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), expected.size());
         for (size_t i = 0; i < rows.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(rows[i].first, expected[i].first);
@@ -1693,16 +1748,19 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
-    Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) { }
+    Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) {
+    }
 
     Y_UNIT_TEST_F(Basic, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         auto seed = GetRandomSeed();
         std::mt19937 rng(seed);
-        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16); ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16); ++t) {
+            sizes.push_back(1 + rng() % 734);
+        }
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
@@ -1717,11 +1775,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
     Y_UNIT_TEST_F(StatsMode, TSyncComputeActorTestFixture) {
         for (auto statsMode : {
-                NDqProto::DQ_STATS_MODE_NONE,
-                NDqProto::DQ_STATS_MODE_BASIC,
-                NDqProto::DQ_STATS_MODE_FULL,
-                NDqProto::DQ_STATS_MODE_PROFILE,
-                }) {
+                 NDqProto::DQ_STATS_MODE_NONE, NDqProto::DQ_STATS_MODE_BASIC, NDqProto::DQ_STATS_MODE_FULL, NDqProto::DQ_STATS_MODE_PROFILE,
+             }) {
             std::mt19937 rng;
             BasicMultichannelTests(5, 1, true, 1, rng, statsMode);
         }
@@ -1730,8 +1785,10 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransformMultichannel, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
-        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
-        for (ui32 numChannels: { 1, 2, 11 }) {
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8); ++t) {
+            sizes.push_back(1 + rng() % 734);
+        }
+        for (ui32 numChannels : { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
                 for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                     for (ui32 packets : sizes) {
@@ -1740,6 +1797,60 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST_F(WatermarkPassesThroughOutputTransform, TSyncComputeActorTestFixture) {
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        AddDummyInputChannel(task, InputChannelId);
+        AddMockSinkOutput(task);
+        auto* transform = task.MutableOutputs(0)->MutableTransform();
+        transform->SetType("BarrierTransform");
+        transform->SetInputType(SerializeNode(RowType, TypeEnv));
+        transform->SetOutputType(SerializeNode(RowType, TypeEnv));
+        auto actor = CreateTestSyncComputeActor(task);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        ui32 seqNo = 0;
+        SendWatermark(actor, InputChannelId, TInstant::Seconds(1), true, &seqNo);
+        WaitForSinkFinished();
+        UNIT_ASSERT_VALUES_EQUAL(SinkState->TransformWatermark.load(), 1000000);
+    }
+
+    Y_UNIT_TEST_F(CheckpointCannotBypassOutputTransformIntoSink, TSyncComputeActorTestFixture) {
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        task.SetId(ThisTaskId);
+        AddDummyInputChannel(task, InputChannelId);
+        AddMockSinkOutput(task);
+        auto* transform = task.MutableOutputs(0)->MutableTransform();
+        transform->SetType("BarrierTransform");
+        transform->SetInputType(SerializeNode(RowType, TypeEnv));
+        transform->SetOutputType(SerializeNode(RowType, TypeEnv));
+        auto actor = CreateTestSyncComputeActor(task);
+        ActorSystem.EnableScheduleForActor(actor, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        RegisterCheckpointCoordinator(actor, CoordinatorGeneration);
+        auto event = MakeHolder<TEvDqCompute::TEvChannelData>();
+        event->Record.SetSeqNo(1);
+        auto* data = event->Record.MutableChannelData();
+        data->SetChannelId(InputChannelId);
+        data->MutableCheckpoint()->SetId(CheckpointId);
+        data->MutableCheckpoint()->SetGeneration(CoordinatorGeneration);
+        ActorSystem.Send(actor, SrcEdgeActor[InputChannelId], event.Release());
+        WaitFor([&] {
+            return SinkState->TransformCheckpoints.load() == 1;
+        }, "transform did not receive barrier");
+        // Release the barrier; direct injection plus forwarding would yield two.
+        ActorSystem.Send(SinkState->TransformActor, EdgeActor, new NActors::TEvents::TEvWakeup());
+        WaitFor([&] {
+            return SinkState->SinkCheckpoints.load() >= 1;
+        }, "sink did not receive forwarded barrier");
+        AbortComputeActor(actor);
+        UNIT_ASSERT_VALUES_EQUAL(SinkState->SinkCheckpoints.load(), 1);
     }
 
     // Reproduces hang of compute actor after sending a watermark into a sink (async output).
@@ -1765,7 +1876,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
         auto syncCA = CreateTestSyncComputeActor(task);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
 
         ui32 seqNo = 0;
         SendWatermark(syncCA, InputChannelId, TInstant::Seconds(1), /* finish */ true, &seqNo);
@@ -1787,7 +1898,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
         auto syncCA = CreateTestSyncComputeActor(task);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
 
         constexpr ui32 rows = 3;
         ui32 seqNo = 0;
@@ -1798,9 +1909,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
             NDqProto::TWatermark watermark;
             watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
             dqOutputChannel->Push(std::move(watermark));
-            return std::pair { dqOutputChannel, &seqNo };
-        },
-        syncCA, /* packets */ 1, /* waitIntermediateAcks */ true);
+            return std::pair{ dqOutputChannel, &seqNo };
+        }, syncCA, /* packets */ 1, /* waitIntermediateAcks */ true);
 
         WaitForSinkFinished();
         UNIT_ASSERT_EQUAL_C(SinkState->Rows.load(), rows, "expected " << rows << " rows, got " << SinkState->Rows.load());
@@ -1841,7 +1951,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
         auto syncCA = CreateTestSyncComputeActor(task, memoryLimits);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap, sent before DoBootstrap()
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap, sent before DoBootstrap()
 
         const auto state = AbortComputeActor(syncCA);
         UNIT_ASSERT_C(state.GetStatusCode() == NYql::NDqProto::StatusIds::ABORTED, state.ShortDebugString());
@@ -1882,8 +1992,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorCheckpointsTest) {
         SendCommitState(syncCA, CheckpointId, CoordinatorGeneration);
 
         ExpectStateCommitted(CheckpointId, CoordinatorGeneration);
-        UNIT_ASSERT_VALUES_EQUAL_C(SinkState->CommitStateCalls.load(), 1,
-            "sink must be asked to commit exactly once per checkpoint");
+        UNIT_ASSERT_VALUES_EQUAL_C(SinkState->CommitStateCalls.load(), 1, "sink must be asked to commit exactly once per checkpoint");
     }
 
     Y_UNIT_TEST_F(CheckpointCommitWaitsForAsyncSink, TSyncComputeActorTestFixture) {
@@ -1992,7 +2101,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorCheckpointsTest) {
         auto syncCA = StartCAForCheckpointing(task, /* withSink */ true);
 
         RegisterCheckpointCoordinator(syncCA, CoordinatorGeneration);
-        SendCommitState(syncCA, CheckpointId, CoordinatorGeneration, CoordinatorGeneration - 1); // Emulate restoring from pending commit checkpoint
+        SendCommitState(
+            syncCA, CheckpointId, CoordinatorGeneration, CoordinatorGeneration - 1);   // Emulate restoring from pending commit checkpoint
 
         WaitForSinkCommitCalls(1);
         ExpectNoStateCommitted();
@@ -2002,4 +2112,4 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorCheckpointsTest) {
     }
 }
 
-} //namespace NYql::NDq
+}   //namespace NYql::NDq

@@ -21,6 +21,7 @@ struct TSecretSettingsNames {
 };
 
 static const TVector<TSecretSettingsNames> EDS_SECRETS_SETTINGS = {
+    TSecretSettingsNames("tvm_secret"),
     TSecretSettingsNames("token_secret"),
     TSecretSettingsNames("password_secret"),
     TSecretSettingsNames("service_account_secret"),

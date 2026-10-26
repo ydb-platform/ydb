@@ -84,7 +84,7 @@ const TColumnShard* WaitForShard(TCopyTableDropTestController& controller, TTest
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
     }
     UNIT_ASSERT_VALUES_EQUAL(controller.GetShardActualsCount(), 1);
-    return controller.GetShard();
+    return controller.GetAnyShard();
 }
 
 void AssertReadOnlySnapshotState(const TColumnShard& shard, const NOlap::TSnapshot& snapshot, const bool expectedPresent) {
@@ -127,7 +127,7 @@ bool WaitForPathsToDropEmpty(TCopyTableDropTestController& controller, TTestBasi
         }
         runtime.SimulateSleep(TDuration::Seconds(1));
         Y_UNUSED(controller.WaitCleaning(TDuration::Seconds(1), &runtime));
-        if (const auto* shard = controller.GetShard()) {
+        if (const auto* shard = controller.GetAnyShard()) {
             if (shard->GetTablesManager().GetPathsToDrop().empty()) {
                 return true;
             }

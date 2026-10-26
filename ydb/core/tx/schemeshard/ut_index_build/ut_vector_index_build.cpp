@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
@@ -153,7 +153,131 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(9)});
+    }
+
+    Y_UNIT_TEST(DeltaScanAppliesWritesDuringBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Block the final posting level, so the new write below happens after the
+        // build snapshot but before the index is switched to WriteOnly.
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateInvalid)});
+
+        // This row is not covered by the build snapshot and must be applied by the delta scan.
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 201);
+
+        localKBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        const auto postingRows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(postingRows, 201);
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(PrefixedDeltaScanAppliesWritesDuringBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // WriteVectorTableRows sets prefix = key % 17, so keys [0, 16) cover prefixes [0, 15).
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 16);
+
+        // Block the final posting level, so the write below happens after the build
+        // snapshot but before the index is switched to WriteOnly.
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"prefix", "embedding"});
+
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateInvalid)});
+
+        // Key 33 has prefix 16 (33 % 17), which is not present in the build snapshot.
+        // The prefix differs from the key, so the delta scan must read the prefix column
+        // instead of taking the leading key columns. It must insert both a new posting
+        // row and a new prefix row.
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 33, 34);
+
+        localKBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            NLs::IndexKeys({"prefix", "embedding"})});
+
+        const auto postingRows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(postingRows, 17);
+
+        const auto prefixRows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPrefixTable");
+        UNIT_ASSERT_VALUES_EQUAL(prefixRows, 17);
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
     void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
@@ -740,7 +864,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
@@ -857,7 +981,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(8)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(9)});
     }
 
     std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> DoCreateIndexWithShardedLevel1(
@@ -977,7 +1101,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // Now wait for the index build
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
 
         // Check row count in the posting table
         {
@@ -1126,7 +1250,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // Now wait for the index build
         env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
 
         // Check row count in the posting table
         {
@@ -1327,7 +1451,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 NLs::PathVersionEqual(4)});
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table/index1", true, true, true), {
                 NLs::PathExist,
-                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly)});
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateInvalid)});
         }
         localKBlocker.Stop().Unblock();
 
@@ -2571,7 +2695,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // Now wait for the index build
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(7)});
 
         // Check row count in the posting table
         {

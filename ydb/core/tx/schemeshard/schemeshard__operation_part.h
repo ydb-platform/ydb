@@ -692,6 +692,9 @@ ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxStat
 ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreatePrepareVectorIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreatePrepareVectorIndex(TOperationId id, TTxState::ETxState state);
+
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 

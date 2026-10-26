@@ -224,5 +224,8 @@ enum EOperationType {
     ESchemeOpCreateTestShardSet = 138;
     ESchemeOpDropTestShardSet = 139;
 
+    // Vector index consistent build: take a main table snapshot and switch the index to WriteOnly
+    ESchemeOpPrepareVectorIndex = 140;
+
     // Some entries are grouped by semantics, so are out of order
 }

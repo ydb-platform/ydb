@@ -483,8 +483,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);
 
-        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
-        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+        // As in the new build, only the posting table keeps its data in the shadow
+        // until the index is applied; level/prefix are written to the user table.
+        const bool needShadow = implTableDesc.GetName() == NTableIndex::NKMeans::PostingTable;
+        implTableDesc.MutablePartitionConfig()->SetShadowData(needShadow);
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(needShadow);
 
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
         modifyScheme.SetInternal(true);
@@ -980,6 +983,30 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     modifyScheme.MutablePrepareIndexValidation()->SetTableName(NTableIndex::ImplTable);
 
     YDB_LOG_NOTICE("PrepareValidationPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareVectorIndexPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildVectorIndex());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpPrepareVectorIndex);
+    modifyScheme.SetInternal(true);
+    modifyScheme.SetWorkingDir(TPath::Init(buildInfo.TablePathId, ss).PathString());
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+    modifyScheme.MutablePrepareVectorIndex()->SetTableName(buildInfo.GetBuildIndexName());
+
+    YDB_LOG_NOTICE("PrepareVectorIndexPropose",
         {"buildId", buildInfo.Id},
         {"state", buildInfo.State},
         {"propose", propose->Record.ShortDebugString()},
@@ -2523,6 +2550,10 @@ private:
             {"buildInfo", buildInfo.DebugString()},
         );
 
+        if (buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta) {
+            return FillVectorIndexDelta(buildInfo);
+        }
+
         if (buildInfo.KMeans.Level == 1) {
             if (buildInfo.KMeans.NeedVectorAutodetect) {
                 if (!DoVectorAutodetect(txc, buildInfo, true)) {
@@ -2623,10 +2654,113 @@ private:
         return false;
     }
 
+    void EnsureDeltaSnapshots(TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.DeltaSnapshotTxId) {
+            // The prepare operation's tx id is kept in ApplyTxId until delta scans finish.
+            buildInfo.DeltaSnapshotTxId = buildInfo.ApplyTxId;
+        }
+        Y_ENSURE(buildInfo.DeltaSnapshotTxId);
+
+        if (!buildInfo.DeltaSnapshotStep) {
+            auto it = Self->SnapshotsStepIds.find(buildInfo.DeltaSnapshotTxId);
+            Y_ENSURE(it != Self->SnapshotsStepIds.end());
+            buildInfo.DeltaSnapshotStep = it->second;
+        }
+        Y_ENSURE(buildInfo.DeltaSnapshotStep);
+
+        Y_ENSURE(buildInfo.InitiateTxId);
+        Y_ENSURE(Self->SnapshotsStepIds.contains(buildInfo.InitiateTxId));
+    }
+
+    void SendDeltaKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
+        EnsureDeltaSnapshots(buildInfo);
+
+        auto ev = MakeHolder<TEvDataShard::TEvDeltaKMeansRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
+
+        ev->Record.SetFromSnapshotTxId(ui64(buildInfo.InitiateTxId));
+        ev->Record.SetFromSnapshotStep(ui64(Self->SnapshotsStepIds.at(buildInfo.InitiateTxId)));
+        ev->Record.SetToSnapshotTxId(ui64(buildInfo.DeltaSnapshotTxId));
+        ev->Record.SetToSnapshotStep(ui64(buildInfo.DeltaSnapshotStep));
+
+        const auto& settings = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        *ev->Record.MutableSettings() = settings;
+
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
+        ev->Record.SetOutputName(path.Dive(NTableIndex::NKMeans::PostingTable).PathString());
+        ev->Record.SetLevelName(path.Rise().Dive(NTableIndex::NKMeans::LevelTable).PathString());
+        if (buildInfo.IsBuildPrefixedVectorIndex()) {
+            ev->Record.SetPrefixName(path.Rise().Dive(NTableIndex::NKMeans::PrefixTable).PathString());
+            Y_ENSURE(buildInfo.IndexColumns.size() >= 2);
+            ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumnNames(buildInfo.IndexColumns[i]);
+            }
+        }
+
+        ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
+        *ev->Record.MutableDataColumns() = {
+            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
+        };
+
+        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
+        ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
+        ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
+
+        auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
+        {
+            auto& shardStatus = buildInfo.Shards.at(shardIdx);
+            if (shardStatus.LastKeyAck) {
+                TSerializedCellVec lastKey{shardStatus.LastKeyAck};
+                TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
+                range.Serialize(*ev->Record.MutableKeyRange());
+            } else {
+                shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+            }
+        }
+
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvDeltaKMeansRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
+    bool FillVectorIndexDelta(TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta);
+
+        EnsureDeltaSnapshots(buildInfo);
+        Y_ENSURE(!buildInfo.Shards.empty());
+
+        if (NoShardsAdded(buildInfo)) {
+            AddAllShards(buildInfo);
+        }
+
+        const bool done = SendToShards(buildInfo, [&](TShardIdx idx) { SendDeltaKMeansRequest(idx, buildInfo); })
+            && buildInfo.DoneShards.size() == buildInfo.Shards.size();
+
+        if (done) {
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndexDelta Done ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
+        }
+
+        return done;
+    }
+
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Start ",
             {"buildInfo", buildInfo.DebugString()},
         );
+
+        if (buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta) {
+            return FillVectorIndexDelta(buildInfo);
+        }
 
         // (Sample -> Recompute* -> Reshuffle -> UploadClusters)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample ||
@@ -3488,6 +3622,22 @@ public:
                     nextState = buildInfo.IsBuildColumns()
                         ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                         : TIndexBuildInfo::EState::Cancellation_Applying;
+                } else if (fillRes && buildInfo.IsBuildVectorIndex()) {
+                    if (buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta) {
+                        // Delta scan finished: release the transaction id held for the
+                        // ToSnapshot and proceed to the regular Apply.
+                        NIceDb::TNiceDb db(txc.DB);
+                        buildInfo.ApplyTxId = {};
+                        buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                        buildInfo.ApplyTxDone = false;
+                        buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+                        Self->PersistBuildIndexApplyTx(db, buildInfo);
+                        Self->PersistBuildIndexState(db, buildInfo);
+                    } else {
+                        // All levels are built: take a main table snapshot and switch
+                        // the index to WriteOnly.
+                        nextState = TIndexBuildInfo::EState::PrepareVectorIndex;
+                    }
                 }
 
                 ClearAfterFill(ctx, buildInfo);
@@ -3495,7 +3645,9 @@ public:
                 Progress(BuildId);
 
                 // make final bill
-                Bill(buildInfo);
+                if (nextState != TIndexBuildInfo::EState::PrepareVectorIndex) {
+                    Bill(buildInfo);
+                }
             } else {
                 AskToScheduleBilling(buildInfo);
             }
@@ -3578,7 +3730,8 @@ public:
             break;
         case TIndexBuildInfo::EState::LockBuild:
             Y_ENSURE(buildInfo.IsBuildVectorIndex() && (buildInfo.KMeans.Level > 1 ||
-                buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter) ||
+                buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter ||
+                buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta) ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation ||
@@ -3644,6 +3797,35 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::PrepareVectorIndex: {
+            Y_ENSURE(buildInfo.IsBuildVectorIndex());
+            if (buildInfo.ApplyTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), PrepareVectorIndexPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.ApplyTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+            } else {
+                NIceDb::TNiceDb db(txc.DB);
+
+                // The prepare transaction id is kept in ApplyTxId: it identifies the
+                // ToSnapshot until the delta scan completes (and survives restarts).
+                buildInfo.DeltaSnapshotTxId = buildInfo.ApplyTxId;
+                buildInfo.DeltaSnapshotStep = Self->SnapshotsStepIds.at(buildInfo.ApplyTxId);
+                Y_ENSURE(buildInfo.DeltaSnapshotStep);
+                buildInfo.SubState = TIndexBuildInfo::ESubState::VectorIndexDelta;
+                Self->PersistBuildIndexState(db, buildInfo);
+
+                // Drop the build-table shard ranges: FillIndex will re-init them
+                // from the main table (GetShardsPath is delta-aware). This also
+                // resets LastKeyAck, so each delta scan starts from the shard begin.
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+
+                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                Progress(BuildId);
+            }
+            break;
+        }
         case TIndexBuildInfo::EState::PrepareValidation:
             Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex);
             if (buildInfo.ApplyTxId == InvalidTxId) {
@@ -3871,6 +4053,10 @@ public:
         static constexpr std::string_view LogPrefix = "";
         TString prevBound = TSerializedCellVec::Serialize(TVector<TCell>(tableColumns.Keys.size()));
 
+        const bool addParents = buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
+            buildInfo.SubState != TIndexBuildInfo::ESubState::VectorIndexDelta &&
+            buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter;
+
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(x->ShardIdx));
@@ -3878,8 +4064,7 @@ public:
             // it will describe the first and the last index keys for further validation.
             TSerializedTableRange shardRange = (buildInfo.IsValidatingUniqueIndex()
                 ? TSerializedTableRange() : TSerializedTableRange(prevBound, x->EndOfRange, true, false));
-            if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
-                buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
+            if (addParents) {
                 YDB_LOG_DEBUG(LogPrefix << "InitiateShard",
                     {"shardIdx", x->ShardIdx},
                     {"shardrange", buildInfo.KMeans.RangeToDebugStr(shardRange)},
@@ -3890,7 +4075,9 @@ public:
                     {"shardIdx", x->ShardIdx},
                 );
             }
-            auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
+            TIndexBuildShardStatus status{std::move(shardRange), ""};
+            status.SeqNoRound = (buildInfo.SubState == TIndexBuildInfo::ESubState::VectorIndexDelta ? (ui64)1 << 32 : 0);
+            auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, status);
             Y_ENSURE(emplaced);
             prevBound = x->EndOfRange;
 
@@ -4374,6 +4561,33 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     }
 };
 
+struct TSchemeShard::TIndexBuilder::TTxReplyDeltaKMeans: public TTxShardReply<TEvDataShard::TEvDeltaKMeansResponse> {
+    explicit TTxReplyDeltaKMeans(TSelf* self, TEvDataShard::TEvDeltaKMeansResponse::TPtr& response)
+        : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
+    {
+    }
+
+    void UpdateLastKeyAck(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo&, const TString& lastKeyAck) override {
+        // LastKeyAck contains main table key cells, but GetShardsPath may already point
+        // to a build table at this point, so skip the generic monotonicity check.
+        if (!lastKeyAck.empty()) {
+            shardStatus.LastKeyAck = lastKeyAck;
+        }
+    }
+
+    void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
+    }
+
+    void HandleDone(NIceDb::TNiceDb&, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
+    }
+};
+
 struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardReply<TEvDataShard::TEvReshuffleKMeansResponse> {
     explicit TTxReplyReshuffleKMeans(TSelf* self, TEvDataShard::TEvReshuffleKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
@@ -4719,6 +4933,7 @@ public:
         case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
+        case TIndexBuildInfo::EState::PrepareVectorIndex:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -4961,6 +5176,7 @@ public:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::PrepareValidation:
+        case TIndexBuildInfo::EState::PrepareVectorIndex:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
@@ -5226,6 +5442,7 @@ public:
         case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
+        case TIndexBuildInfo::EState::PrepareVectorIndex:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -5339,6 +5556,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvFilterKMeansResponse:
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local) {
     return new TIndexBuilder::TTxReplyLocalKMeans(this, local);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvDeltaKMeansResponse::TPtr& delta) {
+    return new TIndexBuilder::TTxReplyDeltaKMeans(this, delta);
 }
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix) {

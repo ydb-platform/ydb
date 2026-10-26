@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run ygdiff tool",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/yandex_specific/autocheck/ygdiff/resources.json"
+        }
+    }
+}

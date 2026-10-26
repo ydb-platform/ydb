@@ -4,6 +4,12 @@
 
 namespace NKikimr::NStorage {
 
+    namespace {
+        bool IsTimedScatterRequest(const NKikimrBlobStorage::TEvNodeConfigScatter& request) {
+            return request.HasCollectConfigs() || request.HasProposeStorageConfig();
+        }
+    }
+
     void TDistributedConfigKeeper::IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request,
             std::span<const TNodeIdentifier> targetedNodes) {
         ui64 cookie = NextScatterCookie++;
@@ -12,6 +18,10 @@ namespace NKikimr::NStorage {
         }
         if (std::holds_alternative<TActorId>(origin)) {
             Y_ABORT_UNLESS(std::get<TActorId>(origin));
+        }
+        const bool timed = IsTimedScatterRequest(request);
+        if (timed) {
+            request.SetTimeoutUs(Min<ui64>(request.HasTimeoutUs() ? request.GetTimeoutUs() : 20'000'000, 20'000'000));
         }
         YDB_LOG_DEBUG("IssueScatterTask",
             {"marker", "NWDC21"},
@@ -25,6 +35,16 @@ namespace NKikimr::NStorage {
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
+        if (timed && !task.Request.GetTimeoutUs()) {
+            CheckCompleteScatterTask(it);
+            return;
+        }
+        if (timed) {
+            const ui64 timeoutUs = task.Request.GetTimeoutUs();
+            Schedule(TDuration::MicroSeconds(Min<ui64>(10'000'000, timeoutUs / 2)),
+                     new TEvPrivate::TEvScatterTaskTimeout(cookie, true));
+            Schedule(TDuration::MicroSeconds(timeoutUs), new TEvPrivate::TEvScatterTaskTimeout(cookie, false));
+        }
         PrepareScatterTask(cookie, task);
         if (!std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) { // issue scatter task downward unless this one is targeted
             for (auto& [nodeId, info] : DirectBoundNodes) {
@@ -40,10 +60,23 @@ namespace NKikimr::NStorage {
         CheckCompleteScatterTask(it);
     }
 
+    void TDistributedConfigKeeper::PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task,
+            ui32 subtreeHeight, TEvScatter& request) {
+        request.CopyFrom(task.Request);
+        request.SetCookie(cookie);
+        if (IsTimedScatterRequest(task.Request)) {
+            const TMonotonic deadline = task.StartTimestamp + TDuration::MicroSeconds(task.Request.GetTimeoutUs());
+            const TMonotonic now = TActivationContext::Monotonic();
+            const ui64 remainingUs = now < deadline ? (deadline - now).MicroSeconds() : 0;
+            const ui64 height = ui64(subtreeHeight) + 1;
+            const ui64 localBudgetUs = remainingUs > 10'000'000 ? 10'000'000 : 0;
+            request.SetTimeoutUs(localBudgetUs + (remainingUs - localBudgetUs) * height / (height + 1));
+        }
+    }
+
     void TDistributedConfigKeeper::IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task) {
         auto ev = std::make_unique<TEvNodeConfigScatter>();
-        ev->Record.CopyFrom(task.Request);
-        ev->Record.SetCookie(cookie);
+        PrepareScatterTaskRequest(cookie, task, 0, ev->Record);
         ev->Record.SetTargeted(true);
         auto interconnectSessionId = SubscribeToPeerNode(nodeId, TActorId());
         auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, 0);
@@ -72,10 +105,53 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::ExpireScatterTaskLocalContribution(TScatterTask& task) {
+        task.LocalContributionExpired = true;
+        task.AsyncOperationsPending = 0;
+        if (const ui64 cookie = std::exchange(task.PersistCookie, 0)) {
+            CancelPersistConfig(cookie);
+        }
+        if (const TActorId actorId = std::exchange(task.ConfigReaderActor, {})) {
+            Send(actorId, new TEvents::TEvPoison);
+        }
+        if (const TActorId actorId = std::exchange(task.TargetedPropositionValidationActor, {})) {
+            Send(actorId, new TEvents::TEvPoison);
+        }
+    }
+
+    void TDistributedConfigKeeper::Handle(TEvPrivate::TEvScatterTaskTimeout::TPtr ev) {
+        const auto it = ScatterTasks.find(ev->Get()->Cookie);
+        if (it == ScatterTasks.end()) {
+            return;
+        }
+        TScatterTask& task = it->second;
+        ExpireScatterTaskLocalContribution(task);
+        if (!ev->Get()->LocalOnly) {
+            for (const ui32 nodeId : std::exchange(task.PendingNodes, {})) {
+                if (const auto jt = DirectBoundNodes.find(nodeId); jt != DirectBoundNodes.end()) {
+                    Y_ABORT_UNLESS(jt->second.ScatterTasks.erase(it->first) == 1);
+                    if (!jt->second.ReportedSubtreeHeight) {
+                        jt->second.ExpiredScatterTasks.insert(it->first);
+                    }
+                } else {
+                    Y_ABORT_UNLESS(AddedNodesScatterTasks.erase({nodeId, it->first}) == 1);
+                    UnsubscribeQueue.insert(nodeId);
+                }
+            }
+        }
+        CheckCompleteScatterTask(it);
+    }
+
     void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
+        if (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty()
+            && IsTimedScatterRequest(task.Request)) {
+            return;
+        }
         auto ev = std::make_unique<TEvNodeConfigScatter>();
-        ev->Record.CopyFrom(task.Request);
-        ev->Record.SetCookie(cookie);
+        PrepareScatterTaskRequest(cookie, task, info.GetSubtreeHeight(), ev->Record);
+        if (ev->Record.HasCollectConfigs() && !info.SupportsMetadataOnlyCollect) {
+            ev->Record.MutableCollectConfigs()->SetMetadataOnly(false);
+        }
         SendEvent(nodeId, info, std::move(ev));
         info.ScatterTasks.insert(cookie);
         task.PendingNodes.insert(nodeId);
@@ -139,6 +215,7 @@ namespace NKikimr::NStorage {
             {"binding", binding});
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
+            ExpireScatterTaskLocalContribution(task);
             auto getAborted = [&] {
                 auto ev = std::make_unique<TEvNodeConfigGather>();
                 task.Response.SetAborted(true);
@@ -168,9 +245,13 @@ namespace NKikimr::NStorage {
                     TBoundNode& info = it->second;
                     const size_t n = info.ScatterTasks.erase(cookie);
                     Y_ABORT_UNLESS(n == 1);
+                    if (!info.ReportedSubtreeHeight && IsTimedScatterRequest(task.Request)) {
+                        info.ExpiredScatterTasks.insert(cookie);
+                    }
                 } else {
                     const size_t n = AddedNodesScatterTasks.erase({nodeId, cookie});
                     Y_ABORT_UNLESS(n == 1);
+                    UnsubscribeQueue.insert(nodeId);
                 }
             }
         }
@@ -209,6 +290,9 @@ namespace NKikimr::NStorage {
         const auto it = DirectBoundNodes.find(senderNodeId);
 
         if (it != DirectBoundNodes.end() ? it->second.Expected(*ev) : AddedNodesScatterTasks.erase({senderNodeId, cookie})) {
+            if (it != DirectBoundNodes.end() && it->second.ExpiredScatterTasks.erase(cookie)) {
+                return;
+            }
             if (const auto jt = ScatterTasks.find(cookie); jt != ScatterTasks.end()) {
                 if (it != DirectBoundNodes.end()) {
                     const size_t n = it->second.ScatterTasks.erase(cookie);
@@ -216,7 +300,12 @@ namespace NKikimr::NStorage {
                 }
 
                 TScatterTask& task = jt->second;
-                record.Swap(&task.CollectedResponses.emplace_back());
+                const bool unexpectedMetadata = record.HasCollectConfigs() && record.GetCollectConfigs().GetMetadataOnly()
+                    && (!task.Request.HasCollectConfigs() || !task.Request.GetCollectConfigs().GetMetadataOnly()
+                        || it == DirectBoundNodes.end() || !it->second.SupportsMetadataOnlyCollect);
+                if (!unexpectedMetadata) {
+                    record.Swap(&task.CollectedResponses.emplace_back());
+                }
                 const size_t m = task.PendingNodes.erase(senderNodeId);
                 Y_ABORT_UNLESS(m == 1);
                 CheckCompleteScatterTask(jt);

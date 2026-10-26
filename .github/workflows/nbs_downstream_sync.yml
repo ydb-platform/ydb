@@ -1,0 +1,37 @@
+name: NBS downstream sync
+
+on:
+  schedule:
+    # Four hours after NBS stable sync (20:00 UTC / 23:00 MSK).
+    - cron: "0 0 * * *"   # At 00:00 UTC / 03:00 MSK the following day
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            .github
+            ydb/ci/
+
+      - uses: ./.github/actions/rightlib_sync
+        with:
+          base_branch: nbs2-26-3-1
+          head_branch: nbs-26-3-1
+          label: sync-nbs
+          repository: ${{ github.repository }}
+          gh_personal_access_token: ${{ env.GH_TOKEN }}

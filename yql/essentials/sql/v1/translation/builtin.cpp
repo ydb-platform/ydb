@@ -10,7 +10,7 @@
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
-#include <yql/essentials/core/sql_types/spark_functions.h>
+#include <yql/essentials/core/spark_meta/functions.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -4780,10 +4780,10 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, const TFu
         };
     }
 
-    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const TString& bindingName) {
-        if (!bindingName.empty()) {
+    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const NYql::NSpark::TFunction& function) {
+        if (function.IsAggregate || !function.BindingName.empty()) {
             map[TString("Spark::") + name] = {
-                .Kind = "Normal",
+                .Kind = function.IsAggregate ? "Agg" : "Normal",
             };
         }
     });

@@ -1,22 +1,13 @@
 YQL_UDF_CONTRIB(histogram_udf)
 
-    YQL_ABI_VERSION(
-        2
-        28
-        0
-    )
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-    SRCS(
-        histogram_udf.cpp
-    )
+INCLUDE(ya.make.inc)
 
-    PEERDIR(
-        library/cpp/histogram/adaptive
-    )
-
-    END()
+END()
 
 RECURSE_FOR_TESTS(
     test
 )
-

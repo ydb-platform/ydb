@@ -67,17 +67,21 @@ public:
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
                     TSubDomainKey servicedSubDomain,
-                    TString error)
+                    TString error,
+                    std::optional<TString> implicitPileName = std::nullopt)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
                 , Error(std::move(error))
+                , ImplicitPileName(std::move(implicitPileName))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
             TString Error;
+            // name of the pile of nodes without pile name (in bridged cluster converted from non-bridged one), if any
+            std::optional<TString> ImplicitPileName;
         };
 
         struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};

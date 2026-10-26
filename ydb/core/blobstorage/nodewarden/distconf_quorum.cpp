@@ -122,6 +122,7 @@ namespace NKikimr::NStorage {
             TNodeLocation location(node.GetLocation());
             const auto bridgePileId = ResolveNodePileId(registry, location);
             if (!bridgePileId) {
+                Y_DEBUG_ABORT_S("can't resolve bridge pile Location# " << location.ToString()); // config is inconsistent
                 error = true;
             } else if (const auto it = status.find(*bridgePileId); it != status.end()) {
                 auto& [ok, err] = it->second[location.GetDataCenterId()];
@@ -287,16 +288,20 @@ namespace NKikimr::NStorage {
                     return false;
                 }
                 const auto& cs = config.GetClusterState();
-                const auto& ids = info->GetBridgeGroupIds();
-                if (ids.size() != cs.PerPileStateSize()) {
+                Y_ABORT_UNLESS(info->Group);
+                const auto& state = info->Group->GetBridgeGroupState();
+                if (cs.PerPileStateSize() < state.PileSize()) {
                     Y_DEBUG_ABORT();
                     return false;
                 }
-                for (size_t i = 0; i < ids.size(); ++i) {
-                    bridgedGroups[ids[i]] = singleBridgePileId
-                        ? TBridgePileId::FromPileIndex(i) == singleBridgePileId
-                        : NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum;
-                }
+                NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    const auto pileState = cs.GetPerPileState(bridgePileId.GetPileIndex());
+                    bridgedGroups[TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId)] =
+                        singleBridgePileId
+                            ? bridgePileId == singleBridgePileId
+                            : NBridge::PileStateTraits(pileState).RequiresConfigQuorum;
+                });
             }
             const bool hasOwnVDisks = !info->IsBridged() || info->IsInlinePile(); // bridge proxy group doesn't have them
             if (hasOwnVDisks && !info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed)) {

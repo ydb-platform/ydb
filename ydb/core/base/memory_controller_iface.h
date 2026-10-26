@@ -17,6 +17,8 @@ enum class EMemoryConsumerKind {
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
     ColumnTablesPortionsMetaDataCache,
+
+    QueryExecution,
 };
 
 // Node memory pressure as the tablets see it: Green admits, Yellow forbids growth, Red admits one at a time

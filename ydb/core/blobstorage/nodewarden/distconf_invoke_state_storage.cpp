@@ -121,6 +121,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
+        // A regular Sentinel push also satisfies the current root's refresh.
+        Self->CancelStateStorageSelfHealRefresh();
         Self->SelfHealNodesState.clear();
         for (auto node : cmd.GetNodesState()) {
             Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
@@ -164,30 +166,40 @@ namespace NKikimr::NStorage {
             FULL
         };
         std::unordered_map<ui32, std::tuple<ui32, ui32, ui32>> nodesToReplace;
-        auto needReconfig = [&](auto clearFunc, auto ssMutableFunc, auto buildFunc) {
+        auto needReconfig = [&](bool automaticManagement, auto clearFunc, auto ssMutableFunc, auto buildFunc) {
+            const auto noReconfig = [&] {
+                (targetConfig.*clearFunc)();
+                return ReconfigType::NONE;
+            };
+            if (!automaticManagement) {
+                return noReconfig();
+            }
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
             auto targetSS = *(targetConfig.*ssMutableFunc)();
-            if (ss.RingGroupsSize() == 0) {
-                ss.MutableRing()->ClearRingGroupActorIdOffset();
-            } else {
-                for (ui32 i : xrange(ss.RingGroupsSize())) {
-                    ss.MutableRingGroups(i)->ClearRingGroupActorIdOffset();
+            const auto clearActorIdOffsets = [](auto& config) {
+                if (config.RingGroupsSize() == 0) {
+                    config.MutableRing()->ClearRingGroupActorIdOffset();
+                } else {
+                    for (auto& ringGroup : *config.MutableRingGroups()) {
+                        ringGroup.ClearRingGroupActorIdOffset();
+                    }
                 }
-            }
+            };
+            clearActorIdOffsets(ss);
+            clearActorIdOffsets(targetSS);
             TIntrusivePtr<TStateStorageInfo> newSSInfo;
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(ss);
             newSSInfo = (*buildFunc)(targetSS);
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
-                (targetConfig.*clearFunc)();
                  YDB_LOG_DEBUG("NeedReconfig clear config",
                      {"marker", "NW104"},
                      {"currentConfig", ss},
                      {"targetConfig", targetSS},
                      {"oldSSInfo", oldSSInfo->ToString()},
                      {"newSSInfo", newSSInfo->ToString()});
-                return ReconfigType::NONE;
+                return noReconfig();
             }
 
             if (oldSSInfo->RingGroups.size() != newSSInfo->RingGroups.size()) {
@@ -217,7 +229,7 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!hasBadNodes && !pileupReplicas) {
-                return ReconfigType::NONE; // Current config is optimal and all nodes are good
+                return noReconfig(); // Current config is optimal and all nodes are good
             }
 
             // Check can be node replacement applyed
@@ -291,9 +303,12 @@ namespace NKikimr::NStorage {
                 ui32 majority = oldRg.NToSelect / 2 + 1;
                 return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
             }
-            return nodesToReplace.empty() ? ReconfigType::NONE : ReconfigType::FULL;
+            return nodesToReplace.empty() ? noReconfig() : ReconfigType::FULL;
         };
-        #define NEED_RECONFIG(NAME) needReconfig(&NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
+        #define NEED_RECONFIG(NAME) needReconfig( \
+            !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(), \
+            &NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, \
+            &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
         auto needReconfigSS = NEED_RECONFIG(StateStorage);
         auto needReconfigSSB = NEED_RECONFIG(StateStorageBoard);
         auto needReconfigSB = NEED_RECONFIG(SchemeBoard);
@@ -320,6 +335,56 @@ namespace NKikimr::NStorage {
 
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
+        // A lost root may have left both old and new groups readable. Keep one
+        // readable version per pile before introducing a fresh target, otherwise
+        // restarting the protocol would create a third version. Retire the other
+        // versions through WriteOnly first, keeping the healthier readable group.
+        bool prepareCurrentConfig = false;
+        auto prepareReadableGroups = [&](auto *cfg, const auto& target) {
+            if (!target.RingGroupsSize()) {
+                return; // Automatic management is disabled for this subsystem.
+            }
+            if (!cfg->RingGroupsSize()) {
+                return;
+            }
+            const auto current = cfg->GetRingGroups();
+            std::unordered_map<ui32, ui32> selected;
+            for (ui32 i : xrange(current.size())) {
+                const auto& group = current.Get(i);
+                if (group.GetWriteOnly() || selected.contains(group.GetBridgePileId())) {
+                    continue;
+                }
+                const auto source = ChooseStateStorageSelfHealSource(*cfg, group.GetBridgePileId(), Self->SelfHealNodesState);
+                if (!source) {
+                    throw TExError() << "Node states are not ready for choosing a readable State Storage group";
+                }
+                selected.emplace(group.GetBridgePileId(), *source);
+            }
+            std::vector<ui32> readable;
+            for (const auto& [pileId, index] : selected) {
+                readable.push_back(index);
+            }
+            std::ranges::sort(readable, [&](ui32 x, ui32 y) {
+                return current.Get(x).GetBridgePileId() < current.Get(y).GetBridgePileId();
+            });
+            cfg->ClearRingGroups();
+            for (ui32 i : readable) {
+                cfg->AddRingGroups()->CopyFrom(current.Get(i));
+            }
+            for (ui32 i : xrange(current.size())) {
+                const auto& group = current.Get(i);
+                if (const auto it = selected.find(group.GetBridgePileId()); it != selected.end() && it->second != i) {
+                    auto *obsolete = cfg->AddRingGroups();
+                    obsolete->CopyFrom(group);
+                    obsolete->SetWriteOnly(true);
+                    prepareCurrentConfig = true;
+                }
+            }
+        };
+        prepareReadableGroups(currentConfig.MutableStateStorageConfig(), targetConfig.GetStateStorageConfig());
+        prepareReadableGroups(currentConfig.MutableStateStorageBoardConfig(), targetConfig.GetStateStorageBoardConfig());
+        prepareReadableGroups(currentConfig.MutableSchemeBoardConfig(), targetConfig.GetSchemeBoardConfig());
+
         YDB_LOG_DEBUG("Need to reconfig, starting StateStorageSelfHealActor",
             {"marker", "NW101"},
             {"currentConfig", currentConfig},
@@ -327,9 +392,8 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
-        const ui32 pilesCnt = Self->BridgeInfo ? Self->BridgeInfo->Piles.size() : 1;
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
         Finish(TResult::OK, std::nullopt);
     }
 

@@ -192,8 +192,8 @@ private:
             for (const auto& filter : filters) {
                 const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
                 const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
-                if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
-                    const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
+                const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
+                if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric, location)) {
                     const bool usable = (!considerDriveStatus || !pdisk.HasStatusV2() || pdisk.GetStatusV2() == "ACTIVE") &&
                             (!considerDecommitStatus || !pdisk.HasDecommitStatus() || pdisk.GetDecommitStatus() == "DECOMMIT_NONE") &&
                             (!considerMaintenanceStatus || !pdisk.HasMaintenanceStatus() || pdisk.GetMaintenanceStatus() == "NO_REQUEST");

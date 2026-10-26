@@ -26,3 +26,5 @@ items:
     path: observability/toc_p.yaml
 - name: Backup and Restore
   href: backup-and-recovery/index.md
+- name: Initial Synchronization for Asynchronous Replication
+  href: async-replication-initial-sync.md

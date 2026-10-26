@@ -3132,10 +3132,13 @@ public:
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && it->Tag == ETags::GroupState) {
                     if (it->IssueLog.reason_size() == 1) {
                         const auto& reason = issueById[it->IssueLog.reason(0)]->IssueLog;
-                        if (message.find("in pile") == std::string::npos) {
+                        const auto& pile = reason.location().storage().pool().group().pile();
+                        if (!pile.name().empty() && message.find("in pile") == std::string::npos) {
                             message = TStringBuilder() << reason.message() <<  " in pile " << reason.location().storage().pool().group().pile().name();
                         }
-                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(reason.location().storage().pool().group().pile());
+                        if (!pile.name().empty()) {
+                            it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(pile);
+                        }
                     }
                 }
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && (it->Tag == ETags::PoolState || it->Tag == ETags::StorageState)) {
@@ -3452,6 +3455,10 @@ public:
             CheckGroupVSlots(checker, slots, storageGroupStatus, context);
             checker.ReportStatus(context);
         } else {
+            auto parts = itGroup->second.BridgeGroups;
+            if (itGroup->second.BridgePileId) { // inline pile: group converted from non-bridged one is also its own part
+                parts.insert(parts.begin(), &itGroup->second);
+            }
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
@@ -3475,7 +3482,12 @@ public:
                 }
                 return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
-            auto [minStatus, maxStatus] = std::ranges::minmax(itGroup->second.BridgeGroups | std::views::filter(isSyncPile) | std::views::transform(getStatus));
+            if (std::ranges::none_of(parts, isSyncPile)) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles", ETags::GroupState);
+                storageGroupStatus.set_overall(context.GetOverallStatus());
+                return;
+            }
+            auto [minStatus, maxStatus] = std::ranges::minmax(parts | std::views::filter(isSyncPile) | std::views::transform(getStatus));
             Ydb::Monitoring::StatusFlag::Status status = maxStatus;
             if (maxStatus == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
                 status = MaxStatus(minStatus, Ydb::Monitoring::StatusFlag::ORANGE);

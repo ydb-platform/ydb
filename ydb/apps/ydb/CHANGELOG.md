@@ -1,3 +1,7 @@
+* Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
+* Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.
+* Added `ydb admin bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
+* Added `ydb admin bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin bridge list`.
 
 ## 2.34.0 ##
 

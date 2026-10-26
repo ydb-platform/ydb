@@ -479,58 +479,56 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
     return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
 }
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) try {
     output = input;
     TOptimizeExprSettings settings(nullptr);
     if (!ResetTypes) {
         settings = TOptimizeExprSettings(&TypeCtx);
     }
-    settings.VisitTuples = true;
     Y_ENSURE(Roots.size(), "NEW RBO OpRoot is not initialized.");
 
-    // Apply optimizations.
-    auto status = OptimizeExpr(
-        output, output,
-        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-
-            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
-            if (node->IsList()) {
-                bool emptyPreamble = false;
-                TVector<TExprNode::TPtr> roots;
-                for (const auto& child : node->Children()) {
-                    if (!child->IsList()) {
-                        continue;
-                    }
-                    if(child->ChildrenSize()==0) {
-                        emptyPreamble = true;
-                        continue;
-                    }
-                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
-                        roots.push_back(child->ChildPtr(0));
-                    }
-                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
-                        roots.push_back(child->ChildPtr(0));
-                    }
-                }
-
-                if (roots.empty()) {
-                    return node;
-                }
-
-                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-                rboCtx.EmptyPreamble = emptyPreamble;
-                TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(Roots, rboCtx);
-                traceOutput.Flush();
-                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
-                return output;
-            } else {
-                return node;
+    // Match containers of (KqpOpRoot, columns) or (Unordered(KqpOpRoot), columns).
+    const auto containers = FindNodes(input, [](const TExprNode::TPtr& node) {
+        return node->IsList() && AnyOf(node->Children(), [](const auto& child) {
+            if (!child->IsList() || child->ChildrenSize() == 0) {
+                return false;
             }
-        },
-        ctx, settings);
+            auto root = child->ChildPtr(0);
+            if (TCoUnordered::Match(root.Get())) {
+                root = root->ChildPtr(0);
+            }
+            return TKqpOpRoot::Match(root.Get());
+        });
+    });
+    if (containers.empty()) {
+        return TStatus::Ok;
+    }
 
-    return status;
+    // Optimize all roots once, then replace every result container.
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+    TRBOTraceOutput traceOutput(rboCtx);
+    auto optimizedPlan = RBO.Optimize(Roots, rboCtx);
+    traceOutput.Flush();
+    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+
+    TNodeOnNodeOwnedMap replacements;
+    for (const auto& container : containers) {
+        // An effects-only KqlQuery is (() (KqpOpRoot ...)): keep its empty Results slot.
+        auto replacement = optimizedPlan;
+        for (const auto& child : container->Children()) {
+            if (child->IsList() && child->ChildrenSize() == 0) {
+                auto children = optimizedPlan->ChildrenList();
+                children.insert(children.begin(), child);
+                replacement = ctx.NewList(container->Pos(), std::move(children));
+                break;
+            }
+        }
+        replacements.emplace(container.Get(), std::move(replacement));
+    }
+    return RemapExpr(input, output, replacements, ctx, settings);
+} catch (const std::exception& e) {
+    ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
+    return TStatus::Error;
 }
 
 void TKqpNewRBOTransformer::ApplyColumnStatistics() {
@@ -762,6 +760,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Optimize physical stages.
     TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateAggregateThroughStageRule>());
+    // Matches an intermediate aggregate once it shares the stage of a column table read.
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPushOlapAggregateRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));

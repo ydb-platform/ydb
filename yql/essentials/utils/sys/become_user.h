@@ -9,6 +9,8 @@ namespace NYql {
 // assume we have enough capabilities to do so: CAP_SETUID, CAP_SETGID
 void BecomeUser(const TString& username, const TString& groupname);
 
+void EnsureNonRootUserAndGroup();
+
 // should be called by root (more specifically caps required: CAP_SETPCAP)
 // special ambient capabilities will be set up: CAP_SETUID, CAP_SETGID, CAP_KILL
 // they will be preserved by fork and exec*

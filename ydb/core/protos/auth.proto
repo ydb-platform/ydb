@@ -86,7 +86,7 @@ message TTVMConfig {
     optional uint64 UpdatePublicKeysSuccessTimeout = 5 [default = 82800];
     optional uint64 UpdatePublicKeysFailureTimeout = 6 [default = 10];
     optional string PublicKeysHost = 7 [default = "tvm-api.yandex.net"];
-    repeated uint32 AdditionalSelfTvmIds = 8;
+    repeated uint32 AdditionalServiceTvmIds = 8;
 }
 
 message TStaffApiTvmSettings {

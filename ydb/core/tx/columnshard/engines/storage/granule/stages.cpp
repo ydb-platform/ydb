@@ -72,4 +72,9 @@ bool TGranuleFinishCommonLoading::DoExecute(NTabletFlatExecutor::TTransactionCon
     return true;
 }
 
+bool TGranuleOptimizerLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+    Self->AddLoadedPortionsToOptimizer();
+    return true;
+}
+
 }   // namespace NKikimr::NOlap::NLoading

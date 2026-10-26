@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SRCS(
     flat_database_pg_ut.cpp
+    ut_tier_predicate_pg.cpp
 )
 
 PEERDIR(

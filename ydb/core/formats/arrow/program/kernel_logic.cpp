@@ -62,18 +62,19 @@ TConclusion<bool> TGetJsonPath::DoExecute(
     return true;
 }
 
-std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
+std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
+    const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const {
     std::shared_ptr<NAccessor::NSubColumns::TJsonPathAccessor> accessor;
 
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
-        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
         AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
-        auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
+        auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
         AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     }
@@ -106,8 +107,8 @@ NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder()
 }
 
 std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
-    const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
-    auto arr = TBase::ExtractArray(jsonAcc, svPath);
+    const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const {
+    auto arr = TBase::ExtractArray(jsonAcc, path);
     auto chunkedArray = arr->GetChunkedArray();
     auto builder = NArrow::MakeBuilder(arrow::uint8(), arr->GetRecordsCount());
     for (auto&& i : chunkedArray->chunks()) {

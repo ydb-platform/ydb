@@ -14,7 +14,7 @@ namespace NYql {
 TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, bool supportRtmrMode,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver, const NPq::NProto::StreamingDisposition& disposition,
     const std::vector<std::pair<TString, TString>>& taskSensorLabels, const std::vector<ui64>& nodeIds, bool useActorSystemThreadsInTopicClient,
-    bool useYtflowEngine, bool addTransparentPrefixToTransparentSystemColumns) {
+    bool allowYtflowEngine, bool addTransparentPrefixToTransparentSystemColumns) {
     return [=](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, TIntrusivePtr<IRandomProvider> randomProvider,
                TIntrusivePtr<TTypeAnnotationContext> typeCtx, const TOperationProgressWriter& progressWriter,
@@ -43,8 +43,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, 
         }
         state->Gateway = gateway;
         state->DqIntegration = CreatePqDqIntegration(state);
-        state->UseYtflowEngine = useYtflowEngine;
-        if (useYtflowEngine) {
+        state->AllowYtflowEngine = allowYtflowEngine;
+        if (allowYtflowEngine) {
             state->YtflowIntegration = CreatePqYtflowIntegration(state);
             state->YtflowOptimization = CreatePqYtflowOptimization(state);
         }
@@ -84,7 +84,31 @@ bool TPqState::IsRtmrMode() const {
     if (!SupportRtmrMode) {
         return false;
     }
+    if (IsYtflowEngine()) {
+        return false;
+    }
     return Configuration->PqReadByRtmrCluster_.Get() != "dq";
+}
+
+bool TPqState::IsYtflowEngine() const {
+    if (!AllowYtflowEngine) {
+        return false;
+    }
+    return Types->EngineType == EEngineType::Ytflow;
+}
+
+bool TPqState::AllowYdbSysColumns() const {
+    if (IsYtflowEngine()) {
+        return false;
+    }
+    return true;
+}
+
+bool TPqState::ShouldAddTransparentPrefixToTransparentSystemColumns() const {
+    if (IsYtflowEngine()) {
+        return false;
+    }
+    return AddTransparentPrefixToTransparentSystemColumns;
 }
 
 const TPqState::TTopicMeta* TPqState::FindTopicMeta(const TString& cluster, const TString& topicPath) const {

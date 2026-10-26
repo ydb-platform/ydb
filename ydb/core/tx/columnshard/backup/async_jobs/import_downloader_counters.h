@@ -1,8 +1,12 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/inflight_guard.h>
+
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <optional>
 
 namespace NKikimr::NColumnShard::NBackup {
 
@@ -20,6 +24,9 @@ private:
 
     NMonitoring::THistogramPtr HistogramProcessDurationMs;
 
+    std::optional<NOlap::NCounters::TInflightGuard> AliveGuard;
+    std::optional<NOlap::NCounters::TInflightGuard> ProcessGuard;
+
 public:
     TImportDownloaderCounters()
         : TBase("ImportDownloader")
@@ -36,20 +43,16 @@ public:
             TBase::GetHistogram("ImportDownloader/Process/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
-    void OnActorAlive() const {
-        AliveActors->Inc();
+    void OnActorAlive() {
+        AliveGuard.emplace(AliveActors);
     }
 
-    void OnActorDead() const {
-        AliveActors->Dec();
+    void OnProcessStarted() {
+        ProcessGuard.emplace(ProcessInflight);
     }
 
-    void OnProcessStarted() const {
-        ProcessInflight->Inc();
-    }
-
-    void OnProcessFinished(const TDuration duration, ui64 rows, ui64 bytes) const {
-        ProcessInflight->Dec();
+    void OnProcessFinished(const TDuration duration, ui64 rows, ui64 bytes) {
+        ProcessGuard.reset();
         HistogramProcessDurationMs->Collect(duration.MilliSeconds());
         *RowsProcessed += rows;
         *BytesProcessed += bytes;

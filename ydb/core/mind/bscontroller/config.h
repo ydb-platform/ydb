@@ -161,6 +161,11 @@ namespace NKikimr {
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+
+            TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+            }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
 
@@ -193,6 +198,7 @@ namespace NKikimr {
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
                 , BridgeInfo(controller.BridgeInfo)
+                , StorageConfig(storageConfig ? std::make_shared<const NKikimrBlobStorage::TStorageConfig>(*storageConfig) : controller.StorageConfig)
             {
                 Y_ABORT_UNLESS(HostRecords);
                 if (storageConfig && storageConfig->HasBlobStorageConfig()) {
@@ -287,6 +293,12 @@ namespace NKikimr {
             void DeleteDestroyedVSlot(const TVSlotInfo *vslot);
 
             void CheckConsistency() const;
+
+            // refuse the change of VDisks of the part of the bridged group that leaves the part unable to restore its
+            // data from its pile, when the pile takes part in data quorum; dataless are VDisks having no full data after
+            // the change
+            void CheckBridgedPartDataRestorable(const TGroupInfo& group,
+                const TBlobStorageGroupInfo::TGroupVDisks& dataless) const;
 
             ui64 ApplyConfigUpdates();
 

@@ -1,6 +1,15 @@
 # library
 (
 
+(import aggregate_module '/lib/yql/aggregate.yqls)
+
+(let checked_sum_traits_factory (lambda '(list_type extractor) (block '(
+  (let traits (Apply (bind aggregate_module 'checked_sum_traits_factory) list_type extractor))
+  (return (WindowTraits (ListItemType list_type)
+    (NthArg '1 traits) (NthArg '2 traits) (lambda '(value state) (Void))
+    (NthArg '6 traits) (NthArg '7 traits)))
+))))
+
 (let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type)))))
 
 # list_type:type function:lambda
@@ -974,6 +983,7 @@
 (export min_traits_factory)
 (export max_traits_factory)
 (export sum_traits_factory)
+(export checked_sum_traits_factory)
 (export sum_if_traits_factory)
 (export count_traits_factory)
 (export count_all_traits_factory)

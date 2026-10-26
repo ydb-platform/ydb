@@ -10,8 +10,203 @@
 
 namespace NKikimr::NReplication::NController {
 
+Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
+    Y_UNIT_TEST(RunCallWaitsBeyondSimulatedMinute) {
+        NTestHelpers::TEnv env(false, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto startedAt = runtime.GetCurrentTime();
+        const auto callDelay = TDuration::Minutes(2);
+        auto completion = NThreading::NewPromise<ui32>();
+        auto observer = runtime.AddObserver<TEvents::TEvWakeup>([&](TEvents::TEvWakeup::TPtr& ev) {
+            if (ev->GetRecipientRewrite() != edge) {
+                return;
+            }
+
+            if (ev->Get()->Tag) {
+                completion.SetValue(42);
+            }
+            ev.Reset();
+        });
+
+        // Visit a timestamp past the old deadline before allowing the call to finish.
+        runtime.Schedule(new IEventHandle(edge, edge, new TEvents::TEvWakeup()), callDelay - TDuration::Seconds(1));
+        runtime.Schedule(new IEventHandle(edge, edge, new TEvents::TEvWakeup(1)), callDelay);
+
+        const auto result = env.RunCall([future = completion.GetFuture()] {
+            return future.GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, 42);
+        UNIT_ASSERT(runtime.GetCurrentTime() - startedAt >= callDelay);
+    }
+}
+
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
+
+    enum class EBootstrapStage {
+        Changefeed,
+        Consumer,
+    };
+
+    void MissingSourceDnsName(EBootstrapStage stage) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        TActorId creator;
+        TVector<TInstant> attempts;
+        const auto requestType = stage == EBootstrapStage::Changefeed
+            ? TEvYdbProxy::TEvAlterTableRequest::EventType
+            : TEvYdbProxy::TEvAlterTopicRequest::EventType;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->Sender != creator || ev->GetTypeRewrite() != requestType) {
+                return;
+            }
+            attempts.push_back(runtime.GetCurrentTime());
+            if (attempts.size() > 2) {
+                return;
+            }
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("GRpc error: (14): DNS resolution failed: C-ares status is not ARES_SUCCESS qtype=AAAA: Domain name not found");
+            NYdb::TStatus status(NYdb::EStatus::TRANSPORT_UNAVAILABLE, std::move(issues));
+            IEventBase* response = stage == EBootstrapStage::Changefeed
+                ? static_cast<IEventBase*>(new TEvYdbProxy::TEvAlterTableResponse(std::move(status)))
+                : static_cast<IEventBase*>(new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)));
+            runtime.Send(new IEventHandle(creator, env.GetYdbProxy(), response, 0, ev->Cookie));
+            ev.Reset();
+        });
+
+        creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+            env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 3);
+        UNIT_ASSERT(attempts[1] - attempts[0] >= TDuration::Seconds(10));
+        UNIT_ASSERT(attempts[2] - attempts[1] >= TDuration::Seconds(10));
+
+        const auto desc = env.GetDescription("/Root/Table");
+        const auto& streams = desc.GetPathDescription().GetTable().GetCdcStreams();
+        UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(streams.at(0).GetName(), "Stream");
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(topic);
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        const auto& consumers = topic->Get()->Result.GetTopicDescription().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "replicationConsumer");
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameDuringChangefeedCreationRetries) {
+        MissingSourceDnsName(EBootstrapStage::Changefeed);
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameDuringConsumerCreationRetries) {
+        MissingSourceDnsName(EBootstrapStage::Consumer);
+    }
+
+    void SessionAcquisitionFailure(Ydb::StatusIds::StatusCode failure) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        // No table operation has used this proxy, so GetSession must create a session.
+        TSessionCreationFault fault(runtime, failure);
+        TActorId creator;
+        ui32 firstResponseType = 0;
+        ui64 alterResponses = 0;
+        std::optional<NYdb::TStatus> acquisitionStatus;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->Sender != env.GetYdbProxy() || ev->GetRecipientRewrite() != creator) {
+                return;
+            }
+            if (!firstResponseType) {
+                firstResponseType = ev->GetTypeRewrite();
+            }
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvAlterTableResponse::EventType) {
+                ++alterResponses;
+                if (!acquisitionStatus) {
+                    acquisitionStatus.emplace(ev->Get<TEvYdbProxy::TEvAlterTableResponse>()->Result);
+                }
+            }
+        });
+
+        creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+        runtime.EnableScheduleForActor(creator);
+        const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(
+            env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(request);
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        runtime.WaitFor("first proxy response to stream creator", [&] { return firstResponseType != 0; },
+            TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(firstResponseType, TEvYdbProxy::TEvAlterTableResponse::EventType);
+        UNIT_ASSERT(acquisitionStatus);
+        UNIT_ASSERT_VALUES_EQUAL(acquisitionStatus->GetIssues().Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(acquisitionStatus->GetIssues().begin()->GetMessage(), "injected GetSession failure");
+        UNIT_ASSERT_VALUES_EQUAL(fault.SessionRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fault.TableRequests, 0);
+
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+            env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT_C(result, "Stream creator must report completion after GetSession failure");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ReplicationId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->TargetId, 1);
+
+        if (failure == Ydb::StatusIds::UNAVAILABLE) {
+            UNIT_ASSERT_VALUES_EQUAL(acquisitionStatus->GetStatus(), NYdb::EStatus::UNAVAILABLE);
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(alterResponses, 2);
+            UNIT_ASSERT(fault.SessionRequests >= 2);
+            const auto desc = env.GetDescription("/Root/Table");
+            const auto& streams = desc.GetPathDescription().GetTable().GetCdcStreams();
+            UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(streams.at(0).GetName(), "Stream");
+
+            env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeConsumerRequest(
+                "/Root/Table/Stream", "replicationConsumer", {}));
+            const auto consumer = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeConsumerResponse>(
+                env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT(consumer);
+            UNIT_ASSERT_C(consumer->Get()->Result.IsSuccess(), consumer->Get()->Result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(acquisitionStatus->GetStatus(), NYdb::EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), NYdb::EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "injected GetSession failure");
+            UNIT_ASSERT_VALUES_EQUAL(alterResponses, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fault.SessionRequests, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fault.TableRequests, 0);
+            UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().GetTable().GetCdcStreams().empty());
+        }
+    }
+
+    Y_UNIT_TEST(SessionAcquisitionFailureRetries) {
+        SessionAcquisitionFailure(Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TerminalSessionAcquisitionFailureReplies) {
+        SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
+    }
 
     void Basic(const std::optional<TDuration>& resolvedTimestamps = {}) {
         TEnv env;
@@ -87,7 +282,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Restored"),
             "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
-            false, true, false, true));
+            false, true, false, false));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
         UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender())->Get()->IsSuccess());

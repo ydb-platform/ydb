@@ -580,6 +580,43 @@ message Iceberg {
     IcebergCatalog catalog = 4;
 }
 
+// Host-only TVM credentials. A service ticket is obtained for source -> destination.
+message ExternalServiceTvmAuth {
+    uint32 source_id = 1;
+    uint32 destination_id = 2;
+    string secret = 3 [(Ydb.length).le = 4096, (Ydb.sensitive) = true];
+}
+
+// Parameters contain public values or secret references, never secret bytes.
+message ExternalServiceWasmAuth {
+    string provider = 1;
+    string parameters = 2;
+}
+
+// Host-owned transport settings for external service adapters.
+message ExternalService {
+    enum Protocol {
+        PROTOCOL_UNSPECIFIED = 0;
+        HTTP = 1;
+        GRPC = 2;
+    }
+    Protocol protocol = 1;
+    // HTTP origin (scheme + host + optional port) or gRPC host:port. Never supplied by WASM.
+    string endpoint = 2 [(Ydb.length).range = {min: 1, max: 4096}];
+    // Methods and paths are supplied per invocation by WASM.
+    reserved 3;
+    reserved "method";
+    IamAuth auth = 4;
+    // Explicit plaintext opt-in. TLS verification cannot be disabled.
+    bool insecure = 5;
+    // PEM trust roots; empty uses system roots. Not a server filesystem path.
+    string ca_certificate = 6 [(Ydb.length).le = 65536];
+    map<string, string> headers = 7 [(Ydb.sensitive) = true];
+    // Exactly one of auth and tvm_auth must be set.
+    ExternalServiceTvmAuth tvm_auth = 8;
+    ExternalServiceWasmAuth wasm_auth = 9;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -593,6 +630,7 @@ message ConnectionSetting {
         MYSQL_CLUSTER = 8;
         LOGGING = 9;
         ICEBERG = 10;
+        EXTERNAL_SERVICE = 11;
     }
 
     oneof connection {
@@ -606,6 +644,7 @@ message ConnectionSetting {
         MySQLCluster mysql_cluster = 8;
         Logging logging = 9;
         Iceberg iceberg = 10;
+        ExternalService external_service = 11;
     }
 }
 

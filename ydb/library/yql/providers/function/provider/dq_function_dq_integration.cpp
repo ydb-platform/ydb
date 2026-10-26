@@ -34,7 +34,14 @@ public:
         auto functionSettings = maybeSettings.Cast();
         NYql::NProto::TFunctionTransform transform;
         transform.SetInvokeUrl(TString{functionSettings.InvokeUrl().Value()});
+        if (const auto batchSize = functionSettings.BatchSize()) {
+            const auto rows = FromString<ui32>(batchSize.Cast().Value());
+            if (rows) transform.SetBatchSize(rows);
+        }
 
+        if (const auto enrich = functionSettings.EnrichRows()) {
+            transform.SetEnrichRows(enrich.Cast().Value() == "true");
+        }
         transformSettings.PackFrom(transform);
     }
 

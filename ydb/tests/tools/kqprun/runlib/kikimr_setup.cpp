@@ -99,6 +99,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
         NYql::NDq::CreatePqDqTaskTransformFactory(), NYql::CreateYtDqTaskTransformFactory(true),
     }));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
+    serverSettings.WasmTvmProvider = settings.WasmTvmProvider;
     serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
 

@@ -20,4 +20,5 @@ RECURSE_FOR_TESTS(
     streaming
     yds
     streaming_common
+    wasm_services
 )

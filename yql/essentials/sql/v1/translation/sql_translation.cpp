@@ -4713,6 +4713,11 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
         return false;
     }
 
+    if (key == "use_tls" && value->Alt_case() == TRule_table_setting_value::kAltTableSettingValue6) {
+        result[key] = TDeferredAtom(Ctx_.Pos(), to_lower(Ctx_.Token(value->GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1())));
+        return true;
+    }
+
     if (!StoreString(*value, result[key], Ctx_, to_upper(key))) {
         return false;
     }

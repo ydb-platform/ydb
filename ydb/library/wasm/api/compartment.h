@@ -45,6 +45,14 @@ struct IWebAssemblyCompartment: public TNonCopyable {
     //! Returns the current linear memory size in bytes.
     virtual size_t GetLinearMemorySize() const = 0;
 
+    //! Creates an isolated linking realm in the same WAVM compartment.
+    //! Memory, indirect-call table, globals, SDK and module exports are private.
+    //! Entries and destruction across realms must be serialized by their common
+    //! owner. Realms may be destroyed in either order; each releases its unused
+    //! resources, and the shared WAVM compartment is freed after the last one.
+    //! A compartment with realms cannot be cloned. No SDK is installed initially.
+    virtual std::unique_ptr<IWebAssemblyCompartment> CreateIsolatedRealm(size_t maxMemoryBytes) = 0;
+
     //! Clones compartment.
     //! NB: Cloning is slow and should not be called too often.
     virtual std::unique_ptr<IWebAssemblyCompartment> Clone() const = 0;

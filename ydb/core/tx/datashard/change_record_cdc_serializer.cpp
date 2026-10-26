@@ -42,10 +42,14 @@ class TBaseSerializer: public IChangeRecordSerializer {
 
     // Heartbeats stay raw. A data row below CdcZstdMinPayloadBytes stays raw.
     // Anything we do compress is written with one ZSTD_compress2 into a context
-    // owned by this serializer. Data rows use the fastest zstd level, which still
-    // shrinks a 1024-byte run of identical bytes. Schema snapshots use the
-    // library default level. The raw bytes stay in place when zstd does not
+    // owned by this serializer. The raw bytes stay in place when zstd does not
     // make them shorter.
+    //
+    // Negative levels select the fast strategy and use the magnitude as the
+    // search step. ZSTD_minCLevel() is -128 KiB, so a 1 KiB run is stored as
+    // literals and the frame grows. Level -1 still visits every byte and shrinks
+    // that run. Schema snapshots use the library default level.
+    static constexpr int CdcZstdDataLevel = -1;
     void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
         if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
             return;
@@ -67,7 +71,7 @@ class TBaseSerializer: public IChangeRecordSerializer {
             CCtx_ = ZSTD_createCCtx();
             Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
         }
-        const int level = schema ? ZSTD_defaultCLevel() : ZSTD_minCLevel();
+        const int level = schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel;
         if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
             return;
         }

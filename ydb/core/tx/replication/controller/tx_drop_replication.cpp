@@ -205,6 +205,7 @@ public:
             Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
+        Replication->Shutdown(ctx);
         Self->Remove(rid);
         Replication.Reset();
 

@@ -526,6 +526,15 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
     }
 
+    void CreateMultipartUpload() {
+        UploadId.Clear();
+        Parts.clear();
+        CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
+        auto request = Aws::S3::Model::CreateMultipartUploadRequest()
+            .WithKey(CurrentObjectKey);
+        this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+    }
+
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
@@ -533,17 +542,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"upload", upload});
 
         if (!upload) {
-            CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
-            auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithKey(CurrentObjectKey);
-            this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+            CreateMultipartUpload();
         } else if (ForceNewUpload) {
             ForceNewUpload = false;
             UploadId = upload->Id;
             Parts.clear();
             this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(
                 this->SelfId(), TxId,
-                TS3Upload::EStatus::UploadParts, TVector<TString>{}));
+                TS3Upload::EStatus::Abort, TVector<TString>{}));
         } else {
             UploadId = upload->Id;
 
@@ -573,14 +579,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 case TS3Upload::EStatus::Abort: {
                     CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
                     Error = std::move(upload->Error);
-                    if (!Error) {
-                        Error = "<empty>";
-                    }
 
                     auto request = Aws::S3::Model::AbortMultipartUploadRequest()
                         .WithKey(CurrentObjectKey)
                         .WithUploadId(*UploadId);
                     this->Send(Client, new TEvExternalStorage::TEvAbortMultipartUploadRequest(request));
+                    if (!Error) {
+                        this->Become(&TThis::StateRestartUpload);
+                    }
                     break;
                 }
             }
@@ -598,6 +604,23 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
+        this->Become(&TThis::StateUploadData);
+    }
+
+    void HandleRestartUpload(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        YDB_LOG_DEBUG("[Export] HandleRestartUpload TEvExternalStorage::TEvAbortMultipartUploadResponse",
+            {"result", result});
+
+        // The abort may have succeeded before a retry or a DataShard restart.
+        if (result.IsSuccess() || result.GetError().GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
+            return CreateMultipartUpload();
+        }
+
+        // Reload the persisted abort before retrying it.
+        UploadId.Clear();
+        RetryOrFinish(result.GetError(), CurrentObjectKey);
     }
 
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
@@ -1007,6 +1030,17 @@ public:
             hFunc(TEvExternalStorage::TEvUploadPartResponse, Handle);
             hFunc(TEvExternalStorage::TEvCompleteMultipartUploadResponse, Handle);
             hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateRestartUpload) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateRestartUpload"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, HandleRestartUpload);
+            hFunc(TEvExternalStorage::TEvCreateMultipartUploadResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -12,6 +12,7 @@ struct TS3Upload {
     enum class EStatus: ui8 {
         UploadParts,
         Complete,
+        // With Error: abort and fail the export. Without Error: abort and start a new upload.
         Abort,
     };
 

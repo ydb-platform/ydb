@@ -21,7 +21,7 @@ env:
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_config.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  PR_BRANCH_PREFIX: update-muted-ya
+  PR_BRANCH_PREFIX: robots/mute/update-muted-ya
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
 
@@ -117,7 +117,16 @@ jobs:
           set -euo pipefail
           echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> "$GITHUB_ENV"
           echo "BUILD_TYPE=${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
-          echo "PR_BRANCH=${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
+          PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}"
+          LEGACY_BRANCH="update-muted-ya_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}"
+          # Continue updating an existing open PR without renaming its branch.
+          LEGACY_PR_COUNT=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --base "${{ matrix.BASE_BRANCH }}" --head "$LEGACY_BRANCH" \
+            --state open --json number --jq 'length')
+          if [ "$LEGACY_PR_COUNT" -gt 0 ]; then
+            PR_BRANCH="$LEGACY_BRANCH"
+          fi
+          echo "PR_BRANCH=$PR_BRANCH" >> "$GITHUB_ENV"
 
           git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
           git show "origin/${{ matrix.BASE_BRANCH }}:${{ matrix.MUTED_YA_RELATIVE }}" > base_muted_ya.txt

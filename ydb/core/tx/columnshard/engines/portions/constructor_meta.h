@@ -13,6 +13,8 @@ struct TIndexInfo;
 class TPortionMetaConstructor {
 private:
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
+    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, PKTypes);
+    YDB_READONLY(NArrow::TComparator, Comparator, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;

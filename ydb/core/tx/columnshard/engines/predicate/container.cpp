@@ -33,7 +33,8 @@ int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr
     AFL_VERIFY(columnIdx < Object->Batch.GetSorting()->GetColumns().size());
     const auto& c = Object->Batch.GetSorting()->GetColumns()[columnIdx];
     auto sPredicate = c->GetScalar(0);
-    const int cmpResult = NArrow::ScalarCompare(sPredicate, s);
+    const int cmpResult =
+        NArrow::ScalarCompare(sPredicate, s, Object->Batch.GetSorting()->GetLogicalTypes()[columnIdx], Object->Batch.GetComparator());
     if (cmpResult == 0) {
         switch (GetCompareType()) {
             case NArrow::ECompareType::GREATER:

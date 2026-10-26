@@ -218,14 +218,16 @@ private:
             const auto& from = filter.GetPredicateFrom();
             const auto& to = filter.GetPredicateTo();
 
-            const auto& leftBorder =
-                from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
-                             : TBorder::MakeLeft(
-                                   TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0)), from.IsInclude());
-            const auto& rightBorder =
-                to.IsAll()
-                    ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
-                    : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0)), to.IsInclude());
+            const auto& leftBorder = from.IsAll()
+                                         ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
+                                         : TBorder::MakeLeft(TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(),
+                                                                 0, from.GetSortableBatchPosition().GetSorting()->GetLogicalTypes(),
+                                                                 from.GetSortableBatchPosition().GetComparator())), from.IsInclude());
+            const auto& rightBorder = to.IsAll()
+                                          ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
+                                          : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(),
+                                                                   0, to.GetSortableBatchPosition().GetSorting()->GetLogicalTypes(),
+                                                                   to.GetSortableBatchPosition().GetComparator())), to.IsInclude());
 
             intervals.EachIntersection(leftBorder, rightBorder, collector);
         }

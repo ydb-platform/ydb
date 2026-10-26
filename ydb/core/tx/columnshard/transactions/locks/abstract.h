@@ -2,6 +2,7 @@
 #include "dependencies.h"
 #include "interaction.h"
 
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <library/cpp/object_factory/object_factory.h>
@@ -24,7 +25,8 @@ public:
 protected:
     virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
     virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
-    virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) = 0;
+    virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const NArrow::TComparator& comparator) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const = 0;
 
 public:
@@ -35,8 +37,8 @@ public:
 
     virtual NColumnShard::TUnifiedPathId GetPathId() const = 0;
 
-    bool DeserializeFromProto(const TProto& proto) {
-        return DoDeserializeFromProto(proto);
+    bool DeserializeFromProto(const TProto& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) {
+        return DoDeserializeFromProto(proto, logicalTypes, comparator);
     }
 
     void SerializeToProto(TProto& proto) const {
@@ -58,6 +60,11 @@ private:
     YDB_READONLY(ui64, LockId, 0);
 
 public:
+    bool DeserializeFromProto(
+        const ITxEvent::TProto& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator);
+    TConclusionStatus DeserializeFromString(
+        const TString& data, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator);
+
     void AddToInteraction(TInteractionsContext& context) const {
         return GetObjectVerified().AddToInteraction(LockId, context);
     }

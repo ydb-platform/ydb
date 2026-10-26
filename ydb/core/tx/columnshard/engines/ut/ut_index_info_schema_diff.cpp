@@ -1,8 +1,11 @@
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NTest {
@@ -42,6 +45,46 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropAndAdd() {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
+    Y_UNIT_TEST(DecimalComparisonModeIsLatchedAndPreservedBySchemaDiff) {
+        const NKikimrConfig::TColumnShardConfig defaultConfig;
+        UNIT_ASSERT(!defaultConfig.GetEnableDecimalNumericComparison());
+
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto storages = TTestStoragesManager::GetInstance();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        const auto schemaV1 = MakeSchemaV1();
+        const auto diffProto = TSchemaDiffView::MakeSchemasDiff(schemaV1, MakeSchemaV2AfterDropAndAdd());
+        const NArrow::TComparator legacy(NArrow::EDecimalComparisonMode::Legacy);
+        const NArrow::TComparator numeric(NArrow::EDecimalComparisonMode::Numeric);
+
+        auto defaultIndexInfo = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(defaultIndexInfo);
+        UNIT_ASSERT(defaultIndexInfo->GetComparator() == legacy);
+
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        auto legacyIndexInfo = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(legacyIndexInfo);
+        UNIT_ASSERT(legacyIndexInfo->GetComparator() == legacy);
+
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
+        auto numericIndexInfo = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(numericIndexInfo);
+        UNIT_ASSERT(numericIndexInfo->GetComparator() == numeric);
+        UNIT_ASSERT(defaultIndexInfo->GetComparator() == legacy);
+        UNIT_ASSERT(legacyIndexInfo->GetComparator() == legacy);
+
+        auto legacyDiff = TIndexInfo::BuildFromProto(diffProto, *legacyIndexInfo, storages, cache);
+        UNIT_ASSERT(legacyDiff);
+        UNIT_ASSERT(legacyDiff->GetComparator() == legacy);
+
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
+        auto numericDiff = TIndexInfo::BuildFromProto(diffProto, *numericIndexInfo, storages, cache);
+        UNIT_ASSERT(numericDiff);
+        UNIT_ASSERT(numericIndexInfo->GetComparator() == numeric);
+        UNIT_ASSERT(numericDiff->GetComparator() == numeric);
+    }
+
     Y_UNIT_TEST(GetColumnsConsistentAfterDropAndAddColumns) {
         auto storages = TTestStoragesManager::GetInstance();
         auto cache = std::make_shared<TSchemaObjectsCache>();

@@ -115,7 +115,9 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
     if (Data) {
         dataColumns = Data->GetFieldNames();
     }
-    return TRWSortableBatchPosition(batch, position, Sorting->GetFieldNames(), dataColumns, ReverseSort);
+
+    return TRWSortableBatchPosition(
+        batch, position, Sorting->GetFieldNames(), dataColumns, ReverseSort, Sorting->GetLogicalTypes(), Sorting->GetComparator());
 }
 
 TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
@@ -152,8 +154,11 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     return *pos;
 }
 
-TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch,
+    const std::vector<std::string>& columns, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     for (auto&& i : columns) {
         auto c = batch->GetAccessorByNameOptional(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
@@ -165,14 +170,21 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     Fields = batch->GetSchema()->GetFields();
     Columns = batch->GetColumns();
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::string>& columns, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
@@ -184,15 +196,24 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     for (auto&& c : batch->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
     }
+
     Fields = batch->schema()->fields();
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
@@ -205,12 +226,16 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
 }
 
 TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-    const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
     : RecordsCount(recordsCount)
-    , Fields(fields) {
+    , Fields(fields)
+    , LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
     for (auto&& i : columns) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
     }
+
     BuildPosition(position);
 }
 
@@ -223,6 +248,7 @@ void TSortableScanData::AppendPositionTo(
 }
 
 void TSortableScanData::BuildPosition(const ui64 position) {
+    AFL_VERIFY(LogicalTypes.empty() || LogicalTypes.size() == Columns.size());
     PositionAddress.clear();
     std::optional<ui64> recordsCount;
     FinishPosition = Max<ui64>();
@@ -295,8 +321,12 @@ std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64
 
 std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64 itemPosition) const {
     AFL_VERIFY(PositionAddress.size() == item.GetPositionAddress().size());
+    AFL_VERIFY(LogicalTypes.size() == PositionAddress.size());
+    AFL_VERIFY(item.GetLogicalTypes().size() == item.GetPositionAddress().size());
+    AFL_VERIFY_DEBUG(LogicalTypes == item.GetLogicalTypes());
+    AFL_VERIFY_DEBUG(Comparator.IsCompatibleWith(item.GetComparator(), LogicalTypes));
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-        auto cmp = PositionAddress[idx].Compare(Position, item.GetPositionAddress()[idx], itemPosition);
+        auto cmp = PositionAddress[idx].Compare(Position, item.GetPositionAddress()[idx], itemPosition, LogicalTypes[idx], Comparator);
         if (std::is_neq(cmp)) {
             return cmp;
         }
@@ -307,8 +337,12 @@ std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64
 
 std::partial_ordering TCursor::Compare(const TCursor& item) const {
     AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
+    AFL_VERIFY(LogicalTypes.size() == PositionAddress.size());
+    AFL_VERIFY(item.LogicalTypes.size() == item.PositionAddress.size());
+    AFL_VERIFY_DEBUG(LogicalTypes == item.LogicalTypes);
+    AFL_VERIFY_DEBUG(Comparator.IsCompatibleWith(item.Comparator, LogicalTypes));
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-        auto cmp = PositionAddress[idx].Compare(Position, item.PositionAddress[idx], item.Position);
+        auto cmp = PositionAddress[idx].Compare(Position, item.PositionAddress[idx], item.Position, LogicalTypes[idx], Comparator);
         if (std::is_neq(cmp)) {
             return cmp;
         }
@@ -319,6 +353,10 @@ std::partial_ordering TCursor::Compare(const TCursor& item) const {
 
 void TCursor::ValidateSchema(const TSortableScanData& position) const {
     AFL_VERIFY(position.GetFields().size() == PositionAddress.size());
+    AFL_VERIFY(LogicalTypes.size() == PositionAddress.size());
+    AFL_VERIFY(position.GetLogicalTypes().size() == position.GetFields().size());
+    AFL_VERIFY_DEBUG(LogicalTypes == position.GetLogicalTypes());
+    AFL_VERIFY_DEBUG(Comparator.IsCompatibleWith(position.GetComparator(), LogicalTypes));
     for (ui64 i = 0; i < PositionAddress.size(); ++i) {
         const auto& posType = position.GetFields()[i]->type();
         const auto& cursorType = PositionAddress[i].GetArray()->type();
@@ -326,7 +364,7 @@ void TCursor::ValidateSchema(const TSortableScanData& position) const {
     }
 }
 
-void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64* recordSize) const {
+void TCursor::AppendPositionTo(TConstArrayRef<std::unique_ptr<arrow::ArrayBuilder>> builders, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
         AFL_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
@@ -334,9 +372,14 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
     }
 }
 
-TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns)
-    : Position(position) {
-    PositionAddress = TSortableScanData(position, table, columns).GetPositionAddress();
+TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+    : Position(position)
+    , LogicalTypes(logicalTypes)
+    , Comparator(comparator)
+{
+    AFL_VERIFY(logicalTypes.size() == columns.size());
+    PositionAddress = TSortableScanData(position, table, columns, logicalTypes, comparator).GetPositionAddress();
 }
 
 }   // namespace NKikimr::NArrow::NMerger

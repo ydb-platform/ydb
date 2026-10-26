@@ -21,6 +21,14 @@
 
 namespace NKikimr::NOlap {
 
+TIndexInfo::TIndexInfo(const ui64 presetId)
+    : Comparator(HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableDecimalNumericComparison()
+                     ? NArrow::EDecimalComparisonMode::Numeric
+                     : NArrow::EDecimalComparisonMode::Legacy)
+    , PresetId(presetId)
+{
+}
+
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
         return TConclusionStatus::Fail(
@@ -135,6 +143,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         auto it = columns.find(i);
         AFL_VERIFY(it != columns.end());
         PKColumns.emplace_back(TNameTypeInfo(it->second.Name, it->second.PType));
+        PrimaryKeyTypes.emplace_back(it->second.PType);
     }
 
     if (!SchemaWithSpecials) {
@@ -607,7 +616,8 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
     if (IsSpecialColumn(columnId)) {
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
-            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
+            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt,
+            NScheme::TTypeInfo(columnId == (ui32)ESpecialColumn::DELETE_FLAG ? NScheme::NTypeIds::Bool : NScheme::NTypeIds::Uint64));
     } else {
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());
@@ -624,7 +634,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache)
-    : PresetId(original.PresetId)
+    : Comparator(original.Comparator)
+    , PresetId(original.PresetId)
 {
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -654,6 +665,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
         PKColumnIds = original.PKColumnIds;
         PKColumns = original.PKColumns;
+        PrimaryKeyTypes = original.PrimaryKeyTypes;
     }
     {
         const auto addFromOriginal = [&](const ui32 index) {

@@ -14,9 +14,9 @@
 #include <ydb/core/formats/arrow/program/projection.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
 
-#include <ydb/library/formats/arrow/helpers/array.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/arrow_kernels/ut_common.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -25,6 +25,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -795,6 +796,55 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         GroupByXY(false, 2, ETest::EMPTY);
 
         GroupByXY(false, 1, ETest::ONE_VALUE);
+    }
+
+    Y_UNIT_TEST(GroupByMergePhysicalKeys) {
+        std::string one(16, '\0');
+        one[0] = 1;
+        std::string twoHundredFiftySix(16, '\0');
+        twoHundredFiftySix[1] = 1;
+        const std::string prefix("a\0", 2);
+        std::vector<std::unique_ptr<TAccessorsCollection>> sources;
+        const auto addSource = [&](const std::array<std::string, 3>& keys, const std::array<std::string, 3>& suffixes,
+                                   const std::array<i64, 3>& partialSums) {
+            arrow::FixedSizeBinaryBuilder keyBuilder(arrow::fixed_size_binary(16));
+            arrow::BinaryBuilder suffixBuilder;
+            arrow::Int64Builder sumBuilder;
+            for (ui32 i = 0; i < keys.size(); ++i) {
+                UNIT_ASSERT(keyBuilder.Append(keys[i]).ok());
+                UNIT_ASSERT(suffixBuilder.Append(suffixes[i]).ok());
+                UNIT_ASSERT(sumBuilder.Append(partialSums[i]).ok());
+            }
+            auto source = std::make_unique<TAccessorsCollection>();
+            source->AddCalculated(1, TStatusValidator::GetValid(keyBuilder.Finish()));
+            source->AddCalculated(2, TStatusValidator::GetValid(suffixBuilder.Finish()));
+            source->AddCalculated(4, TStatusValidator::GetValid(sumBuilder.Finish()));
+            sources.emplace_back(std::move(source));
+        };
+        addSource({ one, twoHundredFiftySix, one }, { "a", "a", prefix }, { 10, 20, 30 });
+        addSource({ twoHundredFiftySix, one, one }, { "a", "a", prefix }, { 40, 50, 60 });
+
+        NAggregation::TWithKeysAggregationProcessor::TBuilder builder;
+        builder.AddKey(1);
+        builder.AddKey(2);
+        UNIT_ASSERT(builder.AddGroupBy(3, 4, EAggregate::Sum).IsSuccess());
+        const std::shared_ptr<IResourceProcessor> processor = builder.Finish().DetachResult();
+        TAccessorsCollection result;
+        UNIT_ASSERT(processor->BuildResultsAggregator()->Execute(sources, result).IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetRecordsCountActualVerified(), 3);
+
+        const auto keys = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(result.GetArrayVerified(1));
+        const auto suffixes = std::static_pointer_cast<arrow::BinaryArray>(result.GetArrayVerified(2));
+        const auto sums = std::static_pointer_cast<arrow::Int64Array>(result.GetArrayVerified(4));
+        std::map<std::pair<std::string, std::string>, i64> expected = { { { one, "a" }, 60 }, { { twoHundredFiftySix, "a" }, 60 },
+            { { one, prefix }, 90 } };
+        for (i64 i = 0; i < keys->length(); ++i) {
+            const auto it = expected.find({ keys->GetString(i), suffixes->GetString(i) });
+            UNIT_ASSERT(it != expected.end());
+            UNIT_ASSERT_VALUES_EQUAL(sums->Value(i), it->second);
+            expected.erase(it);
+        }
+        UNIT_ASSERT(expected.empty());
     }
 
     Y_UNIT_TEST(MinMaxSomeGroupBy) {

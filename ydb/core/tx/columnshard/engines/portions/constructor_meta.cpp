@@ -17,14 +17,17 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
         AFL_VERIFY(primaryKeys.GetSchema()->field(i)->type()->id() == indexInfo.GetReplaceKey()->field(i)->type()->id());
     }
     FirstAndLastPK = primaryKeys;
+    PKTypes = indexInfo.GetPrimaryKeyTypes();
+    Comparator = indexInfo.GetComparator();
     AFL_VERIFY(!RecordSnapshotMin);
     AFL_VERIFY(!RecordSnapshotMax);
     DeletionsCount = deletionsCount;
     if (snapshotKeys) {
-        RecordSnapshotMin = TSnapshot(snapshotKeys->GetFirst().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
-            snapshotKeys->GetFirst().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
-        RecordSnapshotMax = TSnapshot(snapshotKeys->GetLast().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
-            snapshotKeys->GetLast().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
+        const auto& snapshotTypes = IIndexInfo::GetSnapshotColumnTypes();
+        RecordSnapshotMin = TSnapshot(snapshotKeys->GetFirst(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
+            snapshotKeys->GetFirst(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
+        RecordSnapshotMax = TSnapshot(snapshotKeys->GetLast(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
+            snapshotKeys->GetLast(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
     } else {
         RecordSnapshotMin = TSnapshot::Zero();
         RecordSnapshotMax = TSnapshot::Zero();
@@ -32,6 +35,8 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
 }
 
 TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
+    PKTypes = meta.GetPKTypes();
+    Comparator = meta.GetComparator();
     FirstAndLastPK = NArrow::TFirstLastSpecialKeys(meta.IndexKeyStart(), meta.IndexKeyEnd(), meta.IndexKeyStart().GetSchema());
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
@@ -56,7 +61,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     TMemoryProfileGuard mGuard("meta_construct/others", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
-    TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
+    TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax, PKTypes, Comparator);
     if (TierName) {
         result.TierName = *TierName;
     }
@@ -82,6 +87,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
 
 bool TPortionMetaConstructor::LoadMetadata(
     const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& /*groupSelector*/) {
+    PKTypes = indexInfo.GetPrimaryKeyTypes();
+    Comparator = indexInfo.GetComparator();
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }

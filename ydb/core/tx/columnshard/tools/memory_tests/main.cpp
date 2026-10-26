@@ -89,6 +89,9 @@ int main(int argc, char** argv) {
     }
 
     auto schema = MakeFullSchema();
+    const std::vector<NKikimr::NScheme::TTypeInfo> logicalTypes = { NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Timestamp),
+        NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Utf8), NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Uint64) };
+    const NKikimr::NArrow::TComparator comparator(NKikimr::NArrow::EDecimalComparisonMode::Legacy);
     auto start = std::chrono::high_resolution_clock::now();
     for (auto i : std::ranges::views::iota(0ll, N)) {
         arrow::TimestampBuilder id1_B =
@@ -123,14 +126,14 @@ int main(int argc, char** argv) {
 
         switch (TYPE) {
             case 1:
-                simpleRows.emplace_back(std::make_shared<NKikimr::NArrow::TSimpleRow>(ExtractBatch(table), 0));
+                simpleRows.emplace_back(std::make_shared<NKikimr::NArrow::TSimpleRow>(ExtractBatch(table), 0, logicalTypes, comparator));
                 break;
             case 2:
                 recordBatches.emplace_back(ExtractBatch(table));
                 break;
             case 3:
                 sortableBatchPositions.emplace_back(
-                    std::make_shared<NKikimr::NArrow::NMerger::TSortableBatchPosition>(ExtractBatch(table), 0, false));
+                    std::make_shared<NKikimr::NArrow::NMerger::TSortableBatchPosition>(ExtractBatch(table), 0, false, logicalTypes, comparator));
                 break;
             default:
                 return -12;

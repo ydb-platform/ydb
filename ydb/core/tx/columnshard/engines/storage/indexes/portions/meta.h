@@ -23,8 +23,8 @@ protected:
         return DataExtractor;
     }
 
-    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount,
+        const NScheme::TTypeInfo& logicalType, const NArrow::TComparator& comparator) const = 0;
 
     virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,

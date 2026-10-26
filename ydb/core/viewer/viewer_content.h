@@ -70,7 +70,7 @@ private:
             return;
         }
 
-        const auto& params = httpRequest->GetParams();
+        const auto params = NormalizePathParameters(httpRequest->GetParams());
         auto post = httpRequest->GetPostContent();
 
         reqCtx.JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(

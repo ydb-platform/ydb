@@ -143,8 +143,9 @@ public:
             }
             SwitchDrainOff<Schema::Node>(db, node);
         } else if (std::holds_alternative<TBridgePileId>(Target)) {
-            TBridgePileInfo& pile = Self->GetPile(std::get<TBridgePileId>(Target));
-            SwitchDrainOff<Schema::BridgePile>(db, &pile);
+            // the pile may have been removed from the cluster meanwhile, then there is nothing to switch off
+            const auto it = Self->BridgePiles.find(std::get<TBridgePileId>(Target));
+            SwitchDrainOff<Schema::BridgePile>(db, it != Self->BridgePiles.end() ? &it->second : nullptr);
         } else {
             Y_DEBUG_ABORT("Unexpected value in TDrainTarget");
         }

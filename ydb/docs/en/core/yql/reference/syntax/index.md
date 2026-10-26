@@ -12,12 +12,6 @@
 * [SELECT](select/index.md)
 * [VALUES](values.md)
 
-{% if select_command == "SELECT STREAM" %}
-
-* [SELECT STREAM](select_stream.md)
-
-{% endif %}
-
 * [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
@@ -88,12 +82,6 @@
 {% if process_command == "PROCESS" %}
 
 * [PROCESS](process.md)
-
-{% endif %}
-
-{% if process_command == "PROCESS STREAM" %}
-
-* [PROCESS STREAM](process.md)
 
 {% endif %}
 

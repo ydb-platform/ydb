@@ -194,11 +194,12 @@ public:
             const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
                 return Name(setting) == SharedReading && FromString<bool>(Value(setting));
             });
+            const auto enableWatermarksAdvanced = State_->EnableWatermarksAdvanced && !useSharedReading;
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
             TMaybeNode<TCoAtom> watermarkSerialized;
-            if (maybeWatermark) {
+            if (maybeWatermark && !enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 TStringBuilder err;
@@ -234,8 +235,8 @@ public:
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .WatermarkExpr(maybeWatermark)
-                    .WatermarkSerialized(watermarkSerialized)
+                    .WatermarkExpr(enableWatermarksAdvanced ? TMaybeNode<TCoLambda>() : maybeWatermark)
+                    .WatermarkSerialized(enableWatermarksAdvanced ? TMaybeNode<TCoAtom>() : watermarkSerialized)
                     .Build()
                 .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -243,7 +244,7 @@ public:
                 .Done();
             // clang-format on
 
-            if (maybeWatermark && State_->EnableWatermarksAdvanced && !useSharedReading) {
+            if (maybeWatermark && enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
@@ -292,20 +293,21 @@ public:
                 // The partition id metadata column is exposed at the expr level under the user-facing
                 // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
                 const auto partitionIdDescriptor =
-                    GetPqMetaFieldDescriptorByKey("partition_id", State_->AddTransparentPrefixToTransparentSystemColumns,
+                    GetPqMetaFieldDescriptorByKey("partition_id", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                         State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!partitionIdDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind partition_id metadata to column"));
                     return {};
                 }
-                const auto clusterDescriptor = GetPqMetaFieldDescriptorByKey("cluster", State_->AddTransparentPrefixToTransparentSystemColumns,
-                    State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
+                const auto clusterDescriptor =
+                    GetPqMetaFieldDescriptorByKey("cluster", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+                        State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!clusterDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind cluster metadata to column"));
                     return {};
                 }
                 const auto writeTimeDescriptor =
-                    GetPqMetaFieldDescriptorByKey("write_time", State_->AddTransparentPrefixToTransparentSystemColumns,
+                    GetPqMetaFieldDescriptorByKey("write_time", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                         State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!writeTimeDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind write_time metadata to column"));
@@ -638,7 +640,8 @@ public:
 
                 TString watermarkExprSql;
                 if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
-                    const auto serializedWatermarkExpr = maybeWatermarkSerialized.Cast().Ref().Content();
+                    const auto watermarkSerialized = maybeWatermarkSerialized.Cast();
+                    const auto serializedWatermarkExpr = watermarkSerialized.Ref().Content();
                     if (!serializedWatermarkExpr.empty()) {
                         NYql::NConnector::NApi::TExpression watermarkExprProto;
                         YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
@@ -978,15 +981,14 @@ public:
 
         TExprNode::TListType metadataFieldsList;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
-            for (const auto& sysColumn :
-                GetAllowedPqMetaSysColumns(State_->AddTransparentPrefixToTransparentSystemColumns, State_->EnableUserAttributesInTopicQuery))
-            {
+            for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery)) {
                 metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
             }
         }
 
         // Also add __ydb_-prefixed system columns
-        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery, State_->AllowYdbSysColumns())) {
             metadataFieldsList.push_back(ctx.NewAtom(pos, ydbColumn));
         }
 

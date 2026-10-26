@@ -2,6 +2,7 @@
 """Format tracked C/C++ files in folders opted in through Ya autoincludes."""
 
 import argparse
+import difflib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -186,14 +187,60 @@ def resolve_formatter(root):
     return binary
 
 
+def check_files(root, files, style, binary, clear_progress=None):
+    command = [binary, '--style=file:' + str(style)]
+    result = subprocess.run(
+        command + ['--dry-run', '--Werror', '--ferror-limit=1'] + [str(path) for path in files],
+        cwd=root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode == 0:
+        return 0
+
+    # Match the native checker: clang-format can report replacements that leave
+    # the bytes unchanged. A failed dry run needs an actual output comparison.
+    failed = False
+    for path in files:
+        original = path.read_bytes()
+        result = subprocess.run(
+            command + ['--assume-filename=' + str(path)], cwd=root, input=original, capture_output=True
+        )
+        diagnostics = result.stderr.decode(errors='replace')
+        if result.returncode != 0:
+            failed = True
+            if not diagnostics:
+                diagnostics = f'{path}: clang-format failed with exit status {result.returncode}\n'
+        elif result.stdout != original:
+            failed = True
+            diagnostics += f'{path}: error: code should be clang-formatted\n'
+            diagnostics += ''.join(
+                difflib.unified_diff(
+                    original.decode(errors='replace').splitlines(keepends=True),
+                    result.stdout.decode(errors='replace').splitlines(keepends=True),
+                    fromfile=str(path),
+                    tofile=str(path) + ' (formatted)',
+                )
+            )
+        if diagnostics:
+            if clear_progress is not None:
+                clear_progress()
+            print(diagnostics, end='' if diagnostics.endswith('\n') else '\n', file=sys.stderr, flush=True)
+    return int(failed)
+
+
 def format_files(root, files, style, binary, fix, progress=None, clear_progress=None):
     failed = False
     for start in range(0, len(files), 32):
         batch = [root / path for path in files[start : start + 32]]
-        before = [path.read_bytes() for path in batch] if fix else []
-        command = [binary, '--style=file:' + str(style)]
-        command += ['-i'] if fix else ['--dry-run', '--Werror', '--ferror-limit=1']
-        command += [str(path) for path in batch]
+        if not fix:
+            failed |= check_files(root, batch, style, binary, clear_progress) != 0
+            if progress is not None:
+                progress(len(batch), 0)
+            continue
+
+        before = [path.read_bytes() for path in batch]
+        command = [binary, '--style=file:' + str(style), '-i'] + [str(path) for path in batch]
         if clear_progress is None:
             result = subprocess.run(command, cwd=root)
         else:

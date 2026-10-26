@@ -2036,7 +2036,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
         }
     });
 
-    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true, 2) });
+    auto* firstSchema = new TTxInitSchema(TableId, true, 2);
+    firstSchema->CompactionPolicy->InMemForceSizeToSnapshot = Max<ui64>();
+    env.SendSync(new NFake::TEvExecute{ firstSchema });
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
         TString value(size_t(100 * 1024), char('a' + key % 26));
@@ -2067,7 +2069,11 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 
     // make second table to try to preempt first table from cache
-    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false, 3) });
+    auto* secondSchema = new TTxInitSchema(Table2Id, false, 3);
+    // Preserve the first part's payload size independently of memtable arena capacity
+    secondSchema->CompactionPolicy->InMemForceSizeToSnapshot = Max<ui64>();
+    secondSchema->CompactionPolicy->InMemForceStepsToSnapshot = (16_MB + 200_KB - 1) / 200_KB;
+    env.SendSync(new NFake::TEvExecute{ secondSchema });
     // write 100 rows, each ~200KB (~20MB)
     for (i64 key = 0; key < 100; ++key) {
         TString value(size_t(200 * 1024), char('a' + key % 26));

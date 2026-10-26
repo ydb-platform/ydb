@@ -1,7 +1,77 @@
 #include "config.h"
+#include "group_geometry_info.h"
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/base/nameservice.h>
 
 namespace NKikimr::NBsController {
+
+    TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
+            const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
+            const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config) {
+        auto result = pool;
+        // Ordinary groups can span piles. Only physical parts with a pile identity use overrides.
+        if (pool.DDisk || !pileId || !bridgeInfo || !config) {
+            return result;
+        }
+        const auto *pile = bridgeInfo->FindPile(pileId);
+        if (!pile) {
+            return result;
+        }
+        const auto *rule = FindStoragePoolPileOverride(config->GetBlobStorageConfig(), pile->Name, pool.Kind);
+        if (!rule) {
+            return result;
+        }
+        // Keep the base pool intact: Console may later resend it with a different group count.
+        NKikimrBlobStorage::TDefineStoragePool effective;
+        Serialize(&effective, id, pool);
+        ApplyStoragePoolPileOverride(effective, *rule);
+        if (!TBlobStorageGroupType::ParseErasureName(result.ErasureSpecies, effective.GetErasureSpecies())) {
+            throw TExError() << "invalid ErasureSpecies in storage pool pile override";
+        }
+        result.SetGroupGeometry(effective.GetGeometry());
+        result.PDiskFilters.clear();
+        for (const auto& filter : effective.GetPDiskFilter()) {
+            result.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), filter));
+        }
+        return result;
+    }
+
+    TBlobStorageController::TStoragePoolInfo TBlobStorageController::GetStoragePoolForPile(
+            const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+    }
+
+    std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        if (auto error = NKikimr::ValidateStoragePoolPileOverrides(config.GetBlobStorageConfig())) {
+            return error;
+        }
+        try {
+            std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> geometries;
+            for (const auto& [groupId, group] : GroupMap) {
+                if (!group->BridgePileId || group->DDisk || group->VDisksInGroup.empty()) {
+                    continue;
+                }
+                const auto [it, inserted] = geometries.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
+                if (inserted) {
+                    const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
+                        group->BridgePileId, BridgeInfo.get(), &config);
+                    it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+                }
+                const auto& geometry = it->second;
+                if (group->ErasureSpecies != geometry.GetErasure()
+                        || group->Topology->GetNumVDisksPerFailDomain() != geometry.GetNumVDisksPerFailDomain()
+                        || group->Topology->GetTotalFailRealmsNum() != geometry.GetNumFailRealms()
+                        || group->Topology->GetNumFailDomainsPerFailRealm() != geometry.GetNumFailDomainsPerFailRealm()) {
+                    return TStringBuilder() << "storage pool pile override changes erasure or topology of existing GroupId# "
+                        << groupId;
+                }
+            }
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "invalid storage pool pile override: " << ex.what();
+        }
+        return std::nullopt;
+    }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
         TBoxId boxId = cmd.GetBoxId();
@@ -50,6 +120,26 @@ namespace NKikimr::NBsController {
         const TBoxStoragePoolId id(boxId, storagePoolId);
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
+        const auto current = StoragePools.Get().find(id);
+        const bool existing = current != StoragePools.Get().end();
+        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
+        const bool bridgeMode = existing ? current->second.BridgeMode
+            : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
+        if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
+            throw TExError() << "can't change storage pool BridgeMode";
+        }
+        if (!existing && bridgeMode != defaultBridgeMode) {
+            const auto& details = Self.StorageConfig
+                ? Self.StorageConfig->GetClusterStateDetails()
+                : NKikimrBridge::TClusterStateDetails::default_instance();
+            if (!defaultBridgeMode || details.GetBscConversionPending()) {
+                throw TExError() << "BridgeMode override requires a bridged cluster with BSC conversion complete";
+            }
+            if (!details.GetNonUniformStorageEnabled()) {
+                throw TExError() << "BridgeMode override requires bridge_config.enable_non_uniform_storage";
+            }
+        }
+
         TStoragePoolInfo storagePool;
         storagePool.Name = cmd.GetName();
         storagePool.Generation = nextGen;
@@ -59,15 +149,11 @@ namespace NKikimr::NBsController {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
         }
 
+        // Resolve the default only at creation; updates preserve the stored mode.
+        storagePool.BridgeMode = bridgeMode;
+
         if (cmd.HasGeometry()) {
-            const auto &geom = cmd.GetGeometry();
-            storagePool.RealmLevelBegin = geom.GetRealmLevelBegin();
-            storagePool.RealmLevelEnd = geom.GetRealmLevelEnd();
-            storagePool.DomainLevelBegin = geom.GetDomainLevelBegin();
-            storagePool.DomainLevelEnd = geom.GetDomainLevelEnd();
-            storagePool.NumFailRealms = geom.GetNumFailRealms();
-            storagePool.NumFailDomainsPerFailRealm = geom.GetNumFailDomainsPerFailRealm();
-            storagePool.NumVDisksPerFailDomain = geom.GetNumVDisksPerFailDomain();
+            storagePool.SetGroupGeometry(cmd.GetGeometry());
         }
 
         // parse VDisk kind
@@ -102,44 +188,7 @@ namespace NKikimr::NBsController {
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = boxId;
-            filter.StoragePoolId = storagePoolId;
-
-            bool hasTypeProperty = false;
-
-            for (const auto &property : item.GetProperty()) {
-                switch (property.GetPropertyCase()) {
-#define PROPERTY(NAME, PTR) \
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
-                        if (filter.NAME) { \
-                            throw TExError() << #NAME << " already set"; \
-                        } else { \
-                            filter.NAME = property.Get ## NAME(); \
-                            if (bool *p = (PTR)) { \
-                                *p = true; \
-                            } \
-                            continue; \
-                        } \
-                    }
-
-                    PROPERTY(Type, &hasTypeProperty)
-                    PROPERTY(SharedWithOs, nullptr)
-                    PROPERTY(ReadCentric, nullptr)
-                    PROPERTY(Kind, nullptr)
-
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
-                }
-
-                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
-            }
-
-            if (!hasTypeProperty) {
-                throw TExError() << "TPDiskFilter did not specify Type property";
-            }
-
-            storagePool.PDiskFilters.insert(std::move(filter));
+            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
         }
 
         if (cmd.HasExistingGroups()) {
@@ -155,12 +204,20 @@ namespace NKikimr::NBsController {
         }
 
         const auto& spToGroups = StoragePoolGroups.Get();
+        std::map<TBridgePileId, TBlobStorageGroupType::EErasureSpecies> erasures;
         for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
             // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
-            const bool physical = !group->BridgeGroupInfo || group->IsInlinePile();
-            if (physical && group->ErasureSpecies != storagePool.ErasureSpecies) {
+            if (group->BridgeGroupInfo && !group->IsInlinePile()) {
+                continue;
+            }
+            const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
+            if (inserted) {
+                erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
+                    BridgeInfo.get(), StorageConfig.get()).ErasureSpecies;
+            }
+            if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }
@@ -177,15 +234,8 @@ namespace NKikimr::NBsController {
                 }
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
-            storagePool.BridgeMode = cur.BridgeMode;
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
-        } else {
-            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
-            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
-            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
-            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
-            spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }
@@ -488,6 +538,9 @@ namespace NKikimr::NBsController {
 
         if (origin.DDisk || target.DDisk) {
             throw TExError() << "can't move groups between DDisk pools";
+        }
+        if (origin.BridgeMode != target.BridgeMode) {
+            throw TExError() << "can't move groups between pools with different BridgeMode";
         }
 
         auto& storagePoolGroups = StoragePoolGroups.Unshare();
@@ -834,6 +887,15 @@ namespace NKikimr::NBsController {
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+
+        // the wiped VDisk restores its data from the other ones, the VDisks not ready may miss data too
+        TBlobStorageGroupInfo::TGroupVDisks dataless(group->Topology.get(), vslot->GetShortVDiskId());
+        for (const TVSlotInfo *slot : group->VDisksInGroup) {
+            if (!slot->IsReady) {
+                dataless |= {group->Topology.get(), slot->GetShortVDiskId()};
+            }
+        }
+        CheckBridgedPartDataRestorable(*group, dataless);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {

@@ -8,76 +8,6 @@
 
 using namespace NBridgeTest;
 
-namespace {
-
-    // define new storage pool with the same settings as the existing one
-    void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
-        NKikimrBlobStorage::TConfigRequest request;
-        auto *read = request.AddCommand()->MutableReadStoragePool();
-        read->SetBoxId(1);
-        read->AddStoragePoolId(1);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
-
-        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
-        pool.SetStoragePoolId(storagePoolId);
-        pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
-        pool.SetKind(pool.GetName());
-        pool.SetNumGroups(1);
-        pool.ClearItemConfigGeneration();
-
-        request.Clear();
-        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-    }
-
-    void SetNumGroups(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups) {
-        NKikimrBlobStorage::TConfigRequest request;
-        auto *read = request.AddCommand()->MutableReadStoragePool();
-        read->SetBoxId(1);
-        read->AddStoragePoolId(storagePoolId);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
-
-        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
-        pool.SetNumGroups(numGroups);
-
-        request.Clear();
-        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-    }
-
-    // move one of the group's VDisks to another PDisk; this also bumps the group generation
-    void ReassignOneDisk(TEnvironmentSetup& env, ui32 groupId) {
-        const auto baseConfig = env.FetchBaseConfig();
-        const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
-        for (const auto& vslot : baseConfig.GetVSlot()) {
-            if (vslot.GetGroupId() == groupId) {
-                target = &vslot;
-                break;
-            }
-        }
-        UNIT_ASSERT(target);
-
-        NKikimrBlobStorage::TConfigRequest request;
-        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
-        reassign->SetGroupId(groupId);
-        reassign->SetGroupGeneration(target->GetGroupGeneration());
-        reassign->SetFailRealmIdx(target->GetFailRealmIdx());
-        reassign->SetFailDomainIdx(target->GetFailDomainIdx());
-        reassign->SetVDiskIdx(target->GetVDiskIdx());
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-    }
-
-}
-
 Y_UNIT_TEST_SUITE(BridgeConversion) {
 
     Y_UNIT_TEST(RollingRestartIntoBridgeCapable) {
@@ -738,28 +668,15 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         RollingRestartWithSinglePileBridgeConfig(env, checker, groups.front());
 
         ui32 numInnerPuts = 0; // puts issued by the bridge proxy to the DS proxy of the pile
-        std::unordered_map<ui32, NKikimrBlobStorage::TGroupInfo> groupInfos; // latest group infos sent by BSC
-        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvBlobStorage::EvPut:
-                    if (auto *msg = ev->Get<TEvBlobStorage::TEvPut>(); msg->ForceGroupGeneration &&
-                            msg->Id.TabletID() == 100500) {
-                        ++numInnerPuts;
-                    }
-                    break;
-
-                case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
-                    const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
-                    for (const auto& group : record.GetServiceSet().GetGroups()) {
-                        auto& info = groupInfos[group.GetGroupID()];
-                        if (info.GetGroupGeneration() <= group.GetGroupGeneration()) {
-                            info.CopyFrom(group);
-                        }
-                    }
-                    break;
+        TGroupInfoTracker groupInfos; // latest group infos sent by BSC
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                if (auto *msg = ev->Get<TEvBlobStorage::TEvPut>(); msg->ForceGroupGeneration &&
+                        msg->Id.TabletID() == 100500) {
+                    ++numInnerPuts;
                 }
             }
-            return true;
+            return groupInfos.Filter(nodeId, ev);
         };
 
         const auto baseConfigBefore = env.FetchBaseConfig();
@@ -786,8 +703,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         for (ui32 groupId : groups) {
             const ui32 generation = getGroupGeneration(baseConfig, groupId);
             UNIT_ASSERT_VALUES_EQUAL(generation, getGroupGeneration(baseConfigBefore, groupId) + 1);
-            UNIT_ASSERT(groupInfos.contains(groupId));
-            const auto& info = groupInfos[groupId];
+            const auto& info = groupInfos.Get(groupId);
             UNIT_ASSERT_VALUES_EQUAL_C(info.GetGroupGeneration(), generation, info.ShortDebugString());
             UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeProxyGroupId(), groupId, info.ShortDebugString());
             UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
@@ -816,7 +732,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         ReassignOneDisk(env, groups.front());
         env.Sim(TDuration::Minutes(1));
         {
-            const auto& info = groupInfos[groups.front()];
+            const auto& info = groupInfos.Get(groups.front());
             UNIT_ASSERT_VALUES_EQUAL(info.GetGroupGeneration(),
                 getGroupGeneration(env.FetchBaseConfig(), groups.front()));
             UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeGroupState().GetPile(0).GetGroupGeneration(), info.GetGroupGeneration());
@@ -863,15 +779,17 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         auto res = ReplaceMainConfig(env, [](YAML::Node& /*config*/) {});
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
             res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "list of bridge piles can't be changed");
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "bridged cluster can't run without bridge config");
 
-        // the config with the only pile of the cluster passes the check
+        // the config with the only pile of the cluster is accepted
         res = ReplaceMainConfig(env, [](YAML::Node& config) {
             YAML::Node pile;
             pile["name"] = "pile_1";
             config["bridge_config"]["piles"].push_back(pile);
         });
-        UNIT_ASSERT_C(!res.GetErrorReason().Contains("bridge piles"), res.GetErrorReason());
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
         checker.Write(groupId);
         checker.CheckAll();
     }

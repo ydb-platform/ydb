@@ -18,11 +18,11 @@ inputs:
     description: "small or small-medium or all"
   test_threads:
     required: false
-    default: "56"
+    default: "64"
     description: "Test threads count"
   link_threads:
     required: false
-    default: "12"
+    default: "6"
     description: "link threads count"
   additional_ya_make_args:
     type: string
@@ -335,6 +335,8 @@ runs:
 
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          # Keep chunk archives separate to avoid merging and repacking them.
+          --dont-merge-split-tests
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
         )
@@ -611,7 +613,6 @@ runs:
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
-          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
           analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then
@@ -937,3 +938,16 @@ runs:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+
+    - name: cleanup tmp
+      if: always()
+      shell: bash
+      run: |
+        set +e
+        set -x
+        if [ -n "${TMP_DIR:-}" ]; then
+          rm -rf "$TMP_DIR"
+        fi
+        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
+        rm -rf /tmp/tmp*
+        df -h / || true

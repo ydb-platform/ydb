@@ -35,6 +35,7 @@ SRCS(
     ut_iterator.cpp
     ut_key_blocks.cpp
     ut_memtable.cpp
+    ut_memtable_memory.cpp
     ut_sausage.cpp
     ut_stat.cpp
     ut_comp_gen.cpp
@@ -62,6 +63,7 @@ SRCS(
     ut_slice.cpp
     ut_slice_loader.cpp
     ut_tablet_memory.cpp
+    ut_tier_predicate.cpp
     ut_vacuum.cpp
     ut_versions.cpp
     ut_backup.cpp

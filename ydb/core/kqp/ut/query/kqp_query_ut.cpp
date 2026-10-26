@@ -3303,6 +3303,34 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAsSelectWarningPolicy, WarningsAsErrors) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(std::format(R"(
+            PRAGMA Warning("{0}", "1101");
+            CREATE TABLE `/Root/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN)
+            AS SELECT 1u AS Col1, TablePath() AS Col2 FROM (SELECT 1u AS x);
+        )", WarningsAsErrors ? "error" : "disable"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        const auto issues = result.GetIssues().ToString();
+        if (WarningsAsErrors) {
+            UNIT_ASSERT_C(!result.IsSuccess(), issues);
+            UNIT_ASSERT_STRING_CONTAINS_C(issues, "TablePath will be empty", issues);
+        } else {
+            UNIT_ASSERT_C(result.IsSuccess(), issues);
+            UNIT_ASSERT_C(issues.find("TablePath will be empty") == TString::npos, issues);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsSelectPath, UseTablePathPrefix) {
         const auto dirPath = UseTablePathPrefix ? "" : "/Root/test/";
         const auto pragma = UseTablePathPrefix ? "PRAGMA TablePathPrefix(\"/Root/test\");" : "";

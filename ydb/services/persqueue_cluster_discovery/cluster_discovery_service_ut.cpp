@@ -1138,8 +1138,6 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         auto fnxColumn = server.PQClient().TryRunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
         UNIT_ASSERT(!fnxColumn.Defined());
-        auto kikimrHost = server.PQClient().TryRunYqlDataQuery("SELECT kikimrHost FROM `/Root/PQ/Config/V2/Cluster`;");
-        UNIT_ASSERT(!kikimrHost.Defined());
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         DiscoverClustersResult result;

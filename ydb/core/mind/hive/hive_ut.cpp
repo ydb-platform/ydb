@@ -10429,6 +10429,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 }
             });
         }
+
+        void SetPileState(ui32 pile, NKikimrBridge::TClusterState::EPileState state) {
+            UpdateBridgeInfo([pile, state](std::shared_ptr<TBridgeInfo> newState) {
+                newState->Piles[pile].State = state;
+            });
+        }
     };
 
     Y_UNIT_TEST(TestBridgeCreateTablet) {
@@ -10632,6 +10638,88 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), 0);
+    }
+
+    // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later
+    Y_UNIT_TEST(TestBridgeInactivePileForgotten) {
+        static constexpr ui32 NUM_NODES = 4;
+        static constexpr ui32 NUM_TABLETS = 2;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetDrainInflight(1);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
+                TTabletTypes::Dummy, BINDED_CHANNELS));
+            MakeSureTabletIsUp(runtime, SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true), 0);
+        }
+
+        // persisted drain flag of the pile, or -1 if the pile is not stored
+        auto pileDrain = [&](ui32 pileIndex) -> int {
+            auto query = MakeHolder<TEvTablet::TEvLocalMKQL>();
+            query->Record.MutableProgram()->MutableProgram()->SetText(TStringBuilder()
+                << "((let row (SelectRow 'BridgePile '('('Id (Uint32 '"
+                << TBridgePileId::FromPileIndex(pileIndex).GetLocalDb() << "))) '('Drain)))"
+                << "(return (AsList (SetResult 'row row))))");
+            runtime.SendToPipe(hiveTablet, sender, query.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto *response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), NKikimrProto::OK, response->Record.ShortDebugString());
+            const auto& result = response->Record.GetExecutionEngineEvaluatedResponse();
+            // SetResult wraps its value in Optional; SelectRow adds another Optional for the row
+            const auto& optionalRow = result.GetValue().GetStruct(0).GetOptional();
+            if (!optionalRow.HasOptional()) {
+                return -1;
+            }
+            const auto& value = optionalRow.GetOptional().GetStruct(0);
+            return value.HasOptional() && value.GetOptional().GetBool();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(pileDrain(0), 0);
+
+        // the primary pile is being drained when it fails and gets removed from the cluster
+        TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
+        bridge.Promote(1);
+        while (blockBoot.empty()) {
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(20));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pileDrain(0), 1);
+        bridge.Disconnect(0);
+        bridge.SetPileState(0, NKikimrBridge::TClusterState::INACTIVE); // the pile is removed from the cluster
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(pileDrain(0), -1);
+
+        // the drain ends without bringing the pile back, and the pile added to the cluster later starts afresh
+        blockBoot.Stop().Unblock();
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(pileDrain(0), -1);
+        bridge.SetPileState(0, NKikimrBridge::TClusterState::DISCONNECTED); // and added again
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(pileDrain(0), 0);
+
+        // the nodes reserved by the drain of the pile are released by it, so they can be drained when the pile is back
+        bridge.SetPileState(0, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        for (ui32 attempt = 0;; ++attempt) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(runtime.GetNodeId(0)), 0,
+                GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto *response = runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            if (response->Record.GetStatus() == NKikimrProto::OK) {
+                break;
+            }
+            // the drain of the pile may still be finishing
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::ALREADY);
+            UNIT_ASSERT_LT(attempt, 10);
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
     }
 
     Y_UNIT_TEST(TestBridgeBalance) {

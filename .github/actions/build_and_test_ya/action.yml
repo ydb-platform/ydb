@@ -16,11 +16,11 @@ inputs:
     description: "run tests"
   test_threads:
     type: string
-    default: 28
+    default: 64
     description: "Test threads count"
   link_threads:
     type: string
-    default: 12
+    default: 6
     description: "link threads count"
   test_size:
     type: string
@@ -73,6 +73,24 @@ defaults:
 runs:
   using: "composite"
   steps:
+    - name: Configure runner limits
+      shell: bash
+      run: |
+        # test_tool requests 1 MiB stderr pipes. Parallel runs can exhaust the
+        # per-user pipe budget, preventing pipe growth. With a small buffer,
+        # test_tool's 100 ms polling sleep can block chatty tests on stderr writes
+        # and cause timeouts. Raise the soft budget to 8 GiB per user.
+        sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
+        pipe_soft_pages=$((8 * 1024 * 1024 * 1024 / $(getconf PAGESIZE)))
+        current_soft_pages=$(sysctl -n fs.pipe-user-pages-soft)
+        # Zero means unlimited; preserve it and any higher existing limit.
+        if (( current_soft_pages > 0 && current_soft_pages < pipe_soft_pages )); then
+          sudo -n sysctl -w "fs.pipe-user-pages-soft=$pipe_soft_pages"
+        fi
+        # Disable any preconfigured hard cap that could restrict this budget.
+        sudo -n sysctl -w fs.pipe-user-pages-hard=0
+        sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash

@@ -139,9 +139,30 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+            // Exact match on supplied string fields; omitted fields are unconstrained.
+            // Deprecated numeric location fields are not accepted.
+            NActorsInterconnect.TNodeLocation Location = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
+}
+
+// Allocation overrides shared by BSC and distconf. Selectors are independent: an empty Kind list selects no
+// dynamic pools unless AllKinds is set; StaticGroupOverride selects static groups without reserving a pool kind.
+message TStoragePoolPileOverride {
+    repeated string PileName = 1; // nonempty list of distinct pile names; settings apply to every listed pile
+    repeated string Kind = 2;
+    bool AllKinds = 3;
+    bool StaticGroupOverride = 4;
+
+    optional string ErasureSpecies = 5;
+    // Replaces the whole geometry; {} selects the erasure's default geometry. Required with ErasureSpecies.
+    TGroupGeometry Geometry = 6;
+    message TPDiskFilters {
+        repeated TPDiskFilter PDiskFilter = 1;
+    }
+    // Replaces all filters, including with an empty list. Omission inherits the base filters.
+    TPDiskFilters PDiskFilters = 7;
 }
 
 message TDefineStoragePool {
@@ -164,6 +185,9 @@ message TDefineStoragePool {
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
     repeated uint64 ExpectedGroupSlotSize = 15; // primarily for debugging purposes; expected slot size for group allocation
+    // Resolved at creation from this field or the cluster default; readback returns the stored mode.
+    // Omitted updates preserve it, and changing it is not allowed.
+    optional bool BridgeMode = 16;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
@@ -218,12 +242,22 @@ message TDeleteStoragePool {
 // one is not supported). NumVDisksPerFailDomain should be one too. During Direct Block Group allocation resulting DDisks
 // may (but not necessarily) contain mix of different groups allocated here, but according to the pool placement model.
 
+enum EPersistentBufferAllocationMode {
+    BALANCED = 0;
+    // Select the lowest-ID eligible pool DDisk slot on each PDisk. The representative
+    // is stable while the eligible slots remain unchanged; existing PB claims are
+    // not migrated automatically when slots are removed or reconfigured.
+    ONE_PER_PDISK = 1;
+}
+
 message TDefineDDiskPool {
     uint64 BoxId = 1; // the box in which we allocate new DDisks
     string Name = 2; // cluster-unique name of the DDisk pool within the box
     TGroupGeometry Geometry = 3; // group geometry to map realms/domains
     repeated TPDiskFilter PDiskFilter = 4; // PDisk filter used for mapping
     uint32 NumDDiskGroups = 5; // number of DDisk groups of selected geometry
+    // Fixed at creation. Omission on update preserves the existing mode.
+    optional EPersistentBufferAllocationMode PersistentBufferAllocationMode = 6;
     uint64 ItemConfigGeneration = 100;
 }
 
@@ -253,6 +287,10 @@ message TUpdateDriveStatus {
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
     EDecommitStatus DecommitStatus = 7;
     TMaintenanceStatus.E MaintenanceStatus = 8;
+    // set by the one judging the drive by what it sees of it (CMS sentinel): the status of the drive of the pile that is
+    // not allowed to connect to the cluster (DISCONNECTED or INACTIVE one) is kept then, as nobody can see the drive;
+    // this way a stale request, e.g. a retry, doesn't override what BSC has done to the drive of the removed pile
+    bool SkipIfPileCutOff = 9;
 }
 
 message TReadDriveStatus {

@@ -560,7 +560,7 @@ runs:
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
              "${DELEGATE_CPU[@]}" \
-             -- "${YA_MAKE_RUN_CMD[@]}")
+             -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`

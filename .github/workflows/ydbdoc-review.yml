@@ -40,7 +40,8 @@ jobs:
             core.setOutput('sha', ref.object.sha);
 
       - name: Documentation translation review
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+        # v1.0.1 plus the robots/docs branch namespace change.
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@55800df7927cd63f4a1e73d26c755657253ea018
         with:
           mode: translate
           pr: ${{ github.event.pull_request.number }}
@@ -71,22 +72,28 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sourcePr = context.payload.pull_request.number;
-            const head = `${owner}:translation/pr-${sourcePr}`;
+            const heads = [
+              `${owner}:robots/docs/translation/pr-${sourcePr}`,
+              `${owner}:translation/pr-${sourcePr}`,
+            ];
             let translationPr = null;
 
             for (let attempt = 1; attempt <= 6; attempt++) {
-              const { data: pulls } = await github.rest.pulls.list({
-                owner,
-                repo,
-                state: 'open',
-                head,
-                per_page: 1,
-              });
+              for (const head of heads) {
+                const { data: pulls } = await github.rest.pulls.list({
+                  owner,
+                  repo,
+                  state: 'open',
+                  head,
+                  per_page: 1,
+                });
 
-              if (pulls[0]) {
-                translationPr = pulls[0];
-                break;
+                if (pulls[0]) {
+                  translationPr = pulls[0];
+                  break;
+                }
               }
+              if (translationPr) break;
 
               if (attempt < 6) {
                 core.info(`Translation PR not found yet (${attempt}/6), retrying...`);
@@ -96,7 +103,7 @@ jobs:
 
             if (!translationPr) {
               core.warning(
-                `Open translation PR not found for head ${head}. Labels were not added; CI can be triggered manually.`
+                `Open translation PR not found for heads ${heads.join(', ')}. Labels were not added; CI can be triggered manually.`
               );
               return;
             }

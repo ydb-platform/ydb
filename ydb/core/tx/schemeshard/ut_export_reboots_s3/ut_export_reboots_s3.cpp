@@ -11,6 +11,8 @@
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 
+#include <utility>
+
 using namespace NKikimrSchemeOp;
 using namespace NKikimr::NWrappers::NTestHelpers;
 using namespace NSchemeShardUT_Private;
@@ -138,14 +140,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const TVector<TTypedScheme>& schemeObjects,
         const TVector<TExportItem>& items,
         TRunFnWithSetup func, const TTestEnvOptions& opts,
-        const TString& extraSettings = "")
+        const TString& extraSettings = "",
+        TRuntimeSetup runtimeSetup = {})
     {
         t.GetTestEnvOptions() = opts;
 
-        TRuntimeSetup runtimeSetup;
         if (extraSettings.Contains("parquet")) {
-            runtimeSetup = [](TTestActorRuntime& runtime) {
+            auto baseSetup = std::move(runtimeSetup);
+            runtimeSetup = [baseSetup = std::move(baseSetup)](TTestActorRuntime& runtime) {
                 runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+                if (baseSetup) {
+                    baseSetup(runtime);
+                }
             };
         }
 
@@ -176,9 +182,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const TVector<TTypedScheme>& schemeObjects,
         const TVector<TExportItem>& items,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
+        const TString& extraSettings = "",
+        TRuntimeSetup runtimeSetup = {})
     {
-        Decorate(t, IsFs, schemeObjects, items, &Run, opts, extraSettings);
+        Decorate(t, IsFs, schemeObjects, items, &Run, opts, extraSettings, std::move(runtimeSetup));
     }
 
     template <bool IsFs>
@@ -186,9 +193,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const TVector<TTypedScheme>& schemeObjects,
         const TVector<TExportItem>& items,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
+        const TString& extraSettings = "",
+        TRuntimeSetup runtimeSetup = {})
     {
-        Decorate(t, IsFs, schemeObjects, items, &Cancel, opts, extraSettings);
+        Decorate(t, IsFs, schemeObjects, items, &Cancel, opts, extraSettings, std::move(runtimeSetup));
     }
 
     template <bool IsFs>
@@ -196,9 +204,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const TVector<TTypedScheme>& schemeObjects,
         const TVector<TExportItem>& items,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
+        const TString& extraSettings = "",
+        TRuntimeSetup runtimeSetup = {})
     {
-        Decorate(t, IsFs, schemeObjects, items, &Forget, opts, extraSettings);
+        Decorate(t, IsFs, schemeObjects, items, &Forget, opts, extraSettings, std::move(runtimeSetup));
+    }
+
+    TRuntimeSetup TableBackupAsSqlSetup() {
+        return [](TTestActorRuntime& runtime) {
+            runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+            runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        };
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleShardTable, 2, 1, false, IsFs) {
@@ -222,6 +238,42 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 UniformPartitionsCount: 2
             )",
         }, {{"/MyRoot/Table", ""}});
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(TableBackupAsSqlShouldSucceed, 2, 1, false, IsFs) {
+        RunExport<IsFs>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+        }, {{"/MyRoot/Table", "sql"}}, TTestWithReboots::GetDefaultTestEnvOptions(), "", TableBackupAsSqlSetup());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(TableBackupAsSqlCancelShouldSucceed, 2, 1, false, IsFs) {
+        CancelExport<IsFs>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+        }, {{"/MyRoot/Table", "sql"}}, TTestWithReboots::GetDefaultTestEnvOptions(), "", TableBackupAsSqlSetup());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(TableBackupAsSqlForgetShouldSucceed, 2, 1, false, IsFs) {
+        ForgetExport<IsFs>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+        }, {{"/MyRoot/Table", "sql"}}, TTestWithReboots::GetDefaultTestEnvOptions(), "", TableBackupAsSqlSetup());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTable, 2, 1, false) {

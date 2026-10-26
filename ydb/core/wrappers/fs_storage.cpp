@@ -419,8 +419,22 @@ public:
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        YDB_LOG_WARN("DeleteObject: not implemented");
-        ReplyError<TEvDeleteObjectResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
+        try {
+            if (!NFs::Remove(key) && errno != ENOENT) {
+                ythrow TSystemError() << "Cannot remove file " << key;
+            }
+            // Also flush on an idempotent retry after an unacknowledged unlink.
+            const auto parent = TFsPath(key).Parent();
+            if (parent.Exists()) {
+                FsyncParentDir(key);
+            }
+            ReplySuccess<TEvDeleteObjectResponse>(ev->Sender, key);
+        } catch (const TSystemError& ex) {
+            ReplyFsSystemError<TEvDeleteObjectResponse>(ev->Sender,
+                TStringBuilder() << "DeleteObject failed: key# " << key, ex, key);
+        } catch (const std::exception& ex) {
+            ReplyError<TEvDeleteObjectResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
+        }
     }
 
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {

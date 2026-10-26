@@ -402,7 +402,7 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
         } else {
             return HttpBadRequest(params);
         }
-    } else if (method == EMethod::Delete && Parent->Data.contains(path)) {
+    } else if (method == EMethod::Delete) {
         Parent->Data.erase(path);
         params.Output << "HTTP/1.1 204 Ok\r\n\r\n";
     } else {

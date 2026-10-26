@@ -36,6 +36,22 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+template <typename TSettings>
+TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
+    if (itemIdx < ui32(settings.items_size())) {
+        const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+        if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+            return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
+        }
+        return itemDest;
+    }
+    return NBackup::NFieldsWrappers::GetCommonDestination(settings);
+}
+
+} // namespace
+
 template <class TDerived, class TSettings>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
 protected:
@@ -46,6 +62,7 @@ protected:
         TString Path;
         TString Content;
         size_t Attempt = 0;
+        bool Delete = false;
     };
 
 protected:
@@ -100,6 +117,15 @@ protected:
         return true;
     }
 
+    void AddDeleteFile(TString path) {
+        Files.emplace_back(TFileUpload{.Path = std::move(path), .Delete = true});
+    }
+
+    void ClearFiles() {
+        Files.clear();
+        Delay = TDuration::Minutes(1);
+    }
+
     // Starting function for upload already added files
     void UploadFiles() {
         if (!StorageOperator) {
@@ -120,16 +146,30 @@ protected:
 
         const TFileUpload& upload = Files.front();
 
+        if (upload.Delete) {
+            auto request = Aws::S3::Model::DeleteObjectRequest().WithKey(GetObjectKey(upload.Path));
+            this->Send(StorageOperator, new TEvExternalStorage::TEvDeleteObjectRequest(request));
+            return;
+        }
+
         auto request = Aws::S3::Model::PutObjectRequest().WithKey(GetObjectKey(upload.Path));
 
         this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
     }
 
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
+        HandleResult(ev->Get()->Result);
+    }
+
+    void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
+        HandleResult(ev->Get()->Result);
+    }
+
+    template <typename TResult>
+    void HandleResult(const TResult& result) {
         TFileUpload& upload = Files.front();
 
-        YDB_LOG_DEBUG("Put file response " << upload.Path,
+        YDB_LOG_DEBUG("File operation response " << upload.Path,
             {"self", this->SelfId()},
             {"key", GetObjectKey(upload.Path)},
             {"result", result},
@@ -162,6 +202,7 @@ protected:
             sFunc(TEvents::TEvWakeup, ProcessQueue);
             sFunc(TEvents::TEvPoisonPill, PassAway);
             hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle);
         }
     }
 
@@ -386,17 +427,6 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         Finish(success, error);
     }
 
-    static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
-        if (itemIdx < ui32(settings.items_size())) {
-            const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
-            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
-                return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
-            }
-            return itemDest;
-        }
-        return NBackup::NFieldsWrappers::GetCommonDestination(settings);
-    }
-
 public:
     TSchemeUploader(
         TActorId schemeShard,
@@ -453,6 +483,113 @@ private:
     TString Permissions;
     TString Metadata;
 }; // TSchemeUploader
+
+template <typename TSettings>
+class TTableSchemeUploader : public TExportFilesUploader<TTableSchemeUploader<TSettings>, TSettings> {
+    using TBase = TExportFilesUploader<TTableSchemeUploader<TSettings>, TSettings>;
+
+public:
+    TTableSchemeUploader(
+        TActorId schemeShard,
+        ui64 exportId,
+        ui32 itemIdx,
+        const TSettings& settings,
+        TString scheme,
+        bool enableChecksums,
+        const TMaybe<NBackup::TEncryptionIV>& iv
+    )
+        : TBase(settings, GetDestinationPrefix(settings, itemIdx))
+        , SchemeShard(schemeShard)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+        , EnableChecksums(enableChecksums)
+        , Encrypted(settings.has_encryption_settings())
+        , IV(iv)
+        , Scheme(std::move(scheme))
+    {
+    }
+
+    void Bootstrap() {
+        const TString createTableFileName = NYdb::NDump::NFiles::CreateTable().FileName;
+
+        // Missing SQL also covers preparation failures and recovery from an older
+        // binary. Never regenerate bytes under an IV that may have been used.
+        if (Scheme.empty()) {
+            return OnFilesUploaded(false, "Missing persisted CREATE TABLE SQL");
+        }
+        if (Encrypted && !IV) {
+            return OnFilesUploaded(false, "Missing IV for SQL scheme upload");
+        }
+
+        TMaybe<NBackup::TEncryptionIV> schemeIV;
+        if (IV) {
+            if (IV->Size() != NBackup::TEncryptionIV::SIZE) {
+                return OnFilesUploaded(false, "Invalid IV size for SQL scheme upload");
+            }
+            schemeIV = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::TableCreate, 0 /* backupItemNumber */, 0 /* shardNumber */);
+        }
+
+        if (!this->AddFile(createTableFileName, Scheme, schemeIV)) {
+            return;
+        }
+
+        if (EnableChecksums) {
+            const TString checksum = TStringBuilder() << NBackup::ComputeChecksum(Scheme) << ' ' << createTableFileName;
+            if (!this->AddFile(NBackup::ChecksumKey(createTableFileName), checksum)) {
+                return;
+            }
+        }
+
+        this->UploadFiles();
+    }
+
+private:
+    void Finish(bool success, const TString& error) {
+        YDB_LOG_INFO("Finish uploading CREATE TABLE",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error},
+        );
+
+        this->Send(SchemeShard,
+            new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
+        this->PassAway();
+    }
+
+    void OnFilesUploaded(bool success, const TString& error) override {
+        if (!success && !Cleaning) {
+            YDB_LOG_WARN("Failed to upload CREATE TABLE SQL, removing SQL artifacts before backup",
+                {"self", this->SelfId()},
+                {"id", ExportId},
+                {"itemIdx", ItemIdx},
+                {"error", error},
+            );
+            // Keep SchemeShard in UploadTableSchemeSql until upload or fallback
+            // cleanup completes. A reboot can safely replay these persisted bytes.
+            Cleaning = true;
+            this->ClearFiles();
+            const TString fileName = NYdb::NDump::NFiles::CreateTable().FileName;
+            this->AddDeleteFile(NBackup::ChecksumKey(fileName));
+            this->AddDeleteFile(fileName);
+            this->AddDeleteFile(fileName + ".enc");
+            return this->UploadFiles();
+        }
+        if (!success) {
+            return Finish(false, TStringBuilder() << "Cannot invalidate CREATE TABLE SQL: " << error);
+        }
+        Finish(true, {});
+    }
+
+private:
+    TActorId SchemeShard;
+    ui64 ExportId;
+    ui32 ItemIdx;
+    const bool EnableChecksums;
+    const bool Encrypted;
+    TMaybe<NBackup::TEncryptionIV> IV;
+    TString Scheme;
+    bool Cleaning = false;
+};
 
 template <typename TSettings>
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader<TSettings>, TSettings> {
@@ -577,6 +714,19 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 }
 
 template <typename TSettings>
+IActor* CreateTableSchemeUploader(
+    TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const TSettings& settings,
+    TString scheme,
+    bool enableChecksums,
+    const TMaybe<NBackup::TEncryptionIV>& iv
+) {
+    return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(scheme), enableChecksums, iv);
+}
+
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
@@ -594,6 +744,18 @@ template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings& settings, TString scheme,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToFsSettings& settings, TString scheme,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToS3Settings>(

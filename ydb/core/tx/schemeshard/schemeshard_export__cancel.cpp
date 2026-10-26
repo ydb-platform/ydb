@@ -12,6 +12,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 
+#include <utility>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
 
 namespace NKikimr {
@@ -32,7 +34,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         return TXTYPE_CANCEL_EXPORT;
     }
 
-    bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
+    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
 
         auto response = MakeHolder<TEvExport::TEvCancelExportResponse>(request.GetTxId());
@@ -71,8 +73,23 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         );
 
         exportInfo->Issue = "Cancelled manually";
-
         NIceDb::TNiceDb db(txc.DB);
+
+        for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+            auto& item = exportInfo->Items[itemIdx];
+            if (item.State != TExportInfo::EState::UploadTableSchemeSql) {
+                continue;
+            }
+
+            if (auto schemeUploader = std::exchange(item.SchemeUploader, {})) {
+                ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
+                Self->RunningExportSchemeUploaders.erase(schemeUploader);
+            }
+
+            item.State = TExportInfo::EState::Cancelled;
+            Self->PersistExportItemState(db, *exportInfo, itemIdx);
+        }
+
         if (auto uploader = std::exchange(exportInfo->ExportMetadataUploader, {})) {
             Send(uploader, new TEvents::TEvPoisonPill());
             Self->RunningExportSchemeUploaders.erase(uploader);

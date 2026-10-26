@@ -217,7 +217,7 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(HeadObjectForNonExistentFileReturnsNoSuchKey);
     UNIT_TEST(MultipartUploadFullCycleCreatesCorrectFile);
     UNIT_TEST(AbortMultipartUploadDeletesIncompleteFile);
-    UNIT_TEST(DeleteObjectReturnsNotImplementedError);
+    UNIT_TEST(DeleteObjectIsIdempotent);
     UNIT_TEST(ListObjectsReturnsFilesInDirectory);
     UNIT_TEST(ListObjectsReturnsExactFile);
     UNIT_TEST(ListObjectsReturnsEmptyForMissingFile);
@@ -479,11 +479,18 @@ public:
         UNIT_ASSERT(!TFsPath(key).Exists());
     }
 
-    void DeleteObjectReturnsNotImplementedError() {
+    void DeleteObjectIsIdempotent() {
         const TString key = KeyPath("delete_test.txt");
 
+        UNIT_ASSERT(PutObject(key, "stale SQL").IsSuccess());
+        UNIT_ASSERT(TFsPath(key).Exists());
         auto result = DeleteObject(key);
-        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT(!TFsPath(key).Exists());
+        result = DeleteObject(key);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        result = DeleteObject(KeyPath("missing/file.sql"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
     }
 
     void ListObjectsReturnsFilesInDirectory() {

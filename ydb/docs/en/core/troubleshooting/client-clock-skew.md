@@ -6,9 +6,9 @@ The Healthcheck [`NODES_TIME_DIFFERENCE`](../reference/ydb-sdk/health-check-api.
 
 ## Symptoms {#symptoms}
 
-* Errors during authentication with a [service account key](../security/authentication.md#iam). In this mode, the application builds a JWT to request a token and sets the current time from the host system clock in that JWT. If the clock is ahead or behind, the IAM token service rejects the JWT.
-* If the SDK decides when to refresh a token based on the local clock, a lagging clock may cause the client to send an already expired token to the cluster.
-* Errors occur only on some hosts — for example, on new machines or in environments without configured time synchronization.
+- Errors during authentication with a [service account key](../security/authentication.md#iam). The client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) to request a token and sets the current time from the host system clock in that JWT. If the clock is ahead or behind, IAM may reject the token request.
+- If the SDK decides when to refresh a token based on the local clock, a lagging clock may cause the client to send an already expired token to the cluster.
+- Errors occur only on some hosts — for example, on new machines or in environments without configured time synchronization.
 
 {% note info %}
 
@@ -37,4 +37,4 @@ The primary fix is to synchronize the system clocks.
 
 ## See also
 
-* [{#T}](performance/system/system-clock-drift.md)
+- [{#T}](performance/system/system-clock-drift.md)

@@ -252,11 +252,13 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         std::vector<std::pair<std::unique_ptr<IEventHandle>, ui32>> heldStaticCommits;
         bool holdingStaticCommits = true;
 
-        // hold the storage configs reported to the warden of the writing node once it has learned the
-        // NOT_SYNCHRONIZED_1 state of the pile: the node keeps skipping the pile in its writes while the pile switches
-        // back to NOT_SYNCHRONIZED_2 and its dynamic group parts keep the SYNCED stage of their previous sync
-        std::vector<std::pair<std::unique_ptr<IEventHandle>, ui32>> heldConfigs;
-        bool holdingConfigs = false;
+        // when the proxy of the group on the writing node learns the NOT_SYNCHRONIZED_1 state of the pile, a write
+        // is issued right away: the write lands between the rejoin re-run and the switch of the pile back to
+        // NOT_SYNCHRONIZED_2, like a write made while the nodes of the pile are down, so it skips the pile; the proxy
+        // is the only bridge proxy of the node, as nothing else uses the bridged groups from it
+        const TActorId putEdge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        bool gapWriteArmed = false;
+        bool gapWriteIssued = false;
 
         env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
             if (holdingStaticCommits && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
@@ -270,14 +272,17 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
                         return false;
                     }
                 }
-            } else if (holdingConfigs && node == nodeId &&
+            } else if (gapWriteArmed && !gapWriteIssued && node == nodeId &&
                     ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                 const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
                 if (msg.Config && msg.Config->HasClusterState() &&
-                        msg.Config->GetClusterState().GetPerPileState(1) !=
+                        msg.Config->GetClusterState().GetPerPileState(1) ==
                             NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1) {
-                    heldConfigs.emplace_back(std::move(ev), node);
-                    return false;
+                    if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                            TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                        gapWriteIssued = true;
+                        checker.SendPut(groupId, putEdge);
+                    }
                 }
             }
             return true;
@@ -307,21 +312,14 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         }, "BSC report of the pile sync", [&] { return config.GetClusterStateDetails().DebugString(); });
         UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
 
-        // rejoin is re-run: the pile gets NOT_SYNCHRONIZED_1, which resets nothing, and switches back to
-        // NOT_SYNCHRONIZED_2 right away, which does not reset the dynamic group parts either, as BSC has already
-        // reported them; the warden of the node is held at NOT_SYNCHRONIZED_1, so the writes made meanwhile skip the
-        // pile and their data never reaches its part
-        holdingConfigs = true;
+        // rejoin is re-run: the pile gets NOT_SYNCHRONIZED_1 and switches back to NOT_SYNCHRONIZED_2 right away;
+        // the write issued while the proxy of the node knows the pile as NOT_SYNCHRONIZED_1 skips the pile, and its
+        // data never reaches the part
+        gapWriteArmed = true;
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1); // rejoin re-run
-        env.Sim(TDuration::Seconds(10)); // let the node learn NOT_SYNCHRONIZED_1
-        checker.Write(groupId, nodeId); // reaches pile 0 only
-        checker.Write(groupId, nodeId);
-        UNIT_ASSERT(!heldConfigs.empty());
-        holdingConfigs = false;
-        for (auto& [ev, node] : std::exchange(heldConfigs, {})) {
-            env.Runtime->Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, ev->ReleaseBase().Release(), 0,
-                ev->Cookie), node);
-        }
+        const auto put = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(putEdge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Get()->Status, NKikimrProto::OK, put->Get()->ToString());
+        UNIT_ASSERT(gapWriteIssued);
 
         // release the held commits of the static group sync: the one of the current generation finishes it, and the
         // pile becomes SYNCHRONIZED
@@ -334,8 +332,8 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         env.Runtime->FilterFunction = nullptr;
 
-        // the part of the dynamic group has never been reset: it misses the writes made while the pile was
-        // NOT_SYNCHRONIZED_1, so reading it directly must fail until it is resynced
+        // the part of the dynamic group in the pile must hold every acknowledged write when the pile reports
+        // SYNCHRONIZED, including the one made while it was NOT_SYNCHRONIZED_1
         UNIT_ASSERT_EQUAL(GetPart(env, groupId, 1).GetStage(), NKikimrBridge::TGroupState::SYNCED);
         CheckPileData(env, checker, 1, 9);
     }

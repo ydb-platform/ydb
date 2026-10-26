@@ -5,6 +5,12 @@ from types import SimpleNamespace
 from ydb.tests.stability.nemesis.internal.nemesis.local_cluster_view import (
     LocalClusterView,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import (
+    TargetKind,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import (
+    ClusterInventory,
+)
 
 
 def test_local_cluster_view_separates_identity_from_connection_address():
@@ -69,3 +75,17 @@ def test_local_cluster_view_separates_identity_from_connection_address():
             },
         ],
     }
+
+    topology = SimpleNamespace(
+        hosts={"node-1": object(), "node-2": object()},
+    )
+    inventory = ClusterInventory(topology, cluster_view=view)
+    assert inventory.degraded_reason is None
+    assert inventory.hosts == ["node-1", "node-2"]
+    assert [
+        (target.host, target.node_id, target.ic_port)
+        for target in inventory.entities(TargetKind.NODE)
+    ] == [
+        ("node-1", 1, 31003),
+        ("node-2", 2, 31103),
+    ]

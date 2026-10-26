@@ -43,11 +43,18 @@ class ClusterInventory:
         topology: ClusterTopologyModel,
         *,
         agent_hosts: Iterable[str] | None = None,
+        cluster_view=None,
     ) -> None:
         self._topology = topology
+        self._cluster_view = cluster_view
         self._agent_hosts = [h for h in (agent_hosts or []) if h]
         if not self._agent_hosts:
-            self._agent_hosts = list(topology.hosts.keys())
+            if cluster_view is not None:
+                self._agent_hosts = [
+                    node.logical_host for node in cluster_view.nodes.values()
+                ]
+            else:
+                self._agent_hosts = list(topology.hosts.keys())
         self.nodes: dict[int, NodeInfo] = {}
         self.slots: dict[int, SlotInfo] = {}
         # Set when nodes had to be synthesized: ids and ports are guesses, and there are no slots.
@@ -57,6 +64,9 @@ class ClusterInventory:
     # -- loading ------------------------------------------------------------
 
     def _load_from_harness(self) -> None:
+        if self._cluster_view is not None:
+            self._load_from_cluster_view()
+            return
         try:
             from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 
@@ -105,6 +115,20 @@ class ClusterInventory:
             len(self._agent_hosts),
             len(self.nodes),
             len(self.slots),
+        )
+
+    def _load_from_cluster_view(self) -> None:
+        for node_id, node in self._cluster_view.nodes.items():
+            self.nodes[int(node_id)] = NodeInfo(
+                node_id=int(node_id),
+                host=node.logical_host,
+                ic_port=int(node.ic_port),
+                rack=node.rack,
+                datacenter=node.datacenter,
+            )
+        logger.info(
+            "ClusterInventory: loaded %d local harness node(s)",
+            len(self.nodes),
         )
 
     def _synthesize_nodes_from_hosts(self) -> None:

@@ -37,6 +37,9 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
     ChaosTarget,
     TargetKind,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import (
+    ClusterInventory,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
     FailureModelGuard,
@@ -186,6 +189,18 @@ def test_local_cluster_view_uses_live_ports_and_nameservice_location(local_clust
             },
         }
     ]
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as topology_file:
+        yaml.safe_dump(view.topology_document(), topology_file)
+        topology_file.flush()
+        topology = ClusterTopologyModel(topology_file.name)
+        inventory = ClusterInventory(topology, cluster_view=view)
+
+    targets = inventory.entities(TargetKind.NODE)
+    assert len(targets) == 1
+    assert targets[0].host == "node-1"
+    assert targets[0].node_id == 1
+    assert targets[0].ic_port == live_node.ic_port
 
 
 def test_embedded_agent_api_allows_only_datashard_chaos(local_cluster):

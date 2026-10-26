@@ -295,7 +295,7 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
 
 void TDiscoveryConverter::BuildFstClassNames(bool enableRelativePaths) {
     if (enableRelativePaths) {
-        PrimaryPath = NKikimr::ResolvePathToDatabase(
+        PrimaryPath = NKikimr::PrependDomainIfNeeded(
             NKikimr::CanonizePath(Database.GetOrElse(TString())), OriginalTopic);
     } else {
         TStringBuf normTopic(OriginalTopic);

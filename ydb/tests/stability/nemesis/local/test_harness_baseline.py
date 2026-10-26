@@ -18,6 +18,9 @@ from ydb.tests.library.stability.healthcheck.healthcheck_reporter import (
     HealthCheckReporter,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import use_cluster
+from ydb.tests.stability.nemesis.internal.nemesis.local_cluster_view import (
+    LocalClusterView,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_tablets import (
     ClusterKillDataShardNemesis,
 )
@@ -159,6 +162,30 @@ def test_live_harness_endpoint_serves_a_datashard_table(local_cluster):
     assert recovered[0].rows[0]["value"] == "ready"
     assert nemesis._tablet_ids
     assert nemesis._disabled is False
+
+
+def test_local_cluster_view_uses_live_ports_and_nameservice_location(local_cluster):
+    live_node = local_cluster.nodes[1]
+    view = LocalClusterView.from_cluster(local_cluster)
+    node = view.nodes[1]
+
+    assert node.logical_host == "node-1"
+    assert node.connect_host == live_node.host
+    assert (node.grpc_port, node.mon_port, node.ic_port) == (
+        live_node.grpc_port,
+        live_node.mon_port,
+        live_node.ic_port,
+    )
+    assert node.rack == "1"
+    assert view.topology_document()["hosts"] == [
+        {
+            "name": "node-1",
+            "location": {
+                "rack": "1",
+                "data_center": "1",
+            },
+        }
+    ]
 
 
 def test_embedded_agent_api_allows_only_datashard_chaos(local_cluster):

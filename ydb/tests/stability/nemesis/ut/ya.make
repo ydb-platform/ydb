@@ -15,6 +15,7 @@ TEST_SRCS(
     test_local_kikimr.py
     test_cluster_context.py
     test_healthcheck_endpoints.py
+    test_local_cluster_view.py
 )
 
 PEERDIR(

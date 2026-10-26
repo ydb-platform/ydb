@@ -305,6 +305,71 @@ def test_embedded_agent_api_kills_scheme_shard_manually(local_cluster):
     assert result[0].rows[0]["id"] == 1
 
 
+def test_embedded_agent_api_kills_hive_manually(local_cluster):
+    tablet_ids = [
+        info.TabletId
+        for info in local_cluster.client.tablet_state(
+            TabletTypes.FLAT_HIVE
+        ).TabletStateInfo
+    ]
+    assert tablet_ids
+
+    app = Flask(__name__)
+    app.register_blueprint(agent_router.blueprint)
+    with use_cluster(local_cluster), app.test_client() as client:
+        process_offset = len(agent_router.manager.get_all())
+        response = client.post(
+            "/api/processes",
+            json={"type": "KillHiveNemesis", "action": "inject"},
+        )
+        assert response.status_code == 200
+        execution = _wait_for_api_execution(client, process_offset)
+        assert execution["type"] == "KillHiveNemesis"
+
+    wait_tablets_state_by_id(
+        local_cluster.client,
+        TabletStates.Active,
+        tablet_ids=tablet_ids,
+        timeout_seconds=60,
+    )
+
+    node = local_cluster.nodes[1]
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database="/Root",
+            endpoint=node.endpoint,
+        )
+    )
+    driver.wait(timeout=60)
+    try:
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries(
+                """
+                CREATE TABLE `local_nemesis_after_hive` (
+                    id Uint64 NOT NULL,
+                    PRIMARY KEY (id)
+                )
+                """
+            )
+            pool.execute_with_retries(
+                """
+                UPSERT INTO `local_nemesis_after_hive` (id)
+                VALUES (1)
+                """
+            )
+            result = pool.execute_with_retries(
+                """
+                SELECT id
+                FROM `local_nemesis_after_hive`
+                WHERE id = 1
+                """
+            )
+    finally:
+        driver.stop()
+
+    assert result[0].rows[0]["id"] == 1
+
+
 def test_healthcheck_uses_the_live_harness_grpc_port(local_cluster):
     node = local_cluster.nodes[1]
     reporter = HealthCheckReporter(

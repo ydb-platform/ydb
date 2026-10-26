@@ -19,18 +19,17 @@ def test_local_harness_starts_with_one_explicitly_allowed_type():
 
     with cluster_context.use_cluster(object()):
         assert cluster_context.nemesis_rejection_reason("KillDataShardNemesis") is None
-        assert cluster_context.nemesis_rejection_reason("KillSchemeShardNemesis") is None
+        for manual_only_type in ("KillHiveNemesis", "KillSchemeShardNemesis"):
+            assert cluster_context.nemesis_rejection_reason(manual_only_type) is None
+            assert (
+                cluster_context.scheduled_nemesis_rejection_reason(manual_only_type)
+                is not None
+            )
         assert (
             cluster_context.scheduled_nemesis_rejection_reason(
                 "KillDataShardNemesis"
             )
             is None
-        )
-        assert (
-            cluster_context.scheduled_nemesis_rejection_reason(
-                "KillSchemeShardNemesis"
-            )
-            is not None
         )
         reason = cluster_context.nemesis_rejection_reason("NetworkNemesis")
         assert reason is not None

@@ -17,6 +17,7 @@ _cluster_override: Any | None = None
 # test before it is admitted here.
 LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
+    "KillHiveNemesis",
     "KillSchemeShardNemesis",
 })
 

@@ -877,6 +877,7 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/protos

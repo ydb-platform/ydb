@@ -385,6 +385,9 @@ public:
     // Send stop to registred services and call Shutdown on grpc server
     // This method MUST be called before destroying TGRpcServer
     void Stop();
+    // Like Stop(), but completion queues keep polling, so requests that outlive
+    // GRpcShutdownDeadline can still finish their grpc calls. Call Stop() once RequestsInProgress() is 0.
+    void StopAcceptingRequests();
     ui16 GetPort() const;
     TString GetHost() const;
 
@@ -409,6 +412,7 @@ private:
     TGlobalLimiter Limiter_;
 
     std::atomic<bool> Stopped_{ false };
+    std::atomic<bool> CompletionQueuesStopped_{ false };
 };
 
 } // namespace NYdbGrpc

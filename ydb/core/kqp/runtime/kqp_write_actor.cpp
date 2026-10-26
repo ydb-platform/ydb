@@ -1537,7 +1537,7 @@ public:
         evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
-        YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+        YQL_ENSURE(isPrepare || isImmediateCommit || evWrite->Record.OperationsSize() > 0);
 
         if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
@@ -1943,7 +1943,7 @@ public:
                         }
                     }
                 }
-                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards), transferTargets);
                 UpdateShards();
                 bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {

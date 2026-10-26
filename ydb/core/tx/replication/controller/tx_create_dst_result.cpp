@@ -41,6 +41,14 @@ public:
             return true;
         }
 
+        if (!target->IsExpectedDstCreator(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete destination creator",
+                {"rid", rid},
+                {"tid", tid},
+                {"sender", Ev->Sender});
+            return true;
+        }
+
         const bool attachmentNotStarted = target->GetDstState() != TReplication::EDstState::Attaching;
         const bool replicationDone = replication->GetDesiredState() == TReplication::EState::Done;
         if (replicationDone && attachmentNotStarted) {
@@ -127,6 +135,17 @@ public:
             return true;
         }
 
+        // An Attaching creator is deliberately retained across ALTER/DONE/DROP.
+        // Match its identity rather than rejecting the operation's old state.
+        if (!target->IsExpectedDstCreator(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete destination creator",
+                {"rid", rid},
+                {"tid", tid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
         const auto dstState = target->GetDstState();
         const bool expectsResult = dstState == TReplication::EDstState::Creating
             || dstState == TReplication::EDstState::Alter
@@ -156,7 +175,11 @@ public:
             if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
             } else {
-                target->SetDstState(TReplication::EDstState::Ready);
+                // Other attachments can keep the replication Ready while PAUSE
+                // is pending. Do not let this newly attached target start workers.
+                target->SetDstState(Replication->GetDesiredState() == TReplication::EState::Paused
+                    ? TReplication::EDstState::Paused
+                    : TReplication::EDstState::Ready);
                 if (wasAltering && Replication->CheckAlterDone()) {
                     Replication->SetState(Replication->GetDesiredState());
                 }

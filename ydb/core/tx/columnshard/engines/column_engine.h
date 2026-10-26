@@ -108,40 +108,47 @@ protected:
     virtual void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const = 0;
 
 public:
-    class TSchemaInitializationData {
+    class TSchemaVersionView {
     private:
-        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchema>, Schema);
-        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>, Diff);
+        const NKikimrTxColumnShard::TSchemaPresetVersionInfo& Info;
 
     public:
-        const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
-            AFL_VERIFY(Schema);
-            return *Schema;
-        }
-
-        TSchemaInitializationData(
-            const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
-            : Schema(schema)
-            , Diff(diff)
+        explicit TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
+            : Info(info)
         {
-            AFL_VERIFY(Schema || Diff);
         }
 
-        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
-            if (info.HasSchema()) {
-                Schema = info.GetSchema();
-            }
-            if (info.HasDiff()) {
-                Diff = info.GetDiff();
-            }
+        TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
+
+        TSchemaVersionView(const TSchemaVersionView&) = delete;
+        TSchemaVersionView(TSchemaVersionView&&) = delete;
+        TSchemaVersionView& operator=(const TSchemaVersionView&) = delete;
+        TSchemaVersionView& operator=(TSchemaVersionView&&) = delete;
+
+        bool HasSchema() const {
+            return Info.HasSchema();
+        }
+
+        const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
+            AFL_VERIFY(Info.HasSchema());
+            return Info.GetSchema();
+        }
+
+        bool HasDiff() const {
+            return Info.HasDiff();
+        }
+
+        const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
+            AFL_VERIFY(Info.HasDiff());
+            return Info.GetDiff();
         }
 
         ui64 GetVersion() const {
-            if (Schema) {
-                return Schema->GetVersion();
+            if (Info.HasSchema()) {
+                return Info.GetSchema().GetVersion();
             }
-            AFL_VERIFY(Diff);
-            return Diff->GetVersion();
+            AFL_VERIFY(Info.HasDiff());
+            return Info.GetDiff().GetVersion();
         }
     };
 
@@ -205,8 +212,8 @@ public:
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
-    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
+    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
 
     virtual ui64 MemoryUsage() const {
         return 0;

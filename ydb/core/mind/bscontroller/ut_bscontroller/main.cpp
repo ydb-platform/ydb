@@ -433,7 +433,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         auto matches = [&](const NActorsInterconnect::TNodeLocation& location) {
             return TFilter::Parse(1, 1, proto).MatchPDisk(category, false, {}, TNodeLocation(location));
         };
-        UNIT_ASSERT(matches({})); // An empty location imposes no constraint.
+        // An empty location imposes no constraint and is stored the same way as an absent one.
+        UNIT_ASSERT(!TFilter::Parse(1, 1, proto).Location);
+        UNIT_ASSERT(matches({}));
         for (const char* name : {"DataCenter", "Module", "Rack", "Unit", "BridgePileName"}) {
             const auto* field = actual.GetDescriptor()->FindFieldByName(name);
             required->Clear();
@@ -480,17 +482,30 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         bool activeZone;
         env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
         env.DisableLogging();
+
+        // Returns the location property of the filter, adding one when the filter has none.
+        auto location = [](NKikimrBlobStorage::TPDiskFilter* filter) {
+            for (auto& property : *filter->MutableProperty()) {
+                if (property.HasLocation()) {
+                    return property.MutableLocation();
+                }
+            }
+            return filter->AddProperty()->MutableLocation();
+        };
+
         NKikimrBlobStorage::TConfigRequest request;
+        auto lastPool = [&] {
+            return request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool();
+        };
         env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
             env.GetNodes(), request);
         env.DefineStoragePool(1, 1, "dc1", 2, NKikimrBlobStorage::ROT, false, request);
-        request.MutableCommand(2)->MutableDefineStoragePool()->MutablePDiskFilter(0)
-            ->AddProperty()->MutableLocation()->SetDataCenter("1");
+        location(lastPool()->MutablePDiskFilter(0))->SetDataCenter("1");
         env.DefineStoragePool(1, 2, "either dc", 0, NKikimrBlobStorage::ROT, false, request);
-        auto* either = request.MutableCommand(3)->MutableDefineStoragePool();
-        either->MutablePDiskFilter(0)->AddProperty()->MutableLocation()->SetDataCenter("1");
+        auto* either = lastPool();
+        location(either->MutablePDiskFilter(0))->SetDataCenter("1");
         *either->AddPDiskFilter() = either->GetPDiskFilter(0);
-        either->MutablePDiskFilter(1)->MutableProperty(2)->MutableLocation()->SetDataCenter("2");
+        location(either->MutablePDiskFilter(1))->SetDataCenter("2");
         env.DefineStoragePool(1, 3, "unrestricted", 0, NKikimrBlobStorage::ROT, false, request);
         auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
@@ -505,34 +520,45 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(0).StoragePoolSize(), 1);
             return result.GetStatus(0).GetStoragePool(0);
         };
-        auto checkPlacement = [&] {
+        auto definePool = [&](const NKikimrBlobStorage::TDefineStoragePool& pool) {
+            NKikimrBlobStorage::TConfigRequest define;
+            *define.AddCommand()->MutableDefineStoragePool() = pool;
+            return env.Invoke(define);
+        };
+        // Checks that the pool has the expected number of groups, all of them placed in the given DC.
+        auto checkPlacement = [&](ui64 storagePoolId, const TString& dc, ui32 numGroups) {
             const auto config = FetchBaseConfig(&env);
             THashMap<ui32, TString> datacenters;
             for (const auto& node : config.GetNode()) {
                 datacenters[node.GetNodeId()] = node.GetLocation().GetDataCenter();
             }
-            UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 2);
+            ui32 groups = 0;
             for (const auto& group : config.GetGroup()) {
+                if (group.GetStoragePoolId() != storagePoolId) {
+                    continue;
+                }
+                ++groups;
                 UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 8);
                 for (const auto& slot : group.GetVSlotId()) {
-                    UNIT_ASSERT_VALUES_EQUAL(datacenters.at(slot.GetNodeId()), "1");
+                    UNIT_ASSERT_VALUES_EQUAL(datacenters.at(slot.GetNodeId()), dc);
                 }
             }
+            UNIT_ASSERT_VALUES_EQUAL(groups, numGroups);
             return config;
         };
-        checkPlacement();
+        checkPlacement(1, "1", 2);
         const auto before = readPool(2).SerializeAsString();
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(readPool(2).SerializeAsString(), before);
         UNIT_ASSERT_VALUES_EQUAL(readPool(2).PDiskFilterSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(readPool(3).GetPDiskFilter(0).PropertySize(), 2);
-        auto config = checkPlacement();
+        auto config = checkPlacement(1, "1", 2);
         const auto source = FindVSlot(config, config.GetGroup(0).GetVSlotId(0));
         request = MakeReassignRequest(source, config.GetGroup(0).GetGroupGeneration());
         request.SetIgnoreGroupFailModelChecks(true); // This fixture does not run VDisks.
         response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        checkPlacement();
+        checkPlacement(1, "1", 2);
 
         // Explicit reassignment cannot escape the filter either.
         config = FetchBaseConfig(&env);
@@ -555,46 +581,31 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(target->GetNodeId());
         response = env.Invoke(request);
         UNIT_ASSERT(!response.GetSuccess());
-        checkPlacement();
+        checkPlacement(1, "1", 2);
 
         // Different locations with identical disk properties survive update and deletion independently.
         auto pool = readPool(2);
         pool.MutablePDiskFilter()->RemoveLast();
-        request.Clear();
-        *request.AddCommand()->MutableDefineStoragePool() = pool;
-        response = env.Invoke(request);
+        response = definePool(pool);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(readPool(2).PDiskFilterSize(), 1);
+
         // An unknown DC cannot allocate a group even though other DCs have free space.
         pool = readPool(2);
-        pool.MutablePDiskFilter(0)->MutableProperty(2)->MutableLocation()->SetDataCenter("missing");
+        location(pool.MutablePDiskFilter(0))->SetDataCenter("missing");
         pool.SetNumGroups(1);
-        request.Clear();
-        *request.AddCommand()->MutableDefineStoragePool() = pool;
-        UNIT_ASSERT(!env.Invoke(request).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(readPool(2).GetPDiskFilter(0).GetProperty(2).GetLocation().GetDataCenter(), "1");
+        UNIT_ASSERT(!definePool(pool).GetSuccess());
+        auto stored = readPool(2);
+        UNIT_ASSERT_VALUES_EQUAL(location(stored.MutablePDiskFilter(0))->GetDataCenter(), "1");
 
         // The second filter can satisfy the pool when the first matches no disk.
-        *pool.AddPDiskFilter() = readPool(2).GetPDiskFilter(0);
-        pool.MutablePDiskFilter(1)->MutableProperty(2)->MutableLocation()->SetDataCenter("2");
-        request.Clear();
-        *request.AddCommand()->MutableDefineStoragePool() = pool;
-        response = env.Invoke(request);
+        *pool.AddPDiskFilter() = stored.GetPDiskFilter(0);
+        location(pool.MutablePDiskFilter(1))->SetDataCenter("2");
+        response = definePool(pool);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        config = FetchBaseConfig(&env);
-        UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 3);
-        THashSet<ui32> dc2Nodes;
-        for (const auto& node : config.GetNode()) {
-            if (node.GetLocation().GetDataCenter() == "2") dc2Nodes.insert(node.GetNodeId());
-        }
-        for (const auto& group : config.GetGroup()) {
-            if (group.GetStoragePoolId() == 2) {
-                for (const auto& slot : group.GetVSlotId()) {
-                    UNIT_ASSERT(dc2Nodes.contains(slot.GetNodeId()));
-                }
-            }
-        }
+        checkPlacement(1, "1", 2);
+        checkPlacement(2, "2", 1);
     }
 
     Y_UNIT_TEST(Basic) {
@@ -2608,7 +2619,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             NActorsInterconnect::TNodeLocation location;
             location.SetDataCenter(dc);
             auto filter = *filters.begin();
-            filter.Location = location.SerializeAsString();
+            filter.SetLocation(TNodeLocation(location).GetSerializedLocation());
             filters = {filter};
             TStringStream data;
             Save(&data, filters);

@@ -34,6 +34,6 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     EReplicationMode mode = EReplicationMode::ReadOnly,
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
     const TPathId& pendingDstPathId = {},
-    TReplication::EState desiredState = TReplication::EState::Ready);
+    bool cleanup = false);
 
 }

@@ -1102,10 +1102,12 @@ Y_UNIT_TEST(StatsProfile) {
 }
 
 // The per node memory history of a profiled query carries what the query holds on the node (Memory + ExternalMemory
-// via the resource manager), reported by the query quota manager of the node service: at least the start prepay of
-// the tasks and the channels. A scan query never runs its tasks locally in the executer, they go to the node service
-Y_UNIT_TEST(NodeMemQueryAllocatedProfile) {
+// via the compute scheduler or, without FeatureFlags.EnableComputeSchedulerMemory, the resource manager), reported by
+// the query quota manager of the node service: at least the start prepay of the tasks and the channels. A scan query
+// never runs its tasks locally in the executer, they go to the node service
+Y_UNIT_TEST_TWIN(NodeMemQueryAllocatedProfile, EnableComputeSchedulerMemory) {
     NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
     app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
     TKikimrRunner kikimr{TKikimrSettings(app)};
 

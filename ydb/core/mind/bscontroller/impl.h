@@ -719,6 +719,7 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
+        std::optional<Table::FailRealmStates::Type> FailRealmStates;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -797,7 +798,8 @@ public:
                     Table::BlobDepotId,
                     Table::ErrorReason,
                     Table::NeedAlter,
-                    Table::BridgeGroupInfo
+                    Table::BridgeGroupInfo,
+                    Table::FailRealmStates
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -822,7 +824,8 @@ public:
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
                     &TGroupInfo::NeedAlter,
-                    &TGroupInfo::BridgeGroupInfo
+                    &TGroupInfo::BridgeGroupInfo,
+                    &TGroupInfo::FailRealmStates
                 );
             callback(&adapter);
         }
@@ -1375,6 +1378,16 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+        std::optional<Table::DataCenters::Type> DataCenters;
+
+        std::optional<NKikimrBlobStorage::TStoragePoolDataCenters> GetDataCenters() const {
+            if (!DataCenters) {
+                return std::nullopt;
+            }
+            NKikimrBlobStorage::TStoragePoolDataCenters policy;
+            Y_ABORT_UNLESS(policy.ParseFromString(*DataCenters));
+            return policy;
+        }
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1482,6 +1495,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
+                    Table::DataCenters,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1513,6 +1527,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
+                    &TStoragePoolInfo::DataCenters,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );

@@ -1297,6 +1297,9 @@ namespace NKikimr::NBsController {
             if (pool.VDiskHeapAllocatorNumLeadingDisks) {
                 pb->SetVDiskHeapAllocatorNumLeadingDisks(*pool.VDiskHeapAllocatorNumLeadingDisks);
             }
+            if (const auto policy = pool.GetDataCenters()) {
+                pb->MutableDataCenters()->CopyFrom(*policy);
+            }
         }
 
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
@@ -1568,6 +1571,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState(groupInfo.FailRealmStates->GetState(vdiskId.FailRealm));
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

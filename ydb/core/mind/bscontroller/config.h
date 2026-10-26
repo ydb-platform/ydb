@@ -153,6 +153,9 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
+            THashSet<TBoxStoragePoolId> DataCentersChanged;
+
+            void ApplyStoragePoolDataCenters();
             THashSet<TGroupId> GroupFailureModelChanged;
             // Pools whose leading-disk override changed. Their VDisk service-set records are resent
             // without touching group generation.

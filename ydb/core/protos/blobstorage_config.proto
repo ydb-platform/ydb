@@ -184,12 +184,22 @@ message TDefineStoragePool {
     TStoragePoolSettings Settings = 103;
 }
 
+// Physical DataCenter names from node locations. Both lists are replaced together.
+// The lists must be disjoint. Unlisted DataCenters are included by default.
+message TStoragePoolDataCenters {
+    repeated string Included = 1;
+    repeated string Excluded = 2;
+}
+
 // Per-pool settings that DefineStoragePool neither sets nor resets.
 message TStoragePoolSettings {
     // How many leading VDisks of each group (order number 0 .. N-1) may use the stripe heap. Overrides
     // blob_storage_config.vdisk_heap_allocator_num_leading_disks for this pool, including 0; absent inherits it.
     // Takes effect when a VDisk starts; running VDisks are not restarted.
     optional uint32 VDiskHeapAllocatorNumLeadingDisks = 1;
+    // Mirror-3-dc only: excluded realms become F; F realms returned to included become R.
+    // Reset includes all DataCenters and also uses F -> R.
+    TStoragePoolDataCenters DataCenters = 2;
 }
 
 message TUpdateStoragePoolSettings {
@@ -197,7 +207,7 @@ message TUpdateStoragePoolSettings {
     uint64 StoragePoolId = 2;
     // fields present here are written
     TStoragePoolSettings Settings = 3;
-    // names of TStoragePoolSettings fields to reset, so the pool inherits the global value again
+    // names of TStoragePoolSettings fields whose per-pool overrides are removed
     repeated string Reset = 4;
 }
 

@@ -1,5 +1,8 @@
 #include "config.h"
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+
+#include <array>
 
 namespace NKikimr::NBsController {
 
@@ -164,6 +167,7 @@ namespace NKikimr::NBsController {
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
+            storagePool.DataCenters = cur.DataCenters;
             cur = std::move(storagePool); // update existing storage pool
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
@@ -268,6 +272,31 @@ namespace NKikimr::NBsController {
             reflection->ClearField(&settings, field);
         }
         settings.MergeFrom(cmd.GetSettings());
+        if (cmd.GetSettings().HasDataCenters()) {
+            // MergeFrom appends repeated fields; this policy is replaced as a whole.
+            settings.MutableDataCenters()->CopyFrom(cmd.GetSettings().GetDataCenters());
+        }
+        if (settings.HasDataCenters()) {
+            if (it->second.ErasureSpecies != TErasureType::ErasureMirror3dc || it->second.BridgeMode) {
+                throw TExError() << "DataCenters requires a mirror-3-dc pool without bridge mode";
+            }
+            THashSet<TString> names;
+            const auto validate = [&](const auto& values) {
+                for (const auto& name : values) {
+                    if (name.empty() || !names.insert(name).second) {
+                        throw TExError() << "empty or duplicate DataCenter# " << name;
+                    }
+                }
+            };
+            validate(settings.GetDataCenters().GetIncluded());
+            validate(settings.GetDataCenters().GetExcluded());
+        }
+        const auto policy = settings.HasDataCenters()
+            ? std::make_optional(settings.GetDataCenters().SerializeAsString()) : std::nullopt;
+        if (policy != it->second.DataCenters) {
+            StoragePools.Unshare().at(id).DataCenters = policy;
+            DataCentersChanged.insert(id);
+        }
 
         const TMaybe<ui32> numLeadingDisks = settings.HasVDiskHeapAllocatorNumLeadingDisks()
             ? MakeMaybe(settings.GetVDiskHeapAllocatorNumLeadingDisks())
@@ -276,6 +305,70 @@ namespace NKikimr::NBsController {
             StoragePools.Unshare().at(id).VDiskHeapAllocatorNumLeadingDisks = numLeadingDisks;
             HeapAllocatorNumLeadingDisksChanged.insert(id);
         }
+    }
+
+    void TBlobStorageController::TConfigState::ApplyStoragePoolDataCenters() {
+        THashSet<TGroupId> groups;
+        for (const auto& poolId : DataCentersChanged) {
+            const auto& index = StoragePoolGroups.Get();
+            for (auto it = index.lower_bound({poolId, Min<TGroupId>()}); it != index.end() && it->first == poolId; ++it) {
+                groups.insert(it->second);
+            }
+        }
+        // Also apply the policy to newly allocated, relocated and moved groups.
+        for (const auto& [base, overlay] : Groups.Diff()) {
+            if (overlay->second) {
+                groups.insert(overlay->first);
+            }
+        }
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        for (const auto groupId : groups) {
+            const auto* group = Groups.Find(groupId);
+            const auto policy = StoragePools.Get().at(group->StoragePoolId).GetDataCenters();
+            if ((!policy && !group->FailRealmStates) || group->VDisksInGroup.empty()) {
+                continue;
+            }
+            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
+                    || group->Topology->GetTotalFailRealmsNum() != 3) {
+                throw TExError() << "DataCenters requires a mirror-3-dc group# " << groupId;
+            }
+            std::array<TString, 3> dataCenters;
+            for (const TVSlotInfo* slot : group->VDisksInGroup) {
+                if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
+                    throw TExError() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter";
+                }
+                NActorsInterconnect::TNodeLocation location;
+                HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
+                auto& dataCenter = dataCenters.at(slot->RingIdx);
+                if (!location.HasDataCenter() || location.GetDataCenter().empty()
+                        || (!dataCenter.empty() && dataCenter != location.GetDataCenter())) {
+                    throw TExError() << "group# " << groupId << " realm# " << slot->RingIdx
+                        << " must belong to one physical DataCenter";
+                }
+                dataCenter = location.GetDataCenter();
+            }
+            NKikimrBlobStorage::TGroupFailRealmStates states;
+            bool changed = false;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const auto previous = group->FailRealmStates ? group->FailRealmStates->GetState(realm) : R::N0;
+                auto current = previous;
+                if (policy && Find(policy->GetExcluded(), dataCenters[realm]) != policy->GetExcluded().end()) {
+                    current = R::F;
+                } else if (current == R::F) {
+                    current = R::R;
+                }
+                states.AddState(current);
+                changed |= current != previous;
+            }
+            if (!GetMirror3dcGroupState(states.GetState(0), states.GetState(1), states.GetState(2))) {
+                throw TExError() << "DataCenters produces an unsupported mirror-3-dc state for group# " << groupId;
+            }
+            if (changed) {
+                Groups.FindForUpdate(groupId)->FailRealmStates = std::move(states);
+                GroupContentChanged.insert(groupId);
+            }
+        }
+        DataCentersChanged.clear();
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/, TStatus& status) {

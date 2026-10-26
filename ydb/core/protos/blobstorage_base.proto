@@ -96,6 +96,11 @@ message TVDiskLocation {
     optional uint64 PDiskGuid = 4;
 }
 
+// Persisted controller state, indexed by physical fail realm in GroupInfo.
+message TGroupFailRealmStates {
+    repeated TGroupInfo.TFailRealm.EState State = 1;
+}
+
 message TGroupInfo {
     message TFailRealm {
         // Internal state; N states describe minimum copies of every confirmed blob.

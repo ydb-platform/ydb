@@ -85,6 +85,8 @@ struct Schema : NIceDb::Schema {
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
+        struct FailRealmStates : Column<18, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupFailRealmStates; };
+
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
@@ -101,7 +103,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo, FailRealmStates>;
     };
 
     struct State : Table<1> {
@@ -345,6 +347,7 @@ struct Schema : NIceDb::Schema {
         struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct DataCenters : Column<31, NScheme::NTypeIds::String> {}; // serialized TStoragePoolDataCenters
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
@@ -352,7 +355,7 @@ struct Schema : NIceDb::Schema {
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode, DataCenters>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

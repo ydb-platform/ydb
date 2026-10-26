@@ -415,7 +415,250 @@ namespace {
 
 }
 
+namespace {
+
+    struct TPoolDataCentersEnv : TEnvironmentSetup {
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        TMap<ui32, TString> NodeDataCenters;
+        TMap<ui32, ui64> GroupPools;
+
+        TPoolDataCentersEnv()
+            : TEnvironmentSetup(24, 3)
+        {
+            bool activeZone;
+            Prepare("", [](TTestActorRuntime&) {}, activeZone);
+            DisableLogging();
+            NKikimrBlobStorage::TConfigRequest request;
+            DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, GetNodes(), request);
+            DefineStoragePool(1, 1, "managed", 3, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
+            DefineStoragePool(1, 2, "other", 1, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
+            DefineStoragePool(1, 3, "block", 0, NKikimrBlobStorage::ROT, false, request);
+            const auto response = Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            const auto config = FetchBaseConfig(this);
+            for (const auto& node : config.GetNode()) {
+                NodeDataCenters[node.GetNodeId()] = node.GetLocation().GetDataCenter();
+            }
+            for (const auto& group : config.GetGroup()) {
+                GroupPools[group.GetGroupId()] = group.GetStoragePoolId();
+            }
+        }
+
+        NKikimrBlobStorage::TDefineStoragePool ReadPool(ui64 poolId = 1) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* command = request.AddCommand()->MutableReadStoragePool();
+            command->SetBoxId(1);
+            command->AddStoragePoolId(poolId);
+            const auto response = Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            return response.GetStatus(0).GetStoragePool(0);
+        }
+
+        NKikimrBlobStorage::TConfigRequest Policy(std::initializer_list<TString> included,
+                std::initializer_list<TString> excluded, ui64 poolId = 1) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* command = request.AddCommand()->MutableUpdateStoragePoolSettings();
+            command->SetBoxId(1);
+            command->SetStoragePoolId(poolId);
+            auto* policy = command->MutableSettings()->MutableDataCenters();
+            for (const auto& dc : included) {
+                policy->AddIncluded(dc);
+            }
+            for (const auto& dc : excluded) {
+                policy->AddExcluded(dc);
+            }
+            return request;
+        }
+
+        TMap<ui32, NKikimrBlobStorage::TGroupInfo> ReadGroups() {
+            TMap<ui32, NKikimrBlobStorage::TGroupInfo> result;
+            const auto config = FetchBaseConfig(this);
+            for (const auto& group : config.GetGroup()) {
+                const auto edge = Runtime->AllocateEdgeActor();
+                auto event = MakeHolder<TEvBlobStorage::TEvControllerGetGroup>(0, group.GetGroupId());
+                Runtime->SendToPipe(TabletId, edge, event.Release(), 0, GetPipeConfigWithRetries(), {}, Max<ui64>());
+                const auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(edge);
+                const auto& record = response->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetServiceSet().GroupsSize(), 1);
+                result.emplace(group.GetGroupId(), record.GetServiceSet().GetGroups(0));
+            }
+            return result;
+        }
+
+        void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, R::EState state) const {
+            for (const auto& [id, group] : groups) {
+                UNIT_ASSERT_VALUES_EQUAL(group.RingsSize(), 3);
+                for (const auto& realm : group.GetRings()) {
+                    const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
+                    const auto expected = GroupPools.at(id) == 1 && NodeDataCenters.at(node) == "2" ? state : R::N0;
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
+                }
+            }
+        }
+    };
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(StoragePoolDataCentersTransitionAndRestart) {
+        using R = TPoolDataCentersEnv::R;
+        TPoolDataCentersEnv env;
+        const auto before = env.ReadGroups();
+        UNIT_ASSERT_VALUES_EQUAL(before.size(), 4);
+        env.CheckStates(before, R::N0);
+        const auto request = env.Policy({"1", "3"}, {"2"});
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto excluded = env.ReadGroups();
+        env.CheckStates(excluded, R::F);
+        for (const auto& [id, group] : excluded) {
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(),
+                before.at(id).GetGroupGeneration() + (env.GroupPools.at(id) == 1));
+        }
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        for (const auto& [id, group] : env.ReadGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), excluded.at(id).SerializeAsString());
+        }
+        const auto pool = env.ReadPool();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().IncludedSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().ExcludedSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().GetExcluded(0), "2");
+        UNIT_ASSERT(!env.ReadPool(2).GetSettings().HasDataCenters());
+
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), pool.SerializeAsString());
+        for (const auto& [id, group] : env.ReadGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), excluded.at(id).SerializeAsString());
+        }
+        response = env.Invoke(env.Policy({"1", "2", "3"}, {}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto included = env.ReadGroups();
+        env.CheckStates(included, R::R);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().GetSettings().GetDataCenters().ExcludedSize(), 0);
+        for (const auto& [id, group] : included) {
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(),
+                excluded.at(id).GetGroupGeneration() + (env.GroupPools.at(id) == 1));
+        }
+        response = env.Invoke(env.Policy({"1", "2", "3"}, {}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        for (const auto& [id, group] : env.ReadGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), included.at(id).SerializeAsString());
+        }
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        env.CheckStates(env.ReadGroups(), R::R);
+    }
+
+    Y_UNIT_TEST(StoragePoolDataCentersDefaultIncluded) {
+        using R = TPoolDataCentersEnv::R;
+        TPoolDataCentersEnv env;
+        auto response = env.Invoke(env.Policy({"1"}, {"2"}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        env.CheckStates(env.ReadGroups(), R::F);
+        // Removing DC 2 from Excluded includes it even without an explicit Included entry.
+        response = env.Invoke(env.Policy({}, {}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto included = env.ReadGroups();
+        env.CheckStates(included, R::R);
+        const auto pool = env.ReadPool();
+        UNIT_ASSERT(pool.GetSettings().HasDataCenters());
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().IncludedSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetDataCenters().ExcludedSize(), 0);
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        env.CheckStates(env.ReadGroups(), R::R);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().SerializeAsString(), pool.SerializeAsString());
+    }
+
+    Y_UNIT_TEST(StoragePoolDataCentersValidationAndRollback) {
+        TPoolDataCentersEnv env;
+        const auto before = env.ReadGroups();
+        for (const auto& request : {
+                env.Policy({"1", "2", "3"}, {"2"}),
+                env.Policy({"1", "1", "3"}, {"2"}),
+                env.Policy({"1", "3", ""}, {"2"}),
+                env.Policy({"1", "3"}, {"2"}, 3)}) {
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
+        }
+        auto request = env.Policy({"1", "3"}, {"2"});
+        request.SetRollback(true);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetRollbackSuccess(), response.DebugString());
+        UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
+        for (const auto& [id, group] : env.ReadGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
+        }
+    }
+
+    Y_UNIT_TEST(StoragePoolDataCentersNewGroupsAndReset) {
+        TPoolDataCentersEnv env;
+        auto response = env.Invoke(env.Policy({"1", "3"}, {"2"}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        auto pool = env.ReadPool();
+        pool.SetNumGroups(pool.GetNumGroups() + 1);
+        NKikimrBlobStorage::TConfigRequest request;
+        *request.AddCommand()->MutableDefineStoragePool() = pool;
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadPool().GetSettings().SerializeAsString(), pool.GetSettings().SerializeAsString());
+        const auto config = FetchBaseConfig(&env);
+        for (const auto& group : config.GetGroup()) {
+            env.GroupPools[group.GetGroupId()] = group.GetStoragePoolId();
+        }
+        const auto added = env.ReadGroups();
+        UNIT_ASSERT_VALUES_EQUAL(added.size(), 5);
+        env.CheckStates(added, TPoolDataCentersEnv::R::F);
+        request.Clear();
+        auto* command = request.AddCommand()->MutableUpdateStoragePoolSettings();
+        command->SetBoxId(1);
+        command->SetStoragePoolId(1);
+        command->AddReset("DataCenters");
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT(!env.ReadPool().GetSettings().HasDataCenters());
+        env.CheckStates(env.ReadGroups(), TPoolDataCentersEnv::R::R);
+    }
+
+    Y_UNIT_TEST(StoragePoolDataCentersMoveGroup) {
+        using R = TPoolDataCentersEnv::R;
+        TPoolDataCentersEnv env;
+        auto response = env.Invoke(env.Policy({"1", "3"}, {"2"}));
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto before = env.ReadGroups();
+        ui32 moved = 0;
+        for (const auto& [id, pool] : env.GroupPools) {
+            if (pool == 1) {
+                moved = id;
+                break;
+            }
+        }
+        UNIT_ASSERT(moved);
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* command = request.AddCommand()->MutableMoveGroups();
+        command->SetBoxId(1);
+        command->SetOriginStoragePoolId(1);
+        command->SetTargetStoragePoolId(2);
+        command->SetOriginStoragePoolGeneration(env.ReadPool(1).GetItemConfigGeneration());
+        command->SetTargetStoragePoolGeneration(env.ReadPool(2).GetItemConfigGeneration());
+        command->AddExplicitGroupId(moved);
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto after = env.ReadGroups();
+        for (const auto& [id, group] : after) {
+            if (id != moved) {
+                UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), before.at(id).GetGroupGeneration() + 1);
+            for (const auto& realm : group.GetRings()) {
+                const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
+                UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(env.NodeDataCenters.at(node) == "2" ? R::R : R::N0));
+            }
+        }
+    }
+
     Y_UNIT_TEST(PDiskLocationFilterMatchesSuppliedFields) {
         using TFilter = TBlobStorageController::TStoragePoolInfo::TPDiskFilter;
         const ui64 category = TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 7).GetRaw();

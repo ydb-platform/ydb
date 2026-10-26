@@ -278,10 +278,11 @@ reports, plus automatic repair requests, raw responses and attempt history.
 Workers persist identity and unacknowledged results locally.
 
 Snapshot files for the last job remain in `DB/scan` and are replaced by the
-next job. `snapshot` is the assembled input, `blobsan.err` is analyzer stderr,
-`manifest.json` records the group and successfully completed streams, including
-empty streams, and `report.json` contains the histogram. Resource usage depends
-on group size, the external analyzer and candidate lists.
+next job. `snapshot` is the assembled input, `manifest.json` records the group
+and successfully completed streams, including empty streams, and `report.json`
+contains the histogram. Analyzer stderr is parsed line by line from a pipe;
+only candidates are retained. Resource usage depends on group size, the external
+analyzer and candidate lists.
 
 Jobs have renewable leases (`master --lease`, default 120 seconds). Failed
 workers' jobs become available after expiry. Claim retries return the same

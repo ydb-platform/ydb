@@ -839,6 +839,63 @@ class TestWorker(unittest.TestCase):
         self.assertEqual(svc.run_blobsan(args(blobsan=str(binary)), 1, self.directory, threading.Event())[0],
                          {'inv1_candidate': set(), 'inv2_candidate': {BLOB}})
 
+    def test_analyzer_streams_large_stderr_and_final_unterminated_candidate(self):
+        binary = self.directory / 'blobsan'
+        binary.write_text('#!/bin/sh\n'
+                          "/bin/cat > \"$5\" <<'REPORT'\n" + json.dumps(scan_report()) + '\nREPORT\n'
+                          "printf '%s\\n' 'GroupId# 1 BlobId# " + BLOB + " inv1_candidate inv2_candidate' >&2\n"
+                          'i=0\nwhile [ "$i" -lt 10000 ]; do\n'
+                          "printf '%s\\n' '    LocalLayout# diagnostic output discarded by the worker' >&2\n"
+                          'i=$((i + 1))\ndone\n'
+                          "printf '%s' 'GroupId# 1 BlobId# [42:7:259:3:5:4096:0] inv2_candidate' >&2\n")
+        binary.chmod(0o700)
+        (self.directory / 'snapshot').write_bytes(b'')
+        svc.atomic_json(self.directory / 'manifest.json', dict(group_id=1, completed_vdisks=list(range(9))))
+        found, report = svc.run_blobsan(args(blobsan=str(binary)), 1, self.directory, threading.Event())
+        self.assertEqual(found, {'inv1_candidate': {BLOB}, 'inv2_candidate': {BLOB, '[42:7:259:3:5:4096:0]'}})
+        self.assertEqual(report, scan_report())
+        self.assertFalse((self.directory / 'blobsan.err').exists())
+
+    def test_analyzer_pipe_errors_and_cancellation_reap_process(self):
+        binary = self.directory / 'blobsan'
+        (self.directory / 'snapshot').write_bytes(b'')
+        svc.atomic_json(self.directory / 'manifest.json', dict(group_id=1, completed_vdisks=list(range(9))))
+        cases = [
+            ('silent timeout', 'exec /bin/sleep 60', TimeoutError, 'blobsan timeout'),
+            ('timeout after EOF', 'exec 2>&-\nexec /bin/sleep 60', TimeoutError, 'blobsan timeout'),
+            ('cancel', "printf 'unfinished diagnostic' >&2\nexec /bin/sleep 60", RuntimeError, 'lost master lease'),
+            ('invalid candidate', "printf 'GroupId# invalid\\n' >&2\nexec /bin/sleep 60", ValueError, 'Unrecognized'),
+            ('failed', "printf 'analyzer failure' >&2\nexit 42", RuntimeError, 'blobsan exited 42'),
+        ]
+        popen = svc.subprocess.Popen
+        for name, script, exception, message in cases:
+            with self.subTest(name=name):
+                binary.write_text('#!/bin/sh\n' + script + '\n')
+                binary.chmod(0o700)
+                cancel = threading.Event()
+                timer = threading.Timer(0.1, cancel.set) if name == 'cancel' else None
+                processes = []
+
+                def start(*a, **kw):
+                    process = popen(*a, **kw)
+                    processes.append(process)
+                    if timer:
+                        timer.start()
+                    return process
+
+                try:
+                    with patch.object(svc.subprocess, 'Popen', side_effect=start), self.assertRaisesRegex(exception, message):
+                        svc.run_blobsan(args(blobsan=str(binary), scan_timeout=0.5 if 'timeout' in name else 10),
+                                        1, self.directory, cancel)
+                finally:
+                    if timer:
+                        timer.cancel()
+                        timer.join()
+                self.assertEqual(len(processes), 1)
+                self.assertIsNotNone(processes[0].returncode)
+                self.assertTrue(processes[0].stderr.closed)
+                self.assertFalse((self.directory / 'blobsan.err').exists())
+
     def test_expired_local_lease_stops_worker(self):
         cancel = threading.Event()
         cancel.deadline = time.monotonic() - 1

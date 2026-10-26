@@ -1156,7 +1156,6 @@ def scan(args, job, directory, cancel):
 def run_blobsan(args, gid, directory, cancel):
     """The supplied executable alone classifies restoration candidates."""
     check_running(cancel)
-    report = directory / 'blobsan.err'
     manifest_path = (directory / 'manifest.json').resolve()
     manifest = json.loads(manifest_path.read_text())
     statistics_path = (directory / 'report.json').resolve()
@@ -1164,18 +1163,38 @@ def run_blobsan(args, gid, directory, cancel):
     command = [args.blobsan, '--restore-canidates', '--scan-manifest', str(manifest_path),
                '--scan-report', str(statistics_path)]
     command.append('mirror-3-dc')
-    with (directory / 'snapshot').open('rb') as inp, report.open('wb') as err:
+    candidates = {category: set() for category in CATEGORIES}
+    with (directory / 'snapshot').open('rb') as inp, concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         process = subprocess.Popen(command,
-                                   stdin=inp, stdout=subprocess.DEVNULL, stderr=err)
+                                   stdin=inp, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors='replace')
+
+        def read_stderr():
+            with process.stderr:
+                for line in process.stderr:
+                    if 'GroupId#' not in line:
+                        continue
+                    match = CANDIDATE.fullmatch(line.strip())
+                    flags = set(match[3].split()) if match and match[3] else set()
+                    categories = flags.intersection(CATEGORIES)
+                    if not match or int(match[1]) != gid or not categories or flags - {*CATEGORIES, 'FULL'} or (
+                            'inv1_candidate' in categories and 'inv2_candidate' not in categories):
+                        raise ValueError('Unrecognized blobsan candidate: ' + line[:200])
+                    for category in categories:
+                        candidates[category].add(match[2])
+
         try:
+            reader = pool.submit(read_stderr)
             deadline = time.monotonic() + args.scan_timeout
-            while process.poll() is None:
+            while process.poll() is None or not reader.done():
                 check_running(cancel)
+                if reader.done():
+                    reader.result()  # Propagate parsing errors even if blobsan is still running.
                 if time.monotonic() >= deadline:
                     raise TimeoutError('blobsan timeout')
                 cancel.wait(0.2)
+            reader.result()
             if process.returncode:
-                raise RuntimeError('blobsan exited %d; see %s' % (process.returncode, report))
+                raise RuntimeError('blobsan exited %d' % process.returncode)
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -1186,19 +1205,6 @@ def run_blobsan(args, gid, directory, cancel):
                     process.wait()
     check_running(cancel)
     statistics = write2x2_report.validate(json.loads(statistics_path.read_text()), gid, manifest['completed_vdisks'])
-    candidates = {category: set() for category in CATEGORIES}
-    with report.open(errors='replace') as inp:
-        for line in inp:
-            if 'GroupId#' not in line:
-                continue
-            match = CANDIDATE.fullmatch(line.strip())
-            flags = set(match[3].split()) if match and match[3] else set()
-            categories = flags.intersection(CATEGORIES)
-            if not match or int(match[1]) != gid or not categories or flags - {*CATEGORIES, 'FULL'} or (
-                    'inv1_candidate' in categories and 'inv2_candidate' not in categories):
-                raise ValueError('Unrecognized blobsan candidate: ' + line[:200])
-            for category in categories:
-                candidates[category].add(match[2])
     return candidates, statistics
 
 

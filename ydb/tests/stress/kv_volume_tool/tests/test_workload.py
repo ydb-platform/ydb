@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import json
 import os
 import tempfile
@@ -47,26 +48,35 @@ def _upload_download_size_id(size):
     return "{}MB".format(size // MB)
 
 
-def _write_file_of_size(path, size_bytes):
+def _data_blocks(size_bytes):
     chunk = (b"kv_volume_tool_upload_download_test_" * 32)[:1024]
     big_chunk = chunk * 1024  # 1MB
-    with open(path, "wb") as file:
-        written = 0
-        while written < size_bytes:
-            to_write = min(len(big_chunk), size_bytes - written)
-            file.write(big_chunk[:to_write])
-            written += to_write
+    for offset in range(0, size_bytes, len(big_chunk)):
+        yield big_chunk[:min(len(big_chunk), size_bytes - offset)]
 
 
-def _assert_files_equal(path_a, path_b):
-    assert os.path.getsize(path_a) == os.path.getsize(path_b)
-    with open(path_a, "rb") as file_a, open(path_b, "rb") as file_b:
-        while True:
-            block_a = file_a.read(MB)
-            block_b = file_b.read(MB)
-            assert block_a == block_b
-            if not block_a:
-                break
+@contextmanager
+def _execute_stream(command, *, upload):
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "rb") as reader, os.fdopen(write_fd, "wb") as writer:
+        child_stream, parent_stream = (reader, writer) if upload else (writer, reader)
+        execution = yatest.common.execute(
+            command,
+            **{"stdin" if upload else "stdout": child_stream},
+            wait=False,
+            close_fds=True,
+        )
+        child_stream.close()
+        try:
+            with parent_stream:
+                yield parent_stream
+            execution.wait()
+        except BrokenPipeError:
+            execution.wait()
+            raise
+        finally:
+            if execution.running:
+                execution.kill()
 
 
 def _dstool_binary():
@@ -156,25 +166,16 @@ class TestKvVolumeTool(StressFixture):
         self._create_volume()
         key = "upload_download_{}".format(file_size)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source_path = os.path.join(tmpdir, "source.bin")
-            downloaded_path = os.path.join(tmpdir, "downloaded.bin")
+        transfer_args = [*self._base_args(), "--partition-id", "0", "--key", key, "--file", "-"]
+        with _execute_stream([self._tool(), "upload", *transfer_args], upload=True) as stream:
+            for block in _data_blocks(file_size):
+                stream.write(block)
 
-            _write_file_of_size(source_path, file_size)
-
-            self._run(
-                "upload",
-                "--partition-id", "0",
-                "--key", key,
-                "--file", source_path,
-            )
-            self._run(
-                "download",
-                "--partition-id", "0",
-                "--key", key,
-                "--file", downloaded_path,
-            )
-            _assert_files_equal(source_path, downloaded_path)
+        with _execute_stream([self._tool(), "download", *transfer_args], upload=False) as stream:
+            for offset, expected in enumerate(_data_blocks(file_size)):
+                actual = stream.read(len(expected))
+                assert actual == expected, "download mismatch at byte {}".format(offset * MB)
+            assert stream.read(1) == b"", "download contains extra data"
 
         self._run("remove")
 

@@ -13,10 +13,34 @@
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 
+#include <cstdlib>
+
+#ifdef _unix_
+    #include <unistd.h>
+#endif
+
 namespace NYT::NFS {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#ifdef _unix_
+TEST(TFSDeathTest, TestGetHomePathEnvironment)
+{
+    EXPECT_EXIT(
+        {
+            EXPECT_EQ(::setenv("HOME", "/tmp/test-home", 1), 0);
+            EXPECT_EQ(GetHomePath(), "/tmp/test-home");
+            EXPECT_EQ(::setenv("HOME", "", 1), 0);
+            EXPECT_EQ(GetHomePath(), "");
+            EXPECT_EQ(::unsetenv("HOME"), 0);
+            EXPECT_THROW_WITH_SUBSTRING(GetHomePath(), "HOME environment variable is not set");
+            ::_exit(::testing::Test::HasFailure() ? 1 : 0);
+        },
+        ::testing::ExitedWithCode(0),
+        "");
+}
+#endif
 
 TEST(TFSTest, TestGetRealPath)
 {

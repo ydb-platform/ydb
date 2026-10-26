@@ -1135,6 +1135,7 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         }
         break;
     }
+    case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
     case NKikimrSchemeOp::EIndexTypeInvalid:
     case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
     case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:

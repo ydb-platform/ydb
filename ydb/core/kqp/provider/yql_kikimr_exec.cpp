@@ -2774,6 +2774,9 @@ public:
                     }
 
                     switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalHnswIndex:
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "HNSW index implementation is not available yet"));
+                            return SyncError();
                         case Ydb::Table::TableIndex::kGlobalIndex:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:

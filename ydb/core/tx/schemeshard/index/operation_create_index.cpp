@@ -117,6 +117,12 @@ public:
             return result;
         }
 
+        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "HNSW index implementation is not available yet");
+            return result;
+        }
+
         if (!tableIndexCreation.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in CreateTableIndex");
             return result;

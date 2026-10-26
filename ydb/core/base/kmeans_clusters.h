@@ -13,6 +13,9 @@ namespace NKikimr::NTableIndex::NKMeans {
 
 namespace NKikimr::NKMeans {
 
+inline constexpr ui32 MaxHnswM = 100;
+inline constexpr ui32 MaxHnswEfConstruction = 1000;
+
 class IClusters {
 public:
     virtual ~IClusters() = default;
@@ -66,6 +69,10 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 
 bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+
+// HNSW's single-level routing may consist of a single cluster.
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);

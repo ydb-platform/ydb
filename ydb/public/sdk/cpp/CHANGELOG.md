@@ -1,5 +1,7 @@
 ## v3.25.0
 
+* Added preparatory HNSW vector index settings and index type to the table client. Server-side creation remains unavailable until its implementation is included.
+
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.

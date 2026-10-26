@@ -458,4 +458,6 @@ message TFeatureFlags {
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
+    // Gate for HNSW creation and acceleration once the implementation is included.
+    optional bool EnableHnswIndex = 371 [default = false];
 }

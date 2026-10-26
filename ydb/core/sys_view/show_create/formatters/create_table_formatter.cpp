@@ -51,6 +51,7 @@ namespace {
             case TableIndex::kGlobalAsyncIndex:
             case TableIndex::kGlobalUniqueIndex:
             case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalHnswIndex:
             case TableIndex::kGlobalFulltextPlainIndex:
             case TableIndex::kGlobalFulltextRelevanceIndex:
             case TableIndex::kGlobalJsonIndex:
@@ -609,6 +610,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     bool isLocalBloomFilter = false;
     bool isLocalBloomNgramFilter = false;
     switch (index.type_case()) {
+        case TableIndex::kGlobalHnswIndex:
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "HNSW index implementation is not available yet");
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
             break;

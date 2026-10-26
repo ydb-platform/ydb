@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(apply(policy), yexception, "is not a family of the table");
         policy = RelativePolicy();
         policy.Rules[0].TierId = TModel::GroupId1;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(apply(policy), yexception, "is not a family of the table");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply(policy), yexception, "cannot target the default tier");
         policy = RelativePolicy();
         std::swap(policy.Rules[0], policy.Rules[1]);
         UNIT_ASSERT_EXCEPTION(apply(policy), yexception);

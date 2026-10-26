@@ -112,9 +112,9 @@ namespace {
             Y_ENSURE(column, "Tiering column " << newPolicy->ColumnTag << " does not exist");
             TTierPredicate::ValidateColumn(*newPolicy, column->PType);
 
+            // Rules never target the default tier (checked by TTierPredicate::Validate)
             for (const auto& rule : newPolicy->Rules) {
-                // Rows that match no rule stay in the default tier, rules move rows to other tiers
-                Y_ENSURE(rule.TierId != TTierPredicate::DefaultTierId && families.contains(rule.TierId),
+                Y_ENSURE(families.contains(rule.TierId),
                     "Tiering policy refers to tier " << rule.TierId << " that is not a family of the table");
             }
         } else if (tableInfo.TieringPolicy && !delta.GetResetTieringPolicy()) {

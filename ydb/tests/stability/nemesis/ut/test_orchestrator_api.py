@@ -145,11 +145,12 @@ def test_scheduler_start_rejects_bad_profiles(client, body):
     assert router.nemesis_scheduler.started == 0, "a rejected profile must not start chaos"
 
 
-def test_local_harness_rejects_unavailable_scheduler_type(client):
+@pytest.mark.parametrize("nemesis_type", ["NetworkNemesis", "KillSchemeShardNemesis"])
+def test_local_harness_rejects_unavailable_scheduler_type(client, nemesis_type):
     with use_cluster(object()):
         response = client.post(
             "/api/scheduler/start",
-            json={"enabled": ["NetworkNemesis"]},
+            json={"enabled": [nemesis_type]},
         )
     assert response.status_code == 400
     assert "unavailable in the current runtime" in response.get_json()["message"]

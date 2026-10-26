@@ -17,6 +17,11 @@ _cluster_override: Any | None = None
 # test before it is admitted here.
 LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
+    "KillSchemeShardNemesis",
+})
+
+LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES = frozenset({
+    "KillDataShardNemesis",
 })
 
 
@@ -67,6 +72,18 @@ def nemesis_rejection_reason(nemesis_type: str) -> str | None:
             f"{nemesis_type} is not enabled for local harness execution; "
             f"allowed types: {', '.join(sorted(LOCAL_HARNESS_NEMESIS_TYPES))}"
         )
+    return None
+
+
+def scheduled_nemesis_rejection_reason(nemesis_type: str) -> str | None:
+    rejection = nemesis_rejection_reason(nemesis_type)
+    if rejection is not None:
+        return rejection
+    if (
+        local_harness_mode()
+        and nemesis_type not in LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES
+    ):
+        return f"{nemesis_type} is not enabled in the local harness scheduled profile"
     return None
 
 

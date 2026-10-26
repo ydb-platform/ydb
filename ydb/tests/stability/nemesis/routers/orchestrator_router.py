@@ -8,7 +8,10 @@ from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.config import Settings
 from ydb.tests.stability.nemesis.internal.models import parse_warden_time_window
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import nemesis_rejection_reason
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    nemesis_rejection_reason,
+    scheduled_nemesis_rejection_reason,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
@@ -425,7 +428,7 @@ def set_schedule():
     if process_type not in NEMESIS_TYPES:
         return jsonify({"status": "error", "message": "Invalid process type"}), 400
     if enabled:
-        rejection = nemesis_rejection_reason(process_type)
+        rejection = scheduled_nemesis_rejection_reason(process_type)
         if rejection is not None:
             return jsonify({"status": "error", "message": rejection}), 400
     if not isinstance(params, dict):
@@ -533,7 +536,9 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
                 f"unknown nemesis type(s): {', '.join(sorted(unknown))}. "
                 f"See GET /api/process_types; default profile: {', '.join(default_enabled_types())}"
             )
-        unavailable = [t for t in names if nemesis_rejection_reason(t) is not None]
+        unavailable = [
+            t for t in names if scheduled_nemesis_rejection_reason(t) is not None
+        ]
         if unavailable:
             return {}, (
                 f"type(s) unavailable in the current runtime: {', '.join(sorted(unavailable))}"

@@ -15,7 +15,9 @@ import requests
 
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import nemesis_rejection_reason
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    scheduled_nemesis_rejection_reason,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     confirm_timeout_for,
@@ -106,7 +108,7 @@ class OrchestratorNemesisSchedule:
         Start a daemon thread running _run_schedule_loop and record the task.
         Returns False if this process_type is already scheduled as enabled.
         """
-        rejection = nemesis_rejection_reason(process_type)
+        rejection = scheduled_nemesis_rejection_reason(process_type)
         if rejection is not None:
             raise ValueError(rejection)
         with self._lock:

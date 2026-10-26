@@ -19,6 +19,19 @@ def test_local_harness_starts_with_one_explicitly_allowed_type():
 
     with cluster_context.use_cluster(object()):
         assert cluster_context.nemesis_rejection_reason("KillDataShardNemesis") is None
+        assert cluster_context.nemesis_rejection_reason("KillSchemeShardNemesis") is None
+        assert (
+            cluster_context.scheduled_nemesis_rejection_reason(
+                "KillDataShardNemesis"
+            )
+            is None
+        )
+        assert (
+            cluster_context.scheduled_nemesis_rejection_reason(
+                "KillSchemeShardNemesis"
+            )
+            is not None
+        )
         reason = cluster_context.nemesis_rejection_reason("NetworkNemesis")
         assert reason is not None
         assert "not enabled for local harness execution" in reason

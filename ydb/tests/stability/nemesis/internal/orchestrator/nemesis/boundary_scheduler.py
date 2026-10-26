@@ -24,7 +24,9 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import nemesis_rejection_reason
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    scheduled_nemesis_rejection_reason,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
@@ -72,7 +74,7 @@ def default_enabled_types() -> list[str]:
         if (
             t in NEMESIS_TYPES
             and supports_boundary_scheduler(t)
-            and nemesis_rejection_reason(t) is None
+            and scheduled_nemesis_rejection_reason(t) is None
         )
     ]
 

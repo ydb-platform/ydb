@@ -79,7 +79,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendAddChangefeeds(Changefeed)));
+                .AppendAddChangefeeds(Changefeed)),
+                0,
+                ProxyGeneration);
             break;
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
@@ -93,13 +95,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCreateStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CreateStream);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
@@ -107,7 +112,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry CreateStream");
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error",
@@ -139,7 +144,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 .ConsumerName(SrcConsumerName)
             .EndAddConsumer();
 
-        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
+        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings), 0, ProxyGeneration);
         Become(&TThis::StateCreateConsumer);
     }
 
@@ -148,13 +153,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCreateConsumer"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CreateConsumer);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
@@ -166,7 +174,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry CreateConsumer");
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error",
@@ -182,7 +190,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void CheckConsumerExists() {
         const auto streamPath = BuildStreamPath();
-        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}));
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}), 0, ProxyGeneration);
         Become(&TThis::StateCheckConsumerExists);
     }
 
@@ -191,13 +199,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCheckConsumerExists"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CheckConsumerExists);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -208,7 +219,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                     {"streamPath", BuildStreamPath()},
                     {"ev", ev->Get()->ToString()},
                     {"outcome", "retry"});
-                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error of resolving topic",
@@ -243,24 +254,31 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void DescribeStreamTable() {
         // Creation can replay an existing stream after the feature flag has
         // changed. Record its actual capability, not the requested setting.
-        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()));
+        Send(
+            YdbProxy,
+            new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()),
+            0,
+            ProxyGeneration);
         Become(&TThis::StateDescribeStreamTable);
     }
 
     STATEFN(StateDescribeStreamTable) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, DescribeStreamTable);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                return Schedule(RetryDelay, new TEvents::TEvWakeup());
+                return Retry();
             }
 
             auto issues = result.GetIssues();
@@ -277,10 +295,50 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         Finish(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
     }
 
+    void Retry() {
+        Schedule(RetryDelay, new TEvents::TEvWakeup(ProxyGeneration));
+    }
+
+    void RetryCurrentOperation() {
+        const auto state = CurrentStateFunc();
+        if (state == &TThis::StateCreateStream) {
+            CreateStream();
+        } else if (state == &TThis::StateCreateConsumer) {
+            CreateConsumer();
+        } else if (state == &TThis::StateCheckConsumerExists) {
+            CheckConsumerExists();
+        } else if (state == &TThis::StateDescribeStreamTable) {
+            DescribeStreamTable();
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == ProxyGeneration) {
+            RetryCurrentOperation();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (YdbProxy != ev->Get()->YdbProxy) {
+            YdbProxy = ev->Get()->YdbProxy;
+            ++ProxyGeneration;
+            // Keep the controller's existing scheme-operation permission. Only
+            // replay the pending source operation, which may have committed.
+            RetryCurrentOperation();
+        }
+    }
+
     void Finish(NYdb::TStatus&& status, bool schemaChanges = false) {
         auto result = MakeHolder<TEvPrivate::TEvCreateStreamResult>(ReplicationId, TargetId, std::move(status));
         result->SchemaChanges = schemaChanges;
         Send(Parent, result.Release());
+        PassAway();
+    }
+
+    void Cancel() {
+        // Cancellation only releases the limiter; it must not change the
+        // persisted stream state as a successful or failed creation would.
+        Send(Parent, new TEvPrivate::TEvCancelCreateStream());
         PassAway();
     }
 
@@ -339,13 +397,15 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
+            sFunc(TEvents::TEvPoison, Cancel);
         }
     }
 
 private:
     const TActorId Parent;
-    const TActorId YdbProxy;
+    TActorId YdbProxy;
+    ui64 ProxyGeneration = 0;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;

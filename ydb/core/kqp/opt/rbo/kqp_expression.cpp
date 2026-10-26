@@ -516,6 +516,14 @@ bool TExpression::MaybeConstantCondition() const {
     return false;
 }
 
+bool TExpression::IsLiteralOne() const {
+    auto body = Node->ChildPtr(1);
+    if (TCoUint32::Match(body.Get())) {
+        return TString(body->Content()) == "1";
+    }
+    return false;
+}
+
 TExprNode::TPtr TExpression::GetLambda() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
     return Node;

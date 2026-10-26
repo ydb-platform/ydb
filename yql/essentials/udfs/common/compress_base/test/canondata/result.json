@@ -1,12 +1,12 @@
 {
-    "test.test[RoundTrip]": [
+    "test.test[RoundTrip-Results]": [
         {
-            "uri": "file://test.test_RoundTrip_/results.txt"
+            "uri": "file://test.test_RoundTrip-Results_/results.txt"
         }
     ],
-    "test.test[TryDecompress]": [
+    "test.test[TryDecompress-Results]": [
         {
-            "uri": "file://test.test_TryDecompress_/results.txt"
+            "uri": "file://test.test_TryDecompress-Results_/results.txt"
         }
     ]
 }

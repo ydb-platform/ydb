@@ -1,5 +1,8 @@
 #include "resource_pool_settings.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NResourcePool {
@@ -70,7 +73,11 @@ std::optional<TString> TPoolSettings::Validate() const {
     if (QueryMemoryLimitPercentPerNode != -1) {
         return "Invalid resource pool configuration, query_memory_limit_percent_per_node is not supported";
     }
-    if (TotalMemoryLimitPercentPerNode != -1) {
+    // The memory of a pool is limited only by the compute scheduler.
+    // Without the actor system (e.g. in tests) the default of the flag applies.
+    const bool memoryLimitSupported =
+        HasAppData() ? AppData()->FeatureFlags.GetEnableComputeSchedulerMemory() : TFeatureFlags().GetEnableComputeSchedulerMemory();
+    if (!memoryLimitSupported && TotalMemoryLimitPercentPerNode != -1) {
         return "Invalid resource pool configuration, total_memory_limit_percent_per_node is not supported";
     }
     if (QueryCpuLimitPercentPerNode != -1) {

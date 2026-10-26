@@ -161,6 +161,7 @@ namespace NKikimr::NStorage {
             ui32 RootNodeId = 0; // this is the terminal node id for the whole binding chain
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
+            bool SupportsDirectRootQueries = false; // advertised by the direct parent
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
@@ -172,6 +173,7 @@ namespace NKikimr::NStorage {
                 , RootNodeId(origin.RootNodeId)
                 , Cookie(origin.Cookie)
                 , SessionId(origin.SessionId)
+                , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
             {}
 
             bool Expected(IEventHandle& ev) const {

@@ -1305,6 +1305,7 @@ namespace NKikimr::NBsController {
             TPDiskFilter filter;
             filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
+            bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
                 switch (property.GetPropertyCase()) {
@@ -1325,13 +1326,16 @@ namespace NKikimr::NBsController {
 #undef PROPERTY
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
-                        if (filter.Location) {
+                        if (std::exchange(hasLocation, true)) {
                             throw TExError() << "Location already set";
                         }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
                             throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
                         }
-                        filter.Location = TNodeLocation(property.GetLocation()).GetSerializedLocation();
+                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
+                            filter.SetLocation(location.GetSerializedLocation());
+                        }
                         continue;
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:

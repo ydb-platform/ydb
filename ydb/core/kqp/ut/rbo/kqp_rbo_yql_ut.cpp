@@ -7644,7 +7644,8 @@ FROM (
                 {true, {k, id}, {id, k}, {intermediateK, intermediateId}},
                 {true, {id, k}, {id}, {}},
                 {true, {}, {id}, {}},
-                {false, {id}, {id}, {}}}) {
+                {false, {id}, {id}, {}},
+                {false, {k, id}, {id, k}, {}}}) {
             f.Props.ColumnLineage.Clear();
             f.Config->OptShuffleElimination = testCase.Enabled;
             auto read = f.Read({id, k});
@@ -7665,9 +7666,80 @@ FROM (
             auto finalAggregate = MakeIntrusive<TOpAggregate>(std::move(aggregate), std::move(finalTraits),
                 std::move(finalKeys), EOpPhase::Final, true, f.Pos);
             finalAggregate->ComputeMetadata(f.RboCtx, f.Props);
-            const auto expectedFinal = testCase.Expected.Items().empty() ? TOrderedIUs<>{} : testCase.ShuffledBy;
+            const auto expectedFinal = testCase.Expected.Items().empty() ? testCase.Keys : testCase.ShuffledBy;
             UNIT_ASSERT(finalAggregate->Props.Metadata->ShuffledByColumns == expectedFinal);
         }
+    }
+
+    Y_UNIT_TEST(AggregateShuffleEliminationTracksCreatedPartitioning) {
+        NTests::TIdTestContext f;
+        const auto id = f.Id(), k = f.Id(), payload = f.Id(), result = f.Id();
+        struct TCase {
+            bool Enabled;
+            EOpPhase Phase;
+            TOrderedIUs<> ShuffledBy, Keys, Expected;
+            bool EliminateShuffle;
+        };
+        for (const auto& testCase : TVector<TCase>{
+                {true, EOpPhase::Undefined, {payload}, {k, id}, {k, id}, false},
+                {true, EOpPhase::Final, {}, {k, id}, {k, id}, false},
+                {true, EOpPhase::Intermediate, {payload}, {k, id}, {}, false},
+                {true, EOpPhase::Undefined, {k}, {id, k}, {k}, true},
+                {true, EOpPhase::Final, {k}, {id, k}, {k}, true},
+                {true, EOpPhase::Intermediate, {k}, {id, k}, {k}, true},
+                {true, EOpPhase::Final, {k}, {}, {}, false},
+                {false, EOpPhase::Undefined, {}, {id}, {id}, false},
+                {false, EOpPhase::Final, {k, id}, {id, k}, {id, k}, false}}) {
+            f.Props.ColumnLineage.Clear();
+            f.Config->OptShuffleElimination = testCase.Enabled;
+            auto read = f.Read({id, k, payload});
+            read->Props.Metadata.emplace();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+            TAggregationIUs traits;
+            traits.Add(result, TOpAggregationTraits{payload, "sum"});
+            auto aggregate = MakeIntrusive<TOpAggregate>(std::move(read), std::move(traits), testCase.Keys,
+                testCase.Phase, false, f.Pos);
+            aggregate->ComputeMetadata(f.RboCtx, f.Props);
+            UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns == testCase.Expected);
+            // Advertising the result must not suppress the aggregation's own exchange.
+            UNIT_ASSERT_VALUES_EQUAL(CanEliminateAggregateShuffle(*aggregate, f.RboCtx), testCase.EliminateShuffle);
+        }
+    }
+
+    Y_UNIT_TEST(DistinctShuffleEliminationMatchesCreatedKeyOrder) {
+        NTests::TIdTestContext f;
+        f.Config->OptShuffleElimination = true;
+        const auto id = f.Id(), k = f.Id(), outputK = f.Id(), outputId = f.Id();
+        auto read = f.Read({id, k});
+        read->StorageType = NYql::EStorageType::ColumnStorage;
+        read->Props.Metadata.emplace();
+        TAggregationIUs traits;
+        traits.Add(outputK, TOpAggregationTraits{k, "distinct"});
+        traits.Add(outputId, TOpAggregationTraits{id, "distinct"});
+        auto aggregate = MakeIntrusive<TOpAggregate>(std::move(read), std::move(traits), TOrderedIUs<>{id, k},
+            EOpPhase::Undefined, true, f.Pos);
+        aggregate->ComputeMetadata(f.RboCtx, f.Props);
+        UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns == (TOrderedIUs<>{outputK, outputId}));
+        auto* op = aggregate.get();
+        auto root = f.Root(std::move(aggregate), {{outputK, "k"}, {outputId, "id"}});
+        TAssignStagesStage().RunStage(*root, f.RboCtx);
+        const auto sourceStage = *op->GetInput()->Props.StageId;
+        const auto aggregateStage = *op->Props.StageId;
+        const auto& connections = root->PlanProps.StageGraph.GetConnections(sourceStage, aggregateStage);
+        UNIT_ASSERT_VALUES_EQUAL(connections.size(), 1);
+        UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
+        UNIT_ASSERT(static_cast<const TShuffleConnection&>(*connections.front()).Keys == (TOrderedIUs<>{k, id}));
+
+        TPropagateAggregateThroughStageRule rule;
+        UNIT_ASSERT(rule.MatchAndApply(root->MutableChild(0), f.RboCtx, root->PlanProps));
+        auto& final = CastOperator<TOpAggregate>(*root->GetInput());
+        UNIT_ASSERT(rule.MatchAndApply(final.MutableChild(0), f.RboCtx, root->PlanProps));
+        const auto& partial = CastOperator<TOpAggregate>(*final.GetInput());
+        const auto& shuffled = root->PlanProps.StageGraph.GetConnections(sourceStage, aggregateStage).front();
+        UNIT_ASSERT(IsConnection<TShuffleConnection>(shuffled));
+        UNIT_ASSERT(static_cast<const TShuffleConnection&>(*shuffled).Keys == final.GetKeyColumns());
+        UNIT_ASSERT(partial.GetAggregationTraits().At(final.GetKeyColumns().Items()[0]).Input == k);
+        UNIT_ASSERT(partial.GetAggregationTraits().At(final.GetKeyColumns().Items()[1]).Input == id);
     }
 
     Y_UNIT_TEST(AggregateSeparatesSourceStatisticsAndHintIdentityFromProvenance) {
@@ -8175,11 +8247,15 @@ FROM (
                 PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND NOT EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 6);
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND (SELECT foo.id FROM `/Root/foo` as foo where foo.id == -1) IS NULL;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
             R"([[3]])",
+            R"([[0]])",
             R"([[0]])",
             R"([[0]])",
             R"([[0]])",
@@ -11021,6 +11097,99 @@ FROM (
 
     TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
         return ExplainHashCompatibilityQueryWithAst(tables, query).first;
+    }
+
+    Y_UNIT_TEST_TWIN(AggregateShuffleEliminationReusesCreatedPartitioning, ColumnStore) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* config = settings.AppConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        config->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = tableSession.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/aggregation` (
+                id Int64 NOT NULL,
+                k Int64 NOT NULL,
+                payload Int64 NOT NULL,
+                PRIMARY KEY (id)
+            )
+        )" << (ColumnStore ? "PARTITION BY HASH(id) WITH (STORE = COLUMN, PARTITION_COUNT = 4);"
+                          : "WITH (PARTITION_AT_KEYS = (7, 13, 19));")).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (i64 id = 1; id <= 24; ++id) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("k").Int64(id % 2)
+                .AddMember("payload").Int64(id % 3)
+                .EndStruct();
+        }
+        const auto inserted = tableClient.BulkUpsert("/Root/aggregation", rows.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            size_t EnabledShuffles;
+            size_t DisabledShuffles;
+        };
+        const TVector<TCase> cases{
+            {R"(
+                $grouped = SELECT k, payload, SUM(id) AS total FROM `/Root/aggregation` GROUP BY k, payload;
+                SELECT k, payload, SUM(total) AS total, COUNT(*) AS n FROM $grouped
+                GROUP BY payload, k ORDER BY k, payload;
+            )", "[[0;0;60;1u];[0;1;52;1u];[0;2;44;1u];[1;0;48;1u];[1;1;40;1u];[1;2;56;1u]]", 1, 2},
+            {R"(
+                $grouped = SELECT DISTINCT payload, k FROM `/Root/aggregation`;
+                SELECT k, payload, COUNT(*) AS n FROM $grouped
+                GROUP BY k, payload ORDER BY k, payload;
+            )", "[[0;0;1u];[0;1;1u];[0;2;1u];[1;0;1u];[1;1;1u];[1;2;1u]]", 1, 2},
+            // Dropping a partitioning key still requires the second shuffle.
+            {R"(
+                $grouped = SELECT k, payload, SUM(id) AS total FROM `/Root/aggregation` GROUP BY k, payload;
+                SELECT k, SUM(total) AS total, COUNT(*) AS n FROM $grouped GROUP BY k ORDER BY k;
+            )", "[[0;156;3u];[1;144;3u]]", 2, 2},
+            {R"(
+                $grouped = SELECT k, payload, SUM(id) AS total FROM `/Root/aggregation` GROUP BY k, payload;
+                SELECT SUM(total) AS total, COUNT(*) AS n FROM $grouped;
+            )", "[[[300];6u]]", 1, 1},
+            // A window's exchange invalidates the first aggregation's distribution.
+            {R"(
+                $grouped = SELECT k, payload, SUM(id) AS total FROM `/Root/aggregation` GROUP BY k, payload;
+                $ranked = SELECT k, payload, total, ROW_NUMBER() OVER (PARTITION BY total ORDER BY k) AS rn FROM $grouped;
+                SELECT k, payload, SUM(total) AS total, MAX(rn) AS rn FROM $ranked
+                GROUP BY k, payload ORDER BY k, payload;
+            )", "[[0;0;60;1u];[0;1;52;1u];[0;2;44;1u];[1;0;48;1u];[1;1;40;1u];[1;2;56;1u]]", 3, 3},
+            // Reuse the window's new distribution when it matches the outer grouping.
+            {R"(
+                $grouped = SELECT k, payload, SUM(id) AS total FROM `/Root/aggregation` GROUP BY k, payload;
+                $ranked = SELECT k, payload, total, ROW_NUMBER() OVER (PARTITION BY k ORDER BY payload) AS rn FROM $grouped;
+                SELECT k, SUM(total) AS total, MAX(rn) AS rn FROM $ranked
+                GROUP BY k ORDER BY k;
+            )", "[[0;156;3u];[1;144;3u]]", 2, 3},
+        };
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const bool enabled : {false, true}) {
+            for (const auto& testCase : cases) {
+                const TString query = TStringBuilder() << "PRAGMA YqlSelect = 'force';\n"
+                    << "PRAGMA ydb.OptShuffleElimination = '" << (enabled ? "true" : "false") << "';\n"
+                    << testCase.Query;
+                const auto explained = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+                UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
+                const TString plan{*explained.GetStats()->GetPlan()};
+                const auto hashes = CollectHashShuffleFuncs(plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(hashes.size(), enabled ? testCase.EnabledShuffles : testCase.DisabledShuffles, plan);
+                UNIT_ASSERT_C(std::all_of(hashes.begin(), hashes.end(), [](const auto& hash) { return hash == "HashV2"; }), plan);
+                const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\n" << query);
+                CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
     }
 
     Y_UNIT_TEST(AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout) {

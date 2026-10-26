@@ -13,28 +13,12 @@ inline bool IsValidPDiskFilterLocation(const NActorsInterconnect::TNodeLocation&
         && !location.HasBodyNum() && !location.HasBody() && location.unknown_fields().empty();
 }
 
-inline bool MatchPDiskLocation(const NActors::TNodeLocation& actual,
-        const NActorsInterconnect::TNodeLocation& required) {
-    if (!IsValidPDiskFilterLocation(required)) {
-        return false;
-    }
-    const auto& items = actual.GetItems();
-    auto match = [&](NActors::TNodeLocation::TKeys::E key, const TString& value) {
-        const auto it = std::lower_bound(items.begin(), items.end(), key,
-            [](const auto& item, auto key) { return item.first < key; });
-        return it != items.end() && it->first == key && it->second == value;
-    };
-#define MATCH_LOCATION_FIELD(NAME) \
-    if (required.Has##NAME() && !match(NActors::TNodeLocation::TKeys::NAME, required.Get##NAME())) { \
-        return false; \
-    }
-    MATCH_LOCATION_FIELD(BridgePileName)
-    MATCH_LOCATION_FIELD(DataCenter)
-    MATCH_LOCATION_FIELD(Module)
-    MATCH_LOCATION_FIELD(Rack)
-    MATCH_LOCATION_FIELD(Unit)
-#undef MATCH_LOCATION_FIELD
-    return true;
+// Every field supplied in the required location must be present in the actual one with the same value.
+// Both item lists are sorted by (key, value), so this is a subset check.
+inline bool MatchPDiskLocation(const NActors::TNodeLocation& actual, const NActors::TNodeLocation& required) {
+    const auto& x = actual.GetItems();
+    const auto& y = required.GetItems();
+    return std::includes(x.begin(), x.end(), y.begin(), y.end());
 }
 
 } // namespace NKikimr

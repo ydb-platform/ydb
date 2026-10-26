@@ -28,6 +28,8 @@ namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
 void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice);
 
+bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type);
+
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,

@@ -16,6 +16,51 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+struct TCdcIndexTestCase {
+    TString ImplTable;
+    TString Schema;
+};
+
+TCdcIndexTestCase MakeCdcIndexTestCase(NKikimrSchemeOp::EIndexType type) {
+    const bool vector = type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    const TString description = vector ? R"(
+        VectorIndexKmeansTreeDescription {
+            Settings {
+                settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                clusters: 2
+                levels: 1
+            }
+        }
+    )" : "";
+
+    return {
+        vector ? "indexImplPostingTable" : "indexImplTable",
+        Sprintf(R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "indexed" Type: "String" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "SyncIndex"
+                KeyColumnNames: ["indexed"]
+                Type: %s
+                %s
+            }
+            IndexDescription {
+                Name: "AsyncIndex"
+                KeyColumnNames: ["indexed"]
+                Type: EIndexTypeGlobalAsync
+            }
+        )", NKikimrSchemeOp::EIndexType_Name(type).c_str(), description.c_str()),
+    };
+}
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     Y_UNIT_TEST(Basic) {
         TTestBasicRuntime runtime;
@@ -1582,70 +1627,66 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
-    Y_UNIT_TEST(StreamOnIndexTableNegative) {
+    void StreamOnIndexTableNegative(NKikimrSchemeOp::EIndexType type) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(false));
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
-            TableDescription {
-              Name: "Table"
-              Columns { Name: "key" Type: "Uint64" }
-              Columns { Name: "indexed" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "Index"
-              KeyColumnNames: ["indexed"]
-            }
-        )");
+        const auto testCase = MakeCdcIndexTestCase(type);
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", testCase.Schema);
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
-            TableName: "indexImplTable"
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", Sprintf(R"(
+            TableName: "%s"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
             }
-        )", {NKikimrScheme::StatusPreconditionFailed});
+        )", testCase.ImplTable.c_str()), {NKikimrScheme::StatusPreconditionFailed});
     }
 
-    Y_UNIT_TEST(StreamOnIndexTable) {
+    Y_UNIT_TEST(StreamOnIndexTableNegative) {
+        StreamOnIndexTableNegative(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(StreamOnUniqueIndexTableNegative) {
+        StreamOnIndexTableNegative(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST(StreamOnVectorIndexTableNegative) {
+        StreamOnIndexTableNegative(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+    }
+
+    void StreamOnIndexTable(NKikimrSchemeOp::EIndexType type) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
-            TableDescription {
-              Name: "Table"
-              Columns { Name: "key" Type: "Uint64" }
-              Columns { Name: "indexed" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "SyncIndex"
-              KeyColumnNames: ["indexed"]
-            }
-            IndexDescription {
-              Name: "AsyncIndex"
-              KeyColumnNames: ["indexed"]
-              Type: EIndexTypeGlobalAsync
-            }
-        )");
+        const auto testCase = MakeCdcIndexTestCase(type);
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", testCase.Schema);
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(2)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(3)});
-
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", R"(
-            TableName: "indexImplTable"
+        const TString implPath = "/MyRoot/Table/SyncIndex/" + testCase.ImplTable;
+        const TString streamPath = implPath + "/Stream";
+        const TString streamSchema = Sprintf(R"(
+            TableName: "%s"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
             }
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        )", testCase.ImplTable.c_str());
+        const TString streamTarget = Sprintf(R"(
+            TableName: "%s"
+            StreamName: "Stream"
+        )", testCase.ImplTable.c_str());
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(2)});
+        TestDescribeResult(DescribePrivatePath(runtime, implPath), {NLs::PathVersionEqual(3)});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", streamSchema,
+            {NKikimrScheme::StatusPathDoesNotExist});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/AsyncIndex", R"(
             TableName: "indexImplTable"
@@ -1656,55 +1697,52 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         )", {NKikimrScheme::StatusPreconditionFailed});
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
-            TableName: "indexImplTable"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-            }
-        )");
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", streamSchema);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(5)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(4)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, implPath), {NLs::PathVersionEqual(4)});
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {
+            NLs::PathExist,
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath + "/streamImpl"), {NLs::PathExist});
 
-        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", R"(
-            TableName: "indexImplTable"
-            StreamName: "Stream"
-            Disable {}
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        const TString disableStream = streamTarget + "Disable {}";
+        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", disableStream,
+            {NKikimrScheme::StatusPathDoesNotExist});
 
-        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
-            TableName: "indexImplTable"
-            StreamName: "Stream"
-            Disable {}
-        )");
+        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", disableStream);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(7)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(5)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
+        TestDescribeResult(DescribePrivatePath(runtime, implPath), {NLs::PathVersionEqual(5)});
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
         });
 
-        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", R"(
-            TableName: "indexImplTable"
-            StreamName: "Stream"
-        )", {NKikimrScheme::StatusPathDoesNotExist});
+        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/UnknownIndex", streamTarget,
+            {NKikimrScheme::StatusPathDoesNotExist});
 
-        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
-            TableName: "indexImplTable"
-            StreamName: "Stream"
-        )");
+        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", streamTarget);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex"), {NLs::PathVersionEqual(10)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable"), {NLs::PathVersionEqual(6)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, implPath), {NLs::PathVersionEqual(6)});
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath + "/streamImpl"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(StreamOnIndexTable) {
+        StreamOnIndexTable(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(StreamOnUniqueIndexTable) {
+        StreamOnIndexTable(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST(StreamOnVectorIndexTable) {
+        StreamOnIndexTable(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
     }
 
     Y_UNIT_TEST(StreamOnBuildingIndexTable) {
@@ -1950,6 +1988,85 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
+    void InitialScanOnIndex(NKikimrSchemeOp::EIndexType type, bool enable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedsOnIndexTables(true)
+            .EnableChangefeedInitialScan(enable));
+        ui64 txId = 100;
+
+        const auto testCase = MakeCdcIndexTestCase(type);
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", testCase.Schema);
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> scanRequest;
+        auto blockScanRequest = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            scanRequest.Reset(ev.Release());
+        });
+
+        const auto expectedStatus = enable
+            ? NKikimrScheme::StatusAccepted
+            : NKikimrScheme::StatusPreconditionFailed;
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", Sprintf(R"(
+            TableName: "%s"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+                State: ECdcStreamStateScan
+            }
+        )", testCase.ImplTable.c_str()), {expectedStatus});
+
+        const TString streamPath = "/MyRoot/Table/SyncIndex/" + testCase.ImplTable + "/Stream";
+        if (!enable) {
+            TestDescribeResult(DescribePrivatePath(runtime, streamPath), {NLs::PathNotExist});
+            return;
+        }
+
+        env.TestWaitNotification(runtime, txId);
+        runtime.WaitFor("index scan request", [&] { return bool(scanRequest); });
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
+            NLs::StreamInitialScanProgress(1, 0),
+        });
+
+        ui64 readyTxId = 0;
+        auto observeReady = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
+                    readyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+
+        blockScanRequest.Remove();
+        runtime.Send(scanRequest.Release(), 0, true);
+        runtime.WaitFor("automatic index scan completion", [&] { return readyTxId != 0; });
+        env.TestWaitNotification(runtime, readyTxId);
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", Sprintf(R"(
+            TableName: "%s"
+            StreamName: "Stream"
+        )", testCase.ImplTable.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, streamPath), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST_FLAG(InitialScanOnGlobalIndex, Enabled) {
+        InitialScanOnIndex(NKikimrSchemeOp::EIndexTypeGlobal, Enabled);
+    }
+
+    Y_UNIT_TEST_FLAG(InitialScanOnUniqueIndex, Enabled) {
+        InitialScanOnIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique, Enabled);
+    }
+
+    Y_UNIT_TEST_FLAG(InitialScanOnVectorIndex, Enabled) {
+        InitialScanOnIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Enabled);
+    }
+
     void InitialScan(bool enable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

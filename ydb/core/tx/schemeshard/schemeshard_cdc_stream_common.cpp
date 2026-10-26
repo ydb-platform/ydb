@@ -7,6 +7,12 @@
 
 namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
+bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
+    return type == NKikimrSchemeOp::EIndexTypeGlobal
+        || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+}
+
 void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice) {
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     auto path = context.SS->PathsById.at(pathId);

@@ -3346,6 +3346,87 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitialScanTest(true);
     }
 
+    void IndexStream(NKikimrSchemeOp::EIndexType type, bool initialScan) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        InitRoot(server, edgeActor);
+
+        const auto table = WithExtraColumn().Indexes({
+            {"by_value", {"value"}, {"extra"}, type},
+        });
+        CreateShardedTable(server, edgeActor, "/Root", "Table", table);
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value, extra) VALUES
+                (1, 10, 100), (2, 20, 200);
+        )");
+
+        auto stream = Updates(NKikimrSchemeOp::ECdcStreamFormatJson);
+        if (initialScan) {
+            stream = WithInitialScan(stream);
+        }
+
+        ui64 readyTxId = 0;
+        auto observeReady = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
+                    readyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+
+        const auto txId = AsyncAlterAddStream(server, "/Root/Table/by_value", "indexImplTable", stream);
+        WaitTxNotification(server, edgeActor, txId);
+
+        const TString streamPath = "/Root/Table/by_value/indexImplTable/Stream";
+        TVector<TString> expected;
+        if (initialScan) {
+            expected = {
+                R"({"update":{"extra":100},"key":[10,1]})",
+                R"({"update":{"extra":200},"key":[20,2]})",
+            };
+            WaitForContent(server, edgeActor, streamPath, expected);
+            WaitFor(runtime, [&] { return readyTxId != 0; }, "automatic index scan completion");
+            WaitTxNotification(server, edgeActor, readyTxId);
+        }
+
+        const auto schemeShard = ResolveTableId(server, edgeActor, "/Root/Table").PathId.OwnerId;
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, streamPath), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET extra = 101 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 100 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` WHERE key = 2;");
+        ExecSQL(server, edgeActor, "INSERT INTO `/Root/Table` (key, value, extra) VALUES (3, 30, 300);");
+
+        // Ordinary CDC emits only changes after stream creation; the scan adds
+        // the two snapshot records before these same updates and erases.
+        // Updating a covered column replaces the index row with an erase/upsert.
+        expected.insert(expected.end(), {
+            R"({"erase":{},"key":[10,1]})",
+            R"({"update":{"extra":101},"key":[10,1]})",
+            R"({"erase":{},"key":[10,1]})",
+            R"({"update":{"extra":101},"key":[100,1]})",
+            R"({"erase":{},"key":[20,2]})",
+            R"({"update":{"extra":300},"key":[30,3]})",
+        });
+        WaitForContent(server, edgeActor, streamPath, expected);
+    }
+
+    Y_UNIT_TEST_TWIN(GlobalIndexStream, InitialScan) {
+        IndexStream(NKikimrSchemeOp::EIndexTypeGlobal, InitialScan);
+    }
+
+    Y_UNIT_TEST_TWIN(UniqueIndexStream, InitialScan) {
+        IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
+    }
+
     Y_UNIT_TEST(InitialScanDebezium) {
         TTestTopicEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "UnusedStream"));
         auto& client = env.GetClient();

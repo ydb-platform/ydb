@@ -39,4 +39,12 @@ struct TTaskResourceEstimationParams {
 
 void EstimateTaskResources(TTaskResourceEstimation& ret, const TTaskResourceEstimationParams& params, ui32 tasksCount);
 
+// The program which gets the heavy memory limit instead of the light one
+bool IsHeavyProgram(const NYql::NDqProto::TDqTask& task);
+
+// The memory a task is expected to take beyond its initial limit - the elastic part (E) of its memory demand.
+// TODO: the first version - no statistics and data volumes, only the flags of the program, like the initial limits:
+//       a heavy program is expected to grow up to the heavy limit, a light one - not to grow at all.
+ui64 EstimateTaskElasticMemory(const NYql::NDqProto::TDqTask& task, ui64 initialLimit, ui64 lightLimit, ui64 heavyLimit);
+
 } // namespace NKikimr::NKqp

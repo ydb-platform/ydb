@@ -509,7 +509,7 @@ public:
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
             Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
-            TProgramKey cacheKey{program.GetLangVer(), ResolvedRuntimeSettings->StableHash, program.GetRaw()};
+            TProgramKey cacheKey{program.GetLangVer(), StableHashRuntimeSettings(*RuntimeSettings), program.GetRaw()};
             auto future = cache->FindOrSubscribe(cacheKey);
             if (!future.HasValue()) {
                 try {
@@ -591,8 +591,7 @@ public:
         TaskId = task.GetId();
         StageId = task.GetStageId();
         LangVer = task.GetProgram().GetLangVer();
-        ResolvedRuntimeSettings = ResolveRuntimeSettings(task.GetProgram().GetRuntimeSettings());
-        RuntimeSettings = ResolvedRuntimeSettings->Settings;
+        RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
         auto entry = BuildTask(task);
 
@@ -1257,7 +1256,6 @@ private:
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
     TLangVersion LangVer = MinLangVersion;
-    std::shared_ptr<const TResolvedRuntimeSettings> ResolvedRuntimeSettings;
     TRuntimeSettings::TConstPtr RuntimeSettings;
 
     ui64 InputsConsumed = 0;

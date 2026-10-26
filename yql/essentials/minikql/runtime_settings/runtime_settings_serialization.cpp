@@ -4,12 +4,6 @@
 #include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
 
-#include <util/system/mutex.h>
-
-#include <array>
-#include <list>
-#include <unordered_map>
-
 namespace NYql {
 
 namespace {
@@ -59,79 +53,6 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromStringImpl(const TString& data)
 }
 
 } // namespace
-
-std::shared_ptr<const TResolvedRuntimeSettings> ResolveRuntimeSettings(
-    const NProto::TRuntimeSettings& proto)
-{
-    // Key by the complete wire representation, including activation/unknown fields.
-    // Equivalent encodings can miss this cache but retain the same pattern hash.
-    // Changing settings never reuses metadata from the previous plan. The program
-    // and language version remain part of the computation-pattern cache key.
-    struct TShard {
-        TMutex Mutex;
-        std::list<TString> Lru;
-        struct TEntry {
-            std::shared_ptr<const TResolvedRuntimeSettings> Value;
-            std::list<TString>::iterator Position;
-        };
-        std::unordered_map<TString, TEntry> Entries;
-        size_t Bytes = 0;
-    };
-    static std::array<TShard, 16> cache;
-    constexpr size_t MaxEntriesPerShard = 64;
-    constexpr size_t MaxBytesPerShard = 64 * 1024;
-    constexpr size_t MaxEntryBytes = 16 * 1024;
-
-    const auto build = [&] {
-        const auto mutableSettings = DeserializeRuntimeSettingsFromProto(proto);
-        // Copy the plain settings, stripping the mutable configuration dispatcher.
-        auto settings = MakeRuntimeSettings(*mutableSettings);
-        auto hash = StableHashRuntimeSettings(*settings);
-        return std::make_shared<const TResolvedRuntimeSettings>(
-            TResolvedRuntimeSettings{std::move(settings), std::move(hash)});
-    };
-    // Never cache activation decisions. Even malformed/unresolved task settings
-    // must retain the deserializer's request-local activation/error behavior.
-    bool hasActivation = false;
-    for (const auto& setting : proto.GetHostSettings()) {
-        hasActivation |= setting.HasActivation();
-    }
-    for (const auto& udf : proto.GetUdfSettings()) {
-        for (const auto& setting : udf.GetRuntimeSettings()) {
-            hasActivation |= setting.HasActivation();
-        }
-    }
-    if (hasActivation || proto.ByteSizeLong() > MaxEntryBytes) {
-        return build();
-    }
-    TString key;
-    Y_ENSURE(proto.SerializeToString(&key));
-    auto& shard = cache[THash<TString>()(key) % cache.size()];
-    {
-        const TGuard<TMutex> guard(shard.Mutex);
-        if (const auto it = shard.Entries.find(key); it != shard.Entries.end()) {
-            shard.Lru.splice(shard.Lru.begin(), shard.Lru, it->second.Position);
-            return it->second.Value;
-        }
-    }
-    // Configuration dispatch (which can throw) happens outside the cache lock.
-    // Activation is still rejected on this path; failures are never cached.
-    auto value = build();
-    const TGuard<TMutex> guard(shard.Mutex);
-    if (const auto it = shard.Entries.find(key); it != shard.Entries.end()) {
-        shard.Lru.splice(shard.Lru.begin(), shard.Lru, it->second.Position);
-        return it->second.Value;
-    }
-    shard.Bytes += key.size();
-    shard.Lru.push_front(key);
-    shard.Entries.emplace(std::move(key), TShard::TEntry{value, shard.Lru.begin()});
-    while (shard.Entries.size() > MaxEntriesPerShard || shard.Bytes > MaxBytesPerShard) {
-        shard.Bytes -= shard.Lru.back().size();
-        shard.Entries.erase(shard.Lru.back());
-        shard.Lru.pop_back();
-    }
-    return value;
-}
 
 TRuntimeSettings::TPtr CreateRuntimeSettingsFromProto(
     const NProto::TRuntimeSettings& proto,

@@ -224,7 +224,7 @@ protected:
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
-        , CoreRuntimeSettings(ResolveRuntimeSettings(Task.GetProgram().GetRuntimeSettings())->Settings)
+        , CoreRuntimeSettings(DeserializeRuntimeSettingsFromProto(Task.GetProgram().GetRuntimeSettings()))
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , AsyncIoFactory(std::move(asyncIoFactory))

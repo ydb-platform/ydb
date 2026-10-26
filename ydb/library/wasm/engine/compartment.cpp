@@ -96,6 +96,24 @@ struct TMemoryLayoutData {
     static void Clear(TMemoryLayoutData* data);
 };
 
+// WAVM returns null when the compartment-wide mutable-global slots are full.
+// Its module instantiator does not check this before initializeGlobal.
+void EnsureMutableGlobalCapacity(Runtime::Compartment* compartment, Uptr required)
+{
+    Uptr available = 0;
+    for (U32 index = 0; index < Runtime::maxMutableGlobals; ++index) {
+        available += !compartment->globalDataAllocationMask.contains(index);
+    }
+    THROW_ERROR_EXCEPTION_IF(required > available, "WebAssembly mutable global limit exceeded");
+}
+
+Runtime::Global* CreateCheckedGlobal(Runtime::Compartment* compartment, IR::GlobalType type, std::string name)
+{
+    auto* global = Runtime::createGlobal(compartment, type, std::move(name));
+    THROW_ERROR_EXCEPTION_IF(!global, "WebAssembly mutable global limit exceeded");
+    return global;
+}
+
 TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
 {
     static const auto mutableI64Global = IR::GlobalType{ IR::ValueType::i64, true };
@@ -122,13 +140,13 @@ TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
             },
             nullptr,
             "__global_offset_table"),
-        .StackPointer = Runtime::createGlobal(compartment, mutableI64Global, "__stack_pointer"),
-        .HeapBase = Runtime::createGlobal(compartment, mutableI64Global, "__heap_base"),
-        .MemoryBase = Runtime::createGlobal(compartment, immutableI64Global, "__memory_base"),
-        .TableBase = Runtime::createGlobal(compartment, immutableI64Global, "__table_base"),
-        .TableBase32 = Runtime::createGlobal(compartment, immutableI32Global, "__table_base32"),
-        .StackLow = Runtime::createGlobal(compartment, mutableI64Global, "__stack_low"),
-        .StackHigh = Runtime::createGlobal(compartment, mutableI64Global, "__stack_high"),
+        .StackPointer = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_pointer"),
+        .HeapBase = CreateCheckedGlobal(compartment, mutableI64Global, "__heap_base"),
+        .MemoryBase = CreateCheckedGlobal(compartment, immutableI64Global, "__memory_base"),
+        .TableBase = CreateCheckedGlobal(compartment, immutableI64Global, "__table_base"),
+        .TableBase32 = CreateCheckedGlobal(compartment, immutableI32Global, "__table_base32"),
+        .StackLow = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_low"),
+        .StackHigh = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_high"),
     };
     // clang-format on
 
@@ -267,6 +285,32 @@ Uptr GetActiveElemSegmentSize(const IR::ElemSegment& elemSegment)
         default:
             return 0;
     }
+}
+
+// Segment offsets use the module's relocation base, not the table capacity.
+// Evaluate before resolving GOT.func: newly allocated slots must be above all
+// incoming active segments, or instantiation can overwrite the resolved pointer.
+Uptr GetActiveElemSegmentOffset(const IR::Module& module, const IR::ElemSegment& segment, Uptr tableBase)
+{
+    THROW_ERROR_EXCEPTION_IF(segment.tableIndex != 0, "Unsupported module: elem segment table index must be 0");
+    const auto& offset = segment.baseOffset;
+    switch (offset.type) {
+        case IR::InitializerExpression::Type::i32_const:
+            return static_cast<U32>(offset.i32);
+        case IR::InitializerExpression::Type::i64_const:
+            return static_cast<U64>(offset.i64);
+        case IR::InitializerExpression::Type::global_get:
+            if (offset.ref < module.globals.imports.size()) {
+                const auto& global = module.globals.imports[offset.ref];
+                if (global.exportName == "__table_base" || global.exportName == "__table_base32") {
+                    return tableBase;
+                }
+            }
+            break;
+        default:
+            break;
+    }
+    THROW_ERROR_EXCEPTION("Unsupported active elem segment offset");
 }
 
 void EnsureGlobalOffsetTableCapacity(Runtime::Table* globalOffsetTable, Uptr requiredSize)
@@ -790,19 +834,19 @@ private:
         } else if (objectName == "__memory_base") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.MemoryBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newMemoryBase = Compartment_->MemoryLayoutData_.MemoryBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__memory_base");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__memory_base");
             Runtime::initializeGlobal(result, newMemoryBase);
             candidate = Runtime::asObject(result);
         } else if (objectName == "__table_base") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.TableBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newTableBase = Compartment_->MemoryLayoutData_.TableBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__table_base");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__table_base");
             Runtime::initializeGlobal(result, newTableBase);
             candidate = Runtime::asObject(result);
         } else if (objectName == "__table_base32") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.TableBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newTableBase = Compartment_->MemoryLayoutData_.TableBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i32, false }, "__table_base");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i32, false }, "__table_base");
             THROW_ERROR_EXCEPTION_IF(
                 newTableBase > std::numeric_limits<I32>::max(), "WebAssembly linkage error: new table base is bigger than max i32 value");
             Runtime::initializeGlobal(result, static_cast<I32>(newTableBase));
@@ -859,7 +903,7 @@ private:
         Uptr indexInGOT = it->second;
         auto globalType = asGlobalType(type);
         globalType.isMutable = true;
-        auto result = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
+        auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
         Runtime::initializeGlobal(result, indexInGOT);
         return Runtime::asObject(result);
     }
@@ -923,7 +967,7 @@ private:
         I64 indexInGOT = it->second;
         auto globalType = asGlobalType(type);
         globalType.isMutable = true;
-        auto result = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(demangled));
+        auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(demangled));
         YT_ASSERT(result != nullptr);
         Runtime::initializeGlobal(result, indexInGOT);
         return Runtime::asObject(result);
@@ -953,7 +997,7 @@ private:
         if (objectName == "emscripten_console_trace") {
             auto globalType = asGlobalType(type);
             globalType.isMutable = true;
-            auto result = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
+            auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
             Runtime::initializeGlobal(Runtime::asGlobal(result), static_cast<I64>(0));
             return result;
         }
@@ -1000,7 +1044,7 @@ private:
                 }
                 auto globalType = asGlobalType(type);
                 globalType.isMutable = true;
-                auto outObject = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
+                auto outObject = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
                 auto incomingGlobal = IncomingModule_->globals.defs[exportedDataEntry.index - IncomingModule_->globals.imports.size()];
                 Runtime::initializeGlobal(Runtime::asGlobal(outObject), incomingGlobal.initializer.i64);
                 return outObject;
@@ -1042,6 +1086,22 @@ void EnsureFunctionDebugNamesFromExports(IR::Module& irModule)
 
 Runtime::LinkResult TWebAssemblyCompartment::LinkModule(const IR::Module& irModule)
 {
+    Uptr requiredSize = MemoryLayoutData_.TableBases.back();
+    for (const auto& tableImport : irModule.tables.imports) {
+        requiredSize = std::max(requiredSize, tableImport.type.size.min);
+    }
+    for (const auto& segment : irModule.elemSegments) {
+        if (segment.type != IR::ElemSegment::Type::active) {
+            continue;
+        }
+        const auto offset = GetActiveElemSegmentOffset(irModule, segment, MemoryLayoutData_.TableBases.back());
+        const auto size = GetActiveElemSegmentSize(segment);
+        THROW_ERROR_EXCEPTION_IF(offset > MaxGlobalOffsetTableSize || size > MaxGlobalOffsetTableSize - offset,
+            "WebAssembly active elem segment exceeds table limit");
+        requiredSize = std::max(requiredSize, offset + size);
+    }
+    EnsureGlobalOffsetTableCapacity(GetGlobalOffsetTable(), requiredSize);
+
     auto linker = TLinker(this, &irModule);
     auto linkResult = Runtime::linkModule(irModule, linker);
 
@@ -1059,32 +1119,25 @@ void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule
 {
     EnsureFunctionDebugNamesFromExports(irModule);
 
-    IR::DisassemblyNames disassemblyNames;
-    getDisassemblyNames(irModule, disassemblyNames);
-
-    auto exportedFunctions = THashSet<std::string>();
+    THashMap<Uptr, std::vector<std::string>> exportedFunctions;
     for (const auto& item : irModule.exports) {
         if (item.kind == IR::ExternKind::function) {
-            exportedFunctions.insert(CppDemangle(TString(item.name)));
+            exportedFunctions[item.index].push_back(item.name);
         }
     }
 
-    // TODO: Index from evaluated active elem segment baseOffset (__table_base /
-    // const), not table capacity. Min GOT size is 2048 while segments land at
-    // table_base (often 0), so getTableNumElements() mis-records GOT.func slots.
-    Uptr baseOffset = Runtime::getTableNumElements(GetGlobalOffsetTable());
     for (const auto& elementSegment : irModule.elemSegments) {
         if (elementSegment.type != IR::ElemSegment::Type::active) {
             continue;
         }
-
-        auto indexExportedFunction = [&](int tableIndex, Uptr functionIndex) {
-            if (functionIndex >= disassemblyNames.functions.size()) {
-                return;
-            }
-            const auto& functionName = disassemblyNames.functions[functionIndex].name;
-            if (exportedFunctions.contains(functionName)) {
-                GlobalOffsetTableElements_.Functions[functionName] = baseOffset + tableIndex;
+        const auto baseOffset = GetActiveElemSegmentOffset(irModule, elementSegment, MemoryLayoutData_.TableBases.back());
+        const auto indexExportedFunction = [&](Uptr tableIndex, Uptr functionIndex) {
+            // Export names are the linking ABI; debug names may be stripped,
+            // demangled or unrelated, and one function may have several aliases.
+            if (const auto it = exportedFunctions.find(functionIndex); it != exportedFunctions.end()) {
+                for (const auto& name : it->second) {
+                    GlobalOffsetTableElements_.Functions[name] = baseOffset + tableIndex;
+                }
             }
         };
 
@@ -1125,16 +1178,11 @@ void TWebAssemblyCompartment::InstantiateModule(
     YT_VERIFY(linkResult.success);
 
     EnsureFunctionDebugNamesFromExports(wavmModule->ir);
-
-    {
-        const Uptr tableBase = MemoryLayoutData_.TableBases.back();
-        Uptr requiredTableSize = tableBase;
-        for (const auto& elemSegment : wavmModule->ir.elemSegments) {
-            // TODO: Use evaluated active segment baseOffset + size (see MemoryBases TODO).
-            requiredTableSize = std::max(requiredTableSize, tableBase + GetActiveElemSegmentSize(elemSegment));
-        }
-        EnsureGlobalOffsetTableCapacity(GetGlobalOffsetTable(), requiredTableSize);
+    Uptr mutableDefinitions = 0;
+    for (const auto& global : wavmModule->ir.globals.defs) {
+        mutableDefinitions += global.type.isMutable;
     }
+    EnsureMutableGlobalCapacity(Compartment_, mutableDefinitions);
 
     Runtime::Instance* instance = nullptr;
     try {
@@ -1162,17 +1210,9 @@ void TWebAssemblyCompartment::InstantiateModule(
         MemoryLayoutData_.MemoryBases.push_back(newMemoryBase);
     }
 
-    {
-        // TODO: Same as MemoryBases — max end of active elem segments via evaluated
-        // __table_base offset, not sum of segment sizes (ignore passive).
-        Uptr lastTableBase = MemoryLayoutData_.TableBases.back();
-        Uptr newTableBase = lastTableBase;
-        for (auto& elemSegment : wavmModule->ir.elemSegments) {
-            THROW_ERROR_EXCEPTION_IF(elemSegment.tableIndex != 0, "Unsupported module: elem segment table index must be 0");
-            newTableBase += GetActiveElemSegmentSize(elemSegment);
-        }
-        MemoryLayoutData_.TableBases.push_back(newTableBase);
-    }
+    // LinkModule reserved active segments before resolving GOT.func. Include
+    // slots allocated during linking so subsequent modules cannot reuse them.
+    MemoryLayoutData_.TableBases.push_back(Runtime::getTableNumElements(GetGlobalOffsetTable()));
 
     { LinkingData_.WeakFunctions.clear(); }
 
@@ -1190,25 +1230,29 @@ void TWebAssemblyCompartment::InstantiateModule(
 
 void TWebAssemblyCompartment::ApplyDataRelocationsAndCallConstructors(Runtime::Instance* instance)
 {
-    auto callIfDefined = [this](Runtime::Instance* instance, const IR::FunctionType& signature, const std::string& name) {
-        if (auto* function = getTypedInstanceExport(instance, name, signature)) {
-            auto arguments = std::array<IR::UntaggedValue, 0>{};
-            SaveAndRestoreCompartment(this, [&] {
-                try {
-                    Runtime::invokeFunction(Context_, function, signature, arguments.data(), {});
-                } catch (WAVM::Runtime::Exception* ex) {
-                    auto description = WAVM::Runtime::describeException(ex);
-                    WAVM::Runtime::destroyException(ex);
-                    THROW_ERROR_EXCEPTION("WAVM Runtime Exception: %Qv", description);
-                }
-            });
+    TCompactVector<Runtime::Function*, 4> called;
+    const auto call = [this, &called](Runtime::Function* function) {
+        if (!function || std::find(called.begin(), called.end(), function) != called.end()) {
+            return;
         }
+        called.push_back(function);
+        SaveAndRestoreCompartment(this, [&] {
+            try {
+                Runtime::invokeFunction(Context_, function, IR::FunctionType({}, {}), nullptr, nullptr);
+            } catch (WAVM::Runtime::Exception* ex) {
+                auto description = WAVM::Runtime::describeException(ex);
+                WAVM::Runtime::destroyException(ex);
+                THROW_ERROR_EXCEPTION("WAVM Runtime Exception: %Qv", description);
+            }
+        });
     };
-
-    static const auto VoidToVoidSignature = IR::FunctionType(/*inResults*/ {}, /*inParams*/ {});
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_apply_data_relocs");
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_apply_global_relocs");
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_call_ctors");
+    // wasm-ld emits __wasm_apply_global_relocs as the start function, which
+    // need not be exported. WAVM instantiates it but leaves execution to us.
+    call(Runtime::getStartFunction(instance));
+    static const auto VoidToVoidSignature = IR::FunctionType({}, {});
+    for (const auto* name : { "__wasm_apply_global_relocs", "__wasm_apply_data_relocs", "__wasm_call_ctors" }) {
+        call(Runtime::getTypedInstanceExport(instance, name, VoidToVoidSignature));
+    }
 }
 
 void TWebAssemblyCompartment::Clone(const TWebAssemblyCompartment& source, TWebAssemblyCompartment* destination)

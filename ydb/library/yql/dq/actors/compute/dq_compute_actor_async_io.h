@@ -189,6 +189,13 @@ struct IDqComputeActorAsyncOutput {
 
     virtual i64 GetFreeSpace() const = 0;
 
+    // Outputs with hard admission limits must not receive channel overcommit.
+    // GetFreeSpace still uses estimated bytes; buffer Pop may include the last
+    // whole row, so such outputs must reserve capacity for that row as well.
+    virtual bool AllowFreeSpaceOvercommit() const {
+        return true;
+    }
+
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.

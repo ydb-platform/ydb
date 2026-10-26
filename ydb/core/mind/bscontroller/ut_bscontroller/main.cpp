@@ -573,11 +573,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         node->MutableLocation()->SetRack("rack");
         const THostRecordMap hosts = std::make_shared<THostRecordMapImpl>(config);
 
-        for (const TString location : {TString("other-dc"), TString("dc")}) {
+        for (const TString& location : {TString("other-dc"), TString("dc")}) {
             TBlobStorageController::TStoragePoolInfo::TPDiskFilter filter{.Type = NKikimrBlobStorage::ROT};
             NActorsInterconnect::TNodeLocation required;
             required.SetDataCenter(location);
-            filter.Location = required.SerializeAsString();
+            filter.SetLocation(TNodeLocation(required).GetSerializedLocation());
             TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters{filter};
             TStringStream data;
             Save(&data, filters);

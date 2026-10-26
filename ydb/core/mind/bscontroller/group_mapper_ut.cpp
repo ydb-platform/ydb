@@ -337,7 +337,7 @@ public:
             status = ESanitizeResult::FAIL;
             for (auto vdisk : result.Disks) {
                 auto target = mapper.TargetMisplacedVDisk(TGroupId::FromValue(groupId), group.Group, vdisk,
-                    std::move(forbid), group.GroupSizeInUnits, 0, requireOperational, TBridgePileId(), error);
+                    std::move(forbid), 0, requireOperational, group.GroupSizeInUnits, TBridgePileId(), error);
                 if (target) {
                     status = ESanitizeResult::SUCCESS;
                     if (movedDisk) {
@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                     .PDiskId = id,
                     .Location = TNodeLocation(location),
                     .Usable = true,
-                    .ExpectedSlotCount = 10,
+                    .MaxSlots = 10,
                     .Operational = true,
                     .BridgePileId = TBridgePileId::FromPileIndex(pile),
                 }));
@@ -648,19 +648,13 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TString layoutError;
         UNIT_ASSERT_C(context.CheckGroupPlacement(group, geometry, layoutError), layoutError);
 
-        TGroupMapper::TReassignmentRequest request;
-        request.GroupId = 1;
-        request.PileScope = TGroupMapper::TPileScope::AcrossPiles();
-        TGroupMapper::Traverse(group, [&](TVDiskIdShort id, TPDiskId disk) {
-            request.VDisks.push_back({.VDiskId = id, .PDiskId = disk});
-        });
-        const auto old = request.VDisks.front().PDiskId;
-        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{};
-        const auto result = mapper.AllocateGroupReassignment(request);
-        UNIT_ASSERT_C(result.Success, result.Error.ErrorMessage);
-        UNIT_ASSERT_C(context.CheckGroupPlacement(result.Group, geometry, layoutError), layoutError);
-        UNIT_ASSERT_UNEQUAL(result.Group[0][0][0], old);
-        UNIT_ASSERT_VALUES_EQUAL((result.Group[0][0][0].NodeId - 1) / 4, (old.NodeId - 1) / 4);
+        const auto old = std::exchange(group[0][0][0], TPDiskId());
+        const THashMap<TVDiskIdShort, TPDiskId> replacedDisks{{TVDiskIdShort(0, 0, 0), old}};
+        UNIT_ASSERT_C(mapper.AllocateGroup(1, group, replacedDisks, {}, 1, 0, true,
+            TGroupMapper::TPileScope::AcrossPiles(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(context.CheckGroupPlacement(group, geometry, layoutError), layoutError);
+        UNIT_ASSERT_UNEQUAL(group[0][0][0], old);
+        UNIT_ASSERT_VALUES_EQUAL((group[0][0][0].NodeId - 1) / 4, (old.NodeId - 1) / 4);
 
         // Different pile labels must not make one physical DC look like three DCs.
         TGroupMapper sameDatacenter(geometry);

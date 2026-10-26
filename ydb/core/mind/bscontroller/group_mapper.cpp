@@ -1301,7 +1301,7 @@ namespace NKikimr::NBsController {
         }
 
         std::optional<TPDiskId> TargetMisplacedVDisk(ui32 groupId, TGroupDefinition& groupDefinition, TVDiskIdShort vdisk,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TPileScope pileScope,
+                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, ui32 groupSizeInUnits, TPileScope pileScope,
                 TString& error) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());

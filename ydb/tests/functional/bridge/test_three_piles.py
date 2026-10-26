@@ -33,7 +33,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.epoch = 0
         super().setup_method()
         try:
-            assert all(len(nodes) == 8 for nodes in self.pile_nodes.values())
+            assert self.nodes_count % len(self.pile_names) == 0
+            assert all(len(nodes) == self.nodes_count // len(self.pile_names) for nodes in self.pile_nodes.values())
             assert self.configurator.yaml_config["erasure"] == "block-4-2"
             self.wait_states()
         except Exception:
@@ -42,10 +43,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
 
     def teardown_method(self):
         try:
-            for pool in self.pools.values():
-                pool.stop()
-            for driver in self.drivers.values():
-                self.stop_driver(driver)
+            for name in list(self.drivers):
+                self.stop_pile_clients(name)
         finally:
             super().teardown_method()
 
@@ -135,7 +134,20 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.states[name] = PRIMARY
         self.wait_states()
 
+    def stop_pile_clients(self, name):
+        pool = self.pools.pop(name, None)
+        driver = self.drivers.pop(name, None)
+        try:
+            if pool is not None:
+                pool.stop()
+        finally:
+            if driver is not None:
+                self.stop_driver(driver)
+
     def stop_pile(self, name):
+        # Stop keepalives before taking the endpoint down. A pinned driver cannot
+        # reconnect once its only connection has been removed from the SDK cache.
+        self.stop_pile_clients(name)
         with ThreadPoolExecutor(max_workers=len(self.pile_nodes[name])) as executor:
             list(executor.map(lambda node: node.stop(), self.pile_nodes[name]))
         assert all(not node.is_alive() for node in self.pile_nodes[name])
@@ -146,15 +158,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
 
     def execute(self, query, scheme=False):
         name = self.primary
-        if name not in self.drivers:
-            node = self.pile_nodes[name][0]
-            # Keep requests on this pile instead of discovering nodes that a later
-            # transition disconnects. Discovery itself is covered separately.
-            driver = ydb.Driver(ydb.DriverConfig(
-                endpoint=f"grpc://{node.endpoint}", database="/Root", disable_discovery=True,
-            ))
-            self.drivers[name] = driver
-            self.pools[name] = ydb.SessionPool(driver, size=1)
         settings = ydb.BaseRequestSettings().with_timeout(10)
 
         def operation(session):
@@ -164,12 +167,27 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
                 query, commit_tx=True, settings=settings,
             )
 
-        return self.eventually(
-            lambda: self.pools[name].retry_operation_sync(
-                operation, retry_settings=ydb.RetrySettings(max_retries=0, get_session_client_timeout=5),
-            ),
-            f"table operation through {name}",
-        )
+        def attempt():
+            if name not in self.drivers:
+                node = self.pile_nodes[name][0]
+                # Keep requests on this pile instead of discovering nodes that a later
+                # transition disconnects. Discovery itself is covered separately.
+                driver = ydb.Driver(ydb.DriverConfig(
+                    endpoint=f"grpc://{node.endpoint}", database="/Root", disable_discovery=True,
+                ))
+                self.drivers[name] = driver
+                self.pools[name] = ydb.SessionPool(driver, size=1)
+            try:
+                return self.pools[name].retry_operation_sync(
+                    operation, retry_settings=ydb.RetrySettings(max_retries=0, get_session_client_timeout=5),
+                )
+            except (grpc.RpcError, ydb.ConnectionError, ydb.Unavailable, ydb.SessionPoolEmpty):
+                # Session acquisition can hide a lost connection behind
+                # SessionPoolEmpty. Retry with a new driver pinned to the same node.
+                self.stop_pile_clients(name)
+                raise
+
+        return self.eventually(attempt, f"table operation through {name}")
 
     def create_data(self):
         self.execute(
@@ -239,6 +257,15 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.keep_only("r1")
         self.write_data()
 
+    @pytest.mark.parametrize("target", ["r2", "r3"])
+    def test_takedown_and_rejoin(self, target):
+        self.create_data()
+        self.disconnect(target, graceful=True)
+        self.write_data()
+        self.rejoin(target)
+        self.keep_only(target)
+        self.write_data()
+
     @pytest.mark.parametrize("survivor", ["r1", "r3"], ids=["primary-survives", "primary-lost"])
     def test_two_piles_fail_together(self, survivor):
         self.create_data()
@@ -254,12 +281,52 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.check_data()
         self.write_data()
 
-    def test_switch_with_third_pile_disconnected(self):
+    @pytest.mark.parametrize("failover", [False, True], ids=["switchover", "failover"])
+    def test_switch_with_third_pile_disconnected(self, failover):
         self.create_data()
         self.disconnect("r3")
         self.write_data()
-        self.promote("r2")
+        if failover:
+            self.stop_pile("r1")
+            self.disconnect("r1", new_primary="r2")
+        else:
+            self.promote("r2")
         self.check_data()
+        self.write_data()
+        self.rejoin("r3")
+        self.keep_only("r3")
+
+    @pytest.mark.parametrize(
+        "disconnect_order,return_order",
+        [(("r2", "r3"), ("r2", "r3")), (("r1", "r2"), ("r2", "r1"))],
+        ids=["survive-r1-forward-rejoin", "survive-r3-reverse-rejoin"],
+    )
+    @pytest.mark.parametrize("verify_index", [0, 1], ids=["verify-first", "verify-second"])
+    def test_two_lagging_piles(self, disconnect_order, return_order, verify_index):
+        self.create_data()
+        survivor = next(name for name in self.pile_names if name not in disconnect_order)
+        for name in disconnect_order:
+            self.disconnect(name, new_primary=survivor if name == self.primary else None)
+            self.write_data()
+        for name in return_order:
+            self.rejoin(name)
+            self.check_data()
+            self.write_data()
+        # Verify each restored pile in its own run. Rejoining peers between isolation
+        # checks would add another recovery cycle and change the data being verified.
+        self.keep_only(return_order[verify_index])
+        self.write_data()
+
+    @pytest.mark.parametrize("verify_pile", ["r2", "r3"])
+    def test_rejoin_without_waiting_for_other_pile(self, verify_pile):
+        self.create_data()
+        for name in ("r2", "r3"):
+            self.disconnect(name)
+            self.write_data()
+        self.rejoin("r2", wait=False)
+        self.rejoin("r3", wait=False)
+        self.wait_states(timeout=self.synchronization_timeout)
+        self.keep_only(verify_pile)
         self.write_data()
 
     def check_discovery(self):
@@ -328,3 +395,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             [("r2", UNSYNC), ("r3", UNSYNC)], StatusIds.INTERNAL_ERROR, "Too many state changes",
         )
         self.check_data()
+        for name in ("r2", "r3"):
+            self.rejoin(name)
+        self.keep_only("r3")

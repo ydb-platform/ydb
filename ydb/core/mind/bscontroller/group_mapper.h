@@ -68,6 +68,28 @@ namespace NKikimr {
         // TGroupMapper is a helper class used to create groups from a set of PDisks with their respective locations
         // over physical hardware
         class TGroupMapper {
+        public:
+            class TPileScope {
+                std::optional<TBridgePileId> PileId;
+
+            public:
+                // An invalid pile still means the legacy unlabelled pile, never a wildcard.
+                TPileScope(TBridgePileId pileId = {})
+                    : PileId(pileId)
+                {}
+
+                static TPileScope AcrossPiles() {
+                    TPileScope scope;
+                    scope.PileId.reset();
+                    return scope;
+                }
+
+                bool Allows(TBridgePileId pileId) const {
+                    return !PileId || *PileId == pileId;
+                }
+            };
+
+        private:
             class TImpl;
             THolder<TImpl> Impl;
 
@@ -167,9 +189,9 @@ namespace NKikimr {
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace,
-                bool requireOperational, TBridgePileId bridgePileId, TGroupMapperError& error);
+                bool requireOperational, TPileScope pileScope, TGroupMapperError& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TPileScope pileScope,
                 TGroupMapperError& error);
 
             struct TMisplacedVDisks {
@@ -201,7 +223,7 @@ namespace NKikimr {
             TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group, ui32 groupSizeInUnits);
 
             std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TPileScope pileScope,
                 TString& error);
         };
 

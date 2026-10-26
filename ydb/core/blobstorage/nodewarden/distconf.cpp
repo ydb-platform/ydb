@@ -71,6 +71,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelStateStorageSelfHealRefresh();
         CancelConfigRefill();
         CancelBindingLiveness();
         for (const auto& item : InvokeQ) {
@@ -149,6 +150,10 @@ namespace NKikimr::NStorage {
             }
 
             QuorumValid = false;
+
+            // A generation-zero root can learn its first managed configuration
+            // from quorum recovery after BecomeRoot has already run.
+            StartStateStorageSelfHealRefresh();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&

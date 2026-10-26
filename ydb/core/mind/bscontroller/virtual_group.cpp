@@ -399,7 +399,8 @@ namespace NKikimr::NBsController {
                 group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
                     const auto& pools = State->StoragePools.Get();
                     if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                        return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            State->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     }
                     Y_DEBUG_ABORT();
                     return TGroupGeometryInfo();

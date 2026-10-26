@@ -5,6 +5,8 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
 #include <ydb/core/mind/bscontroller/impl.h>
+#include <ydb/core/mind/bscontroller/storage_stats_calculator.h>
+#include <ydb/core/mind/bscontroller/sys_view.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -292,7 +294,313 @@ public:
     }
 };
 
+namespace {
+
+    using TBaseConfig = NKikimrBlobStorage::TBaseConfig;
+    using TVSlot = TBaseConfig::TVSlot;
+
+    bool SameVSlotId(const NKikimrBlobStorage::TVSlotId& lhs, const NKikimrBlobStorage::TVSlotId& rhs) {
+        return lhs.GetNodeId() == rhs.GetNodeId()
+            && lhs.GetPDiskId() == rhs.GetPDiskId()
+            && lhs.GetVSlotId() == rhs.GetVSlotId();
+    }
+
+    TBaseConfig FetchBaseConfig(TEnvironmentSetup* env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableQueryBaseConfig();
+        const auto response = env->Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
+        return response.GetStatus(0).GetBaseConfig();
+    }
+
+    TVSlot FindVSlot(const TBaseConfig& baseConfig, const NKikimrBlobStorage::TVSlotId& id) {
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (SameVSlotId(vslot.GetVSlotId(), id)) {
+                return vslot;
+            }
+        }
+        UNIT_ASSERT_C(false, "VSlot not found");
+        return {};
+    }
+
+    TVSlot FindActiveVSlot(const TBaseConfig& baseConfig, const TVSlot& logicalVDisk) {
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetGroupId() != logicalVDisk.GetGroupId()) {
+                continue;
+            }
+            for (const auto& id : group.GetVSlotId()) {
+                const TVSlot vslot = FindVSlot(baseConfig, id);
+                if (vslot.GetFailRealmIdx() == logicalVDisk.GetFailRealmIdx()
+                        && vslot.GetFailDomainIdx() == logicalVDisk.GetFailDomainIdx()
+                        && vslot.GetVDiskIdx() == logicalVDisk.GetVDiskIdx()) {
+                    return vslot;
+                }
+            }
+        }
+        UNIT_ASSERT_C(false, "active VSlot not found");
+        return {};
+    }
+
+    NKikimrBlobStorage::TConfigRequest MakeReassignRequest(const TVSlot& source, ui32 groupGeneration) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *command = request.AddCommand()->MutableReassignGroupDisk();
+        command->SetGroupId(source.GetGroupId());
+        command->SetGroupGeneration(groupGeneration);
+        command->SetFailRealmIdx(source.GetFailRealmIdx());
+        command->SetFailDomainIdx(source.GetFailDomainIdx());
+        command->SetVDiskIdx(source.GetVDiskIdx());
+        return request;
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(PDiskLocationFilterMatchesSuppliedFields) {
+        using TFilter = TBlobStorageController::TStoragePoolInfo::TPDiskFilter;
+        const ui64 category = TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 7).GetRaw();
+        NActorsInterconnect::TNodeLocation actual;
+        actual.SetDataCenter("dc");
+        actual.SetRack("rack");
+        actual.SetUnit("unit");
+        actual.SetModule("");
+        actual.SetBridgePileName("pile");
+        NKikimrBlobStorage::TPDiskFilter proto;
+        proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        proto.AddProperty()->SetKind(7);
+        proto.AddProperty()->SetSharedWithOs(false);
+        auto* required = proto.AddProperty()->MutableLocation();
+        auto matches = [&](const NActorsInterconnect::TNodeLocation& location) {
+            return TFilter::Parse(1, 1, proto).MatchPDisk(category, false, {}, TNodeLocation(location));
+        };
+        // An empty location imposes no constraint and is stored the same way as an absent one.
+        UNIT_ASSERT(!TFilter::Parse(1, 1, proto).Location);
+        UNIT_ASSERT(matches({}));
+        for (const char* name : {"DataCenter", "Module", "Rack", "Unit", "BridgePileName"}) {
+            const auto* field = actual.GetDescriptor()->FindFieldByName(name);
+            required->Clear();
+            required->GetReflection()->SetString(required, field, actual.GetReflection()->GetString(actual, field));
+            UNIT_ASSERT(matches(actual));
+            auto missing = actual;
+            missing.GetReflection()->ClearField(&missing, field);
+            UNIT_ASSERT(!matches(missing)); // Missing is distinct from an explicit empty value.
+            required->GetReflection()->SetString(required, field, "different");
+            UNIT_ASSERT(!matches(actual));
+        }
+        required->Clear();
+        required->SetDataCenter("dc");
+        required->SetRack("rack");
+        UNIT_ASSERT(matches(actual));
+        actual.SetRack("other");
+        UNIT_ASSERT(!matches(actual));
+        actual.SetRack("rack");
+        auto filter = TFilter::Parse(1, 1, proto);
+        UNIT_ASSERT(!filter.MatchPDisk(category, true, {}, TNodeLocation(actual)));
+        UNIT_ASSERT(!filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 8).GetRaw(),
+            false, {}, TNodeLocation(actual)));
+        TStringStream stream;
+        Save(&stream, filter);
+        TFilter restored;
+        Load(&stream, restored);
+        UNIT_ASSERT(restored.MatchPDisk(category, false, {}, TNodeLocation(actual)));
+        actual.SetDataCenter("other");
+        UNIT_ASSERT(!restored.MatchPDisk(category, false, {}, TNodeLocation(actual)));
+
+        proto.AddProperty()->MutableLocation();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "Location already set");
+        proto.MutableProperty()->RemoveLast();
+        required = proto.MutableProperty(3)->MutableLocation();
+        required->SetDataCenterNum(1);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "legacy numeric");
+        required->Clear();
+        required->mutable_unknown_fields()->AddVarint(999, 1);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "unknown fields");
+    }
+
+    Y_UNIT_TEST(PDiskLocationFilterPlacementAndRestart) {
+        TEnvironmentSetup env(20, 2);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+
+        // Returns the location property of the filter, adding one when the filter has none.
+        auto location = [](NKikimrBlobStorage::TPDiskFilter* filter) {
+            for (auto& property : *filter->MutableProperty()) {
+                if (property.HasLocation()) {
+                    return property.MutableLocation();
+                }
+            }
+            return filter->AddProperty()->MutableLocation();
+        };
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto lastPool = [&] {
+            return request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool();
+        };
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
+            env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "dc1", 2, NKikimrBlobStorage::ROT, false, request);
+        location(lastPool()->MutablePDiskFilter(0))->SetDataCenter("1");
+        env.DefineStoragePool(1, 2, "either dc", 0, NKikimrBlobStorage::ROT, false, request);
+        auto* either = lastPool();
+        location(either->MutablePDiskFilter(0))->SetDataCenter("1");
+        *either->AddPDiskFilter() = either->GetPDiskFilter(0);
+        location(either->MutablePDiskFilter(1))->SetDataCenter("2");
+        env.DefineStoragePool(1, 3, "unrestricted", 0, NKikimrBlobStorage::ROT, false, request);
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        auto readPool = [&](ui64 id) {
+            NKikimrBlobStorage::TConfigRequest read;
+            auto* cmd = read.AddCommand()->MutableReadStoragePool();
+            cmd->SetBoxId(1);
+            cmd->AddStoragePoolId(id);
+            auto result = env.Invoke(read);
+            UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(0).StoragePoolSize(), 1);
+            return result.GetStatus(0).GetStoragePool(0);
+        };
+        auto definePool = [&](const NKikimrBlobStorage::TDefineStoragePool& pool) {
+            NKikimrBlobStorage::TConfigRequest define;
+            *define.AddCommand()->MutableDefineStoragePool() = pool;
+            return env.Invoke(define);
+        };
+        // Checks that the pool has the expected number of groups, all of them placed in the given DC.
+        auto checkPlacement = [&](ui64 storagePoolId, const TString& dc, ui32 numGroups) {
+            const auto config = FetchBaseConfig(&env);
+            THashMap<ui32, TString> datacenters;
+            for (const auto& node : config.GetNode()) {
+                datacenters[node.GetNodeId()] = node.GetLocation().GetDataCenter();
+            }
+            ui32 groups = 0;
+            for (const auto& group : config.GetGroup()) {
+                if (group.GetStoragePoolId() != storagePoolId) {
+                    continue;
+                }
+                ++groups;
+                UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 8);
+                for (const auto& slot : group.GetVSlotId()) {
+                    UNIT_ASSERT_VALUES_EQUAL(datacenters.at(slot.GetNodeId()), dc);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(groups, numGroups);
+            return config;
+        };
+        checkPlacement(1, "1", 2);
+        const auto before = readPool(2).SerializeAsString();
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(readPool(2).SerializeAsString(), before);
+        UNIT_ASSERT_VALUES_EQUAL(readPool(2).PDiskFilterSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).GetPDiskFilter(0).PropertySize(), 2);
+        auto config = checkPlacement(1, "1", 2);
+        const auto source = FindVSlot(config, config.GetGroup(0).GetVSlotId(0));
+        request = MakeReassignRequest(source, config.GetGroup(0).GetGroupGeneration());
+        request.SetIgnoreGroupFailModelChecks(true); // This fixture does not run VDisks.
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkPlacement(1, "1", 2);
+
+        // Explicit reassignment cannot escape the filter either.
+        config = FetchBaseConfig(&env);
+        const auto current = FindActiveVSlot(config, source);
+        request = MakeReassignRequest(current, config.GetGroup(0).GetGroupGeneration());
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto* target = request.MutableCommand(0)->MutableReassignGroupDisk()->MutableTargetPDiskId();
+        for (const auto& node : config.GetNode()) {
+            if (node.GetLocation().GetDataCenter() == "2") {
+                target->SetNodeId(node.GetNodeId());
+                const auto disk = std::ranges::find_if(config.GetPDisk(), [&](const auto& pdisk) {
+                    return pdisk.GetNodeId() == node.GetNodeId();
+                });
+                UNIT_ASSERT(disk != config.GetPDisk().end());
+                target->SetPDiskId(disk->GetPDiskId());
+                break;
+            }
+        }
+        UNIT_ASSERT(target->GetNodeId());
+        response = env.Invoke(request);
+        UNIT_ASSERT(!response.GetSuccess());
+        checkPlacement(1, "1", 2);
+
+        // Different locations with identical disk properties survive update and deletion independently.
+        auto pool = readPool(2);
+        pool.MutablePDiskFilter()->RemoveLast();
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(readPool(2).PDiskFilterSize(), 1);
+
+        // An unknown DC cannot allocate a group even though other DCs have free space.
+        pool = readPool(2);
+        location(pool.MutablePDiskFilter(0))->SetDataCenter("missing");
+        pool.SetNumGroups(1);
+        UNIT_ASSERT(!definePool(pool).GetSuccess());
+        auto stored = readPool(2);
+        UNIT_ASSERT_VALUES_EQUAL(location(stored.MutablePDiskFilter(0))->GetDataCenter(), "1");
+
+        // The second filter can satisfy the pool when the first matches no disk.
+        *pool.AddPDiskFilter() = stored.GetPDiskFilter(0);
+        location(pool.MutablePDiskFilter(1))->SetDataCenter("2");
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkPlacement(1, "1", 2);
+        checkPlacement(2, "2", 1);
+    }
+
+    Y_UNIT_TEST(PDiskLocationFilterCapacity) {
+        TEnvironmentSetup env(1, 1);
+        env.SetupRuntime(1, 1);
+        auto& runtime = *env.Runtime;
+        const ui32 nodeId = runtime.GetNodeId(0);
+        TControllerSystemViewsState state;
+        auto& disk = state.PDisks[TPDiskId(nodeId, 1)];
+        disk.SetBoxId(1);
+        disk.SetCategory(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        disk.SetExpectedSlotCount(4);
+        disk.SetSlotSizeInUnits(1);
+        disk.SetNumActiveSlots(0);
+        disk.SetTotalSize(400);
+        disk.SetEnforcedDynamicSlotSize(100);
+        auto& pool = state.StoragePools[{1, 1}];
+        pool.SetErasureSpeciesV2("none");
+        NKikimrBlobStorage::TStorageConfig config;
+        auto* node = config.AddAllNodes();
+        node->SetNodeId(nodeId);
+        node->SetHost("host");
+        node->SetPort(19001);
+        node->MutableLocation()->SetDataCenter("dc");
+        node->MutableLocation()->SetRack("rack");
+        const THostRecordMap hosts = std::make_shared<THostRecordMapImpl>(config);
+
+        for (const TString& location : {TString("other-dc"), TString("dc")}) {
+            TBlobStorageController::TStoragePoolInfo::TPDiskFilter filter{.Type = NKikimrBlobStorage::ROT};
+            NActorsInterconnect::TNodeLocation required;
+            required.SetDataCenter(location);
+            filter.SetLocation(TNodeLocation(required).GetSerializedLocation());
+            TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters{filter};
+            TStringStream data;
+            Save(&data, filters);
+            pool.SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters));
+            pool.SetPDiskFilterData(data.Str());
+
+            const auto edge = runtime.AllocateEdgeActor();
+            runtime.Register(CreateStorageStatsCoroCalculator(state, hosts, 0, 0).release(),
+                0, 0, TMailboxType::Simple, 0, edge);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvCalculateStorageStatsResponse>(edge);
+            bool found = false;
+            for (const auto& entry : response->Get()->StorageStats) {
+                if (entry.GetErasureSpecies() == "none") {
+                    found = true;
+                    const ui32 expectedGroups = location == "dc" ? 4 : 0;
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetAvailableGroupsToCreate(), expectedGroups);
+                    UNIT_ASSERT_VALUES_EQUAL(entry.GetImmediateGroupsToCreate(), expectedGroups);
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+    }
+
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

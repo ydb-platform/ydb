@@ -453,6 +453,7 @@ message TOlapColumnDiff {
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
     optional string ColumnFamilyName = 9 [deprecated = true];
     optional bool NotNull = 10;
+    optional bool SetNotNullInProgress = 11;
 }
 
 message TOlapColumnDescription {
@@ -475,6 +476,8 @@ message TOlapColumnDescription {
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
     optional uint32 ColumnFamilyId = 14 [deprecated = true];
     optional string ColumnFamilyName = 15 [deprecated = true];
+    // Internal write constraint; reads remain nullable until validation completes.
+    optional bool SetNotNullInProgress = 16 [default = false];
 }
 
 message TIndexDataExtractor {

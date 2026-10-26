@@ -241,6 +241,7 @@ public:
 
     std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
     bool HasWriteOperations(const TInternalPathId pathId) const;
+    bool HasWriteOperationsBeforeSchema(const TInternalPathId pathId, ui64 schemaVersion) const;
 
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);

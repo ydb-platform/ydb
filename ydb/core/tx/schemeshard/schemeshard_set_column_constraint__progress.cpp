@@ -690,26 +690,34 @@ private:
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
-
-        for (const auto* partition : table->GetPartitions()) {
+        TVector<TShardIdx> shards;
+        if (path->IsColumnTable()) {
+            for (const auto tabletId : Self->ColumnTables.GetVerifiedPtr(path->PathId)->GetColumnShards()) {
+                shards.push_back(Self->GetShardIdx(TTabletId(tabletId)));
+            }
+        } else {
+            for (const auto* partition : Self->Tables.at(path->PathId)->GetPartitions()) {
+                shards.push_back(partition->ShardIdx);
+            }
+        }
+        for (const auto shardIdx : shards) {
             // We can initate shards after schemeshard's reboot.
-            if (operationInfo.DoneValidationShards.contains(partition->ShardIdx)) {
+            if (operationInfo.DoneValidationShards.contains(shardIdx)) {
                 continue;
             }
 
-            Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
+            Y_ENSURE(Self->ShardInfos.contains(shardIdx));
 
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
             TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
-            auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition->ShardIdx, std::move(shardStatus));
+            auto [it, emplaced] = operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
             Y_ENSURE(emplaced);
 
-            operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
+            operationInfo.ToValidateShards.emplace_back(shardIdx);
             YDB_LOG_DEBUG("InitiateValidationShards: added shard",
-                {"shardIdx", partition->ShardIdx},
+                {"shardIdx", shardIdx},
             );
         }
 

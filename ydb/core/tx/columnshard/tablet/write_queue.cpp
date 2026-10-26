@@ -64,6 +64,12 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
         LWTRACK(WriteDequeued, *Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, ctx.Monotonic() - Created);
     }
 
+    const auto& currentSchema = owner->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+    if (const auto compatibility = currentSchema->GetIndexInfo().CheckWriteCompatibility(Schema->GetIndexInfo()); compatibility.IsFail()) {
+        Abort(owner, compatibility.GetErrorMessage(), ctx, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+        return true;
+    }
+
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
         if (lock->NeedsAborting()) {
             Abort(owner, "transaction is aborted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
@@ -83,6 +89,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
         {"sizeInFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly()});
 
     AFL_VERIFY(writeOperation);
+    writeOperation->SetSchemaVersion(Schema->GetVersion());
     writeOperation->SetBehaviour(Behaviour);
     const auto applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : owner->GetMaxReadVersionForSchema(Schema->GetVersion());
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,

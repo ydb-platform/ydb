@@ -51,6 +51,12 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
+    for (const auto& [_, validator] : ColumnConstraintValidators) {
+        if (validator.ActorId) {
+            ctx.Send(validator.ActorId, new TEvents::TEvPoisonPill);
+        }
+    }
+    ColumnConstraintValidators.clear();
 
     StoragesManager->Stop();
     DataLocksManager->Stop();

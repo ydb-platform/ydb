@@ -295,6 +295,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvColumnConstraintValidationFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -513,6 +515,15 @@ private:
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
     std::vector<TActorId> ActorsToStop;
+
+    struct TColumnConstraintValidation {
+        TSchemeShardLocalPathId PathId;
+        std::pair<ui64, ui64> SeqNo;
+        TActorId ActorId;
+        bool ScanStarted = false;
+    };
+
+    THashMap<ui64, TColumnConstraintValidation> ColumnConstraintValidators;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;

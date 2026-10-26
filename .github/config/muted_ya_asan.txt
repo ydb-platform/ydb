@@ -13,7 +13,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleIndexesStayConsistentWithOneGeneratedColumn
-ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactAccessDenied-UseQueryService
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
@@ -30,7 +29,6 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashI
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
-ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk

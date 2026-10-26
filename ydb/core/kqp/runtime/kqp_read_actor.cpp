@@ -406,9 +406,10 @@ public:
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
             // One node-wide pipe pins every query for a tablet to the same
-            // follower. Spread independent vector searches across connections,
-            // while ACKs, retries and cancellation keep the same read affinity.
-            PipeCacheId = Settings->HasVectorTopK()
+            // follower. When HNSW is enabled, spread independent vector searches
+            // across connections, while ACKs, retries and cancellation keep the
+            // same read affinity.
+            PipeCacheId = Settings->HasVectorTopK() && AppData()->FeatureFlags.GetEnableHnswIndex()
                 ? MakeVectorReadFollowerPipeCacheID(computeActorId.Hash() % VectorReadFollowerPipeCacheCount)
                 : FollowersPipeCacheId;
             UseFollowers = true;

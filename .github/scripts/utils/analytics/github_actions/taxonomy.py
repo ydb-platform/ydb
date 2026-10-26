@@ -30,6 +30,7 @@ YA_PHASE_NAMES = (
     "s3_sync_try",
     "upload_tests_results",
     "runner_info",
+    "github_proxy",
 )
 
 # Phases derived from ya_evlog.jsonl by ya_evlog_phases.py.

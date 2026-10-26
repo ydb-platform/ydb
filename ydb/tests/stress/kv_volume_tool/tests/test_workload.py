@@ -156,7 +156,8 @@ class TestKvVolumeTool(StressFixture):
         self._create_volume()
         key = "upload_download_{}".format(file_size)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # Use the runner-provided RAM disk when available; None keeps the normal disk fallback.
+        with tempfile.TemporaryDirectory(dir=yatest.common.ram_drive_path()) as tmpdir:
             source_path = os.path.join(tmpdir, "source.bin")
             downloaded_path = os.path.join(tmpdir, "downloaded.bin")
 

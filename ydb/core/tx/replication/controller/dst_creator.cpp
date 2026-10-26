@@ -563,13 +563,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Error(NKikimrScheme::StatusPreconditionFailed, "Existing table is not owned by this replication");
             }
 
-            // SchemeShard atomically decides whether a previous owner is gone.
-            // Describing a read-only table alone does not establish ownership.
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
-            // Existing owners remain protected when assignment is disabled.
-            // Ownerless read-only replicas retain their legacy configuration.
             AssignOwner = desc.GetTable().GetReplicationConfig().HasOwner()
                 || (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership() && !IsReplica(desc.GetTable()));
             Attaching = true;
@@ -1170,7 +1166,8 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        const TPathId& pendingDstPathId, bool cleanup)
+        const TPathId& pendingDstPathId,
+        bool cleanup)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
 }

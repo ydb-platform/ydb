@@ -235,29 +235,12 @@ private:
         TSubSession(std::shared_ptr<NTopic::IReadSession> session = {},
                     std::shared_ptr<TDbInfo> dbInfo = {},
                     std::shared_ptr<std::atomic<bool>> retired = {},
-                    ui64 generation = 0,
-                    std::shared_ptr<std::atomic<bool>> closed = {},
-                    std::shared_ptr<std::atomic<bool>> closeEventDelivered = {})
+                    ui64 generation = 0)
             : Session(std::move(session))
             , DbInfo(std::move(dbInfo))
             , Generation(generation)
             , Retired(std::move(retired))
-            , Closed(std::move(closed))
-            , CloseEventDelivered(std::move(closeEventDelivered))
             {}
-
-        // Set when the subsession reports its own closure. The next membership refresh
-        // drops such a subsession and opens a new one.
-        bool IsClosed() const {
-            return Closed && Closed->load();
-        }
-
-        // The close event was handed to the user. Until then the subsession stays readable, so
-        // the event is delivered once; after that it is left out of waits, because its queue
-        // keeps the close event forever and would turn a blocking read into a busy loop.
-        bool IsDrained() const {
-            return IsClosed() && CloseEventDelivered && CloseEventDelivered->load();
-        }
 
         std::shared_ptr<NTopic::IReadSession> Session;
         std::shared_ptr<TDbInfo> DbInfo;
@@ -265,8 +248,6 @@ private:
         // Set before an intentional close so a subsession SessionClosedEvent is not
         // reported as the end of the whole federated session.
         std::shared_ptr<std::atomic<bool>> Retired;
-        std::shared_ptr<std::atomic<bool>> Closed;
-        std::shared_ptr<std::atomic<bool>> CloseEventDelivered;
     };
 
 public:
@@ -316,16 +297,10 @@ private:
         std::shared_ptr<TDbInfo> DbInfo;
     };
 
-    struct TWakeup {
-        ui64 Id = 0;
-        NThreading::TPromise<void> Promise;
-    };
-
     // Requires Lock.
     bool ScheduleFederationStateUpdateImpl();
-    std::vector<TWakeup> TakeWakeups();
-    void ForgetWakeup(ui64 id);
-    static void SignalWakeups(std::vector<TWakeup> wakeups);
+    NThreading::TPromise<void> TakeWakeup();
+    static void SignalWakeup(NThreading::TPromise<void> wakeup);
     // retire=true swallows subsession close callbacks. Used when one database leaves.
     // Whole-session shutdown leaves retire=false so the existing handlers still run.
     void DetachSubsessions(std::vector<TClosingSubsession>& toClose, bool retire);
@@ -382,14 +357,10 @@ private:
     bool SawEligibleDatabase = false;
 
     NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
-    // One promise per blocked WaitEvent. Completed waits drop their promise so a
-    // stable federation does not keep a WaitAny subscription alive forever.
-    // SetValue happens outside Lock: a subscriber may take Lock.
-    std::vector<TWakeup> Wakeups;
-    ui64 NextWakeupId = 1;
-    // Bounds Wakeups when callers wait with a timeout and drop the future. Each dropped
-    // wait leaves a promise that only the next membership change would complete.
-    static constexpr size_t MaxPendingWakeups = 1024;
+    // Shared by every blocked WaitEvent. Taken and replaced when signaled, so a caller
+    // that drops a timed-out wait does not leave a promise behind. SetValue happens
+    // outside Lock: a subscriber may take Lock.
+    NThreading::TPromise<void> Wakeup;
     // Events produced by the federated session itself, returned by GetEvents
     // before subsession events. Only used when no handler takes them.
     std::deque<TReadSessionEvent::TEvent> PendingEvents;

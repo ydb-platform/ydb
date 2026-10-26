@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
 Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
     TActorSystemStub actorSystem;
-    actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
+    InitializeDatabaseAppData(actorSystem.AppData, relativePathsEnabled);
     auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("/Root/db"));
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("Root/db/source"),
@@ -689,6 +689,9 @@ Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
 
     NKikimrConfig::TPathRewriteConfig config;
     auto* rule = config.AddRules();
+    rule->SetSrc("/Root/db/legacy");
+    rule->SetDst("/Alias/db/new");
+    rule = config.AddRules();
     rule->SetSrc("/Root");
     rule->SetDst("/Alias");
     auto* resourceRule = config.AddRules();
@@ -699,14 +702,15 @@ Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
     for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
         {"", ""}, {"/Root/db/table", "/Alias/db/table"},
         {"table", relativePathsEnabled ? "/Alias/db/table" : "table"},
+        {"legacy/table", relativePathsEnabled ? "/Alias/db/new/table" : "legacy/table"},
         {"Root/db/table", relativePathsEnabled ? "/Alias/db/Root/db/table" : "Root/db/table"},
         {"/Alias/db/table", "/Alias/db/table"},
     }) {
         UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath(path), expected);
     }
-    const TString prefix = request.GetDatabaseRelativePath("/Root/db/restore");
+    const TString prefix = "/Root/db/legacy";
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("table", prefix),
-        relativePathsEnabled ? "/Alias/db/restore/table" : "table");
+        relativePathsEnabled ? "/Alias/db/new/table" : "table");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("/Root/db/table", prefix), "/Alias/db/table");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("", prefix), "");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("table", "/Other/db"),

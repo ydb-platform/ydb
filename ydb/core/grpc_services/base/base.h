@@ -348,7 +348,7 @@ public:
     virtual void CountResourcePath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
-    // An operation-specific base must already be resolved; empty means the database.
+    // An operation-specific base is relative to the requested database; empty means the database.
     TString GetDatabaseRelativePath(TStringBuf path, TStringBuf base = {}) const;
 };
 

@@ -106,7 +106,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 this->Request->GetDatabaseRelativePath(s3Settings->destination_path()));
             for (auto& item : *s3Settings->mutable_items()) {
                 item.set_destination_path(
-                    this->Request->GetDatabaseRelativePath(item.destination_path(), s3Settings->destination_path()));
+                    this->Request->GetDatabaseRelativePath(item.destination_path(), request.settings().destination_path()));
             }
         }
         if constexpr (IsFsImport) {
@@ -117,7 +117,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 this->Request->GetDatabaseRelativePath(fsSettings->destination_path()));
             for (auto& item : *fsSettings->mutable_items()) {
                 item.set_destination_path(
-                    this->Request->GetDatabaseRelativePath(item.destination_path(), fsSettings->destination_path()));
+                    this->Request->GetDatabaseRelativePath(item.destination_path(), request.settings().destination_path()));
             }
         }
 

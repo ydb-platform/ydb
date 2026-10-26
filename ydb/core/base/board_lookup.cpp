@@ -79,7 +79,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     TVector<TReplicaGroup> ReplicaGroups;
 
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> Info;
-    THashMap<TActorId, THashSet<ui32>> InfoReplicas;
+    THashMap<TActorId, THashSet<ui64>> InfoReplicas;
 
     const TDuration& GetCurrentDelay(TReplica& replica) {
         if (replica.CurrentDelay == TDuration::Zero()) {
@@ -232,13 +232,14 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ClusterStateGuid = msg->ClusterStateGuid;
         ReplicaGroups.clear();
         Stats.clear();
-        Stats.resize(msg->ReplicaGroups.size());
-        ReplicaGroups.resize(msg->ReplicaGroups.size());
-        for (ui32 replicaGroupIdx : xrange(msg->ReplicaGroups.size())) {
-            const auto &msgReplicaGroups = msg->ReplicaGroups[replicaGroupIdx];
+        Stats.reserve(msg->ReplicaGroups.size());
+        ReplicaGroups.reserve(msg->ReplicaGroups.size());
+        for (const auto &msgReplicaGroups : msg->ReplicaGroups) {
             if (msgReplicaGroups.WriteOnly || msgReplicaGroups.State == ERingGroupState::DISCONNECTED)
                 continue;
-            auto &replicaGroups = ReplicaGroups[replicaGroupIdx];
+            const ui32 replicaGroupIdx = ReplicaGroups.size();
+            auto &replicaGroups = ReplicaGroups.emplace_back();
+            Stats.emplace_back();
             replicaGroups.Replicas.resize(msgReplicaGroups.Replicas.size());
             for (auto idx : xrange(msgReplicaGroups.Replicas.size())) {
                 const TActorId &msgReplica = msgReplicaGroups.Replicas[idx];
@@ -272,6 +273,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 {"group", replicaGroups.ToString()},
                 {"path", Path});
         }
+        if (ReplicaGroups.empty()) {
+            YDB_LOG_ERROR("Lookup without readable statestorage board replicas");
+            return NotAvailable();
+        }
         Become(&TThis::StateLookup);
     }
 
@@ -294,14 +299,14 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         const TActorId oid = ActorIdFromProto(info.GetOwner());
 
         auto& replicas = InfoReplicas[oid];
+        const ui64 replicaId = EncodeCookie(groupIdx, idx, 0);
         if (info.GetDropped()) {
-            replicas.erase(idx);
+            replicas.erase(replicaId);
             replica.Infos.erase(oid);
         } else {
-            replicas.insert(idx);
+            replicas.insert(replicaId);
             replica.Infos.insert(oid);
         }
-
         if (CurrentStateFunc() == &TThis::StateSubscribe) {
             std::optional<TEvStateStorage::TBoardInfoEntry> update;
             if (info.GetDropped()) {
@@ -388,7 +393,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                     }
                 }
 
-                InfoReplicas[oid].insert(idx);
+                InfoReplicas[oid].insert(EncodeCookie(groupIdx, idx, 0));
                 replica.Infos.insert(oid);
             }
 
@@ -565,7 +570,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             if (infoReplicasIt == InfoReplicas.end()) {
                 continue;
             }
-            infoReplicasIt->second.erase(replicaIdx);
+            infoReplicasIt->second.erase(EncodeCookie(groupIdx, replicaIdx, 0));
             if (infoReplicasIt->second.empty()) {
                 if (isStateSubscribe) {
                     auto& update = updates[infoId];

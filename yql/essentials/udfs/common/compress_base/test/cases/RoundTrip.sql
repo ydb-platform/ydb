@@ -1,4 +1,9 @@
-/* syntax version 1 */
+$input = [
+    <|value: ""|>,
+    <|value: "1"|>,
+    <|value: "1234567890"|>,
+];
+
 $level = 5;
 
 SELECT
@@ -9,4 +14,4 @@ SELECT
     Ensure(Compress::BZip2(value, $level), Decompress::BZip2(Compress::BZip2(value, $level)) == value, "bzip2 failed at: " || value) AS bzip2,
     Ensure(Compress::Zstd(value, $level), Decompress::Zstd(Compress::Zstd(value, $level)) == value, "zstd failed at: " || value) AS zstd,
     Ensure(Compress::Snappy(value), Decompress::Snappy(Compress::Snappy(value)) == value, "Snappy failed at: " || value) AS snappy,
-FROM Input;
+FROM AS_TABLE($input);

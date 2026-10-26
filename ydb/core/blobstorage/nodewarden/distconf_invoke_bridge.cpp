@@ -419,7 +419,10 @@ namespace NKikimr::NStorage {
         const TBridgePileId pileId = NBridge::ResolvePileId(*registry, pileName);
         if (!pileId) {
             throw TExError() << "Pile '" << pileName << "' is not listed in BridgeConfig";
-        } else if (const auto *pending = Self->BridgeInfo->FindPile(NBridge::GetPendingPileOperationPileId(details))) {
+        } else if (const auto *pending = Self->BridgeInfo->FindPile(NBridge::GetPendingPileOperationPileId(details));
+                pending && !(!adding && pending->BridgePileId == pileId && details.GetPendingPileOperation().GetKind() ==
+                    NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD)) {
+            // the addition stuck (e.g. as resources have gone) is cancelled by removing the pile, which replaces it
             throw TExError() << "Operation on pile '" << pending->Name << "' is in progress";
         } else if (const auto state = NBridge::GetPileState(config.GetClusterState(), pileId); state != expectedState) {
             throw TExError() << "Pile '" << pileName << "' has to be " << NKikimrBridge::TClusterState::EPileState_Name(
@@ -541,6 +544,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             auto *details = config.MutableClusterStateDetails();
             auto *op = details->MutablePendingPileOperation();
+            op->Clear(); // the pending addition of this pile, if any, is replaced along with its error
             pileId.CopyToProto(op, &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::SetBridgePileId);
             op->SetKind(NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE);
             op->SetOperationId(config.GetGeneration() + 1); // the generation of the config being proposed

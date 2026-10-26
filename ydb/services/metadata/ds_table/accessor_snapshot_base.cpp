@@ -17,6 +17,7 @@ void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qRe
 
 void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
     YDB_LOG_ERROR("Cannot construct",
+        {"componentId", SnapshotConstructor->GetComponentId()},
         {"snapshot", errorMessage});
 }
 
@@ -88,6 +89,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& e
     if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
         YDB_LOG_ERROR("",
             {"action", "cannot detect path existence"},
+            {"componentId", SnapshotConstructor->GetComponentId()},
             {"path", ev->Get()->GetPath()},
             {"error", ev->Get()->GetErrorMessage()});
     }

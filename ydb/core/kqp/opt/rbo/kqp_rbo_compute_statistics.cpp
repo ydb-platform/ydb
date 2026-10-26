@@ -508,7 +508,14 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->ColumnsCount = outputIUs.Size();
 
-    Props.Metadata->ShuffledByColumns = GetAggregatePreservedShuffling(*this, ctx);
+    auto& shuffledBy = Props.Metadata->ShuffledByColumns;
+    shuffledBy = GetAggregatePreservedShuffling(*this, ctx);
+    if (shuffledBy.Items().empty() && GetAggregationPhase() != EOpPhase::Intermediate && !KeyColumns.Items().empty()) {
+        // Stage assignment will shuffle a complete aggregation by its grouping
+        // keys even when shuffle elimination is disabled. Advertise that output
+        // distribution; eliminating this aggregation's shuffle still uses input metadata.
+        shuffledBy = GetAggregateOutputShuffle(*this);
+    }
 
     // Aggregate acts like a source for the columns it computes. Grouping keys
     // pass through under their input IDs and keep their input lineage.
@@ -521,6 +528,13 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     for (const auto id : Aggregations.Keys()) {
         planProps.ColumnLineage.Add(id, TColumnLineageEntry{.SourceAlias = alias, .ColumnName = ::ToString(id), .Relation = relation});
     }
+}
+
+void TOpWindow::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    // Match the ordered shuffle keys used by window stage assignment.
+    // Without partition keys, the stage gathers its input instead.
+    Props.Metadata->ShuffledByColumns = GetPartitionKeys();
 }
 
 void TOpGroupingSets::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
@@ -812,6 +826,23 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Cost = cost;
     } else {
         Props.Cost = std::nullopt;
+    }
+}
+
+void TOpLimit::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!HasOffset() && GetLimitCond().IsLiteralOne()) {
+        switch(Props.Metadata->LogicalCard) {
+            case ELogicalCardinality::OneOrMore:
+            case ELogicalCardinality::One:
+                Props.Metadata->LogicalCard = ELogicalCardinality::One;
+                break;
+            case ELogicalCardinality::Zero:
+                break;
+            default:
+                Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrOne;
+                break;
+        }
     }
 }
 

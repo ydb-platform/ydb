@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
     // Drive the JSONPath pushdown projection (TJsonPathAccessor::VisitValues) for a key and render the
     // per-record string it yields ("<null>" for absent / non-projectable), joined for easy comparison.
     TString CollectPushdown(const std::shared_ptr<TSubColumnsArray>& arr, const std::string_view path) {
-        auto accResult = arr->GetPathAccessor(path, arr->GetRecordsCount());
+        auto accResult = arr->GetPathAccessor(ParseJsonPath(path).DetachResult(), arr->GetRecordsCount());
         UNIT_ASSERT_C(accResult.IsSuccess(), accResult.GetErrorMessage());
         auto acc = accResult.DetachResult();
         TStringBuilder out;

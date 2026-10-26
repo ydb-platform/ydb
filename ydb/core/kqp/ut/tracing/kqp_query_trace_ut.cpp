@@ -1533,6 +1533,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         spilling.SetRoot("./spilling/");
         MakeDirIfNotExist("./spilling");
         auto [runtime, server, sender] = CreateServer(1, config);
+        // Local file spilling does IO on real threads. Keep the legacy real waits,
+        // so that simulated time does not run ahead of spilling operations.
+        runtime.SetFastSimulatedTime(false);
         ExecSQL(runtime, sender, "CREATE TABLE `/Root/SpillData` (Key Uint64, Value String, PRIMARY KEY (Key));",
             0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
         for (ui32 i = 0; i < 128; ++i) {

@@ -5308,9 +5308,12 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
             .DiscoveryEndpoint(env.GetEndpoint())
             .Database(env.GetDatabase()));
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto session = CreateTableSession(env, client);
         const auto upsert = [&](ui32 key) {
-            for (ui32 attempt = 0; attempt < 50; ++attempt) {
+            constexpr ui32 MaxUpsertAttempts = 50;
+            const auto retryDelay = TDuration::MilliSeconds(100);
+
+            for (ui32 attempt = 0; attempt < MaxUpsertAttempts; ++attempt) {
                 const auto result = session.ExecuteDataQuery(Sprintf(
                     "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
                     NYdb::NTable::TTxControl::BeginTx()
@@ -5320,10 +5323,15 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
                 }
 
                 const auto status = result.GetStatus();
-                UNIT_ASSERT_C(attempt + 1 < 50 &&
-                    (status == NYdb::EStatus::ABORTED || status == NYdb::EStatus::SCHEME_ERROR),
-                    result.GetIssues().ToString());
-                Sleep(TDuration::MilliSeconds(100));
+                // Source stream setup and index changes can temporarily block writes.
+                const bool retryable = status == NYdb::EStatus::ABORTED
+                    || status == NYdb::EStatus::SCHEME_ERROR
+                    || status == NYdb::EStatus::OVERLOADED;
+                UNIT_ASSERT_C(retryable, status << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(attempt + 1 < MaxUpsertAttempts,
+                    "Upsert retry limit reached: " << status << ": " << result.GetIssues().ToString());
+
+                Sleep(retryDelay);
             }
         };
         const auto waitForRow = [&](ui32 key) {

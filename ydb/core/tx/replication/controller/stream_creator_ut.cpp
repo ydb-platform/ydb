@@ -10,6 +10,37 @@
 
 namespace NKikimr::NReplication::NController {
 
+Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
+    Y_UNIT_TEST(RunCallWaitsBeyondSimulatedMinute) {
+        NTestHelpers::TEnv env(false, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto startedAt = runtime.GetCurrentTime();
+        const auto callDelay = TDuration::Minutes(2);
+        auto completion = NThreading::NewPromise<ui32>();
+        auto observer = runtime.AddObserver<TEvents::TEvWakeup>([&](TEvents::TEvWakeup::TPtr& ev) {
+            if (ev->GetRecipientRewrite() != edge) {
+                return;
+            }
+
+            if (ev->Get()->Tag) {
+                completion.SetValue(42);
+            }
+            ev.Reset();
+        });
+
+        // Visit a timestamp past the old deadline before allowing the call to finish.
+        runtime.Schedule(new IEventHandle(edge, edge, new TEvents::TEvWakeup()), callDelay - TDuration::Seconds(1));
+        runtime.Schedule(new IEventHandle(edge, edge, new TEvents::TEvWakeup(1)), callDelay);
+
+        const auto result = env.RunCall([future = completion.GetFuture()] {
+            return future.GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, 42);
+        UNIT_ASSERT(runtime.GetCurrentTime() - startedAt >= callDelay);
+    }
+}
+
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 

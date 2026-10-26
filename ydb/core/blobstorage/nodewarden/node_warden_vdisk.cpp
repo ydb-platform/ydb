@@ -742,6 +742,16 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        const ui32 failRealm = vdisk.GetVDiskId().FailRealm;
+        const auto failed = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+        if ((currentInfo->GetFailRealmState(failRealm) == failed) != (newInfo->GetFailRealmState(failRealm) == failed)) {
+            PoisonLocalVDisk(vdisk);
+            // Keep receiving group updates while the previous incarnation is shutting down.
+            Groups.at(vdisk.GetGroupId()).VDisksOfGroup.PushBack(&vdisk);
+            StartLocalVDiskActor(vdisk);
+            return;
+        }
+
         // update generation and send update message
         currentInfo = newInfo;
         const TVDiskID newVDiskId = currentInfo->GetVDiskId(orderNumber);

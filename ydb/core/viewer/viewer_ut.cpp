@@ -8,6 +8,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <util/generic/set.h>
 #include <util/stream/null.h>
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -97,83 +98,123 @@ duration_t GetBasePerformance() {
 double BASE_PERF = GetBasePerformance().count();
 
 Y_UNIT_TEST_SUITE(Viewer) {
+    // Parsing and merging allocate memory; their wall time cannot be calibrated
+    // against the unrelated CPU-only BASE_PERF workload.
     Y_UNIT_TEST(TabletMerging) {
-        THPTimer timer;
-        Cerr << "BASE_PERF = " << BASE_PERF << Endl;
-        {
-            TMap<ui32, TString> nodesBlob;
-            timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                nodeData.MutableTabletStateInfo()->Reserve(10000);
-                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
-                    NKikimrWhiteboard::TTabletStateInfo* tabletData = nodeData.AddTabletStateInfo();
+        constexpr ui32 NodeCount = 4;
+        constexpr ui32 TabletCount = 100;
+        constexpr ui32 FollowerCount = 2;
+        TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
+        for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+            NKikimrWhiteboard::TEvTabletStateResponse nodeData;
+            nodeData.SetResponseTime(100 - nodeId);
+            nodeData.SetResponseDuration(10 * nodeId);
+            nodeData.SetProcessDuration(nodeId);
+            for (ui32 tabletId = 1; tabletId <= TabletCount; ++tabletId) {
+                for (ui32 followerId = 0; followerId < FollowerCount; ++followerId) {
+                    const ui32 winnerNodeId = 2 + followerId;
+                    auto* tabletData = nodeData.AddTabletStateInfo();
                     tabletData->SetTabletId(tabletId);
-                    tabletData->SetLeader(true);
-                    tabletData->SetGeneration(13);
-                    tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    tabletData->SetFollowerId(followerId);
+                    tabletData->SetLeader(followerId == 0);
+                    // Nodes 1 and 4 have newer timestamps but older generations.
+                    tabletData->SetGeneration(nodeId == 2 || nodeId == 3 ? 13 : 12);
+                    tabletData->SetChangeTime(nodeId == 1 || nodeId == 4 ? 500 : 100);
+                    const bool sameVersion = followerId == 0 && nodeId == 3 && tabletId % 2 == 0;
+                    if (nodeId == winnerNodeId || sameVersion) {
+                        // Equal versions keep the first node's record.
+                        tabletData->SetChangeTime(200);
+                    }
+                    if (tabletId % 2 == 0) {
+                        tabletData->SetNodeId(100 + nodeId);
+                    }
                     tabletData->MutableTenantId()->SetSchemeShard(8);
-                    tabletData->MutableTenantId()->SetPathId(14);
-                    tabletData->MutableChannelGroupIDs()->Add(9);
-                    tabletData->MutableChannelGroupIDs()->Add(10);
-                    tabletData->MutableChannelGroupIDs()->Add(11);
+                    tabletData->MutableTenantId()->SetPathId(14 + nodeId);
+                    for (ui32 channel = 0; channel < 3; ++channel) {
+                        tabletData->AddChannelGroupIDs(9 + nodeId + channel);
+                    }
                 }
-                nodesBlob[nodeId] = nodeData.SerializeAsString();
             }
-            Ctest << "Build = " << timer.Passed() << Endl;
-            timer.Reset();
-            TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
-            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                bool res = nodeData.ParseFromString(nodesBlob[nodeId]);
-                Y_UNUSED(res);
-                nodesData[nodeId] = std::move(nodeData);
-            }
-            NKikimrWhiteboard::TEvTabletStateResponse result;
-            MergeWhiteboardResponses(result, nodesData);
-            Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 8 * BASE_PERF);
-            UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
-            timer.Reset();
+            UNIT_ASSERT(nodesData[nodeId].ParseFromString(nodeData.SerializeAsString()));
         }
-        Ctest << "Destroy = " << timer.Passed() << Endl;
+
+        THPTimer timer;
+        NKikimrWhiteboard::TEvTabletStateResponse result;
+        MergeWhiteboardResponses(result, nodesData);
+        Ctest << "Merge = " << timer.Passed() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), TabletCount * FollowerCount);
+        TSet<std::pair<ui64, ui32>> seen;
+        for (const auto& tabletData : result.GetTabletStateInfo()) {
+            const ui64 tabletId = tabletData.GetTabletId();
+            const ui32 followerId = tabletData.GetFollowerId();
+            UNIT_ASSERT(tabletId >= 1 && tabletId <= TabletCount);
+            UNIT_ASSERT_LT(followerId, FollowerCount);
+            UNIT_ASSERT(seen.emplace(tabletId, followerId).second);
+            const ui32 winnerNodeId = 2 + followerId;
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetNodeId(), winnerNodeId + (tabletId % 2 == 0 ? 100 : 0));
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetGeneration(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetChangeTime(), 200);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetLeader(), followerId == 0);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetTenantId().GetSchemeShard(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetTenantId().GetPathId(), 14 + winnerNodeId);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.ChannelGroupIDsSize(), 3);
+            for (ui32 channel = 0; channel < 3; ++channel) {
+                UNIT_ASSERT_VALUES_EQUAL(tabletData.GetChannelGroupIDs(channel), 9 + winnerNodeId + channel);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseTime(), 100 - NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseDuration(), 10 * NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetProcessDuration(), NodeCount * (NodeCount + 1) / 2);
     }
 
     Y_UNIT_TEST(TabletMergingPacked) {
-        THPTimer timer;
-        {
-            TMap<ui32, TString> nodesBlob;
-            timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
-                auto* tabletData = nodeData->AllocatePackedResponse(10000);
-                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
+        constexpr ui32 NodeCount = 4;
+        constexpr ui32 TabletCount = 100;
+        constexpr ui32 FollowerCount = 2;
+        TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
+        for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+            auto nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+            nodeData->Record.SetResponseTime(100 - nodeId);
+            nodeData->Record.SetResponseDuration(10 * nodeId);
+            nodeData->Record.SetProcessDuration(nodeId);
+            auto* tabletData = nodeData->AllocatePackedResponse(TabletCount * FollowerCount);
+            for (ui32 tabletId = 1; tabletId <= TabletCount; ++tabletId) {
+                for (ui32 followerId = 0; followerId < FollowerCount; ++followerId) {
+                    const ui32 winnerNodeId = 2 + followerId;
                     tabletData->TabletId = tabletId;
-                    tabletData->FollowerId = 0;
-                    tabletData->Generation = 13;
-                    tabletData->Type = NKikimrTabletBase::TTabletTypes::TxProxy;
-                    tabletData->State = NKikimrWhiteboard::TTabletStateInfo::Restored;
-                    //tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    tabletData->FollowerId = followerId;
+                    const bool sameVersion = followerId == 0 && nodeId == 3 && tabletId % 2 == 0;
+                    tabletData->Generation = nodeId == winnerNodeId || sameVersion ? 13 : 12;
+                    tabletData->Type = followerId == 0 ? NKikimrTabletBase::TTabletTypes::DataShard : NKikimrTabletBase::TTabletTypes::TxProxy;
+                    tabletData->State = nodeId == winnerNodeId ? NKikimrWhiteboard::TTabletStateInfo::Active : NKikimrWhiteboard::TTabletStateInfo::Restored;
                     ++tabletData;
                 }
-                nodesBlob[nodeId] = nodeData->Record.SerializeAsString();
             }
-            Ctest << "Build = " << timer.Passed() << Endl;
-            TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
-            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                bool res = nodeData.ParseFromString(nodesBlob[nodeId]);
-                Y_UNUSED(res);
-                nodesData[nodeId] = std::move(nodeData);
-            }
-            NKikimrWhiteboard::TEvTabletStateResponse result;
-            MergeWhiteboardResponses(result, nodesData);
-            Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 3 * BASE_PERF);
-            UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
-            timer.Reset();
+            UNIT_ASSERT(nodesData[nodeId].ParseFromString(nodeData->Record.SerializeAsString()));
         }
-        Ctest << "Destroy = " << timer.Passed() << Endl;
+
+        THPTimer timer;
+        NKikimrWhiteboard::TEvTabletStateResponse result;
+        MergeWhiteboardResponses(result, nodesData);
+        Ctest << "Merge = " << timer.Passed() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), TabletCount * FollowerCount);
+        TSet<std::pair<ui64, ui32>> seen;
+        for (const auto& tabletData : result.GetTabletStateInfo()) {
+            const ui64 tabletId = tabletData.GetTabletId();
+            const ui32 followerId = tabletData.GetFollowerId();
+            UNIT_ASSERT(tabletId >= 1 && tabletId <= TabletCount);
+            UNIT_ASSERT_LT(followerId, FollowerCount);
+            UNIT_ASSERT(seen.emplace(tabletId, followerId).second);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetNodeId(), 2 + followerId);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetGeneration(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetType(), followerId == 0 ? NKikimrTabletBase::TTabletTypes::DataShard : NKikimrTabletBase::TTabletTypes::TxProxy);
+            UNIT_ASSERT(tabletData.GetState() == NKikimrWhiteboard::TTabletStateInfo::Active);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseTime(), 100 - NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseDuration(), 10 * NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetProcessDuration(), NodeCount * (NodeCount + 1) / 2);
     }
 
     Y_UNIT_TEST(VDiskMerging) {
@@ -876,6 +917,126 @@ Y_UNIT_TEST_SUITE(Viewer) {
         headers["Authorization"] = token;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/commit_offset", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
+    }
+
+    class TDatabaseAliasTicketParser : public TActor<TDatabaseAliasTicketParser> {
+    public:
+        TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("path"), "/Root/a,/alias/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, true).Get("path"), "/Root/a,/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("topic"), "relative");
+            NJson::TJsonValue jsonPaths;
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            NormalizePathParameters(jsonPaths);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][1].GetString(), "/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["message"].GetString(), "/alias");
+            jsonPaths["path"] = "/alias/a,/alias/b";
+            NormalizePathParameters(jsonPaths, true);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"].GetString(), "/Root/a,/Root/b");
+
+            const auto& request = *ev->Get();
+            const TString allowedDatabase = request.Ticket == VALID_TOKEN ? "/Root" : "/Other";
+            if (request.Ticket != ROOT_TOKEN && (request.Database != allowedDatabase
+                || (request.Ticket != VALID_TOKEN && request.Ticket != "Bearer other-db"))) {
+                TEvTicketParser::TError error;
+                error.Message = "Token is not valid for this database";
+                error.Retryable = false;
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, error));
+                return;
+            }
+            NACLib::TUserToken::TUserTokenInitFields fields;
+            fields.UserSID = request.Ticket == ROOT_TOKEN ? ROOT_TOKEN : "username";
+            auto token = MakeIntrusive<NACLib::TUserToken>(fields);
+            token->SaveSerializationInfo();
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, token));
+        }
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(DatabaseAlias) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort(8765);
+        auto settings = TServerSettings(ports.GetPort(2134));
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort, true);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/Root");
+        settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        security->SetEnforceUserTokenCheckRequirement(true);
+        security->AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        security->AddMonitoringAllowedSIDs(ROOT_TOKEN);
+        security->AddViewerAllowedSIDs(ROOT_TOKEN);
+        security->AddDatabaseAllowedSIDs("username");
+        settings.CreateTicketParser = [](const TTicketParserSettings&) -> IActor* { return new TDatabaseAliasTicketParser; };
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort(2135));
+        TClient client(settings);
+        client.SetSecurityToken(ROOT_TOKEN);
+        client.InitRootScheme();
+        GrantRead(client);
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = VALID_TOKEN;
+        TStringStream response;
+        const auto status = httpClient.DoGet("/viewer/tenantinfo?database=/alias&direct=true", &response, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+        const auto json = NJson::ReadJsonTree(&response, true);
+        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
+
+        NJson::TJsonReaderConfig describeJsonConfig;
+        describeJsonConfig.DontValidateUtf8 = true; // Describe includes binary ACL fields.
+        for (const auto* cache : {"never", "only"}) {
+            TStringStream describeResponse;
+            const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
+            UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
+            const auto describeJson = NJson::ReadJsonTree(&describeResponse, &describeJsonConfig, true);
+            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/alias");
+        }
+
+        TStringStream relativeResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/json";
+        TStringStream postResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/x-www-form-urlencoded";
+        TStringStream formResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        TStringStream directoryResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "alias");
+        headers["Authorization"] = ROOT_TOKEN;
+        for (const auto* parameter : {"tenant", "path"}) {
+            TStringStream tenantResponse;
+            UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet(TStringBuilder() << "/viewer/tenantinfo?" << parameter << "=/alias&direct=true", &tenantResponse, headers), HTTP_OK);
+            UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&tenantResponse, true)["TenantInfo"][0]["Name"].GetString(), "/alias");
+        }
+        headers["Authorization"] = "Bearer other-db";
+        TStringStream deniedResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {

@@ -298,9 +298,14 @@ namespace {
     }
 
     void TTierPredicate::Validate(const TTieringPolicy& policy) {
+        // No tiering is expressed by the absence of a policy
+        Y_ENSURE(!policy.Rules.empty(), "Tiering policy has no rules");
+
         std::optional<bool> relative;
         for (const auto& rule : policy.Rules) {
             Y_ENSURE(rule.TierId != Max<ui32>(), "Invalid tier id");
+            // Rows that match no rule stay in the default tier anyway
+            Y_ENSURE(rule.TierId != DefaultTierId, "Tiering rule cannot target the default tier");
             Y_ENSURE(!rule.Ranges.empty(), "Tiering rule for tier " << rule.TierId << " has no ranges");
 
             for (const auto& range : rule.Ranges) {

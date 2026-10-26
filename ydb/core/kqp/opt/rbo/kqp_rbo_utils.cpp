@@ -30,6 +30,30 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
+TOrderedIUs<> GetAggregateInputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto& [output, trait] : aggregate.GetAggregationTraits().Items()) {
+        result.Append(trait.Input);
+    }
+    return result;
+}
+
+TOrderedIUs<> GetAggregateOutputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto output : aggregate.GetAggregationTraits().Keys()) {
+        result.Append(output);
+    }
+    return result;
+}
+
 TOrderedIUs<> GetAggregatePreservedShuffling(const TOpAggregate& aggregate, const TRBOContext& ctx) {
     if (aggregate.GetKeyColumns().Items().empty()) {
         return {};

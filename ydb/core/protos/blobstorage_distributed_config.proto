@@ -81,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.
@@ -495,4 +496,9 @@ message TConnectivityPayload {
     optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
     bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
     uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
+}
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
 }

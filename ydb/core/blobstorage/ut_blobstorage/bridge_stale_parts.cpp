@@ -174,4 +174,63 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         checker.CheckAll();
         CheckPileData(env, checker, 1, 9);
     }
+
+    // assimilation and integrity checks take the answer of the synchronized pile only, so they go nowhere else: the part
+    // of the pile being synced (shown here by the one not reset by BSC yet) may be degraded and fail them otherwise
+    Y_UNIT_TEST(AssimilateAndCheckIntegritySkipUnsyncedPile) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+
+        constexpr ui32 nodeId = 2; // node of the pile staying connected
+        TBscConfigHold bscHold(env);
+        ui32 numSentToPile1 = 0;
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if ((ev->GetTypeRewrite() == TEvBlobStorage::TEvAssimilate::EventType ||
+                    ev->GetTypeRewrite() == TEvBlobStorage::TEvCheckIntegrity::EventType) &&
+                    ev->Recipient == MakeBlobStorageProxyID(pileGroups[1])) {
+                ++numSentToPile1;
+            }
+            return bscHold.Filter(node, ev);
+        };
+
+        TDataChecker checker(env);
+        checker.Write(groupId, nodeId);
+        bscHold.Start();
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId, nodeId);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Seconds(10)); // let the node know the cluster state
+        UNIT_ASSERT_EQUAL(GetPart(env, groupId, 1).GetStage(), NKikimrBridge::TGroupState::SYNCED); // not reset by BSC
+
+        const TLogoBlobID id = std::get<1>(checker.GetWritten().back());
+        auto query = [&] {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                // not decommitted group is assimilated as BSC syncers do it
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvAssimilate(std::nullopt, std::nullopt, std::nullopt,
+                    true, false));
+            });
+            auto assimilate = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvAssimilateResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(assimilate->Get()->Status, NKikimrProto::OK, assimilate->Get()->ErrorReason);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCheckIntegrity(id, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto integrity = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(integrity->Get()->Status, NKikimrProto::OK, integrity->Get()->ErrorReason);
+        };
+        query();
+        UNIT_ASSERT_VALUES_EQUAL(numSentToPile1, 0);
+
+        // BSC learns of the cluster state, the pile gets synced and takes the requests then
+        bscHold.Release();
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Sim(TDuration::Seconds(10));
+        query();
+        UNIT_ASSERT(numSentToPile1);
+    }
 }

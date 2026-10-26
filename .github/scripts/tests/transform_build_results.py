@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.parse
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Set
 from mute.mute_check import YaMuteCheck
 
@@ -135,27 +136,59 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
     return f"{log_url_prefix}{quoted_fpath}"
 
 
-def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
+def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str], ya_out_dir):
+    start = time.monotonic()
     arc_name = f"{suite_name.replace('/', '-')}.zip"
 
     arc_fn = os.path.join(out_dir, arc_name)
 
-    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
-
-    for path in logs_dir:
-        log_print(f"put {path} into {arc_name}")
-        test_type = os.path.basename(os.path.dirname(path))
-        for root, dirs, files in os.walk(path):
-            for f in files:
-                if is_coredump_artifact_file(f):
-                    log_print(f"skip coredump artifact in zip: {f}")
-                    continue
-                filename = os.path.join(root, f)
-                zf.write(filename, os.path.join(test_type, os.path.relpath(filename, path)))
-    zf.close()
+    results_root = os.path.join(ya_out_dir, suite_name, "test-results")
+    archived_files = set()
+    # Use the standard zlib level: level 9 spends more CPU chasing smaller logs.
+    with zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        for path in sorted(logs_dir):
+            log_print(f"put {path} into {arc_name}")
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    if is_coredump_artifact_file(f):
+                        log_print(f"skip coredump artifact in zip: {f}")
+                        continue
+                    filename = os.path.join(root, f)
+                    # Keep file/chunk paths: different split files can both have a chunk0.
+                    archive_path = os.path.relpath(filename, results_root)
+                    if archive_path == os.pardir or archive_path.startswith(os.pardir + os.sep):
+                        raise ValueError(f"Log file outside suite results: {filename}")
+                    # Reports may reference both a parent logsdir and its children.
+                    if archive_path not in archived_files:
+                        zf.write(filename, archive_path)
+                        archived_files.add(archive_path)
+    log_print(f"Created {arc_name}: {time.monotonic() - start:.2f}s, {os.path.getsize(arc_fn)} bytes")
 
     quoted_fpath = urllib.parse.quote(arc_name)
     return f"{url_prefix}{quoted_fpath}"
+
+
+def save_zips(logs_by_suite, out_dir, url_prefix, ya_out_dir):
+    # Existing ZIP names flatten paths. Reject collisions before workers can
+    # open the same output file concurrently; keep published names unchanged.
+    archive_names = [suite_name.replace('/', '-') for suite_name in logs_by_suite]
+    if len(set(archive_names)) != len(archive_names):
+        raise ValueError("Different suites map to the same ZIP filename")
+
+    # zlib releases the GIL while compressing. Each worker owns a separate ZIP;
+    # the pool starts threads on demand, up to one per CPU.
+    workers = os.cpu_count() or 1
+    log_print(f"Creating {len(logs_by_suite)} ZIP archives with up to {workers} workers (compression level 6)")
+    urls = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(save_zip, suite_name, out_dir, url_prefix, logs_dir, ya_out_dir): suite_name
+            for suite_name, logs_dir in logs_by_suite.items()
+        }
+        for future in as_completed(futures):
+            # Propagate failures: do not publish a successful report with missing archives.
+            urls[futures[future]] = future.result()
+    return urls
 
 
 def load_user_properties(test_dir):
@@ -260,7 +293,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     # Process suites
     suites_start = time.time()
     total_save_log_time = 0
-    total_save_zip_time = 0
+    logs_by_suite = {}
     suite_count = 0
     
     for suite_name, results in suites.items():
@@ -407,16 +440,9 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         save_log_time = time.time() - save_log_start
         total_save_log_time += save_log_time
 
-        # Create ZIP archives
+        # Queue ZIP archives; compress independent suites together below.
         if has_fail_tests and suite_logsdirs:
-            save_zip_start = time.time()
-            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, suite_logsdirs)
-            save_zip_time = time.time() - save_zip_start
-            total_save_zip_time += save_zip_time
-            for result in results:
-                if "links" not in result:
-                    result["links"] = {}
-                result["links"]["logsdir"] = [url]
+            logs_by_suite[suite_name] = suite_logsdirs
         
         for result in results:
             status = result.get("status", "")
@@ -426,20 +452,19 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             # Keep all logs for muted tests (they were failed before muting)
             # Keep all logs for NOT_LAUNCHED tests (they were skipped but may have logs)
             if not is_fail and not is_muted and not is_not_launched:
-                # Remove logsdir for passed tests if no failed tests in suite
-                # (ZIP was not created, so logsdir would point to raw path which is incorrect)
-                if "links" in result:
-                    # Only remove if ZIP was not created (no failed tests in suite)
-                    if not has_fail_tests and "logsdir" in result["links"]:
-                        result["links"].pop("logsdir", None)
-                    # Keep only logsdir for passed tests (if ZIP was created)
-                    if "logsdir" in result.get("links", {}):
-                        result["links"] = {"logsdir": result["links"]["logsdir"]}
-                    else:
-                        result["links"] = {}
+                # Passed tests keep only the suite ZIP link, attached below
+                # after all archives have been successfully created.
+                result["links"] = {}
+
+    save_zip_start = time.monotonic()
+    archive_urls = save_zips(logs_by_suite, test_stuff_out, test_stuff_prefix, ya_out_dir)
+    save_zip_time = time.monotonic() - save_zip_start
+    for suite_name, url in archive_urls.items():
+        for result in suites[suite_name]:
+            result["links"]["logsdir"] = [url]
 
     suites_time = time.time() - suites_start
-    log_print(f"Processed {suite_count} suites: {suites_time:.2f}s (save_log: {total_save_log_time:.2f}s, save_zip: {total_save_zip_time:.2f}s)")
+    log_print(f"Processed {suite_count} suites: {suites_time:.2f}s (save_log: {total_save_log_time:.2f}s, save_zip wall: {save_zip_time:.2f}s)")
 
     # Process rich-snippet for filtered results only
     rich_start = time.time()

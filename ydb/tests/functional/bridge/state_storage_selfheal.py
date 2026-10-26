@@ -68,6 +68,7 @@ class BridgeStateStorageSelfHeal:
                 "node_pretty_good_state_limit": 2,
                 "node_bad_state_limit": 3,
                 "wait_for_config_step": self.step_seconds * 1_000_000,
+                "self_heal_state_request_timeout": 1_000_000,
                 # Keep a new Sentinel request from interrupting a four-step heal.
                 "relax_time": self.relax_seconds * 1_000_000,
                 "pileup_replicas": True,

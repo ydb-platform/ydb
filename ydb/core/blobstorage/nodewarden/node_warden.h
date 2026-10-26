@@ -57,6 +57,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout = false;
         TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
         TDuration LongRequestThreshold = TDuration::Seconds(50);
+        TDuration SelfHealStateRequestTimeout;
 
         // debugging options
         bool VDiskReplPausedAtStart = false;

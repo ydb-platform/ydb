@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/kqp/query_compiler
     ydb/core/kqp/ut/common
     ydb/core/resource_pools
+    ydb/library/yql/providers/pq/provider
     yql/essentials/ast
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg

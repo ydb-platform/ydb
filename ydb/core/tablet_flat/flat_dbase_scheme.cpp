@@ -93,12 +93,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
         }
 
-        // Tiers refer to rooms, the policy refers to tiers and to a column
-        for (const auto& it : itTable.second.Tiers) {
-            const auto& tier = it.second;
-            delta.SetTier(table, it.first, tier.Room, tier.Codec, tier.Cache, tier.CacheMode);
-        }
-
+        // The policy refers to families and to a column
         if (itTable.second.TieringPolicy) {
             delta.SetTieringPolicy(table, *itTable.second.TieringPolicy);
         }
@@ -277,6 +272,17 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     return ApplyLastRecord();
 }
 
+TAlter& TAlter::DropFamily(ui32 table, ui32 family)
+{
+    // A SetTable record instead of a new delta type: older versions ignore it and keep the family
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(table);
+    delta.AddDropFamilies(family);
+
+    return ApplyLastRecord();
+}
+
 TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer)
 {
     Y_ENSURE(!blobs.empty(), "Room must have at least one external blob channel");
@@ -431,31 +437,6 @@ TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
     delta.SetDeltaType(TAlterRecord::SetTable);
     delta.SetTableId(tableId);
     delta.SetSpecialTableType(type);
-
-    return ApplyLastRecord();
-}
-
-TAlter& TAlter::SetTier(ui32 tableId, ui32 tierId, ui32 room, ECodec codec, ECache cache, ECacheMode cacheMode)
-{
-    TAlterRecord &delta = *Log.AddDelta();
-    delta.SetDeltaType(TAlterRecord::SetTable);
-    delta.SetTableId(tableId);
-    auto* tier = delta.AddSetTiers();
-    tier->SetTierId(tierId);
-    tier->SetRoomId(room);
-    tier->SetCodec(ui32(codec));
-    tier->SetCache(ui32(cache));
-    tier->SetCacheMode(ui32(cacheMode));
-
-    return ApplyLastRecord();
-}
-
-TAlter& TAlter::DropTier(ui32 tableId, ui32 tierId)
-{
-    TAlterRecord &delta = *Log.AddDelta();
-    delta.SetDeltaType(TAlterRecord::SetTable);
-    delta.SetTableId(tableId);
-    delta.AddDropTiers(tierId);
 
     return ApplyLastRecord();
 }

@@ -3027,7 +3027,7 @@ FROM `{table_name}`"""
         argvalues=[
             ("join", "row", {}),
             ("join", "column", {}),
-            ("native_join", "row", {"kqp_constraints_transformer": False}),
+            ("native_join", "row", {"enable_kqp_constraints_transformer": False}),
             ("output", "row", {}),
             ("output", "column", {}),
         ],

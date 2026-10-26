@@ -147,6 +147,11 @@ void BecomeUser(const TString& username, const TString& groupname) {
     DoBecomeUser(username.data(), groupname.data());
 }
 
+void EnsureNonRootUserAndGroup() {
+    Y_ENSURE(geteuid() != 0 && getegid() != 0,
+             "Process must run with a non-root user and group");
+}
+
 void TurnOnBecomeUserAmbientCaps() {
     SetCapFlagsVector({CAP_SETUID, CAP_SETGID, CAP_SETPCAP, CAP_KILL});
     if (prctl(PR_SET_SECUREBITS, SECBIT_NO_SETUID_FIXUP | SECBIT_NO_SETUID_FIXUP_LOCKED, 0, 0, 0) == -1) {

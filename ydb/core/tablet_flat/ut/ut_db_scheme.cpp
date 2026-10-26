@@ -107,11 +107,6 @@ namespace {
                 && a.CacheMode == b.CacheMode;
         }
 
-        static bool IsTheSame(const TScheme::TTier &a, const TScheme::TTier &b) noexcept
-        {
-            return a == b;
-        }
-
         static bool IsTheSame(const TColumn &a, const TColumn &b) noexcept
         {
             return
@@ -143,7 +138,6 @@ namespace {
                 && ByValues(base.Columns, with.Columns)
                 && ByValues(base.Families, with.Families)
                 && ByValues(base.Rooms, with.Rooms)
-                && ByValues(base.Tiers, with.Tiers)
                 && base.TieringPolicy == with.TieringPolicy;
         }
 
@@ -246,6 +240,34 @@ Y_UNIT_TEST_SUITE(TScheme) {
             UNIT_ASSERT(false);
         }
     }
+
+    Y_UNIT_TEST(MalformedFamilySettings)
+    {
+        using namespace NTable::NPage;
+
+        // Values out of the enum range must not be truncated to valid ones
+        auto apply = [](auto&& malform) {
+            TScheme scheme;
+            TSchemeModifier(scheme).Apply(*TModel().Build().Flush());
+
+            TAlter alter;
+            alter.SetFamily(TModel::TableId, TModel::GroupId1, ECache::None, ECodec::Plain);
+            alter.SetFamilyCacheMode(TModel::TableId, TModel::GroupId1, ECacheMode::Regular);
+            auto changes = alter.Flush();
+            for (size_t i = 0; i < changes->DeltaSize(); ++i) {
+                malform(*changes->MutableDelta(i));
+            }
+            TSchemeModifier(scheme).Apply(*changes);
+        };
+
+        apply([](auto&) { });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCodec(256); }),
+            yexception, "Invalid page encoding code value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCache(256); }),
+            yexception, "Invalid pages cache policy value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCacheMode(65536); }),
+            yexception, "Invalid cache mode value 65536");
+    }
 }
 
 namespace {
@@ -256,9 +278,16 @@ namespace {
 
     constexpr ui32 TableId = TModel::TableId;
     constexpr ui32 ColdRoom = TModel::StoreIdOut + 1;
+    // Tiers are families without columns, TModel families with columns are 0 and 3
     constexpr ui32 HddTier = 1;
     constexpr ui32 ArchiveTier = 2;
+    constexpr ui32 ExtraTier = 4;
     constexpr ui32 TimeColumn = 3;
+
+    void AddTier(TAlter& alter, ui32 tier) {
+        alter.AddFamily(TableId, tier, ColdRoom);
+        alter.SetFamilyCompression(TableId, tier, ECodec::LZ4);
+    }
 
     // TModel table with a timestamp column, a cold room and two tiers
     TAlter BuildTiered() {
@@ -266,8 +295,8 @@ namespace {
         alter.AddColumn(TableId, "created_at", TimeColumn, NScheme::NTypeIds::Timestamp, false, false);
         alter.AddColumnToFamily(TableId, TimeColumn, TModel::GroupId1);
         alter.SetRoom(TableId, ColdRoom, TModel::ChannelOut + 1, {TModel::ChannelBlobs + 1}, TModel::ChannelOut + 1);
-        alter.SetTier(TableId, HddTier, ColdRoom, ECodec::LZ4, ECache::None, ECacheMode::Regular);
-        alter.SetTier(TableId, ArchiveTier, ColdRoom, ECodec::LZ4, ECache::None, ECacheMode::Regular);
+        AddTier(alter, HddTier);
+        AddTier(alter, ArchiveTier);
         return alter;
     }
 
@@ -312,6 +341,19 @@ namespace {
         return *table;
     }
 
+    // TAlter writes every change as a separate record, merge them into one
+    TAutoPtr<TSchemeChanges> AsOneRecord(TAlter& alter) {
+        auto changes = alter.Flush();
+        UNIT_ASSERT(changes->DeltaSize() > 1);
+        for (size_t i = 1; i < changes->DeltaSize(); ++i) {
+            changes->MutableDelta(0)->MergeFrom(changes->GetDelta(i));
+        }
+        while (changes->DeltaSize() > 1) {
+            changes->MutableDelta()->RemoveLast();
+        }
+        return changes;
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeTiering) {
@@ -325,14 +367,26 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         }
     }
 
+    Y_UNIT_TEST(PolicyProtoReplace) {
+        // Serialization replaces the previous content of the proto
+        NTabletFlatScheme::TTieringPolicySettings proto;
+        TieringPolicyToProto(RelativePolicy(), proto);
+        TieringPolicyToProto(RelativePolicy(), proto);
+        UNIT_ASSERT(TieringPolicyFromProto(proto) == RelativePolicy());
+
+        TieringPolicyToProto(AbsolutePolicy(), proto);
+        UNIT_ASSERT(TieringPolicyFromProto(proto) == AbsolutePolicy());
+    }
+
     Y_UNIT_TEST(TiersAndPolicy) {
         auto alter = BuildTiered();
         alter.SetTieringPolicy(TableId, RelativePolicy());
         const TScheme scheme = Apply(alter);
         const auto& table = Table(scheme);
 
-        UNIT_ASSERT_VALUES_EQUAL(table.Tiers.size(), 2u);
-        const auto& hdd = table.Tiers.at(HddTier);
+        // Tiers are families of the table, two with columns and two tiers
+        UNIT_ASSERT_VALUES_EQUAL(table.Families.size(), 4u);
+        const auto& hdd = table.Families.at(HddTier);
         UNIT_ASSERT_VALUES_EQUAL(hdd.Room, ColdRoom);
         UNIT_ASSERT(hdd.Codec == ECodec::LZ4);
         UNIT_ASSERT(hdd.Cache == ECache::None);
@@ -343,6 +397,8 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
     Y_UNIT_TEST(Snapshot) {
         for (const auto& policy : {RelativePolicy(), AbsolutePolicy()}) {
             auto alter = BuildTiered();
+            AddTier(alter, ExtraTier);
+            alter.DropFamily(TableId, ExtraTier);
             alter.SetTieringPolicy(TableId, policy);
             const TScheme origin = Apply(alter);
 
@@ -351,7 +407,9 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
             UNIT_ASSERT(TCompare().Do(TableId, origin, restored));
             UNIT_ASSERT(Table(restored).TieringPolicy == policy);
-            UNIT_ASSERT_VALUES_EQUAL(Table(restored).Tiers.size(), 2u);
+            UNIT_ASSERT(Table(restored).Families.contains(HddTier));
+            UNIT_ASSERT(Table(restored).Families.contains(ArchiveTier));
+            UNIT_ASSERT(!Table(restored).Families.contains(ExtraTier));
         }
     }
 
@@ -361,25 +419,30 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
         // Change a tier, set and reset the policy, drop an unused tier
         TAlter change;
-        change.SetTier(TableId, HddTier, ColdRoom, ECodec::Plain, ECache::Once, ECacheMode::TryKeepInMemory);
+        change.SetFamilyCache(TableId, HddTier, ECache::Once);
         change.SetTieringPolicy(TableId, RelativePolicy());
         UNIT_ASSERT(TSchemeModifier(scheme).Apply(*change.Flush()));
-        UNIT_ASSERT(Table(scheme).Tiers.at(HddTier).Cache == ECache::Once);
+        UNIT_ASSERT(Table(scheme).Families.at(HddTier).Cache == ECache::Once);
         UNIT_ASSERT(Table(scheme).TieringPolicy);
 
         // Applying the same changes again is a no-op
         TAlter same;
-        same.SetTier(TableId, HddTier, ColdRoom, ECodec::Plain, ECache::Once, ECacheMode::TryKeepInMemory);
+        same.SetFamilyCache(TableId, HddTier, ECache::Once);
         same.SetTieringPolicy(TableId, RelativePolicy());
         UNIT_ASSERT(!TSchemeModifier(scheme).Apply(*same.Flush()));
 
         TAlter reset;
         reset.ResetTieringPolicy(TableId);
-        reset.DropTier(TableId, ArchiveTier);
+        reset.DropFamily(TableId, ArchiveTier);
         UNIT_ASSERT(TSchemeModifier(scheme).Apply(*reset.Flush()));
         UNIT_ASSERT(!Table(scheme).TieringPolicy);
-        UNIT_ASSERT_VALUES_EQUAL(Table(scheme).Tiers.size(), 1u);
-        UNIT_ASSERT(Table(scheme).Tiers.contains(HddTier));
+        UNIT_ASSERT(!Table(scheme).Families.contains(ArchiveTier));
+        UNIT_ASSERT(Table(scheme).Families.contains(HddTier));
+
+        // Dropping a missing family is a no-op
+        TAlter missing;
+        missing.DropFamily(TableId, ArchiveTier);
+        UNIT_ASSERT(!TSchemeModifier(scheme).Apply(*missing.Flush()));
     }
 
     Y_UNIT_TEST(Rollback) {
@@ -390,7 +453,7 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         TAlter change;
         change.SetTieringPolicy(TableId, RelativePolicy());
         change.ResetTieringPolicy(TableId);
-        change.DropTier(TableId, ArchiveTier);
+        change.DropFamily(TableId, ArchiveTier);
 
         TSchemeRollbackState rollback;
         TSchemeModifier(scheme, &rollback).Apply(*change.Flush());
@@ -400,23 +463,6 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         const auto& preserved = rollback.Tables.at(TableId);
         UNIT_ASSERT(preserved);
         UNIT_ASSERT(TCompare().Do(*preserved, before));
-    }
-
-    Y_UNIT_TEST(InvalidTiers) {
-        auto apply = [](TAlter alter) {
-            TScheme scheme = Apply(BuildTiered());
-            TSchemeModifier(scheme).Apply(*alter.Flush());
-        };
-
-        auto tier = [](ui32 tierId, ui32 room) {
-            TAlter alter;
-            alter.SetTier(TableId, tierId, room, ECodec::Plain, ECache::None, ECacheMode::Regular);
-            return alter;
-        };
-        UNIT_ASSERT_EXCEPTION(apply(tier(0, ColdRoom)), yexception);
-        UNIT_ASSERT_EXCEPTION(apply(tier(Max<ui32>(), ColdRoom)), yexception);
-        UNIT_ASSERT_EXCEPTION(apply(tier(3, ColdRoom + 100)), yexception);
-        apply(tier(3, ColdRoom));
     }
 
     Y_UNIT_TEST(InvalidPolicy) {
@@ -437,13 +483,34 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         policy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
         apply(policy);
 
-        // Unknown tier, rules out of order
+        // Unknown family, the default tier, rules out of order, no rules
         policy = RelativePolicy();
-        policy.Rules[0].TierId = 3;
-        UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
+        policy.Rules[0].TierId = ExtraTier;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply(policy), yexception, "is not a family of the table");
+        policy = RelativePolicy();
+        policy.Rules[0].TierId = TModel::GroupId1;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply(policy), yexception, "cannot target the default tier");
         policy = RelativePolicy();
         std::swap(policy.Rules[0], policy.Rules[1]);
         UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
+        policy = RelativePolicy();
+        policy.Rules.clear();
+        UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
+    }
+
+    Y_UNIT_TEST(InvalidDropFamily) {
+        auto drop = [](ui32 family) {
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.DropFamily(TableId, family);
+            TSchemeModifier(scheme).Apply(*alter.Flush());
+        };
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(drop(TModel::GroupId1), yexception, "Cannot drop the leader family");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(drop(TModel::GroupId2), yexception, "Cannot drop family 3 of column 2");
+
+        // Families without columns can be dropped
+        drop(HddTier);
     }
 
     Y_UNIT_TEST(DropUsedTierOrColumn) {
@@ -453,8 +520,9 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         {
             TScheme scheme = Apply(alter);
             TAlter drop;
-            drop.DropTier(TableId, HddTier);
-            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*drop.Flush()), yexception);
+            drop.DropFamily(TableId, HddTier);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TSchemeModifier(scheme).Apply(*drop.Flush()), yexception,
+                "Cannot drop family 1 used by the tiering policy as a tier");
         }
 
         {
@@ -470,6 +538,67 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
             TAlter drop;
             drop.DropColumn(TableId, TModel::ColId2);
             UNIT_ASSERT(TSchemeModifier(scheme).Apply(*drop.Flush()));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingChangesInOneRecord) {
+        {
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.SetTieringPolicy(TableId, RelativePolicy());
+            alter.ResetTieringPolicy(TableId);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)), yexception);
+        }
+
+        {
+            // The policy cannot refer to a family that the record drops
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.SetTieringPolicy(TableId, RelativePolicy());
+            alter.DropFamily(TableId, ArchiveTier);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)), yexception);
+        }
+
+        {
+            // Families unused by the policy can be dropped in the same record
+            auto build = BuildTiered();
+            AddTier(build, ExtraTier);
+            TScheme scheme = Apply(build);
+            TAlter alter;
+            alter.SetTieringPolicy(TableId, RelativePolicy());
+            alter.DropFamily(TableId, ExtraTier);
+            UNIT_ASSERT(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)));
+            UNIT_ASSERT(Table(scheme).TieringPolicy);
+            UNIT_ASSERT(!Table(scheme).Families.contains(ExtraTier));
+        }
+    }
+
+    Y_UNIT_TEST(RecordIsValidatedAsAWhole) {
+        auto alter = BuildTiered();
+        AddTier(alter, ExtraTier);
+        alter.SetTieringPolicy(TableId, RelativePolicy());
+
+        {
+            // An invalid record changes nothing, even settings it lists before the tiering ones
+            TScheme scheme = Apply(alter);
+            TAlter change;
+            change.SetColdBorrow(TableId, true);
+            change.DropFamily(TableId, ExtraTier);
+            change.DropFamily(TableId, HddTier);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(change)), yexception);
+            UNIT_ASSERT(!Table(scheme).ColdBorrow);
+            UNIT_ASSERT_VALUES_EQUAL(Table(scheme).Families.size(), 5u);
+        }
+
+        {
+            // Families are checked against the policy that the record leaves
+            TScheme scheme = Apply(alter);
+            TAlter change;
+            change.ResetTieringPolicy(TableId);
+            change.DropFamily(TableId, HddTier);
+            UNIT_ASSERT(TSchemeModifier(scheme).Apply(*AsOneRecord(change)));
+            UNIT_ASSERT(!Table(scheme).TieringPolicy);
+            UNIT_ASSERT(!Table(scheme).Families.contains(HddTier));
         }
     }
 }

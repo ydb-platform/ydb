@@ -21,6 +21,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -42,6 +43,8 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
+#include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
@@ -1559,6 +1562,30 @@ private:
         return false;
     }
 
+    void FillServiceConnectionParams(Yql::DqsProto::ExecuteGraphRequest& request) {
+        if (!Params.Config.GetWasmServices().GetEnabled()) {
+            return;
+        }
+        for (const auto& task : request.GetTask()) {
+            for (const auto& output : task.GetOutputs()) {
+                if (!output.HasTransform()) {
+                    continue;
+                }
+                NYql::NProto::TFunctionTransform settings;
+                if (!output.GetTransform().GetSettings().UnpackTo(&settings)) {
+                    continue;
+                }
+                const auto id = NWasmServices::ServiceInvocationConnection(settings.GetInvokeUrl());
+                const auto connection = YqConnections.find(id);
+                Y_ENSURE(connection != YqConnections.end(), "External service connection is inaccessible");
+                // Credentials are added only to the private execution request,
+                // never to persisted graph metadata or public function settings.
+                (*request.MutableSecureParams())[NWasmServices::ServiceConnectionKey(id)] =
+                    NWasmServices::PrepareServiceConnection(connection->second, Params.AuthToken);
+            }
+        }
+    }
+
     TEvaluationGraphInfo RunEvalDqGraph(NFq::NProto::TGraphParams& dqGraphParams) {
         YDB_LOG_DEBUG("RunEvalDqGraph",
             {"queryId", Params.QueryId});
@@ -1607,6 +1634,7 @@ private:
         *request.MutableColumns() = dqGraphParams.GetColumns();
         PrepareResultFormatSettings(info.ResultFormatSettings, dqGraphParams, *dqConfiguration);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
+        FillServiceConnectionParams(request);
         Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
         YDB_LOG_DEBUG("Evaluation",
             {"queryId", Params.QueryId},
@@ -1692,6 +1720,7 @@ private:
         request.SetStatsMode(StatsMode);
 
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
+        FillServiceConnectionParams(request);
         Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
         YDB_LOG_DEBUG("Dump queryId, executer, controller, resultIdActor",
             {"queryId", Params.QueryId},
@@ -2054,6 +2083,10 @@ private:
             gatewaysConfig, clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
+        if (Params.Config.GetWasmServices().GetEnabled() && Params.QueryType == FederatedQuery::QueryContent::ANALYTICS) {
+            dataProvidersInit.push_back(GetDqFunctionDataProviderInitializer(
+                nullptr, NWasmServices::CreateServiceGatewayFactory(Params.Config.GetWasmServices(), YqConnections)));
+        }
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver, Params.Config.GetCommon().GetYdbMvpCloudEndpoint(),
             Params.Config.GetCommon().GetMdbGateway(), Params.MdbEndpointGenerator, Params.QueryId);

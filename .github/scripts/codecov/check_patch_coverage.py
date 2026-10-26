@@ -8,8 +8,8 @@ Use the receipt-bound LCOV instead, retaining Codecov's LCOV branch/partial
 semantics without combining uploads or trusting an adjusted comparison.
 
 ``collect`` runs in the trusted detect job, where the complete Git history is
-already available. ``check`` runs after upload, without checking out PR code.
-No Codecov notification/status or CI completion is needed to read this API.
+already available. ``check`` runs offline against trusted CI artifacts, without
+checking out PR code. Neither Codecov processing nor a main baseline is needed.
 """
 
 from __future__ import annotations
@@ -21,23 +21,16 @@ import os
 import re
 import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Callable
 
 from codecov_suites import COVERAGE_EXCLUDE_REGEXP, SUITES
 
-API_URL = "https://api.codecov.io/graphql/gh"
 MAX_FILES = 1000
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 4096
 MAX_LCOV_BYTES = 64 * 1024 * 1024
-MAX_RESPONSE_BYTES = 32 * 1024 * 1024
-MAX_UPLOAD_PAGES = 20
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 EXCLUDE_RE = re.compile(COVERAGE_EXCLUDE_REGEXP)
@@ -45,10 +38,6 @@ EXCLUDE_RE = re.compile(COVERAGE_EXCLUDE_REGEXP)
 
 class CoverageError(Exception):
     """A report or input cannot safely be used for a coverage verdict."""
-
-
-class NotReady(CoverageError):
-    """A transient API error or an upload that is not merged yet."""
 
 
 def sha(value: str) -> str:
@@ -191,13 +180,11 @@ class UploadReceipt:
 
 
 def load_upload_receipt(path: Path, head: str, flag: str, run_id: int) -> UploadReceipt:
-    """Bind polling to the exact upload produced by the successful suite job.
+    """Bind the local report to the successful suite job, not a merged API view.
 
-    Looking for the newest upload visible in Codecov is insufficient: during
-    eventual consistency an older merged upload can be visible while the new
-    attempt has not appeared yet. A trusted CI artifact records the expected
-    identity and digest of the preserved LCOV. Successful suites can retain
-    their previous-attempt artifact when GitHub reruns only failed jobs.
+    The trusted artifact records the upload identity and preserved LCOV digest.
+    Successful suites can retain their previous-attempt artifact when GitHub
+    reruns only failed jobs. Codecov processing is deliberately not consulted.
     """
     try:
         with path.open("rb") as source:
@@ -331,153 +318,6 @@ def load_lcov(path: Path, receipt: UploadReceipt, flag: str) -> dict:
     return reports
 
 
-def request(query: str, variables: dict, timeout: float) -> dict:
-    req = urllib.request.Request(
-        API_URL,
-        data=json.dumps({"query": query, "variables": variables}).encode("utf-8"),
-        headers={"Content-Type": "application/json", "User-Agent": "ydb-patch-coverage/1"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        exc.close()
-        if exc.code in (408, 429) or exc.code >= 500:
-            raise NotReady(f"Codecov API returned HTTP {exc.code}") from exc
-        raise CoverageError(f"Codecov API returned HTTP {exc.code}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise NotReady("Codecov API request failed or timed out") from exc
-    if len(raw) > MAX_RESPONSE_BYTES:
-        raise CoverageError("Codecov API response exceeds the safety limit")
-    try:
-        result = json.loads(raw)
-    except ValueError as exc:
-        raise NotReady("Codecov API returned invalid JSON") from exc
-    if not isinstance(result, dict):
-        raise CoverageError("Codecov API returned an invalid response")
-    if result.get("errors"):
-        # GraphQL returns HTTP 200 for processing/provider errors. Never accept
-        # partial data from a response containing any such errors.
-        errors = result["errors"]
-        if not isinstance(errors, list) or not isinstance(errors[0], dict):
-            raise CoverageError("Codecov GraphQL returned a malformed error list")
-        error = errors[0]
-        message = error.get("message")
-        detail = json.dumps(message[:300]) if isinstance(message, str) else "unspecified error"
-        extensions = error.get("extensions")
-        code = extensions.get("code") if isinstance(extensions, dict) else None
-        if isinstance(code, str):
-            detail += f" (code {json.dumps(code[:80])})"
-        raise NotReady(f"Codecov GraphQL: {detail}; partial response rejected")
-    return result
-
-
-def commit_from_response(response: dict, head: str) -> dict:
-    try:
-        repo = response["data"]["owner"]["repository"]
-        if repo["__typename"] != "Repository":
-            raise CoverageError("Codecov repository is not accessible")
-        commit = repo["commit"]
-    except (TypeError, KeyError) as exc:
-        raise NotReady("Codecov has not exposed the expected commit report") from exc
-    if commit is None:
-        raise NotReady("Codecov has not exposed the expected commit report")
-    if not isinstance(commit, dict) or commit.get("commitid") != head:
-        raise CoverageError("Codecov returned a different HEAD SHA")
-    return commit
-
-
-UPLOAD_QUERY = """
-query PatchUpload($owner: String!, $repo: String!, $head: String!, $after: String) {
-  owner(username: $owner) {
-    repository(name: $repo) {
-      __typename
-      ... on Repository {
-        commit(id: $head) {
-          commitid
-          coverageAnalytics { flagNames totals { lineCount } }
-          uploads(first: 100, after: $after) {
-            pageInfo { hasNextPage endCursor }
-            edges { node { name state flags errors { totalCount } } }
-          }
-        }
-      }
-    }
-  }
-}
-"""
-
-
-class Client:
-    def __init__(self, repository: str, head: str, timeout: int = 300):
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
-            raise CoverageError("repository must be owner/name")
-        owner, repo = repository.split("/")
-        self.variables = {"owner": owner, "repo": repo, "head": head}
-        self.head = head
-        self.deadline = time.monotonic() + timeout
-
-    def query(self, query: str, extra: dict | None = None) -> dict:
-        remaining = self.deadline - time.monotonic()
-        if remaining <= 0:
-            raise CoverageError("timed out waiting for a complete Codecov report")
-        return commit_from_response(
-            request(query, {**self.variables, **(extra or {})}, min(30, remaining)), self.head,
-        )
-
-    def wait(self, operation: Callable[[], object]) -> object:
-        while True:
-            try:
-                return operation()
-            except NotReady as exc:
-                remaining = self.deadline - time.monotonic()
-                if remaining <= 0:
-                    raise CoverageError(f"timed out: {exc}") from exc
-                print(f"Waiting for Codecov: {exc}", flush=True)
-                time.sleep(min(15, remaining))
-
-    def upload_ready(self, flag: str, name: str) -> str:
-        cursor = None
-        seen_cursors = set()
-        found = []
-        for _ in range(MAX_UPLOAD_PAGES):
-            commit = self.query(UPLOAD_QUERY, {"after": cursor})
-            analytics = commit.get("coverageAnalytics") or {}
-            if flag not in (analytics.get("flagNames") or []):
-                raise NotReady(f"no processed report for flag {flag}")
-            lines = (analytics.get("totals") or {}).get("lineCount")
-            if type(lines) is not int or lines <= 0:
-                raise NotReady("HEAD report has no measured lines")
-            try:
-                connection = commit["uploads"]
-                for edge in connection["edges"]:
-                    upload = edge["node"]
-                    if upload["name"] == name:
-                        found.append(upload)
-                page = connection["pageInfo"]
-                if not page["hasNextPage"]:
-                    break
-                cursor = page["endCursor"]
-                if not cursor or cursor in seen_cursors:
-                    raise CoverageError("invalid Codecov upload pagination")
-                seen_cursors.add(cursor)
-            except (TypeError, KeyError) as exc:
-                raise CoverageError("malformed Codecov upload list") from exc
-        else:
-            raise CoverageError("too many Codecov upload pages; refusing to truncate them")
-        if not found:
-            raise NotReady(f"upload {name} has not appeared yet")
-        for upload in found:
-            if upload.get("flags") != [flag]:
-                raise CoverageError(f"upload {name} does not belong exclusively to {flag}")
-            if upload.get("state") == "ERROR" or (upload.get("errors") or {}).get("totalCount", 0):
-                raise CoverageError(f"upload {name} has Codecov processing errors")
-            if upload.get("state") != "MERGED":
-                raise NotReady(f"upload {name} is {upload.get('state')}, not merged")
-        return name
-
-
 @dataclass
 class Totals:
     hits: int = 0
@@ -536,8 +376,6 @@ def check(args: argparse.Namespace) -> int:
     files = load_changed_lines(args.changed_lines_file, args.base_sha, args.head_sha, args.flag)
     receipt = load_upload_receipt(args.upload_receipt, args.head_sha, args.flag, args.run_id)
     reports = load_lcov(args.coverage_report, receipt, args.flag)
-    client = Client(args.repository, args.head_sha, args.timeout)
-    client.wait(lambda: client.upload_ready(args.flag, receipt.name))
     totals = Totals()
     absent = []
     for path in sorted(files):
@@ -558,6 +396,7 @@ def check(args: argparse.Namespace) -> int:
             output.write(f"Base `{args.base_sha}` → HEAD `{args.head_sha}`.\n\n")
             output.write(f"Upload `{receipt.name}`; LCOV SHA-256 `{receipt.report_sha256}`.\n\n")
             output.write("Uses the exact uploaded LCOV and Codecov's branch/partial semantics for the original PR diff; partial lines are not hits.\n\n")
+            output.write("Calculated offline; Codecov processing and main baseline availability do not affect this verdict.\n\n")
             if absent:
                 output.write("Files absent from that LCOV (excluded from the denominator, not assumed covered):\n\n")
                 for path in absent:
@@ -573,8 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     collect_parser.add_argument("--base-sha", type=sha, required=True)
     collect_parser.add_argument("--head-sha", type=sha, required=True)
     collect_parser.add_argument("--output", type=Path, required=True)
-    check_parser = subparsers.add_parser("check", help="check one flag after its uniquely named upload has merged")
-    check_parser.add_argument("--repository", required=True)
+    check_parser = subparsers.add_parser("check", help="check one flag offline using the exact uploaded LCOV")
     check_parser.add_argument("--base-sha", type=sha, required=True)
     check_parser.add_argument("--head-sha", type=sha, required=True)
     check_parser.add_argument("--flag", choices=sorted(SUITES), required=True)
@@ -583,7 +421,6 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--run-id", type=positive, required=True, help="expected workflow run ID")
     check_parser.add_argument("--changed-lines-file", type=Path, required=True)
     check_parser.add_argument("--threshold", type=percentage, default=Decimal(80))
-    check_parser.add_argument("--timeout", type=positive, default=300)
     args = parser.parse_args(argv)
     try:
         if args.command == "collect":

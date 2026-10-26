@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -825,33 +826,102 @@ class WorkflowContractTest(unittest.TestCase):
         # The stale base is still the correct boundary for the PR's three-dot diff.
         self.assertIn('"$PR_BASE_SHA...$PR_HEAD_SHA"', workflow)
 
-    def test_relevant_pr_base_requires_a_successful_full_main_run(self) -> None:
-        workflow = (
-            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
-        ).read_text(encoding="utf-8")
-        self.assertIn("actions: read", workflow)
-        self.assertIn("Classify PR base commit", workflow)
-        self.assertIn('"${PR_BASE_SHA}^1"', workflow)
-        self.assertIn(
-            '"$base_parent" "$PR_BASE_SHA"',
-            workflow,
+    def test_main_baseline_never_gates_detection_or_the_patch_verdict(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(path)], check=True, text=True, capture_output=True,
         )
-        self.assertIn(
-            "BASE_CHANGE_RELEVANT: ${{ steps.base_change.outputs.should_run }}",
-            workflow,
+        jobs = json.loads(proc.stdout)["jobs"]
+        detection = json.dumps(jobs["detect"])
+        self.assertNotIn("Validate PR base coverage state", detection)
+        self.assertNotIn("Classify PR base commit", detection)
+        self.assertNotIn("listWorkflowRuns", detection)
+        self.assertNotIn("base_change", detection)
+        observer = next(step for step in jobs["patch"]["steps"]
+                        if step.get("name") == "Explain main baseline availability")
+        self.assertIs(observer["continue-on-error"], True)
+        self.assertIn("!cancelled()", observer["if"])
+        self.assertEqual(observer["timeout-minutes"], 1)
+        self.assertIn("request: { timeout: 10000 }", observer["with"]["script"])
+        self.assertNotIn("core.setFailed", observer["with"]["script"])
+        self.assertNotIn("setTimeout", observer["with"]["script"])
+        self.assertNotIn("sleep", observer["with"]["script"])
+        self.assertIn("informational", observer["with"]["script"])
+        check = next(step for step in jobs["patch"]["steps"] if "run" in step)
+        self.assertNotIn("--repository", check["run"])
+        self.assertNotIn("--timeout", check["run"])
+        self.assertLess(jobs["patch"]["steps"].index(check),
+                        jobs["patch"]["steps"].index(observer))
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is needed to exercise github-script")
+    def test_main_baseline_summary_handles_pending_failed_missing_and_api_errors(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(path)], check=True, text=True, capture_output=True,
         )
-        self.assertIn("github.rest.actions.listWorkflowRuns", workflow)
-        self.assertIn("workflow_id: 'cpp_codecov.yml'", workflow)
-        self.assertIn("head_sha: baseSha", workflow)
-        self.assertIn("run.head_branch === 'main'", workflow)
-        self.assertIn("run.event === 'push'", workflow)
-        self.assertIn("run.status === 'completed' && run.conclusion === 'success'", workflow)
-        self.assertIn(
-            "process.env.BASE_CHANGE_RELEVANT === 'true' || runs.length > 0",
-            workflow,
-        )
-        self.assertIn("Wait for or rerun the main coverage workflow", workflow)
-        self.assertIn("then rerun this PR coverage workflow", workflow)
+        jobs = json.loads(proc.stdout)["jobs"]
+        observer = next(step for step in jobs["patch"]["steps"]
+                        if step.get("name") == "Explain main baseline availability")
+        script = observer["with"]["script"]
+        base = "a" * 40
+        run = {"id": 123, "head_sha": base, "head_branch": "main", "event": "push"}
+        cases = [
+            ([], False, "No main coverage run"),
+            ([{**run, "status": "queued", "conclusion": None}], False, "still pending or running"),
+            ([{**run, "status": "in_progress", "conclusion": None}], False, "still pending or running"),
+            ([{**run, "status": "completed", "conclusion": "failure"}], False, "did not complete successfully"),
+            ([{**run, "status": "completed", "conclusion": "cancelled"}], False, "did not complete successfully"),
+            ([{**run, "status": "completed", "conclusion": "success"}], False, "completed successfully"),
+            ([{**run, "head_sha": "b" * 40}], False, "No main coverage run"),
+            ([{**run, "head_branch": "feature"}], False, "No main coverage run"),
+            ([{**run, "event": "pull_request_target"}], False, "No main coverage run"),
+            ([], True, "could not be checked"),
+        ]
+        # Execute the actual workflow script, not a Python reimplementation.
+        runner = r"""
+const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const calls = [];
+const messages = [];
+const summary = {
+  text: '', written: false,
+  addHeading(value) { this.text += value; return this; },
+  addRaw(value) { this.text += value; return this; },
+  addLink(label, url) { this.text += label + ': ' + url; return this; },
+  async write() { this.written = true; }
+};
+const core = { summary, info(value) { messages.push(value); },
+  setFailed() { throw new Error('baseline must not fail CI'); } };
+const github = { rest: { actions: { async listWorkflowRuns(args) {
+  calls.push(args);
+  if (input.fail) throw new Error('simulated API outage');
+  return { data: { workflow_runs: input.runs } };
+} } } };
+process.env.PR_BASE_SHA = input.base;
+process.env.GITHUB_SERVER_URL = 'https://github.com';
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+new AsyncFunction('github', 'context', 'core', input.script)(
+  github, { repo: { owner: 'ydb-platform', repo: 'ydb' } }, core
+).then(() => process.stdout.write(JSON.stringify({ calls, messages, summary })))
+ .catch(error => { process.stderr.write(String(error)); process.exitCode = 1; });
+"""
+        for runs, fail, expected in cases:
+            with self.subTest(expected=expected, runs=runs, fail=fail):
+                execution = subprocess.run(
+                    ["node", "-e", runner],
+                    input=json.dumps({"script": script, "runs": runs, "fail": fail, "base": base}),
+                    check=True, capture_output=True, text=True, timeout=10,
+                )
+                result = json.loads(execution.stdout)
+                self.assertTrue(result["summary"]["written"])
+                self.assertIn(expected, result["summary"]["text"])
+                self.assertIn("local 80% verdict", result["summary"]["text"])
+                self.assertEqual(len(result["calls"]), 1)
+                self.assertEqual(result["calls"][0]["head_sha"], base)
+                self.assertEqual(result["calls"][0]["request"]["timeout"], 10000)
 
     def test_patch_job_is_pr_only_and_independent_of_report_publication(self) -> None:
         path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"

@@ -225,6 +225,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TVector<TColumnBuildInfo> BuildColumns;
+    TMaybe<NKikimrSchemeOp::TModifyScheme> AlterMainTablePayload;
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
@@ -593,6 +594,13 @@ public:
         indexInfo->TablePathId =
             TPathId(row.template GetValue<Schema::IndexBuild::TableOwnerId>(),
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
+
+        if (row.template HaveValue<Schema::IndexBuild::AlterMainTablePayload>()) {
+            indexInfo->AlterMainTablePayload = NKikimrSchemeOp::TModifyScheme();
+            Y_ENSURE(indexInfo->AlterMainTablePayload->ParseFromString(
+                row.template GetValue<Schema::IndexBuild::AlterMainTablePayload>()),
+                "Cannot parse column build alter table payload");
+        }
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();

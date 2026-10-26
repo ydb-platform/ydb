@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -288,7 +289,13 @@ public:
             }
 
             buildInfo->TargetName = tablePath.PathString();
-            // put some validation here for the build operation
+            if (settings.HasAlterMainTablePayload()) {
+                NKikimrSchemeOp::TModifyScheme payload;
+                if (!settings.GetAlterMainTablePayload().UnpackTo(&payload)) {
+                    return makeReply("invalid alter table payload for column build");
+                }
+                buildInfo->AlterMainTablePayload = std::move(payload);
+            }
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
             for(int i = 0; i < settings.column_build_operation().column_size(); i++) {
@@ -309,6 +316,12 @@ public:
                     buildInfo->BuildColumns.push_back(
                         TIndexBuildInfo::TColumnBuildInfo(
                             colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                }
+            }
+            if (buildInfo->AlterMainTablePayload) {
+                TString explain;
+                if (!ValidateColumnBuildPayload(*buildInfo, tablePath, explain)) {
+                    return makeReply(explain);
                 }
             }
         } else {
@@ -388,6 +401,85 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
+    bool ValidateColumnBuildPayload(const TIndexBuildInfo& buildInfo, const TPath& tablePath, TString& explain) {
+        const auto& payload = *buildInfo.AlterMainTablePayload;
+        auto fail = [&](TString message) {
+            explain = std::move(message);
+            return false;
+        };
+        if (payload.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable || !payload.HasAlterTable()) {
+            return fail("column build payload must be an ALTER TABLE operation");
+        }
+
+        // Only additions can be rolled back by dropping the newly built columns.
+        auto otherOperations = payload;
+        otherOperations.ClearWorkingDir();
+        otherOperations.ClearOperationType();
+        otherOperations.ClearAlterTable();
+        auto otherChanges = payload.GetAlterTable();
+        otherChanges.ClearName();
+        otherChanges.ClearColumns();
+        // KQP's alter converter materializes an empty partition config even for ADD COLUMN.
+        if (!otherChanges.GetPartitionConfig().ByteSizeLong()) {
+            otherChanges.ClearPartitionConfig();
+        }
+        if (otherOperations.ByteSizeLong() || otherChanges.ByteSizeLong()) {
+            return fail("only ADD COLUMN actions can be combined with a column build");
+        }
+
+        const auto payloadPath = TPath::Resolve(payload.GetWorkingDir(), Self).Dive(payload.GetAlterTable().GetName());
+        if (!payloadPath.IsResolved() || payloadPath.Base()->PathId != tablePath.Base()->PathId) {
+            return fail("column build payload refers to a different table");
+        }
+
+        const auto& tableInfo = Self->Tables.at(buildInfo.TablePathId);
+        THashMap<TString, const NKikimrSchemeOp::TColumnDescription*> columns;
+        for (const auto& column : payload.GetAlterTable().GetColumns()) {
+            if (column.HasSetNotNullInProgress()) {
+                return fail(TStringBuilder() << "column build payload cannot set SetNotNullInProgress: " << column.GetName());
+            }
+            if (column.GetName().empty() || !column.HasType()) {
+                return fail("column build payload must specify names and types for new columns");
+            }
+            if (!columns.emplace(column.GetName(), &column).second) {
+                return fail(TStringBuilder() << "duplicate column in build payload: " << column.GetName());
+            }
+            if (tableInfo->GetColumnIdByNameSlow(column.GetName()) != TTableInfo::InvalidColumnId) {
+                return fail(TStringBuilder() << "column already exists: " << column.GetName());
+            }
+        }
+
+        if (buildInfo.BuildColumns.empty()) {
+            return fail("column build settings must not be empty");
+        }
+        THashSet<TString> buildColumns;
+        for (const auto& column : buildInfo.BuildColumns) {
+            if (!buildColumns.insert(column.ColumnName).second) {
+                return fail(TStringBuilder() << "duplicate column to build: " << column.ColumnName);
+            }
+            const auto it = columns.find(column.ColumnName);
+            if (it == columns.end()) {
+                return fail(TStringBuilder() << "column to build is missing from payload: " << column.ColumnName);
+            }
+            NScheme::TTypeInfo typeInfo;
+            TString typeMod;
+            Ydb::StatusIds::StatusCode status;
+            if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.DefaultFromLiteral.type(), status, explain)) {
+                return false;
+            }
+            if (it->second->GetType() != NScheme::TypeName(typeInfo, typeMod)) {
+                return fail(TStringBuilder() << "column build type does not match payload: " << column.ColumnName);
+            }
+        }
+        for (const auto& column : payload.GetAlterTable().GetColumns()) {
+            if ((column.GetDefaultValueCase() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET || column.GetNotNull())
+                && !buildColumns.contains(column.GetName())) {
+                return fail(TStringBuilder() << "column requires build settings: " << column.GetName());
+            }
+        }
+        return true;
+    }
+
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
                  TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());

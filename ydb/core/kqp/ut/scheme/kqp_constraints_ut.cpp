@@ -530,6 +530,182 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(AlterTableAddManyColumnsWithDefault, DefaultFirst, WithData) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE t (Key Int32, PRIMARY KEY (Key));
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        if constexpr (WithData) {
+            auto result = session.ExecuteQuery(R"(
+                UPSERT INTO t (Key) VALUES (1);
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = DefaultFirst
+                ? "ALTER TABLE t ADD COLUMN b Int32 DEFAULT 5, ADD COLUMN a Int32;"
+                : "ALTER TABLE t ADD COLUMN a Int32, ADD COLUMN b Int32 DEFAULT 5;";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, b FROM t;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithData ? "[[[1];[5]]]" : "[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, a, b FROM t;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithData ? "[[[1];#;[5]]]" : "[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(AlterTableAddManyColumnsMixedDefaults, DefaultFirst, WithData) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE t (Key Int32, PRIMARY KEY (Key));
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        if constexpr (WithData) {
+            auto result = session.ExecuteQuery("UPSERT INTO t (Key) VALUES (1);", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = DefaultFirst ? R"(
+                ALTER TABLE t
+                    ADD COLUMN c Int32 DEFAULT 5,
+                    ADD COLUMN d Uint64 DEFAULT Uint64("7"),
+                    ADD COLUMN a Int32,
+                    ADD COLUMN b Utf8;
+            )" : R"(
+                ALTER TABLE t
+                    ADD COLUMN a Int32,
+                    ADD COLUMN c Int32 DEFAULT 5,
+                    ADD COLUMN b Utf8,
+                    ADD COLUMN d Uint64 DEFAULT Uint64("7");
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, c, d FROM t;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithData ? "[[[1];[5];[7u]]]" : "[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, a, b, c, d FROM t;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithData ? "[[[1];#;#;[5];[7u]]]" : "[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPSERT INTO t (Key, a, b) VALUES (2, 20, Utf8("new"));
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, a, b, c, d FROM t ORDER BY Key;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithData
+                ? R"([[[1];#;#;[5];[7u]];[[2];[20];["new"];[5];[7u]]])"
+                : R"([[[2];[20];["new"];[5];[7u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableAddManyColumnsRejectsOtherAlterActions) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(R"(
+            CREATE TABLE t (Key Int32, Value Utf8, PRIMARY KEY (Key));
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            UPSERT INTO t (Key, Value) VALUES (1, Utf8("old"));
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            ALTER TABLE t ADD COLUMN a Int32, ADD COLUMN b Int32 DEFAULT 5, DROP COLUMN Value;
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "only ADD COLUMN actions");
+
+        result = session.ExecuteQuery("SELECT Key, Value FROM t;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[1];["old"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        result = session.ExecuteQuery(R"(
+            ALTER TABLE t ADD COLUMN a Int32, ADD COLUMN b Int32 DEFAULT 5;
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteQuery("SELECT Key, Value, a, b FROM t;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[1];["old"];#;[5]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableAddManyColumnsSameKind, WithDefaults) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE t (Key Int32, PRIMARY KEY (Key));
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPSERT INTO t (Key) VALUES (1);
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = WithDefaults
+                ? "ALTER TABLE t ADD COLUMN a Int32 DEFAULT 3, ADD COLUMN b Int32 DEFAULT 5;"
+                : "ALTER TABLE t ADD COLUMN a Int32, ADD COLUMN b Int32;";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery("SELECT Key, a, b FROM t;", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(WithDefaults ? "[[[1];[3];[5]]]" : "[[[1];#;#]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_TWIN(DefaultValuesForTable, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);

@@ -102,6 +102,11 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
         );
     }
+    if (info.AlterMainTablePayload) {
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::AlterMainTablePayload>(info.AlterMainTablePayload->SerializeAsString())
+        );
+    }
     if (info.IsRebuild) {
         persistedBuildIndex.Update(
             NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true),

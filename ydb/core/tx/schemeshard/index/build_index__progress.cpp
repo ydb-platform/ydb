@@ -919,20 +919,30 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
+    auto* alterTable = modifyScheme.MutableAlterTable();
+    THashMap<TString, NKikimrSchemeOp::TColumnDescription*> columns;
+    if (buildInfo.AlterMainTablePayload) {
+        alterTable->MutableColumns()->CopyFrom(buildInfo.AlterMainTablePayload->GetAlterTable().GetColumns());
+        for (auto& column : *alterTable->MutableColumns()) {
+            columns.emplace(column.GetName(), &column);
+        }
+    }
 
     for (const auto& colInfo : buildInfo.BuildColumns) {
-        auto col = modifyScheme.MutableAlterTable()->AddColumns();
-        NScheme::TTypeInfo typeInfo;
-        TString typeMod;
-        Ydb::StatusIds::StatusCode status;
-        TString error;
-        if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
-            // todo gvit fix that
-            Y_ENSURE(false, "failed to extract column type info");
-        }
+        auto* col = buildInfo.AlterMainTablePayload ? columns.at(colInfo.ColumnName) : alterTable->AddColumns();
+        if (!buildInfo.AlterMainTablePayload) {
+            NScheme::TTypeInfo typeInfo;
+            TString typeMod;
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
+                // todo gvit fix that
+                Y_ENSURE(false, "failed to extract column type info");
+            }
 
-        col->SetType(NScheme::TypeName(typeInfo, typeMod));
-        col->SetName(colInfo.ColumnName);
+            col->SetType(NScheme::TypeName(typeInfo, typeMod));
+            col->SetName(colInfo.ColumnName);
+        }
         if (colInfo.IsFromSequence()) {
             // Store the sequence as a table-local leaf name (not an absolute path), matching
             // the create-table convention and how the path describer / KQP key local
@@ -941,7 +951,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         } else {
             col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
         }
-        col->SetIsBuildInProgress(true);
 
         if (!colInfo.FamilyName.empty()) {
             col->SetFamilyName(colInfo.FamilyName);
@@ -950,6 +959,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         if (colInfo.NotNull) {
             col->SetNotNull(colInfo.NotNull);
         }
+    }
+
+    // Publish the entire ADD COLUMN operation only after the backfill finishes.
+    for (auto& column : *alterTable->MutableColumns()) {
+        column.SetIsBuildInProgress(true);
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -1096,6 +1110,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
+    if (buildInfo.AlterMainTablePayload) {
+        auto* settings = columnBuild->MutableSettings();
+        settings->clear_column();
+        for (const auto& column : buildInfo.AlterMainTablePayload->GetAlterTable().GetColumns()) {
+            settings->add_column()->SetColumnName(column.GetName());
+        }
+    }
 
     AddDropSequencePropose(ss, buildInfo, *propose);
 

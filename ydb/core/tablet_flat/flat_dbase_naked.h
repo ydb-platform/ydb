@@ -8,6 +8,8 @@
 #include "flat_dbase_scheme.h"
 #include "flat_redo_writer.h"
 #include "flat_redo_player.h"
+#include "flat_redo_observer.h"
+#include <util/generic/scope.h>
 #include "flat_util_misc.h"
 #include "flat_abi_evol.h"
 #include "flat_abi_check.h"
@@ -599,8 +601,10 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain)
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain, IRedoObserver* observer = nullptr)
         {
+            auto* previous = std::exchange(RedoObserver, observer);
+            Y_DEFER { RedoObserver = previous; };
             return Redo.Replay(plain), *this;
         }
 
@@ -740,6 +744,8 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->Update(rop, key, ops, Annex, rowVersion);
+            if (RedoObserver)
+                RedoObserver->OnRedoUpdate(tid, rop, key, ops, Annex, rowVersion, 0, 0);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
@@ -752,6 +758,8 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->UpdateTx(rop, key, ops, Annex, txId, savepointSeqNum);
+            if (RedoObserver)
+                RedoObserver->OnRedoUpdate(tid, rop, key, ops, Annex, TRowVersion::Min(), txId, savepointSeqNum);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
@@ -764,6 +772,8 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->CommitTx(txId, rowVersion);
+            if (RedoObserver)
+                RedoObserver->OnRedoCommit(tid, txId, rowVersion);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
         }
@@ -775,6 +785,8 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->RemoveTx(txId);
+            if (RedoObserver)
+                RedoObserver->OnRedoRemove(tid, txId);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
         }
@@ -873,6 +885,7 @@ namespace NTable {
         TTableWrapper Dummy;
         THashMap<ui32, TTableWrapper> Tables;
         NRedo::TPlayer<TDatabaseImpl> Redo;
+        IRedoObserver* RedoObserver = nullptr;
         TVector<ui32> Affects;
         TVector<TMemGlob> Annex;
         TVector<ui32> Flushed;

@@ -69,11 +69,28 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         }
     };
 
+    auto getLogicalTypes = [](const TPositionVariant& pos) -> const std::vector<NScheme::TTypeInfo>& {
+        switch (pos.index()) {
+            case StartPortionInfo:
+                return std::get<StartPortionInfo>(pos)->GetMeta().GetPKTypes();
+            case EndPortionInfo:
+                return std::get<EndPortionInfo>(pos)->GetMeta().GetPKTypes();
+            case SimpleRow:
+                return std::get<SimpleRow>(pos).GetLogicalTypes();
+            default:
+                AFL_VERIFY(false)("pos.index()", pos.index());
+        }
+    };
+
     const auto& lhsSchema = getSchema(Position);
     const auto& rhsSchema = getSchema(rhs.Position);
 
+    const auto& lhsTypes = getLogicalTypes(Position);
+    const auto& rhsTypes = getLogicalTypes(rhs.Position);
+    const bool lhsShorter = lhsSchema->num_fields() <= rhsSchema->num_fields();
+    AFL_VERIFY_DEBUG(std::equal(lhsTypes.begin(), lhsTypes.begin() + std::min(lhsTypes.size(), rhsTypes.size()), rhsTypes.begin()));
     return getKeyView(Position)
-        .Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? *lhsSchema : *rhsSchema)
+        .Compare(getKeyView(rhs.Position), lhsShorter ? *lhsSchema : *rhsSchema, lhsShorter ? lhsTypes : rhsTypes)
         .GetResult();
 }
 

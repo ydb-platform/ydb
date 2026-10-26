@@ -58,8 +58,9 @@ private:
             AFL_VERIFY(Source);
             AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo)(
                                                                                  "type", Source->GetType());
-            auto batch = Source->GetAs<IDataSource>()->GetFirstPK().ToBatch();
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
+            const auto firstPK = Source->GetAs<IDataSource>()->GetFirstPK();
+            auto batch = firstPK.ToBatch();
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse, firstPK.GetLogicalTypes());
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
@@ -77,7 +78,9 @@ private:
             auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse);
+            auto pkTypes = Source->GetSourceSchema()->GetIndexInfo().GetPrimaryKeyTypes();
+            pkTypes.resize(arrs.size());
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse, pkTypes);
             IsValidFlag = ShiftWithFilter();
         }
 

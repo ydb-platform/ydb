@@ -466,6 +466,16 @@ public:
         return PKColumns;
     }
 
+    std::vector<NScheme::TTypeInfo> GetPrimaryKeyTypes() const {
+        std::vector<NScheme::TTypeInfo> result;
+        result.reserve(PKColumns.size());
+        for (const auto& column : PKColumns) {
+            result.emplace_back(column.second);
+        }
+
+        return result;
+    }
+
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
     }

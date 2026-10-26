@@ -6,6 +6,7 @@
 
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <cstring>
 
@@ -35,7 +36,7 @@ TConclusionStatus TIndexMeta::DoCheckModificationCompatibility(const IIndexMeta&
 }
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& /*indexInfo*/) const {
     reader.Start();
     TChunkedColumnReader cReader = *reader.begin();
     auto thisChunkIndex = NArrow::NAccessor::TMinMax::MakeNull(cReader.GetCurrentChunk()->GetDataType());
@@ -66,7 +67,13 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
 bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& requestValue,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to min_max index");
-    auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+    const auto& column = info.GetColumnFeaturesVerified(GetColumnId());
+    if (NArrow::TComparator::IsNumericDecimal(column.GetTypeInfo())) {
+        // Stored bounds use the physical byte order and cannot prune numeric Decimal ranges.
+        return true;
+    }
+
+    auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, column.GetArrowField()->type());
     if (chunkValue.ElementType()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
         chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();
         chunkValue.Max() = chunkValue.Max()->CastTo(arrow::uint64()).ValueOrDie();

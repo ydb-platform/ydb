@@ -607,7 +607,8 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
     if (IsSpecialColumn(columnId)) {
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
-            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
+            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt,
+            NScheme::TTypeInfo(columnId == (ui32)ESpecialColumn::DELETE_FLAG ? NScheme::NTypeIds::Bool : NScheme::NTypeIds::Uint64));
     } else {
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());

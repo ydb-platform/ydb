@@ -38,19 +38,20 @@ TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow::S
     return TString(str.data(), str.size());
 }
 
-TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
     AFL_VERIFY(RawData.size());
-    return TSimpleRow(RawData.front(), schema);
+    return TSimpleRow(RawData.front(), schema, logicalTypes);
 }
 
-TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
     AFL_VERIFY(RawData.size());
-    return TSimpleRow(RawData.back(), schema);
+    return TSimpleRow(RawData.back(), schema, logicalTypes);
 }
 
-TSimpleRow TRowsCollection::GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetRecord(
+    const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
     AFL_VERIFY(recordIndex < RawData.size());
-    return TSimpleRow(RawData[recordIndex], schema);
+    return TSimpleRow(RawData[recordIndex], schema, logicalTypes);
 }
 
 }   // namespace NKikimr::NArrow

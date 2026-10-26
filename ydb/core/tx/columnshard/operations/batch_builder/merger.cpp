@@ -9,8 +9,7 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-std::shared_ptr<arrow::Table> CombineAndSortExistsData(
-    const std::vector<std::shared_ptr<arrow::Table>>& chunks, const std::shared_ptr<arrow::Schema>& pkSchema) {
+std::shared_ptr<arrow::Table> CombineAndSortExistsData(const std::vector<std::shared_ptr<arrow::Table>>& chunks, const TIndexInfo& indexInfo) {
     AFL_VERIFY(!chunks.empty());
     if (chunks.size() == 1 && chunks.front()->num_rows() <= 1) {
         return chunks.front();
@@ -20,7 +19,7 @@ std::shared_ptr<arrow::Table> CombineAndSortExistsData(
         return table;
     }
     auto batch = NArrow::ToBatch(table);
-    batch = NArrow::SortBatch(batch, pkSchema, false);
+    batch = NArrow::SortBatch(batch, indexInfo.GetReplaceKey(), indexInfo.GetPrimaryKeyTypes(), false);
     return NArrow::ToTable(batch);
 }
 
@@ -28,7 +27,7 @@ std::shared_ptr<arrow::Table> CombineAndSortExistsData(
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::Finish() {
     if (!ExistsChunks.empty()) {
-        auto existsData = CombineAndSortExistsData(ExistsChunks, Schema->GetIndexInfo().GetReplaceKey());
+        auto existsData = CombineAndSortExistsData(ExistsChunks, Schema->GetIndexInfo());
         ExistsChunks.clear();
         auto result = MergeExistsDataOrdered(existsData);
         if (result.IsFail()) {
@@ -55,8 +54,8 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(cons
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
     AFL_VERIFY(data);
-    NArrow::NMerger::TRWSortableBatchPosition existsPosition(
-        data, 0, Schema->GetPKColumnNames(), Schema->GetIndexInfo().GetColumnSTLNames(false), false);
+    NArrow::NMerger::TRWSortableBatchPosition existsPosition(data, 0, Schema->GetPKColumnNames(),
+        Schema->GetIndexInfo().GetColumnSTLNames(false), false, Schema->GetIndexInfo().GetPrimaryKeyTypes());
     bool exsistFinished = !existsPosition.InitPosition(0);
     while (!IncomingFinished && !exsistFinished) {
         auto cmpResult = IncomingPosition.Compare(existsPosition);

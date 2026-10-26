@@ -3,6 +3,9 @@ UNITTEST_FOR(ydb/core/formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/protos
+    ydb/core/testlib
+    library/cpp/monlib/dynamic_counters
     yql/essentials/types/binary_json
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels

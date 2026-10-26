@@ -71,7 +71,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         result = SortHeap.Current().GetKeyColumns().SliceData(pos.GetPosition() + (include ? 0 : 1), resultSize);
         if (lastResultPosition && resultSize) {
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(pos.GetPosition() + (include ? 0 : 1), resultSize);
-            *lastResultPosition = TCursor(keys, 0, SortSchema->field_names());
+            *lastResultPosition = TCursor(keys, 0, SortSchema->field_names(), LogicalTypes);
         }
         if (SortHeap.Current().GetFilter()) {
             SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(pos.GetPosition() + (include ? 0 : 1), resultSize));
@@ -80,7 +80,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
         if (lastResultPosition && resultSize) {
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(startPos, resultSize);
-            *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema->field_names());
+            *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema->field_names(), LogicalTypes);
         }
         if (SortHeap.Current().GetFilter()) {
             SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(startPos, resultSize));

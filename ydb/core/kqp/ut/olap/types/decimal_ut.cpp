@@ -1,6 +1,9 @@
 #include "column_type_scenarios.h"
 #include "column_type_test_base.h"
 
+#include <ydb/core/kqp/ut/olap/combinatory/compaction.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -436,6 +439,100 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     Y_UNIT_TEST_SCENARIO(TestGroupByWithNulls, GroupByWithNullsScenario);
     Y_UNIT_TEST_PK_SCENARIO(TestDecimalAsPrimaryKey, PkLookupScenario);
     Y_UNIT_TEST_CSV_SCENARIO(TestCsv, CsvScenario);
+
+    Y_UNIT_TEST(TestDecimalPrimaryKeyNumericOrder, EQueryMode, EIntervalTreeMode) {
+        const auto Scan = Arg<0>();
+        const auto UseIntervalTree = Arg<1>() == EIntervalTreeMode::INTERVAL_TREE_ENABLED;
+        using TDecimal = TDecimalTraits<22, 0>;
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        auto settings = TDecimal::CreateSettings();
+        settings.SetColumnShardReaderClassName("TRIVIAL");
+        auto* config = settings.AppConfig.MutableColumnShardConfig();
+        config->SetEnableDecimalNumericComparison(true);
+        config->SetEnableIntervalTreeForMetadataSelect(UseIntervalTree);
+        config->SetWritingBufferVolumeBytes(0);
+        config->SetAlterObjectEnabled(true);
+        TTestHelper helper(settings);
+
+        const TString tableName = "/Root/DecimalPrimaryKey";
+        TTestHelper::TColumnTable table;
+        table.SetName(tableName)
+            .SetPrimaryKey({ "dec" })
+            .SetSharding({ "dec" })
+            .SetMinPartitionsCount(1)
+            .SetSchema({
+                TTestHelper::TColumnSchema().SetName("dec").SetType(TDecimal::GetTypeId()).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("val").SetType(NScheme::NTypeIds::Int64),
+            });
+        helper.CreateTable(table);
+
+        const auto alter = helper.GetSession().ExecuteSchemeQuery(
+            "ALTER OBJECT `" + tableName + "` (TYPE TABLE) SET "
+            "(ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)").GetValueSync();
+        UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
+
+        const auto write = [&](const TVector<std::pair<TString, i64>>& rows) {
+            arrow::FixedSizeBinaryBuilder decimals(TDecimal::ArrowType());
+            std::vector<int64_t> values;
+            for (const auto& [decimal, value] : rows) {
+                TDecimal::AppendDecimalBytes(decimals, decimal);
+                values.push_back(value);
+            }
+
+            std::shared_ptr<arrow::Array> keys;
+            UNIT_ASSERT(decimals.Finish(&keys).ok());
+            helper.BulkUpsert(table, NTestArrow::MakeBatch(
+                { arrow::field("dec", TDecimal::ArrowType(), false), arrow::field("val", arrow::int64()) },
+                { keys, NTestArrow::MakeInt64Array(values) }));
+        };
+
+        write({ { "1", 10 }, { "-1", 20 }, { "256", 30 }, { "0", 40 }, { "-256", 50 } });
+        write({ { "257", 60 }, { "-257", 70 }, { "255", 80 }, { "1", 11 }, { "-1", 21 } });
+        helper.ExecuteQuery(
+            "UPSERT INTO `" + tableName + "` (dec, val) VALUES "
+            "(Unwrap(" + TDecimal::DecCast("256") + "), 31), "
+            "(Unwrap(" + TDecimal::DecCast("-256") + "), 51), "
+            "(Unwrap(" + TDecimal::DecCast("0") + "), 41)");
+
+        helper.ReadData("SELECT COUNT(*) >= 2 FROM `" + tableName +
+            "/.sys/primary_index_portion_stats` WHERE Activity = 1", "[[%true]]");
+
+        const auto check = [&] {
+            const TVector<TQueryCheck> queries = {
+                { "SELECT dec, val FROM `" + tableName + "` ORDER BY dec",
+                    R"([["-257";[70]];["-256";[51]];["-1";[21]];["0";[41]];["1";[11]];["255";[80]];["256";[31]];["257";[60]]])" },
+                { "SELECT dec, val FROM `" + tableName + "` ORDER BY dec DESC",
+                    R"([["257";[60]];["256";[31]];["255";[80]];["1";[11]];["0";[41]];["-1";[21]];["-256";[51]];["-257";[70]]])" },
+                { "SELECT dec, val FROM `" + tableName + "` ORDER BY dec LIMIT 3",
+                    R"([["-257";[70]];["-256";[51]];["-1";[21]]])" },
+                { "SELECT dec, val FROM `" + tableName + "` ORDER BY dec DESC LIMIT 3",
+                    R"([["257";[60]];["256";[31]];["255";[80]]])" },
+                { "SELECT dec, val FROM `" + tableName + "` WHERE dec >= " + TDecimal::DecCast("-1") +
+                    " AND dec < " + TDecimal::DecCast("256") + " ORDER BY dec",
+                    R"([["-1";[21]];["0";[41]];["1";[11]];["255";[80]]])" },
+                { "SELECT dec, val FROM `" + tableName + "` WHERE dec > " + TDecimal::DecCast("0") +
+                    " AND dec <= " + TDecimal::DecCast("256") + " ORDER BY dec DESC LIMIT 2",
+                    R"([["256";[31]];["255";[80]]])" },
+                { "SELECT val FROM `" + tableName + "` WHERE dec = " + TDecimal::DecCast("256"), "[[[31]]]" },
+                { "SELECT COUNT(*) FROM `" + tableName + "`", "[[8u]]" },
+            };
+
+            for (const auto& query : queries) {
+                CheckOrExec(helper, query.Query, query.Expected, Scan);
+            }
+        };
+
+        check();
+
+        const auto compactions = csController->GetCompactionFinishedCounter().Val();
+        UNIT_ASSERT(TOneCompactionCommand().Execute(helper.GetKikimr()).IsSuccess());
+        UNIT_ASSERT_C(csController->GetCompactionFinishedCounter().Val() > compactions, "Decimal portions were not compacted");
+
+        check();
+    }
 
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();

@@ -256,8 +256,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
         IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NArrow::NMerger::TMergePartialStream mergeStream(
-            resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
+        NArrow::NMerger::TMergePartialStream mergeStream(resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false,
+            IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt, resultFiltered->GetIndexInfo().GetPrimaryKeyTypes(),
+            IIndexInfo::GetSnapshotColumnTypes());
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
@@ -366,7 +367,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                 SaverContext.GetStoragesManager(), EPortionType::Compacted, resultFiltered->GetIndexInfo());
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
-            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
+            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot(), IIndexInfo::GetSnapshotColumnTypes());
             constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(
                 *resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
             constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);

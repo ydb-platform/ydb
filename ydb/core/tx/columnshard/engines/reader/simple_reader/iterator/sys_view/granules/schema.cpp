@@ -9,7 +9,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeSha
     NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
     writer.Append<ui64>(pathId.GetRawValue());
     writer.Append<ui64>(tabletId);
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(), std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)));
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

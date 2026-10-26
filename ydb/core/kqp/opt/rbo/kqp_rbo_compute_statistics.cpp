@@ -496,7 +496,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // If the aggregate just adds more columns to existing key columns, use original key columns
     if (DistinctAll) {
         Props.Metadata->KeyColumns = TOrderedIUs<>(outputIUs.begin(), outputIUs.end());
-    } else if (IsDeduplication()) {
+    } else if (IsTrivialDistinct()) {
         // Like DistinctAll: the whole grouping tuple is unique, even when the
         // input has no known key.
         Props.Metadata->KeyColumns = KeyColumns;

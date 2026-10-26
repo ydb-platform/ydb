@@ -26,6 +26,16 @@ public:
         return *this;
     }
 
+    // Mark the key of the trivial DISTINCT over this read in the read program,
+    // which then yields only the key column. A nonzero `itemsLimit` stops
+    // column shards after that many distinct keys.
+    TPhysicalSourceBuilder& WithOlapDistinct(const TOlapDistinct& distinct, ui64 itemsLimit) {
+        Y_ENSURE(distinct.Read == &Read, "A pushed distinct must mark this read");
+        OlapDistinct = &distinct;
+        OlapDistinctLimit = itemsLimit;
+        return *this;
+    }
+
     TExprNode::TPtr BuildPhysicalOp() override;
 
 private:
@@ -36,6 +46,8 @@ private:
     TString GetOlapAggregateField(TInfoUnitId output, TStringBuf function) const;
     // Replace the program output with the aggregate rows and list their fields.
     TExprNode::TPtr AddOlapAggregate(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
+    // Mark the DISTINCT key in the program and list its only output field.
+    TExprNode::TPtr AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
     // A program projection that casts `column` to Double into `field`.
     TExprBase BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const;
     // Rebuild the aggregate's outputs, its keys and partial states, from the program row.
@@ -49,4 +61,6 @@ private:
     bool IsSysView;
     TString CarrierColumn;
     const TOlapAggregate* OlapAggregate = nullptr;
+    const TOlapDistinct* OlapDistinct = nullptr;
+    ui64 OlapDistinctLimit = 0;
 };

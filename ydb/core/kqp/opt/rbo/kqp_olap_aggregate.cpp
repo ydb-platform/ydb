@@ -1,4 +1,5 @@
 #include "kqp_olap_aggregate.h"
+#include "kqp_rbo.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -78,6 +79,36 @@ bool IsCountAll(const TOpAggregationTraits& traits, const TOpMap* map) {
     return TCoVoid::Match(body.Get()) || TCoDataCtor::Match(body.Get());
 }
 
+// The result column of a trivial DISTINCT holding `key`. DISTINCT names it after
+// its select item, which a projection pushed into the read may no longer name.
+TInfoUnitId GetDistinctKeyOutput(const TOpAggregate& aggregate, TInfoUnitId key) {
+    if (!aggregate.IsDistinctAll()) {
+        return key;
+    }
+    auto output = key;
+    for (const auto& [id, traits] : aggregate.GetAggregationTraits().Items()) {
+        if (traits.Input == key) {
+            output = id;
+            break;
+        }
+    }
+    // A split DISTINCT outputs the result columns from its final aggregate.
+    if (aggregate.GetAggregationPhase() != EOpPhase::Intermediate || aggregate.Parents.size() != 1
+        || aggregate.Parents.front().first->Kind != EOperator::Aggregate) {
+        return output;
+    }
+    const auto& finalAggregate = CastOperator<TOpAggregate>(*aggregate.Parents.front().first);
+    if (!finalAggregate.IsDistinctAll()) {
+        return output;
+    }
+    for (const auto& [id, traits] : finalAggregate.GetAggregationTraits().Items()) {
+        if (traits.Input == output) {
+            return id;
+        }
+    }
+    return output;
+}
+
 } // anonymous namespace
 
 bool IsOlapAverageCast(const TTypeAnnotationNode& columnType) {
@@ -149,6 +180,48 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
     }
 
     return result;
+}
+
+std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, const TString& forcedKey,
+                                               const TInfoUnitRegistry& registry) {
+    const auto& keys = aggregate.GetKeyColumns().Unordered();
+    if (!aggregate.IsTrivialDistinct() || keys.Size() != 1) {
+        return std::nullopt;
+    }
+    const IOperator* consumer = &aggregate;
+    const TOpMap* map = nullptr;
+    auto* input = aggregate.GetInput().Get();
+    if (input->Kind == EOperator::Map) {
+        map = CastOperator<TOpMap>(input);
+        consumer = map;
+        input = map->GetInput().Get();
+    }
+    if (input->Kind != EOperator::Source) {
+        return std::nullopt;
+    }
+    auto* read = CastOperator<TOpRead>(input);
+    if (read->GetTableStorageType() != NYql::EStorageType::ColumnStorage) {
+        return std::nullopt;
+    }
+
+    const auto key = *keys.begin();
+    const auto keyName = registry.Get(GetDistinctKeyOutput(aggregate, key)).GetColumnName();
+    Y_ENSURE(keyName == forcedKey,
+             "OptForceOlapPushdownDistinct = '" << forcedKey << "' does not match DISTINCT key column '" << keyName << "'");
+    // Column shards mark a stored or projected column, not a key computed in compute.
+    const auto column = ResolveReadColumn(key, *read, map);
+    if (!column || read->Limit || read->SortDir != ESortDir::None || read->Parents.size() != 1
+        || (map && map->Parents.size() != 1)) {
+        return std::nullopt;
+    }
+    // The program outputs only the key column, so the consumer may use nothing else.
+    const auto keyColumn = registry.Get(*column).GetColumnName();
+    for (const auto id : GetLiveIn(consumer, 0)) {
+        if (registry.Get(id).GetColumnName() != keyColumn) {
+            return std::nullopt;
+        }
+    }
+    return TOlapDistinct{read, *column};
 }
 
 } // namespace NKikimr::NKqp

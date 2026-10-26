@@ -35,4 +35,19 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
 bool IsOlapAverageCast(const TTypeAnnotationNode& columnType);
 bool HasOlapAverageCast(const TOlapAggregate& aggregate, TExprContext& ctx);
 
+// A trivial DISTINCT whose key the program of a column table read marks. Column
+// shards then skip repeated keys and stop after a forced number of distinct
+// keys. The aggregate still removes duplicates.
+struct TOlapDistinct {
+    TOpRead* Read = nullptr;
+    // The read column holding the key.
+    TInfoUnitId Key;
+};
+
+// Match a single key trivial DISTINCT over a column table read, whose key PRAGMA
+// OptForceOlapPushdownDistinct names as `forcedKey`. Throws when the pragma
+// names another key. Uses the liveness of the final plan.
+std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, const TString& forcedKey,
+                                               const TInfoUnitRegistry& registry);
+
 } // namespace NKikimr::NKqp

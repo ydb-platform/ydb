@@ -13,6 +13,7 @@ SRCS(
     kqp_rbo_global_ut.cpp
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_ut.cpp
+    kqp_rbo_olap_distinct_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 

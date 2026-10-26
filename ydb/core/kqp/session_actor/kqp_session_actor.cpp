@@ -488,6 +488,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->PathNormalizer.has_value(), "Query must capture path aliases at local admission");
         if (AdministrativeTerminationReason) {
             ReplyProcessError(ev, Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
             return;

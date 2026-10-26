@@ -114,7 +114,8 @@ public:
         TIntrusivePtr<TKqpDbCounters>& dbCounters,
         const TActorId& sender,
         const TActorContext& ctx,
-        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None,
+        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt);
 
     // warmupAttribution + counters must be set together (Client mode without
     // counters aborts in AccountWarmupHitImpl); no defaults to keep it explicit.

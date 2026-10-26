@@ -71,6 +71,7 @@ public:
         , DbCounters(dbCounters)
         , Sender(ev->Sender)
         , ProxyRequestId(ev->Cookie)
+        , PathNormalizer(ev->Get()->PathNormalizer.value())
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
         , RequestActorId(ev->Get()->GetRequestActorId())
@@ -159,6 +160,7 @@ public:
     TKqpDbCountersPtr DbCounters;
     TActorId Sender;
     ui64 ProxyRequestId = 0;
+    const std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;

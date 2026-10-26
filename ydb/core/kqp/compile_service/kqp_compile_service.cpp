@@ -276,13 +276,14 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+        PathNormalizer = AppData(ctx)->PathNormalizer;
 
         QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                 {tableServiceConfigKind, NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
@@ -481,6 +482,9 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
+        if (ev->Get()->PathNormalizer.has_value()) {
+            PathNormalizer = *ev->Get()->PathNormalizer;
+        }
 
         auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
         if (diff.has_value()) {
@@ -529,8 +533,27 @@ private:
         }
     }
 
+    template<class TRequest>
+    void BindPathNormalizer(TRequest& request) {
+        const auto querySnapshot = request.Query ? request.Query->PathNormalizer : nullptr;
+        YQL_ENSURE(!request.PathNormalizer.has_value() || !request.Query ||
+            (!querySnapshot && !request.QueryAst && !request.SplitExpr) || *request.PathNormalizer == querySnapshot,
+            "Conflicting query path alias snapshots");
+        YQL_ENSURE((!request.QueryAst && !request.SplitExpr) || request.PathNormalizer.has_value() || request.Query,
+            "Parsed query must carry its path alias snapshot");
+        if (!request.PathNormalizer.has_value()) {
+            // A parsed query's owning key is authoritative, including captured-null.
+            request.PathNormalizer = request.Query && (querySnapshot || request.QueryAst || request.SplitExpr)
+                ? querySnapshot : PathNormalizer;
+        }
+        if (request.Query) {
+            request.Query->PathNormalizer = *request.PathNormalizer;
+        }
+    }
+
     void PerformRequest(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
+        BindPathNormalizer(request);
 
         YDB_LOG_DEBUG_CTX(ctx, "Performing compile request",
             {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
@@ -558,7 +581,7 @@ private:
             dbCounters,
             ev->Sender,
             ctx,
-            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client, request.PathNormalizer);
 
         if (request.Uid) {
             if (compileResult) {
@@ -646,6 +669,7 @@ private:
 
     void PerformRequest(TEvKqp::TEvRecompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
+        BindPathNormalizer(request);
 
         YDB_LOG_DEBUG_CTX(ctx, "Received recompile request",
             {"sender", ev->Sender});
@@ -654,11 +678,12 @@ private:
         Counters->ReportRecompileRequestGet(dbCounters);
 
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
+        const bool snapshotMismatch = compileResult && compileResult->Query->PathNormalizer != *request.PathNormalizer;
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
 
-        if (compileResult || request.Query) {
+        if (!snapshotMismatch && (compileResult || request.Query)) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
@@ -722,6 +747,14 @@ private:
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
+        const auto cached = QueryCache->FindByUid(compileResult->Uid, false);
+        if (cached && cached->Query->PathNormalizer != compileRequest.Query.PathNormalizer) {
+            ReplyError(compileRequest.Sender, compileRequest.Uid, Ydb::StatusIds::NOT_FOUND,
+                {NYql::TIssue("Query path alias snapshot changed")}, ctx, compileRequest.Cookie,
+                std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            ProcessQueue(ctx);
+            return;
+        }
 
         YDB_LOG_DEBUG_CTX(ctx, "Received response",
             {"sender", compileRequest.Sender},
@@ -1102,6 +1135,7 @@ private:
 
 private:
     TKqpQueryCachePtr QueryCache;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     EDatabaseType DatabaseType = EDatabaseType::Unknown;
     bool DatabaseTypeCheckScheduled = false;
     TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
@@ -1387,7 +1421,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
     const TActorContext& ctx,
-    EWarmupAttributionMode warmupAttribution)
+    EWarmupAttributionMode warmupAttribution,
+    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1399,6 +1434,9 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
         auto compileResult = FindByUidImpl(*uid, promote);
         const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
+        if (compileResult && pathNormalizer.has_value() && compileResult->Query->PathNormalizer != *pathNormalizer) {
+            compileResult = nullptr;
+        }
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
@@ -1583,7 +1621,7 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings, query.PathNormalizer};
 }
 
 //

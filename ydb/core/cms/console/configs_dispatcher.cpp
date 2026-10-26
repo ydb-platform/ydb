@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/init/mock.h>
 
@@ -74,6 +75,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
     (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
     (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -316,6 +318,8 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    TString PathAliasesConfig;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     const TString StartupConfigYaml;
     const TString StartupStorageYaml;
     NKikimrConfig::TAppConfig CandidateStartupConfig;
@@ -373,6 +377,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , PathAliasesConfig(initInfo.InitialConfig.GetResourcePathPrefixMapping().SerializeAsString())
         , StartupConfigYaml(initInfo.StartupConfigYaml)
         , StartupStorageYaml(initInfo.StartupStorageYaml)
         , CandidateStartupConfig(initInfo.InitialConfig)
@@ -387,8 +392,10 @@ void TConfigsDispatcher::Bootstrap()
 {
     YDB_LOG_DEBUG("TConfigsDispatcher Bootstrap");
 
+    PathNormalizer = AppData()->PathNormalizer;
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
+        mon->UpdatePathNormalizer(PathNormalizer);
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TActivationContext::ActorSystem(), SelfId());
     }
@@ -451,6 +458,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
     // Parsed once when UpdateInProcess was built; share the (read-only) result.
     notification->OpaqueConfigs = subscription->UpdateInProcess->OpaqueConfigs;
+    notification->PathNormalizer = subscription->UpdateInProcess->PathNormalizer;
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
         {"subscriber", subscriber},
@@ -1321,6 +1329,30 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     std::swap(YamlProtoConfig, newYamlProtoConfig);
 
+    const auto aliasKinds = FilterKinds(KindsToBitMap(TVector<ui32>{
+        NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}));
+    if (!aliasKinds.Empty()) {
+        const auto& source = YamlConfigEnabled ? YamlProtoConfig : CurrentConfig;
+        const auto& aliases = source.HasResourcePathPrefixMapping()
+            ? source.GetResourcePathPrefixMapping() : BaseConfig.GetResourcePathPrefixMapping();
+        const TString serialized = aliases.SerializeAsString();
+        if (serialized != PathAliasesConfig) {
+            try {
+                std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer;
+                if (aliases.RulesSize()) {
+                    normalizer = std::make_shared<NPathAliasing::TPathNormalizer>(aliases);
+                }
+                PathNormalizer = std::move(normalizer);
+                PathAliasesConfig = serialized;
+                if (AppData()->Mon) {
+                    AppData()->Mon->UpdatePathNormalizer(PathNormalizer);
+                }
+            } catch (const yexception& e) {
+                YDB_LOG_ERROR("Invalid path aliases configuration", {"error", e.what()});
+            }
+        }
+    }
+
     THashSet<ui32> affectedKinds;
     for (const auto& kind : ev->Get()->Record.GetAffectedKinds()) {
         affectedKinds.insert(kind);
@@ -1396,6 +1428,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
+            subscription->UpdateInProcess->PathNormalizer = PathNormalizer;
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
@@ -1580,6 +1613,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
+            subscription->UpdateInProcess->PathNormalizer = PathNormalizer;
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }

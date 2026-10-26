@@ -19,6 +19,7 @@
 #include <util/generic/strbuf.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimrConfig {
 class TAppConfig;
@@ -28,6 +29,9 @@ namespace NKikimr {
 // Only used below as a pointer in a factory-function declaration; forward
 // declaration avoids pulling ydb/core/base/blobstorage.h into this header.
 class TTabletStorageInfo;
+namespace NPathAliasing {
+class TPathNormalizer;
+}
 }
 
 namespace NKikimr::NConsole {
@@ -331,6 +335,8 @@ namespace TEvConsole {
         // produced by the configs dispatcher via an injected OpaqueConfigParser.
         // .second != nullptr - config either not empty and present or not added into map
         THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
+        // Node-local: absent means no update, engaged-null disables aliases.
+        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

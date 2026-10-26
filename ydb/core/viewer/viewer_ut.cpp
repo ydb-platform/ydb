@@ -925,18 +925,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
             const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
-            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("path"), "/Root/a,/alias/b");
-            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, true).Get("path"), "/Root/a,/Root/b");
-            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("topic"), "relative");
+            const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
+                [normalizer = AppData()->PathNormalizer](TStringBuf path) { return normalizer->NormalizePath(path); });
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
             NJson::TJsonValue jsonPaths;
             UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
-            NormalizePathParameters(jsonPaths);
+            NormalizePathParameters(jsonPaths, normalizer);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][1].GetString(), "/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["message"].GetString(), "/alias");
             jsonPaths["path"] = "/alias/a,/alias/b";
-            NormalizePathParameters(jsonPaths, true);
+            NormalizePathParameters(jsonPaths, normalizer, true);
             UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"].GetString(), "/Root/a,/Root/b");
 
             const auto& request = *ev->Get();

@@ -7,6 +7,7 @@
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>

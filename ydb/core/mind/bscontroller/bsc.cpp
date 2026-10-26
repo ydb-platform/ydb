@@ -17,6 +17,7 @@
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -171,6 +172,12 @@ bool TBlobStorageController::TGroupInfo::FillInOwnGroupParameters(
     return res;
 }
 
+ui64 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value) const {
+    const TBlobStorageGroupType type(ErasureSpecies);
+    const auto scaled = static_cast<unsigned __int128>(value) * VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    return scaled > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(scaled);
+}
+
 bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
         bool useExpectedSlotCount) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
@@ -234,18 +241,17 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
 
     // and recalculate it to the total size of the group according to the erasure
     TBlobStorageGroupType type(ErasureSpecies);
-    const double factor = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     if (size) {
-        pb->SetSpace(Min<ui64>(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), *size * factor));
+        pb->SetSpace(Min<ui64>(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), ScaleGroupResource(*size)));
     }
     if (iops) {
         pb->SetIOPS(Min<double>(pb->HasIOPS() ? pb->GetIOPS() : Max<double>(), *iops * VDisksInGroup.size() / type.TotalPartCount()));
     }
     if (readThroughput) {
-        pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), *readThroughput * factor));
+        pb->SetReadThroughput(Min<ui64>(pb->HasReadThroughput() ? pb->GetReadThroughput() : Max<ui64>(), ScaleGroupResource(*readThroughput)));
     }
     if (writeThroughput) {
-        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetWriteThroughput() : Max<ui64>(), *writeThroughput * factor));
+        pb->SetWriteThroughput(Min<ui64>(pb->HasWriteThroughput() ? pb->GetWriteThroughput() : Max<ui64>(), ScaleGroupResource(*writeThroughput)));
     }
     if (occupancy) {
         pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
@@ -258,15 +264,13 @@ bool TBlobStorageController::TGroupInfo::FillInVDiskResources(NKikimrBlobStorage
     Y_ABORT_UNLESS(Topology);
     TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
 
-    TBlobStorageGroupType type(ErasureSpecies);
-    const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const auto& m = vslot->Metrics;
         if (m.HasAvailableSize()) {
-            pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), f * m.GetAvailableSize()));
+            pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), ScaleGroupResource(m.GetAvailableSize())));
         }
         if (m.HasAllocatedSize()) {
-            pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
+            pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, ScaleGroupResource(m.GetAllocatedSize())));
         }
         if (m.HasCapacityAlert()) {
             pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetCapacityAlert()) : m.GetCapacityAlert());
@@ -315,6 +319,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
 
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
+    BridgeSyncCounters = std::make_unique<TBridgeSyncCounters>(GetServiceCounters(AppData()->Counters, "bridge"));
 
     // initiate timer
     ScrubState.HandleTimer();
@@ -338,6 +343,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
+
+    // static entities may go away (e.g. along with the pile removed), so that they are deleted from system views
+    for (const auto& [pdiskId, _] : prevStaticPDisks) {
+        SysViewChangedPDisks.insert(pdiskId);
+    }
+    for (const auto& [vslotId, _] : prevStaticVSlots) {
+        SysViewChangedVSlots.insert(vslotId);
+    }
+    for (const auto& [groupId, _] : prevStaticGroups) {
+        SysViewChangedGroups.insert(groupId);
+    }
 
     const TMonotonic mono = TActivationContext::Monotonic();
 
@@ -417,6 +433,22 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             ConsoleInteraction->Stop(); // distconf manages the Console
         } else {
             ConsoleInteraction->Start(); // we manage the Console now
+        }
+    }
+
+    if (Loaded && prevStorageConfig) {
+        const auto& previous = prevStorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        const auto& current = StorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        if (!std::equal(previous.begin(), previous.end(), current.begin(), current.end(), [](const auto& a, const auto& b) {
+                return google::protobuf::util::MessageDifferencer::Equals(a, b);
+            })) {
+            for (auto& [groupId, group] : GroupMap) {
+                group->CalculateLayoutStatus(this, group->Topology.get(), [&] {
+                    return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                        GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
+                });
+            }
+            InitializeSelfHealState();
         }
     }
 
@@ -839,6 +871,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             return;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateRemoveBridgePile(pileId, std::exchange(h, {})));
+            return;
+        }
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
@@ -864,6 +909,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                     rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
+            }
+
+            if (auto error = ValidateStoragePoolPileOverrides(storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason(*error);
+                break;
             }
 
             const ui64 cookie = NextValidationCookie++;

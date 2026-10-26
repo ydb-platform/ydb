@@ -105,6 +105,16 @@ namespace NKikimr::NStorage {
                EvBindingTimeout,
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
+               EvUpdateBridgeFeatureRequirement,
+            };
+
+            struct TEvUpdateBridgeFeatureRequirement
+                : TEventLocal<TEvUpdateBridgeFeatureRequirement, EvUpdateBridgeFeatureRequirement> {
+                const std::optional<ui32> RequiredLevel;
+
+                explicit TEvUpdateBridgeFeatureRequirement(std::optional<ui32> requiredLevel)
+                    : RequiredLevel(requiredLevel)
+                {}
             };
 
             struct TEvScatterTaskTimeout : TEventLocal<TEvScatterTaskTimeout, EvScatterTaskTimeout> {
@@ -151,6 +161,7 @@ namespace NKikimr::NStorage {
             ui32 RootNodeId = 0; // this is the terminal node id for the whole binding chain
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
+            bool SupportsDirectRootQueries = false; // advertised by the direct parent
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
@@ -162,6 +173,7 @@ namespace NKikimr::NStorage {
                 , RootNodeId(origin.RootNodeId)
                 , Cookie(origin.Cookie)
                 , SessionId(origin.SessionId)
+                , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -269,6 +281,12 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
 
+        // the cluster runs in bridge mode; the one not converted yet runs single pile in implicit state, while it is the
+        // ordinary cluster for configuration management
+        bool IsBridged() const {
+            return BridgeInfo && !BridgeInfo->IsImplicit;
+        }
+
         // currently active storage config
         TStorageConfigPtr StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
@@ -373,6 +391,11 @@ namespace NKikimr::NStorage {
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
+        class TStateStorageSelfHealRefreshActor;
+        std::optional<TActorId> StateStorageSelfHealRefreshActor;
+        bool StateStorageSelfHealRefreshStarted = false;
+        void StartStateStorageSelfHealRefresh();
+        void CancelStateStorageSelfHealRefresh();
 
         // root node operation
         enum class ERootState {
@@ -391,6 +414,7 @@ namespace NKikimr::NStorage {
             bool MindPrev; // mind previous configuration quorum
             ui64 ConfigRecoveryGeneration;
             bool AdvancesConflictingGeneration = false;
+            bool RecoveryProposition = false;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -425,7 +449,9 @@ namespace NKikimr::NStorage {
         ui64 ProposeRequestCookie = 0;
         ui64 CommitRequestCookie = 0;
         bool ProposeRequestInFlight = false;
+        bool CommitRequestInFlight = false;
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
+        TString ProposedConfigYaml;
         std::vector<std::tuple<TActorId, TString, bool, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching
@@ -565,12 +591,14 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
             bool RequiresGenerationAdvance = false;
+            bool RequiresRecoveryProposition = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false,
+            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const;
@@ -641,7 +669,7 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration = false);
+            bool advancesConflictingGeneration = false, bool recoveryProposition = false);
 
         void CheckForConfigUpdate();
 
@@ -649,6 +677,7 @@ namespace NKikimr::NStorage {
         static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> UpdateBridgeGroupStateGenerations(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -679,6 +708,12 @@ namespace NKikimr::NStorage {
         // its groups; baseConfig provides PDisks already known to BSC.
         std::optional<TString> AddBridgePileToConfig(NKikimrBlobStorage::TStorageConfig *config, TBridgePileId pileId,
             const NKikimrBlobStorage::TBaseConfig *baseConfig);
+
+        // Finish removal of DISCONNECTED pile from the cluster in the config, when BSC has deleted parts of its groups in
+        // the pile: drop parts of bridged static groups (their VDisks are destroyed by their nodes) and state storage ring
+        // groups of the pile, forget its sync state, make it INACTIVE and clear the pending operation.
+        static std::optional<TString> RemoveBridgePileFromConfig(NKikimrBlobStorage::TStorageConfig *config,
+            TBridgePileId pileId);
 
         TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config);
         static TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
@@ -765,7 +800,7 @@ namespace NKikimr::NStorage {
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
         THashSet<ui32> BridgeCapableDynamicNodes; // subset of ConnectedDynamicNodes running with BridgeConfig
-        THashSet<ui32> PileListChangeCapableDynamicNodes; // subset of the above supporting changes of the list of piles
+        THashMap<ui32, ui32> DynamicNodeFeatureLevels; // bridge feature levels of the ConnectedDynamicNodes reporting any
         ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
@@ -780,8 +815,8 @@ namespace NKikimr::NStorage {
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void Handle(TEvNodeWardenDynamicConfigSubscribe::TPtr ev);
-        // pileListChangeCapable tells whether the node takes pile ids from pile registry, see PileListChanged
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache, bool pileListChangeCapable);
+        // the node doesn't get the config requiring higher bridge feature level than the one it supports
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache, ui32 bridgeFeatureLevel);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -820,6 +855,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void OnConsolePipeError();
+        void ResetConsoleSession();
         bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml, bool allowUnknownFields);
 
         static std::optional<TString> UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config, const TString& yaml,
@@ -927,6 +963,32 @@ namespace NKikimr::NStorage {
         return config.GetClusterStateDetails().GetPileRegistry().GetPileListChanged();
     }
 
+    // Levels of bridge features supported by nodes; nodes supporting lower level than the config requires can't work with
+    // it, so they don't get it and they are not connected to.
+    enum EBridgeFeatureLevel : ui32 {
+        // pile ids are taken from pile registry; older versions report it by PileListChangeCapable flag
+        BridgeFeatureLevelPileList = 1,
+        // piles are added and removed with pending operations, static group ids are never reused, static groups going
+        // away are ejected, inline pile may be removed
+        BridgeFeatureLevelPileOps = 2,
+        BridgeFeatureLevelNonUniformStorage = 3,
+        BridgeFeatureLevelPileOverrides = 4,
+    };
+
+    // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOverrides;
+
+    inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
+        const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+        return Max<ui32>(registry.GetRequiredFeatureLevel(),
+            registry.GetPileListChanged() ? BridgeFeatureLevelPileList : 0);
+    }
+
+    // bridge feature level of the node from its report (older versions report only PileListChangeCapable flag)
+    inline ui32 GetReportedBridgeFeatureLevel(ui32 level, bool pileListChangeCapable) {
+        return level ? level : pileListChangeCapable ? BridgeFeatureLevelPileList : 0;
+    }
+
     // Resolve pile of the node against pile registry (as GetPileRegistry provides it, or nullopt for the config that is
     // not a bridged one): default pile (invalid pile id) when there is no registry, nullopt when the pile can't be
     // resolved.
@@ -951,6 +1013,17 @@ namespace NKikimr::NStorage {
     // and make every static group an inline pile of itself.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
         const NKikimrConfig::TBridgeConfig& bridgeConfig);
+
+    // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
+    // destroyed have older generations and keep them.
+    void UpdateStaticVDiskGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss,
+        const THashMap<TGroupId, ui32>& newGenerations);
+
+    // Make parts of bridged static groups in the piles unsynced as of the cluster state generation provided: they are
+    // synced from the very beginning, and generations of all the parts and of their bridge proxy groups are bumped, so
+    // that requests routed by older group state are refused by VDisks.
+    void ResetStaticGroupPileParts(NKikimrBlobStorage::TStorageConfig *config, const std::vector<TBridgePileId>& pileIds,
+        ui64 becameUnsyncedGeneration);
 
 } // NKikimr::NStorage
 

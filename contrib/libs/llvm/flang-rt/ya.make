@@ -9,19 +9,35 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.1.8)
+VERSION(23.1.3)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-23.1.3.tar.gz)
 
 ADDINCL(
     contrib/libs/llvm/flang-rt/flang-rt
     contrib/libs/llvm/flang-rt/flang-rt/include
     contrib/libs/llvm/flang-rt/flang/include
+    contrib/libs/llvm/flang-rt/libc
 )
 
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
+
+CFLAGS(
+    -DLIBC_NAMESPACE=__llvm_libc_common_utils
+    -DLIBC_THREAD_MODE=LIBC_THREAD_MODE_SINGLE
+)
+
+IF (OS_LINUX AND ARCH_AARCH64)
+    CFLAGS(
+        -DFLANG_RT_SUPPORTS_REAL16=1
+    )
+ELSE()
+    CFLAGS(
+        -DFLANG_RT_SUPPORTS_REAL16=0
+    )
+ENDIF()
 
 SRCS(
     flang-rt/lib/runtime/ISO_Fortran_binding.cpp
@@ -40,7 +56,9 @@ SRCS(
     flang-rt/lib/runtime/derived.cpp
     flang-rt/lib/runtime/descriptor-io.cpp
     flang-rt/lib/runtime/descriptor.cpp
-    flang-rt/lib/runtime/dot-product.cpp
+    flang-rt/lib/runtime/dot-product-complex.cpp
+    flang-rt/lib/runtime/dot-product-integer.cpp
+    flang-rt/lib/runtime/dot-product-real.cpp
     flang-rt/lib/runtime/edit-input.cpp
     flang-rt/lib/runtime/edit-output.cpp
     flang-rt/lib/runtime/environment.cpp
@@ -48,20 +66,37 @@ SRCS(
     flang-rt/lib/runtime/execute.cpp
     flang-rt/lib/runtime/extensions.cpp
     flang-rt/lib/runtime/external-unit.cpp
-    flang-rt/lib/runtime/extrema.cpp
+    flang-rt/lib/runtime/extrema-maxloc-dim.cpp
+    flang-rt/lib/runtime/extrema-maxloc.cpp
+    flang-rt/lib/runtime/extrema-minloc-dim.cpp
+    flang-rt/lib/runtime/extrema-minloc.cpp
+    flang-rt/lib/runtime/extrema-value.cpp
     flang-rt/lib/runtime/file.cpp
-    flang-rt/lib/runtime/findloc.cpp
+    flang-rt/lib/runtime/findloc-dim.cpp
+    flang-rt/lib/runtime/findloc-total.cpp
     flang-rt/lib/runtime/format.cpp
     flang-rt/lib/runtime/inquiry.cpp
     flang-rt/lib/runtime/internal-unit.cpp
     flang-rt/lib/runtime/io-api-minimal.cpp
+    flang-rt/lib/runtime/io-api-server.cpp
     flang-rt/lib/runtime/io-api.cpp
     flang-rt/lib/runtime/io-error.cpp
     flang-rt/lib/runtime/io-stmt.cpp
     flang-rt/lib/runtime/iostat.cpp
+    flang-rt/lib/runtime/iso_fortran_env_impl.cpp
     flang-rt/lib/runtime/main.cpp
-    flang-rt/lib/runtime/matmul-transpose.cpp
-    flang-rt/lib/runtime/matmul.cpp
+    flang-rt/lib/runtime/matmul-complex.cpp
+    flang-rt/lib/runtime/matmul-extypes-int16.cpp
+    flang-rt/lib/runtime/matmul-extypes-real10.cpp
+    flang-rt/lib/runtime/matmul-extypes-real16.cpp
+    flang-rt/lib/runtime/matmul-integer.cpp
+    flang-rt/lib/runtime/matmul-real.cpp
+    flang-rt/lib/runtime/matmul-transpose-complex.cpp
+    flang-rt/lib/runtime/matmul-transpose-extypes-int16.cpp
+    flang-rt/lib/runtime/matmul-transpose-extypes-real10.cpp
+    flang-rt/lib/runtime/matmul-transpose-extypes-real16.cpp
+    flang-rt/lib/runtime/matmul-transpose-integer.cpp
+    flang-rt/lib/runtime/matmul-transpose-real.cpp
     flang-rt/lib/runtime/memory.cpp
     flang-rt/lib/runtime/misc-intrinsic.cpp
     flang-rt/lib/runtime/namelist.cpp
@@ -75,6 +110,7 @@ SRCS(
     flang-rt/lib/runtime/reduce.cpp
     flang-rt/lib/runtime/reduction.cpp
     flang-rt/lib/runtime/stat.cpp
+    flang-rt/lib/runtime/stl-overrides.cpp
     flang-rt/lib/runtime/stop.cpp
     flang-rt/lib/runtime/sum.cpp
     flang-rt/lib/runtime/support.cpp
@@ -82,6 +118,7 @@ SRCS(
     flang-rt/lib/runtime/terminator.cpp
     flang-rt/lib/runtime/time-intrinsic.cpp
     flang-rt/lib/runtime/tools.cpp
+    flang-rt/lib/runtime/trampoline.cpp
     flang-rt/lib/runtime/transformational.cpp
     flang-rt/lib/runtime/type-code.cpp
     flang-rt/lib/runtime/type-info.cpp

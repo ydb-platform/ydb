@@ -363,18 +363,18 @@ private:
     class TDescription {
     private:
         std::shared_ptr<NAccessor::IChunkedArray> InputAccessor;
-        std::string_view JsonPath;
+        NAccessor::NSubColumns::TParsedJsonPath JsonPath;
 
     public:
-        TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
+        TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, NAccessor::NSubColumns::TParsedJsonPath jsonPath)
             : InputAccessor(inputAccessor)
-            , JsonPath(jsonPath) {
+            , JsonPath(std::move(jsonPath)) {
         }
 
         const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {
             return InputAccessor;
         }
-        std::string_view GetJsonPath() const {
+        const NAccessor::NSubColumns::TParsedJsonPath& GetJsonPath() const {
             return JsonPath;
         }
     };
@@ -392,11 +392,12 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        if (const auto pathValidation = NAccessor::NSubColumns::ValidateJsonPath(svPath); pathValidation.IsFail()) {
-            return pathValidation;
+        auto parsedPath = NAccessor::NSubColumns::ParseJsonPath(svPath);
+        if (parsedPath.IsFail()) {
+            return TConclusionStatus::Fail(parsedPath.GetErrorMessage());
         }
 
-        return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
+        return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), parsedPath.DetachResult());
     }
 
     virtual TString GetClassName() const override {
@@ -410,7 +411,8 @@ private:
 
 protected:
     virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const;
-    virtual std::shared_ptr<IChunkedArray> ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const;
+    virtual std::shared_ptr<IChunkedArray> ExtractArray(
+        const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const;
 
 public:
 };
@@ -434,7 +436,7 @@ private:
 
     static const inline TFactory::TRegistrator<TExistsJsonPath> Registrator = TFactory::TRegistrator<TExistsJsonPath>(GetClassNameStatic());
     virtual std::shared_ptr<IChunkedArray> ExtractArray(
-        const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const override;
+        const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const override;
     virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const override;
 
 public:

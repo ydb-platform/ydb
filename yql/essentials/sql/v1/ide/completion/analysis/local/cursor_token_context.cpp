@@ -151,15 +151,20 @@ bool GetStatement(
         return false;
     }
 
+    constexpr TStringBuf utf8Bom = "\xEF\xBB\xBF";
+    const size_t bomSize = input.Text.StartsWith(utf8Bom) ? utf8Bom.size() : 0;
+
     size_t& cursor = output_position;
     cursor = 0;
     for (const auto& statement : statements) {
-        if (input.CursorPosition < cursor + statement.size()) {
-            output.Text = TStringBuf(input.Text).SubStr(cursor, statement.size());
+        // ANTLR omits the BOM from tokens, but it occupies bytes in the first original statement.
+        const size_t statementSize = statement.size() + bomSize * (cursor == 0);
+        if (input.CursorPosition < cursor + statementSize) {
+            output.Text = TStringBuf(input.Text).SubStr(cursor, statementSize);
             output.CursorPosition = input.CursorPosition - cursor;
             return true;
         }
-        cursor += statement.size();
+        cursor += statementSize;
     }
 
     output.Text = TStringBuf(input.Text);

@@ -10,6 +10,7 @@
 #include "types.h"
 #include "resources.h"
 #include "stat_processor.h"
+#include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
@@ -19,6 +20,7 @@
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
@@ -103,7 +105,9 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxConvertToBridge;
+    class TTxBridgePileOperation;
     class TTxAddBridgePile;
+    class TTxRemoveBridgePile;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -922,6 +926,8 @@ public:
             }
         }
 
+        ui64 ScaleGroupResource(ui64 value) const;
+
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
         bool FillInOwnGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params) const;
@@ -1232,6 +1238,15 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
+            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
+
+            void SetLocation(const TString& serialized) {
+                Location = serialized;
+                RequiredLocation = std::make_shared<const TNodeLocation>(TNodeLocation::FromSerialized, serialized);
+            }
+
+            static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
 
             template<typename TRowset>
             static TPDiskFilter CreateFromRowset(const TRowset &rowset) {
@@ -1251,10 +1266,14 @@ public:
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
                 }
+                if (rowset.template HaveValue<T::Location>()) {
+                    result.SetLocation(rowset.template GetValue<T::Location>());
+                }
                 return result;
             }
 
-            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric) const {
+            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric,
+                    const TNodeLocation& location) const {
                 TPDiskCategory c(category);
 
                 // determine disk type in terms of configuration
@@ -1266,11 +1285,12 @@ public:
                 return (!Type || *Type == type)
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
-                    && (!Kind || *Kind == kind);
+                    && (!Kind || *Kind == kind)
+                    && (!RequiredLocation || MatchPDiskLocation(location, *RequiredLocation));
             }
 
-            bool MatchPDisk(const TPDiskInfo& pdisk) const {
-                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric);
+            bool MatchPDisk(const TPDiskInfo& pdisk, const TNodeLocation& location) const {
+                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric, location);
             }
 
             void Output(IOutputStream& s) const {
@@ -1288,6 +1308,9 @@ public:
                 if (const auto& x = Kind) {
                     s << comma() << "Kind:" << *x;
                 }
+                if (Location) {
+                    s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1302,14 +1325,26 @@ public:
             }
 
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind);
+            void Save(IOutputStream* s) const {
+                ::SaveMany(s, Type, SharedWithOs, ReadCentric, Kind, Location);
+            }
+
+            void Load(IInputStream* s) {
+                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
+                Location.Clear();
+                RequiredLocation.reset();
+                if (location) {
+                    SetLocation(*location);
+                }
+            }
         };
 
         Table::Name::Type Name;
@@ -1340,6 +1375,16 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+
+        void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
+            RealmLevelBegin = geometry.GetRealmLevelBegin();
+            RealmLevelEnd = geometry.GetRealmLevelEnd();
+            DomainLevelBegin = geometry.GetDomainLevelBegin();
+            DomainLevelEnd = geometry.GetDomainLevelEnd();
+            NumFailRealms = geometry.GetNumFailRealms();
+            NumFailDomainsPerFailRealm = geometry.GetNumFailDomainsPerFailRealm();
+            NumVDisksPerFailDomain = geometry.GetNumVDisksPerFailDomain();
+        }
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1656,6 +1701,7 @@ private:
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
+    std::unique_ptr<TBridgeSyncCounters> BridgeSyncCounters;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
@@ -1776,6 +1822,7 @@ private:
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
     void PushStaticGroupsToSelfHeal();
+    THashSet<TGroupId> StaticGroupsInSelfHeal; // the ones last pushed, to delete them when they go away
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();
@@ -2117,6 +2164,8 @@ private:
     // validate addition of the pile against the storage config being proposed, then send the response
     ITransaction* CreateTxValidateAddBridgePile(TBridgePileId pileId, NKikimrBlobStorage::TStorageConfig&& storageConfig,
         std::unique_ptr<IEventHandle> response);
+    // validate removal of the pile, then send the response
+    ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2186,6 +2235,7 @@ private:
         const TGroupId TargetGroupId;
         THashMap<TNodeId, TPerNodeInfo> NodeIds;
         bool InCommit = false;
+        ui64 StaticCommitCookie = 0;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2194,6 +2244,7 @@ private:
     };
 
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
+    ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 
@@ -2231,15 +2282,33 @@ private:
     // perform BSC part of the pending pile operation from ClusterStateDetails, if there is one
     void CheckBridgePileOperation();
     void OnBridgePileOperationStepDone(TBridgePileId pileId,
-        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, std::optional<TString> error);
+        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, ui64 operationId,
+        std::optional<TString> error);
     void HandleRetryBridgePileOperation();
 
     // add the part in the pile to every bridged group lacking it; added gets (bridge proxy group, new part) pairs
     void AddBridgePileGroups(TConfigState& state, TBridgePileId pileId, ui64 becameUnsyncedGeneration,
         std::vector<std::tuple<TGroupId, TGroupId>> *added);
 
+    // delete the part in the pile of every bridged group (inline pile keeps serving as bridge proxy group only); every
+    // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
+    // groups that have lost their part
+    size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
+
+    // sync state of the unsynced pile from the cluster state details, nullptr if the pile is not unsynced
+    const NKikimrBridge::TClusterStateDetails::TPileSyncState *FindPileSyncState(TBridgePileId pileId) const;
+
+    // the pile is being removed, so new groups get no parts there
+    bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
+    // no part in the pile, the addition gives it to them
+    bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
+    ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
+
+    void UpdateBridgeSyncCounters();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
@@ -2467,6 +2536,14 @@ public:
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
+
+        // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
+        // piles: the ones not reset for the current sync of the pile yet are reset now, and if everything is synced
+        // already (e.g. the notification got lost with the restart), distconf gets notified
+        if (StorageConfig && BridgeInfo) {
+            RecheckUnsyncedBridgePiles = true;
+            CheckUnsyncedBridgePiles();
+        }
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
@@ -2846,6 +2923,11 @@ public:
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
+    static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+    TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);

@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
@@ -16,11 +18,15 @@ from github_actions.export_runner_capacity import (
     build_create_capacity_table_sql,
     build_snapshot_rows,
     bytes_to_gib,
+    cloud_list,
     count_assigned_and_queued,
+    fetch_quota,
+    iam_token,
     github_jobs_incomplete,
     hosts_that_fit,
     index_runner_jobs,
     instance_nrd_gib,
+    display_workflow,
     enrich_run_pull,
     is_ghrun,
     is_github_hosted_job,
@@ -256,6 +262,10 @@ class SnapshotRowsTest(unittest.TestCase):
             "main",
         )
         self.assertEqual(target_branch({"head_branch": "stable-25-1"}), "stable-25-1")
+        self.assertEqual(
+            target_branch({"event": "pull_request_target", "head_branch": "feature"}),
+            "",
+        )
         indexed = index_runner_jobs([
             (
                 {"name": "PR-check", "event": "pull_request", "display_title": "dist-cache miss", "head_branch": "feature", "pull_requests": [{"number": 55140, "base": {"ref": "main"}}]},
@@ -362,17 +372,68 @@ class SnapshotRowsTest(unittest.TestCase):
 
     def test_enrich_keeps_pr_and_target_branch(self):
         run = {
+            "name": "PR-check",
             "event": "pull_request_target",
-            "head_branch": "codex/cuthistory-main",
-            "display_title": "Cut history",
-            "pull_requests": [{"number": 53649, "title": "Cut history", "base": {"ref": "main"}}],
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
         }
         out = enrich_run_pull("ydb-platform", "ydb", run)
-        self.assertEqual(pull_info(out), ("53649", "Cut history"))
+        self.assertEqual(pull_info(out), ("42", "fix it"))
         self.assertEqual(target_branch(out), "main")
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)
-        self.assertEqual(rows[0]["pr_number"], "53649")
+        self.assertEqual(rows[0]["pr_number"], "42")
         self.assertEqual(rows[0]["branch"], "main")
+        self.assertEqual(rows[0]["workflow"], "PR-check")
+
+    def test_postcommit_is_not_grouped_as_pr_check(self):
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "push"},
+                {"name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            "Postcommit",
+        )
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "pull_request_target"},
+                {"name": "Build and test relwithdebinfo"},
+            ),
+            "PR-check",
+        )
+        rows = queue_jobs([
+            (
+                {"id": 1, "name": "PR-check", "event": "push", "head_branch": "main"},
+                {"id": 11, "status": "queued", "name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            (
+                {
+                    "id": 2,
+                    "name": "PR-check",
+                    "event": "pull_request_target",
+                    "head_branch": "feature",
+                    "display_title": "fix it",
+                    "pull_requests": [{"number": 1, "title": "fix it", "base": {"ref": "main"}}],
+                },
+                {"id": 22, "status": "queued", "name": "Build and test relwithdebinfo"},
+            ),
+        ], NOW)
+        by_job = {row["job_name"]: row for row in rows}
+        self.assertEqual(by_job["Postcommit · Build and test relwithdebinfo"]["workflow"], "Postcommit")
+        self.assertIsNone(by_job["Postcommit · Build and test relwithdebinfo"]["pr_number"])
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["workflow"], "PR-check")
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["branch"], "main")
+
+    def test_enrich_strips_pulls_on_push(self):
+        run = {
+            "event": "push",
+            "head_branch": "main",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
+        }
+        out = enrich_run_pull("ydb-platform", "ydb", run)
+        self.assertEqual(out["pull_requests"], [])
+        self.assertEqual(pull_info(out), (None, None))
+        self.assertEqual(target_branch(out), "main")
 
     def test_short_in_progress_page_plus_long_queue_is_incomplete(self):
         self.assertTrue(github_jobs_incomplete(124, 24, 96))
@@ -444,6 +505,55 @@ class SnapshotRowsTest(unittest.TestCase):
         self.assertEqual(second, "unnamed@f1")
         self.assertEqual(third, "unnamed@f1.3")
         self.assertEqual(len({first, second, third}), 3)
+
+
+class CloudApiTest(unittest.TestCase):
+    def test_iam_token_uses_ci_ydb_key(self):
+        with mock.patch.dict(os.environ, {"CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/tmp/sa.json"}, clear=False):
+            with mock.patch("github_actions.export_runner_capacity.os.path.isfile", return_value=True):
+                with mock.patch(
+                    "github_actions.export_runner_capacity.iam_token_from_key_file",
+                    return_value="t-from-sa",
+                ) as mint:
+                    self.assertEqual(iam_token(), "t-from-sa")
+                    mint.assert_called_once_with("/tmp/sa.json")
+
+    def test_quota_accepts_camel_case_id(self):
+        headroom = quota_headroom([
+            {"quotaId": "compute.instanceCores.count", "limit": 10, "usage": 3},
+        ])
+        self.assertEqual(headroom["cores"]["free"], 7)
+
+    def test_fetch_quota_normalizes_rest_rows(self):
+        with mock.patch("github_actions.export_runner_capacity.cloud_list", return_value=[
+            {"quotaId": "compute.instanceCores.count", "limit": "10", "usage": "3"},
+        ]):
+            rows = fetch_quota("cloud", token="t")
+        self.assertEqual(rows, [{"quota_id": "compute.instanceCores.count", "limit": "10", "usage": "3"}])
+
+    def test_cloud_list_follows_page_token(self):
+        pages = [
+            {"folders": [{"id": "1"}], "nextPageToken": "p2"},
+            {"folders": [{"id": "2"}]},
+        ]
+
+        def getter(_url, _token, params):
+            return pages[0 if "pageToken" not in params else 1]
+
+        with mock.patch("github_actions.export_runner_capacity.cloud_get", side_effect=getter):
+            self.assertEqual(cloud_list("https://example", "t", {"cloudId": "c"}, "folders"), [
+                {"id": "1"}, {"id": "2"},
+            ])
+
+    def test_snapshot_reads_created_at_camel_case(self):
+        instance = vm("ghrun-a", 64, 256, None, {"ghrun": "ghrun-a"})
+        instance.pop("created_at", None)
+        instance["createdAt"] = "2026-10-02T14:23:23Z"
+        rows = build_snapshot_rows(NOW, limits(), [instance], [], {
+            "relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+        }, True)
+        runner = next(row for row in rows if row["kind"] == "runner")
+        self.assertEqual(runner["created_at"], datetime(2026, 10, 2, 14, 23, 23, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":

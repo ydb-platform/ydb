@@ -1,4 +1,4 @@
-#include "bridge_config_yaml.h"
+#include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
@@ -8,155 +8,6 @@ using namespace NBridgeTest;
 namespace {
 
     using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-
-    TResult AddPile(TEnvironmentSetup& env, const TString& name) {
-        return InvokeDistconf(env, [&](auto& record) { record.MutableAddBridgePile()->SetPileName(name); });
-    }
-
-    // start nodes of the pile with BridgeConfig listing it
-    void StartPileNodes(TEnvironmentSetup& env, const TString& name, ui32 firstNodeId, ui32 lastNodeId) {
-        env.Runtime->GetAppDataBridgeConfig().AddPiles()->SetName(name);
-        env.ConfiguredNodeCount = lastNodeId;
-        for (ui32 nodeId = firstNodeId; nodeId <= lastNodeId; ++nodeId) {
-            env.StartNode(nodeId);
-        }
-        env.Sim(TDuration::Seconds(30));
-    }
-
-    // wait until BSC performs its part of the pending pile operation
-    NKikimrBlobStorage::TStorageConfig WaitPileOperationFinished(TEnvironmentSetup& env) {
-        WaitUntil(env, [&] { return !QueryStorageConfig(env).GetClusterStateDetails().HasPendingPileOperation(); },
-            "pile operation finish");
-        return QueryStorageConfig(env);
-    }
-
-    void RejoinPile(TEnvironmentSetup& env, ui32 pileIndex) {
-        SwitchPileState(env, pileIndex, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-        WaitForPileState(env, pileIndex, NKikimrBridge::TClusterState::SYNCHRONIZED);
-        UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetClusterStateDetails().PileSyncStateSize(), 0);
-    }
-
-    // the pile has its part in every bridged group, static and dynamic ones, placed on its nodes, and its state
-    // storage replicas; returns the number of dynamic bridged groups
-    size_t CheckPileParts(TEnvironmentSetup& env, ui32 pileIndex, ui32 firstNodeId, ui32 lastNodeId) {
-        const auto pileId = TBridgePileId::FromPileIndex(pileIndex);
-        auto inPile = [&](ui32 nodeId) { return firstNodeId <= nodeId && nodeId <= lastNodeId; };
-        const auto config = QueryStorageConfig(env);
-
-        const auto& ss = config.GetBlobStorageConfig().GetServiceSet();
-        THashMap<ui32, const NKikimrBlobStorage::TGroupInfo*> staticGroups;
-        for (const auto& group : ss.GetGroups()) {
-            staticGroups.emplace(group.GetGroupID(), &group);
-        }
-        THashSet<ui32> pileGroupIds; // parts of bridged groups, static and dynamic ones, in the pile
-        for (const auto& group : ss.GetGroups()) {
-            if (!group.HasBridgeGroupState()) {
-                continue;
-            }
-            const auto *pile = NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId);
-            UNIT_ASSERT_C(pile, group.DebugString());
-            const auto it = staticGroups.find(pile->GetGroupId());
-            UNIT_ASSERT(it != staticGroups.end());
-            for (const auto& realm : it->second->GetRings()) {
-                for (const auto& domain : realm.GetFailDomains()) {
-                    for (const auto& location : domain.GetVDiskLocations()) {
-                        UNIT_ASSERT_C(inPile(location.GetNodeID()), it->second->DebugString());
-                    }
-                }
-            }
-            UNIT_ASSERT(pileGroupIds.insert(pile->GetGroupId()).second);
-        }
-        UNIT_ASSERT(!pileGroupIds.empty());
-
-        for (const auto *pb : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
-                &config.GetSchemeBoardConfig()}) {
-            size_t numRingGroups = 0;
-            for (const auto& ringGroup : pb->GetRingGroups()) {
-                if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) ==
-                        pileId) {
-                    ++numRingGroups;
-                    for (const auto& ring : ringGroup.GetRing()) {
-                        for (const ui32 nodeId : ring.GetNode()) {
-                            UNIT_ASSERT(inPile(nodeId));
-                        }
-                    }
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(numRingGroups, 1, pb->DebugString());
-        }
-
-        // every dynamic bridged group has exactly one part in the pile, and only parts in the pile reside on its nodes
-        const auto baseConfig = env.FetchBaseConfig();
-
-        // static groups reside on PDisks of BSC, as there can be only one PDisk on the drive
-        THashMap<std::tuple<ui32, ui32>, const NKikimrBlobStorage::TBaseConfig::TPDisk*> bscPDisks;
-        for (const auto& pdisk : baseConfig.GetPDisk()) {
-            bscPDisks.emplace(std::make_tuple(pdisk.GetNodeId(), pdisk.GetPDiskId()), &pdisk);
-        }
-        for (const auto& pdisk : ss.GetPDisks()) {
-            if (inPile(pdisk.GetNodeID())) {
-                const auto it = bscPDisks.find(std::make_tuple(pdisk.GetNodeID(), pdisk.GetPDiskID()));
-                UNIT_ASSERT_C(it != bscPDisks.end(), pdisk.DebugString());
-                UNIT_ASSERT_VALUES_EQUAL(it->second->GetPath(), pdisk.GetPath());
-                UNIT_ASSERT_VALUES_EQUAL(it->second->GetGuid(), pdisk.GetPDiskGuid());
-            }
-        }
-
-        THashMap<ui32, ui32> vslotNodes;
-        for (const auto& vslot : baseConfig.GetVSlot()) {
-            vslotNodes.emplace(vslot.GetGroupId(), vslot.GetVSlotId().GetNodeId());
-        }
-        size_t numBridged = 0;
-        for (const auto& group : baseConfig.GetGroup()) {
-            if (staticGroups.contains(group.GetGroupId())) {
-                continue; // checked above
-            }
-            const auto info = GetGroupInfo(env, group.GetGroupId());
-            if (!info.HasBridgeGroupState()) {
-                continue;
-            }
-            ++numBridged;
-            const auto *pile = NBridge::GetGroupPile(info.GetBridgeGroupState(), pileId);
-            UNIT_ASSERT_C(pile, info.DebugString());
-            UNIT_ASSERT(pileGroupIds.insert(pile->GetGroupId()).second);
-        }
-        for (const auto& [groupId, nodeId] : vslotNodes) {
-            UNIT_ASSERT_VALUES_EQUAL_C(pileGroupIds.contains(groupId), inPile(nodeId), "GroupId# " << groupId);
-        }
-        return numBridged;
-    }
-
-    // read data written by the checker from the parts of groups in the pile, not through the bridge proxy
-    void CheckPileData(TEnvironmentSetup& env, const TDataChecker& checker, ui32 pileIndex, ui32 nodeId) {
-        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-        for (const auto& [groupId, id, data] : checker.GetWritten()) {
-            const auto info = GetGroupInfo(env, groupId);
-            const auto *pile = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(pileIndex));
-            UNIT_ASSERT(pile);
-            const ui32 pileGroupId = pile->GetGroupId();
-            const ui32 generation = GetGroupInfo(env, pileGroupId).GetGroupGeneration();
-            env.Runtime->WrapInActorContext(edge, [&] {
-                auto *request = new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
-                request->ForceGroupGeneration = generation;
-                SendToBSProxy(edge, pileGroupId, request);
-            });
-            CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
-        }
-    }
-
-    // nodes 1-9 make the cluster to be converted (as in MakeUnbridgedSettings), they get the name of their pile when
-    // named is set; nodes 10-17 make the pile added later
-    TNodeLocation GetConvertedClusterLocation(ui32 nodeId, bool named) {
-        if (nodeId <= 9 && !named) {
-            return GetUnbridgedLocation(nodeId);
-        }
-        NActorsInterconnect::TNodeLocation location;
-        location.SetBridgePileName(nodeId <= 9 ? "pile_1" : "pile_2");
-        location.SetDataCenter("my_dc");
-        location.SetRack(TStringBuilder() << "rack_" << nodeId);
-        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-        return TNodeLocation(location);
-    }
 
     // make explicit host config for existing hosts and add another one, which has drives with one slot only
     TResult AddSingleSlotHostConfig(TEnvironmentSetup& env) {
@@ -195,7 +46,8 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "is not listed in BridgeConfig");
         res = AddPile(env, "pile_2");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "is already added to the cluster");
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(),
+            "has to be INACTIVE to be added to the cluster, its state is SYNCHRONIZED");
 
         res = AddPile(env, "pile_3");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
@@ -214,7 +66,8 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         CreateAnotherPool(env, 2);
         env.Sim(TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
-        for (const auto *group : GetPoolGroups(env.FetchBaseConfig(), 2)) {
+        const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+        for (const auto *group : GetPoolGroups(baseConfig, 2)) {
             if (group->GetIsProxyGroup()) {
                 checker.Write(group->GetGroupId());
             }
@@ -226,48 +79,27 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
 
     Y_UNIT_TEST(ConvertedOneToTwo) {
         const auto named = std::make_shared<bool>(false);
-        TEnvironmentSetup env{{
-            .NodeCount = 17,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = [named](ui32 nodeId) { return GetConvertedClusterLocation(nodeId, *named); },
-            .SelfManagementConfig = true,
-            .AutomaticBootstrap = true,
-            .InitialConfiguredNodeCount = 9,
-        }};
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
         TDataChecker checker(env);
         const ui32 groupId = ConvertCluster(env, checker);
 
         // other piles can't be listed in the config while nodes of the converted cluster have no pile names
-        auto listPiles = [](YAML::Node& config, std::vector<TString> names) {
-            for (const auto& name : names) {
+        ExpectError(ReplaceMainConfig(env, [&](YAML::Node& config) {
+            for (const char *name : {"pile_1", "pile_2"}) {
                 YAML::Node pile;
                 pile["name"] = name;
                 config["bridge_config"]["piles"].push_back(pile);
             }
-        };
-        auto res = ReplaceMainConfig(env, [&](YAML::Node& config) { listPiles(config, {"pile_1", "pile_2"}); });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "mandatory pile name is missing for node 1");
+        }), "mandatory pile name is missing for node 1");
 
         // nodes of the converted cluster get the name of their pile (implicit one), restarted with it one by one
-        res = ReplaceMainConfig(env, [&](YAML::Node& config) {
-            listPiles(config, {"pile_1"});
-            for (YAML::Node host : config["hosts"]) {
-                host["location"]["bridge_pile_name"] = "pile_1";
-            }
-        });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        env.Sim(TDuration::Seconds(10));
-        *named = true;
-        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
-            env.RestartNode(nodeId);
-            env.Sim(TDuration::Seconds(30));
+        NameConvertedClusterNodes(env, *named, [&] {
             checker.Write(groupId);
             checker.CheckAll();
-        }
+        });
         UNIT_ASSERT_VALUES_EQUAL(GetPileStates(QueryStorageConfig(env)), "pile_1:SYNCHRONIZED");
 
-        res = AddPileToConfig(env, "pile_2", 10, 17);
+        auto res = AddPileToConfig(env, "pile_2", 10, 17);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Seconds(10));
         StartPileNodes(env, "pile_2", 10, 17);
@@ -442,8 +274,7 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
                     record.ClearErrorReason();
                     ++numSpoofed;
                 }
-            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
-                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBridgePileOperation()) {
+            } else if (GetBridgePileOperationNotification(*ev)) {
                 ++numNotifications;
             }
             return true;
@@ -489,6 +320,78 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         CheckPileData(env, checker, 2, FirstThirdPileNodeId);
     }
 
+    // groups created while the addition of the pile is stuck get no part in the pile (the addition gives it to them), so
+    // they neither fail for lack of resources there nor take the ones the addition counts on; the stuck addition is
+    // cancelled by removing the pile, which can be added again then
+    Y_UNIT_TEST(StuckAdditionCancelled) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        auto res = AddSingleSlotHostConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        res = AddPileToConfig(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId, 2);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        // validation by BSC fails, but distconf is told it succeeded, so BSC can't place the parts afterwards
+        bool spoofValidation = true;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDistconfResponse && spoofValidation) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfResponse>()->Record;
+                if (record.GetStatus() == NKikimrBlobStorage::TEvControllerDistconfResponse::Error) {
+                    record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                    record.ClearErrorReason();
+                }
+            }
+            return true;
+        };
+        res = AddPile(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        spoofValidation = false;
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env).GetClusterStateDetails().GetPendingPileOperation().HasErrorReason();
+        }, "error of BSC recorded");
+
+        // the new pool gets its group with no part in the pile
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        std::optional<ui32> newGroupId;
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+                if (group->GetIsProxyGroup()) {
+                    newGroupId = group->GetGroupId();
+                }
+            }
+        }
+        UNIT_ASSERT(newGroupId);
+        const auto info = GetGroupInfo(env, *newGroupId);
+        UNIT_ASSERT_C(!NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2)),
+            info.DebugString());
+        checker.Write(*newGroupId);
+
+        // the stuck addition is cancelled by the removal
+        RemovePileAndWait(env, "pile_3");
+        CheckPileGone(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId);
+        checker.CheckAll();
+
+        // resources appear, the pile is added with parts of both groups
+        res = ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["host_configs"][1]["drive"][0]["expected_slot_count"] = 4;
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        AddPileAndWait(env, "pile_3");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        RejoinPile(env, 2);
+        checker.Write(groupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, FirstThirdPileNodeId);
+    }
+
     // the pile can't be rejoined until BSC adds its parts to every group; BSC finishes the operation after restart
     Y_UNIT_TEST(RejoinWaitsForBsc) {
         TEnvironmentSetup env(MakeExpandableSettings());
@@ -505,8 +408,7 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         bool hold = true;
         ui32 numNotifications = 0;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
-                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBridgePileOperation()) {
+            if (GetBridgePileOperationNotification(*ev)) {
                 ++numNotifications;
                 return !hold;
             }

@@ -23,6 +23,7 @@ namespace NKikimr::NYaml {
         NJson::TJsonValue json;
 
         if (yaml.IsMap()) {
+            json.SetType(NJson::EJsonValueType::JSON_MAP);
             for (const auto& it : yaml) {
                 const auto& key = it.first.as<TString>();
                 TString childPath = currentPath ? (currentPath + "/" + key) : key;

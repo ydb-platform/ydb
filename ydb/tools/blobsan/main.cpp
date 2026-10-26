@@ -401,7 +401,9 @@ int main(int argc, char **argv) {
         " In write2x2 mode this estimate may include blobs still being written"
         " above GC barriers; it does not establish that these parts can be deleted."
         " FULL marks a write2x2 candidate whose merged ingress layout is full"
-        " while its local-part layout from captured VDisks is incomplete.");
+        " while its local-part layout from captured VDisks is incomplete."
+        " Write2x2 mode also emits RestorePartInv1#/RestorePartInv2# <GroupId> <OrderNum> <BlobId>"
+        " to reach two copies per failrealm on captured VDisks, counting existing local copies.");
     opts.AddSection("Exit status",
         "0: analysis completed, including when findings are reported."
         " Nonzero: argument or input error.");
@@ -649,6 +651,21 @@ int main(int argc, char **argv) {
                 << "\n\tKeepMask#           " << FormatBitMask(blob.KeepMask, BlobSubgroupSize)
                 << "\n\tDoNotKeepMask#      " << FormatBitMask(blob.DoNotKeepMask, BlobSubgroupSize)
                 << "\n\tMisplaced#          " << (misplacedParts ? "true" : "false");
+
+            if (Write2x2Candidates) {
+                for (ui32 partIdx = 0; partIdx < TotalPartCount; ++partIdx) {
+                    const ui32 localDisks = originalLocalLayout.GetDisksWithPart(partIdx);
+                    ui32 copies = std::popcount(localDisks & (0b001001001 << partIdx));
+                    for (ui32 i = partIdx; i < BlobSubgroupSize && copies < 2; i += TotalPartCount) {
+                        const bool captured = seenDisks & (1u << i);
+                        const bool hasPart = localDisks & (1u << i);
+                        if (captured && !hasPart) {
+                            err << "\n\tRestorePartInv" << ++copies << "#    "
+                                << groupId << " " << nums[i] << " " << TLogoBlobID(blobId, partIdx + 1);
+                        }
+                    }
+                }
+            }
 
             for (const ui32 index : indexes) {
                 const auto& vdisk = group.States.at(index);

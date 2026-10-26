@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
@@ -25,6 +26,9 @@ class TJsonQuery : public TViewerPipeClient {
     TString Syntax;
     TString QueryId;
     TString ResourcePool;
+    bool IncludeWmInfo = false;
+    bool WmQueueReported = false;
+    bool WmExecutionReported = false;
     TString TransactionMode;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
@@ -356,6 +360,7 @@ public:
         if (params.Has("limit_rows")) {
             LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming != EStreamingType::None ? std::numeric_limits<int>::max() : 100000);
         }
+        IncludeWmInfo = FromStringWithDefault<bool>(params.Get("include_wm_info"), IncludeWmInfo);
         if (params.Has("resource_pool")) {
             ResourcePool = params.Get("resource_pool");
         }
@@ -484,6 +489,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NWorkloadManager::TEvWmStateChanged, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
@@ -584,6 +590,7 @@ public:
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
         request.SetSessionId(SessionId);
+        request.SetReportWmStateChanges(Streaming != EStreamingType::None);
         if (Database) {
             request.SetDatabase(Database);
         }
@@ -937,7 +944,57 @@ private:
         }
     }
 
+    void StreamWmState(const TString& state, const TString& poolId, const TString& classifiedBy) {
+        if (Streaming == EStreamingType::None) {
+            return;
+        }
+        if (state == "QUEUED") {
+            if (WmQueueReported) {
+                return;
+            }
+            WmQueueReported = true;
+        } else if (state == "EXECUTING") {
+            if (WmExecutionReported) {
+                return;
+            }
+            WmExecutionReported = true;
+        } else {
+            return;
+        }
+
+        NJson::TJsonValue json;
+        json["wm_state"] = state;
+        if (classifiedBy) {
+            json["wm_classified_by"] = classifiedBy;
+        }
+        if (poolId) {
+            json["resource_pool"] = poolId;
+        }
+        StreamJsonResponse("QueryStarted", std::move(json));
+    }
+
+    void HandleReply(NWorkloadManager::TEvWmStateChanged::TPtr& ev) {
+        StreamWmState(NWorkloadManager::WmStateToStatus(ev->Get()->State),
+            ev->Get()->PoolId, ev->Get()->ClassifiedBy);
+    }
+
+    static void AddWmInfo(NJson::TJsonValue& json, const NKikimrKqp::TQueryResponse& response, bool includeWmInfo) {
+        if (!includeWmInfo) {
+            return;
+        }
+        if (response.HasWmState() && response.GetWmState() != NKikimrKqp::WM_STATE_NONE) {
+            json["wm_state"] = NWorkloadManager::WmStateToStatus(response.GetWmState());
+        }
+        if (response.HasWmClassifiedBy()) {
+            json["wm_classified_by"] = response.GetWmClassifiedBy();
+        }
+        if (response.HasEffectivePoolId()) {
+            json["resource_pool"] = response.GetEffectivePoolId();
+        }
+    }
+
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        const auto& wmResponse = ev->Get()->Record.GetResponse();
         NJson::TJsonValue jsonResponse;
         if (Streaming == EStreamingType::None) {
             jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
@@ -952,7 +1009,8 @@ private:
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record);
-            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
+            AddWmInfo(jsonResponse, QueryResponse->Record.GetResponse(), IncludeWmInfo);
+            if (Schema == ESchemaType::Classic && Stats.empty() && !IncludeWmInfo && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
         } else {
@@ -960,6 +1018,10 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
+            AddWmInfo(jsonResponse, ev->Get()->Record.GetResponse(), IncludeWmInfo);
+        }
+        if (wmResponse.HasWmState() && wmResponse.GetWmState() == NKikimrKqp::WM_STATE_EXECUTING) {
+            StreamWmState("EXECUTING", wmResponse.GetEffectivePoolId(), wmResponse.GetWmClassifiedBy());
         }
         ReplyWithJsonAndPassAway("QueryResponse", std::move(jsonResponse));
     }
@@ -1538,6 +1600,12 @@ public:
                       * `ydb2`
                 type: string
                 enum: [classic, modern, ydb, multi]
+                required: false
+              - name: include_wm_info
+                in: query
+                description: Include workload manager info in the response.
+                type: boolean
+                default: false
                 required: false
               - name: stats
                 in: query

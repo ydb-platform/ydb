@@ -139,6 +139,12 @@ TEvWorker::TEvStatus* TEvWorker::TEvStatus::FromOperation(EWorkerOperation opera
     return new TEvStatus(std::move(detailedStats));
 }
 
+TEvWorker::TEvStatus* TEvWorker::TEvStatus::FromAcknowledgedWriteBytes(ui64 bytes) {
+    auto stats = std::make_unique<TWorkerDetailedStats>();
+    stats->AcknowledgedWriteBytes = bytes;
+    return new TEvStatus(std::move(stats));
+}
+
 TString TEvWorker::TEvStatus::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Lag: " << Lag

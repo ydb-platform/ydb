@@ -236,6 +236,7 @@ public:
 
             if (ydbProxy) {
                 YdbProxy = ctx.Register(ydbProxy.Release());
+                YdbProxyRevision = CredentialsRevision;
             }
         }
 
@@ -315,6 +316,9 @@ public:
             // A deferred ALTER installs the config before ResetCredentials.
             // Invalidate the old callbacks immediately, including A -> B -> A.
             ++CredentialsRevision;
+            for (auto* target : GetTargets()) {
+                target->GetReplicationStats().ResetScan();
+            }
         }
         Config = config;
     }
@@ -322,7 +326,7 @@ public:
     void StopTargetDescribers(const TActorContext& ctx) {
         // Describers use this proxy's source connection. Finish them with the
         // statistics already collected before destroying that connection.
-        for (const auto& actorId : TargetDescribers) {
+        for (const auto& [actorId, _] : TargetDescribers) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
         TargetDescribers.clear();
@@ -331,6 +335,9 @@ public:
     void ResetCredentials(const TActorContext& ctx) {
         ++CredentialsRevision;
         TargetDiscoveryComplete = false;
+        for (auto* target : GetTargets()) {
+            target->GetReplicationStats().ResetScan();
+        }
         StopTargetDescribers(ctx);
         for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
@@ -371,7 +378,8 @@ private:
     TActorId ResourceIdResolver;
     ui64 ResourceIdResolverRevision = 0;
     TActorId YdbProxy;
-    THashSet<TActorId> TargetDescribers;
+    ui64 YdbProxyRevision = 0;
+    THashMap<TActorId, ui64> TargetDescribers;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
     ui64 TargetDiscovererRevision = 0;
@@ -460,11 +468,17 @@ bool TReplication::IsExpectedTargetDiscoverer(const TActorId& actorId) const {
     return Impl->Targets.empty() && Impl->DesiredState != EState::Done;
 }
 
-void TReplication::FinishTargetDiscovery() {
+void TReplication::FinishTargetDiscovery(bool success) {
     Impl->TargetDiscoverer = {};
     // An empty successful discovery must also be consumed: Progress must not
     // immediately launch another discoverer after retiring the replying actor.
-    Impl->TargetDiscoveryComplete = true;
+    Impl->TargetDiscoveryComplete = success;
+}
+
+bool TReplication::IsTargetDiscoveryComplete() const {
+    // The complete discovered target set is persisted atomically. Loaded targets
+    // prove discovery succeeded even though observation histories are volatile.
+    return Impl->TargetDiscoveryComplete || !Impl->Targets.empty();
 }
 
 void TReplication::Shutdown(const TActorContext& ctx) {
@@ -483,12 +497,22 @@ const TActorId& TReplication::GetYdbProxy() const {
     return Impl->YdbProxy;
 }
 
-void TReplication::AddTargetDescriber(const TActorId& actorId) {
-    Impl->TargetDescribers.insert(actorId);
+bool TReplication::CanDescribeSource() const {
+    return Impl->YdbProxy && Impl->YdbProxyRevision == Impl->CredentialsRevision;
 }
 
-void TReplication::RemoveTargetDescriber(const TActorId& actorId) {
-    Impl->TargetDescribers.erase(actorId);
+void TReplication::AddTargetDescriber(const TActorId& actorId) {
+    Impl->TargetDescribers.emplace(actorId, Impl->YdbProxyRevision);
+}
+
+bool TReplication::RemoveTargetDescriber(const TActorId& actorId) {
+    auto it = Impl->TargetDescribers.find(actorId);
+    if (it == Impl->TargetDescribers.end()) {
+        return false;
+    }
+    const bool current = it->second == Impl->CredentialsRevision;
+    Impl->TargetDescribers.erase(it);
+    return current;
 }
 
 ui64 TReplication::GetSchemeShardId() const {

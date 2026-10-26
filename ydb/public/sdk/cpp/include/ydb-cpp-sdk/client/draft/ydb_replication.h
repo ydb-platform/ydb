@@ -86,10 +86,18 @@ public:
 
     const std::optional<TDuration>& GetLag() const;
     const std::optional<float>& GetInitialScanProgress() const;
+    // Acknowledged serialized destination bytes/second over the trailing 60s
+    // (elapsed observation time during startup). Absent until measurable.
+    const std::optional<double>& GetWriteSpeedBytesPerSecond() const;
+    // Approximate remaining source scan time. Zero confirms scan completion;
+    // absence means unknown. This does not measure destination catch-up time.
+    const std::optional<TDuration>& GetInitialScanEta() const;
 
 private:
     std::optional<TDuration> Lag_;
     std::optional<float> InitialScanProgress_;
+    std::optional<double> WriteSpeedBytesPerSecond_;
+    std::optional<TDuration> InitialScanEta_;
 };
 
 class TRunningState {

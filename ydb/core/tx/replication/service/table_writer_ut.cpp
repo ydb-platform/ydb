@@ -18,6 +18,77 @@ namespace NKikimr::NReplication::NService {
 Y_UNIT_TEST_SUITE(LocalTableWriter) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST_TWIN(AcknowledgedPreparedBytes, Retry) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            .UniformPartitions = 2,
+        }));
+        const auto writer = runtime.Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        ui64 expectedBytes = 0;
+        ui64 acknowledgedBytes = 0;
+        ui32 requests = 0;
+        ui32 failures = 0;
+        THashSet<ui64> tablets;
+        THashSet<ui64> orders;
+        THashSet<TActorId> duplicated;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvApplyReplicationChanges) {
+                const auto& changes = ev->Get<TEvDataShard::TEvApplyReplicationChanges>()->Record;
+                ++requests;
+                for (const auto& change : changes.GetChanges()) {
+                    if (orders.insert(change.GetSourceOffset()).second) {
+                        expectedBytes += change.ByteSizeLong();
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvDataShard::EvApplyReplicationChangesResult) {
+                auto& result = ev->Get<TEvDataShard::TEvApplyReplicationChangesResult>()->Record;
+                if (Retry && failures == 0) {
+                    result.SetStatus(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED);
+                    result.SetReason(NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED);
+                    ++failures;
+                }
+            } else if (ev->GetTypeRewrite() == TEvWorker::EvWriteAcknowledged) {
+                tablets.insert(ev->Get<TEvWorker::TEvWriteAcknowledged>()->PartitionId);
+                // Duplicate a valid acknowledgement while records are pending.
+                if (duplicated.insert(ev->Sender).second) {
+                    auto copy = MakeHolder<TEvWorker::TEvWriteAcknowledged>(
+                        ev->Get<TEvWorker::TEvWriteAcknowledged>()->PartitionId,
+                        TVector<std::pair<ui64, ui64>>(ev->Get<TEvWorker::TEvWriteAcknowledged>()->Records));
+                    runtime.Send(new IEventHandle(writer, ev->Sender, copy.Release()));
+                }
+            } else if (ev->GetTypeRewrite() == TEvWorker::EvStatus && ev->Sender == writer
+                && ev->GetRecipientRewrite() == env.GetSender())
+            {
+                acknowledgedBytes += ev->Get<TEvWorker::TEvStatus>()->DetailedStats->AcknowledgedWriteBytes;
+                // Consume the status: GrabEdgeEvent<TEvPoll> otherwise defers
+                // it and observers see that same edge event again.
+                ev.Reset();
+            }
+        });
+        // Keys reach different destination partitions; JSON whitespace is never credited.
+        const TString first = R"({"key":[1],            "update":{"value":"a"}})";
+        const TString second = R"({"key":[4000000000], "update":{"value":"b"}})";
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "source", {
+            TRecord(1, first), TRecord(2, second),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
+        UNIT_ASSERT(expectedBytes > 0);
+        UNIT_ASSERT(expectedBytes != first.size() + second.size());
+        UNIT_ASSERT_VALUES_EQUAL(acknowledgedBytes, expectedBytes);
+        UNIT_ASSERT_VALUES_EQUAL(failures, Retry ? 1 : 0);
+        UNIT_ASSERT(requests >= (Retry ? 3 : 2));
+        // A replayed batch within this writer session must not add bytes.
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "source", {
+            TRecord(1, first), TRecord(2, second),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(acknowledgedBytes, expectedBytes);
+    }
+
     Y_UNIT_TEST(WriteTable) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

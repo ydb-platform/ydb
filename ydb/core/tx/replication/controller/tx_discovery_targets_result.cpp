@@ -54,7 +54,7 @@ public:
             return true;
         }
 
-        Replication->FinishTargetDiscovery();
+        Replication->FinishTargetDiscovery(Ev->Get()->IsSuccess());
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {

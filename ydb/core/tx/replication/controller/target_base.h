@@ -94,6 +94,7 @@ public:
     void Reset(TActorId& actorId);
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
+    TTargetStatistics& GetReplicationStats() override { return ReplicationStats; }
 
 private:
     TReplication* const Replication;
@@ -109,6 +110,7 @@ private:
     std::optional<bool> StreamSchemaChanges;
     TString Issue;
     bool IndexBuild = false;
+    TTargetStatistics ReplicationStats;
 
     TActorId DstCreator;
     TActorId DstAlterer;

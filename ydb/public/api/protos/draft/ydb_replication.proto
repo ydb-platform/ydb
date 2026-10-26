@@ -57,6 +57,13 @@ message DescribeReplicationResult {
     message Stats {
         optional google.protobuf.Duration lag = 1;
         optional float initial_scan_progress = 2;
+        // Acknowledged serialized destination changes per second, trailing 60 seconds.
+        // Startup uses the elapsed observation time. Absent until measurable.
+        optional double write_speed_bytes_per_second = 3;
+        // Approximate remaining source initial scan time, based on partition progress
+        // observed by stats requests over five minutes. Zero means confirmed complete;
+        // absence means unknown. This does not measure destination catch-up time.
+        optional google.protobuf.Duration initial_scan_eta = 4;
     }
 
     message Item {

@@ -4,6 +4,8 @@
 #include "target_base.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/base/path.h>
+#include <google/protobuf/util/time_util.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -22,7 +24,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     }
 
     void Reply() {
-        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result)));
+        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result), SampleTime));
         PassAway();
     }
 
@@ -92,6 +94,8 @@ public:
             return Reply();
         }
 
+        SampleTime = TActivationContext::Now();
+
         // Source statistics are optional: even a live proxy may never receive
         // a response from the source. Return the available results on timeout.
         Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
@@ -121,6 +125,7 @@ private:
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TEvPrivate::TEvDescribeTargetsResult::TResult Result;
+    TInstant SampleTime;
 
 }; // TTargetDescriber
 
@@ -180,7 +185,7 @@ public:
             && !Replication->GetConfig().HasTransferSpecific()
             && Replication->GetState() != TReplication::EState::Done
             && Replication->GetDesiredState() != TReplication::EState::Done
-            && Replication->GetYdbProxy())
+            && Replication->CanDescribeSource())
         {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
@@ -188,7 +193,11 @@ public:
                     continue;
                 }
 
-                TargetsToDescribe.emplace(tid, target->GetSrcPath());
+                if (target->GetStreamName()) {
+                    // Index streams belong to indexImplTable, not the logical
+                    // index path exposed in the public replication item.
+                    TargetsToDescribe.emplace(tid, TString(ExtractParent(target->GetStreamPath())));
+                }
             }
 
             if (TargetsToDescribe) {
@@ -212,8 +221,49 @@ public:
             return true;
         }
 
-        Replication->RemoveTargetDescriber(PrivEv->Sender);
-        return DescribeReplication(Replication, false);
+        if (!Replication->RemoveTargetDescriber(PrivEv->Sender)) {
+            // A credential reset retires describers before poisoning them.
+            // Their final replies must not repopulate source history.
+            PrivEv->Get()->Result.clear();
+        }
+        return DescribeReplication(Replication, true);
+    }
+
+    const NYdb::NTable::TChangefeedDescription* FindSourceChangefeed(const TReplication::ITarget& target) const {
+        if (!PrivEv) {
+            return nullptr;
+        }
+        const auto& results = PrivEv->Get()->Result;
+        const auto it = results.find(target.GetId());
+        if (it == results.end() || !it->second) {
+            return nullptr;
+        }
+
+        const auto& streams = it->second->GetTableDescription().GetChangefeedDescriptions();
+        return FindIfPtr(streams, [&target](const auto& cf) {
+            return cf.GetName() == target.GetStreamName();
+        });
+    }
+
+    std::optional<TDuration> ObserveInitialScan(
+            TReplication::ITarget& target, const NYdb::NTable::TChangefeedDescription* stream)
+    {
+        if (!stream) {
+            return std::nullopt;
+        }
+
+        using EState = NYdb::NTable::EChangefeedState;
+        const bool complete = stream->GetState() == EState::Enabled;
+        const bool scanning = stream->GetState() == EState::InitialScan;
+        const auto& progress = stream->GetInitialScanProgress();
+        if (!complete && (!scanning || !progress)) {
+            return std::nullopt;
+        }
+        return target.GetReplicationStats().ObserveScan(
+            PrivEv->Get()->SampleTime,
+            progress ? progress->GetPartsTotal() : 0,
+            progress ? progress->GetPartsCompleted() : 0,
+            complete);
     }
 
     bool DescribeReplication(TReplication::TPtr replication, bool includeDetailedStats) {
@@ -229,6 +279,8 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        TReplicationStatistics aggregate(replication->IsTargetDiscoveryComplete());
+        const auto now = TActivationContext::Now();
         bool isTransfer = replication->GetConfig().HasTransferSpecific();
         if (isTransfer) {
             auto& specific = replication->GetConfig().GetTransferSpecific();
@@ -272,28 +324,29 @@ public:
                 item.SetLagMilliSeconds(lag->MilliSeconds());
             }
 
+            const auto* sourceChangefeed = FindSourceChangefeed(*target);
+            if (includeDetailedStats && !isTransfer) {
+                const auto speed = target->GetReplicationStats().GetWriteSpeed(now);
+                const auto eta = ObserveInitialScan(*target, sourceChangefeed);
+                aggregate.Add(speed, eta);
+                if (speed) {
+                    item.SetWriteSpeedBytesPerSecond(*speed);
+                }
+                if (eta) {
+                    *item.MutableInitialScanEta() = google::protobuf::util::TimeUtil::MicrosecondsToDuration(
+                        eta->MicroSeconds());
+                }
+            }
+
             if (PrivEv) {
-                const auto& result = PrivEv->Get()->Result;
-
-                auto it = result.find(tid);
-                if (it == result.end() || !it->second) {
+                if (!sourceChangefeed || !sourceChangefeed->GetInitialScanProgress()) {
                     totalScanProgress.reset();
                     continue;
                 }
 
-                const auto& changefeeds = it->second->GetTableDescription().GetChangefeedDescriptions();
-                auto* cfPtr = FindIfPtr(changefeeds, [target](const NYdb::NTable::TChangefeedDescription& cf) {
-                    return cf.GetName() == target->GetStreamName();
-                });
-
-                if (!cfPtr || !cfPtr->GetInitialScanProgress()) {
-                    totalScanProgress.reset();
-                    continue;
-                }
-
-                item.SetInitialScanProgress(cfPtr->GetInitialScanProgress()->GetProgress());
+                item.SetInitialScanProgress(sourceChangefeed->GetInitialScanProgress()->GetProgress());
                 if (totalScanProgress) {
-                    *totalScanProgress += *cfPtr->GetInitialScanProgress();
+                    *totalScanProgress += *sourceChangefeed->GetInitialScanProgress();
                 }
             }
         }
@@ -303,6 +356,15 @@ public:
         case TReplication::EState::Ready:
         case TReplication::EState::Removing:
             state.MutableStandBy();
+            if (includeDetailedStats && !isTransfer) {
+                if (aggregate.WriteSpeed) {
+                    state.MutableStandBy()->SetWriteSpeedBytesPerSecond(*aggregate.WriteSpeed);
+                }
+                if (aggregate.ScanEta) {
+                    *state.MutableStandBy()->MutableInitialScanEta() =
+                        google::protobuf::util::TimeUtil::MicrosecondsToDuration(aggregate.ScanEta->MicroSeconds());
+                }
+            }
             if (const auto lag = replication->GetLag()) {
                 state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
             }

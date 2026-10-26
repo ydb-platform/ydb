@@ -18,6 +18,7 @@ PEERDIR(
 SRCS(
     ydb_scripting_response_headers_ut.cpp
     ydb_view_ut.cpp
+    ydb_replication_stats_ut.cpp
     ydb_udf_ut.cpp
 )
 

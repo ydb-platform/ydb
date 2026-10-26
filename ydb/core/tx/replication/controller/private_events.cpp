@@ -266,10 +266,12 @@ TString TEvPrivate::TEvRemoveWorker::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvDescribeTargetsResult::TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result)
+TEvPrivate::TEvDescribeTargetsResult::TEvDescribeTargetsResult(
+        const TActorId& sender, ui64 rid, TResult&& result, TInstant sampleTime)
     : Sender(sender)
     , ReplicationId(rid)
     , Result(std::move(result))
+    , SampleTime(sampleTime)
 {
 }
 

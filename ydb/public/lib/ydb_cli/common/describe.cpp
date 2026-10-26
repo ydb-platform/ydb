@@ -996,26 +996,49 @@ int TDescribeLogic::DescribeReplication(const TString& path, const TDescribeOpti
     }
 }
 
-int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result, const TDescribeOptions& options) const {
-    const auto& desc = result.GetReplicationDescription();
+namespace {
 
-    Out << Endl << "State: ";
+TString ReplicationWriteSpeed(const NReplication::TStats& stats) {
+    const auto& speed = stats.GetWriteSpeedBytesPerSecond();
+    return speed ? FormatDecimalSpeed(*speed) : "n/a";
+}
+
+TString ReplicationScanEta(const NReplication::TStats& stats) {
+    const auto& eta = stats.GetInitialScanEta();
+    if (!eta) {
+        return "n/a";
+    }
+    if (*eta == TDuration::Zero()) {
+        return "0s";
+    }
+    // Only confirmed completion should print zero. Round a positive estimate
+    // upward to whole seconds before using the shared coarse formatter.
+    const auto seconds = eta->Seconds() + (eta->MicroSeconds() % 1000000 != 0);
+    return FormatEta(TDuration::Seconds(seconds));
+}
+
+} // namespace
+
+void PrintReplicationDescription(IOutputStream& out,
+        const NReplication::TReplicationDescription& desc, const TDescribeOptions& options)
+{
+    out << Endl << "State: ";
     switch (desc.GetState()) {
     case NReplication::TReplicationDescription::EState::Running:
         if (const auto& stats = desc.GetRunningState().GetStats(); options.ShowStats) {
             if (const auto& progress = stats.GetInitialScanProgress(); progress && *progress < 100) {
-                Out << "Initial scan (" << FloatToString(*progress, PREC_POINT_DIGITS, 2) << "%)";
+                out << "Initial scan (" << FloatToString(*progress, PREC_POINT_DIGITS, 2) << "%)";
             } else if (const auto& lag = stats.GetLag()) {
-                Out << "Standby (lag: " << *lag << ")";
+                out << "Standby (lag: " << *lag << ")";
             } else {
-                Out << desc.GetState();
+                out << desc.GetState();
             }
         } else {
-            Out << desc.GetState();
+            out << desc.GetState();
         }
         break;
     case NReplication::TReplicationDescription::EState::Error:
-        Out << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        out << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
         break;
     default:
         break;
@@ -1025,15 +1048,22 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
     const auto& srcDatabase = connParams.GetDatabase();
     const auto& dstDatabase = options.Database;
 
-    PrintConnectionParams(connParams, Out);
+    PrintConnectionParams(connParams, out);
 
-    Out << Endl << "Consistency level: " << desc.GetConsistencyLevel();
+    out << Endl << "Consistency level: " << desc.GetConsistencyLevel();
     switch (desc.GetConsistencyLevel()) {
     case NReplication::TReplicationDescription::EConsistencyLevel::Row:
         break;
     case NReplication::TReplicationDescription::EConsistencyLevel::Global:
-        Out << Endl << "Commit interval: " << desc.GetGlobalConsistency().GetCommitInterval();
+        out << Endl << "Commit interval: " << desc.GetGlobalConsistency().GetCommitInterval();
         break;
+    }
+
+    if (options.ShowStats) {
+        const auto stats = desc.GetState() == NReplication::TReplicationDescription::EState::Running
+            ? desc.GetRunningState().GetStats() : NReplication::TStats();
+        out << Endl << "Write speed (60s avg): " << ReplicationWriteSpeed(stats);
+        out << Endl << "Initial scan ETA (approx.): " << ReplicationScanEta(stats);
     }
 
     if (const auto& items = desc.GetItems(); !items.empty()) {
@@ -1041,6 +1071,8 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
         if (options.ShowStats) {
             columnNames.push_back("Lag");
             columnNames.push_back("Progress");
+            columnNames.push_back("Write speed (60s avg)");
+            columnNames.push_back("Initial scan ETA (approx.)");
         }
 
         TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
@@ -1053,13 +1085,21 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
             if (options.ShowStats) {
                 row
                     .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
-                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"))
+                    .Column(6, ReplicationWriteSpeed(item.Stats))
+                    .Column(7, ReplicationScanEta(item.Stats));
             }
         }
-        Out << Endl << "Items:" << Endl << table;
+        out << Endl << "Items:" << Endl << table;
     }
 
-    Out << Endl;
+    out << Endl;
+}
+
+int TDescribeLogic::PrintReplicationResponsePretty(
+        const NYdb::NReplication::TDescribeReplicationResult& result, const TDescribeOptions& options) const
+{
+    PrintReplicationDescription(Out, result.GetReplicationDescription(), options);
     return EXIT_SUCCESS;
 }
 

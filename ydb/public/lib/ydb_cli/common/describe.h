@@ -19,6 +19,10 @@ struct TDescribeOptions {
     TString Database;
 };
 
+// Render a replication description without making a network request.
+void PrintReplicationDescription(IOutputStream& out,
+    const NReplication::TReplicationDescription& description, const TDescribeOptions& options);
+
 class TDescribeLogic {
 public:
     TDescribeLogic(TDriver driver, IOutputStream& out);

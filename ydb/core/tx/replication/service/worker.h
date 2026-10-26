@@ -27,6 +27,8 @@ struct TWorkerDetailedStats {
     std::optional<EWorkerOperation> CurrentOperation;
     std::unique_ptr<ReplicationTopicReadStats> ReaderStats;
     std::unique_ptr<TTransferWriteStats> WriterStats;
+    // Successful serialized table-change acknowledgements (not input JSON).
+    ui64 AcknowledgedWriteBytes = 0;
 };
 
 
@@ -49,10 +51,21 @@ struct TEvWorker {
         EvStatsWakeup,
         EvSchemaChange,
         EvSchemaChangeApplied,
+        EvWriteAcknowledged,
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
+
+    struct TEvWriteAcknowledged: public TEventLocal<TEvWriteAcknowledged, EvWriteAcknowledged> {
+        ui64 PartitionId;
+        TVector<std::pair<ui64, ui64>> Records; // order, prepared bytes
+
+        explicit TEvWriteAcknowledged(ui64 partitionId, TVector<std::pair<ui64, ui64>>&& records)
+            : PartitionId(partitionId)
+            , Records(std::move(records))
+        {}
+    };
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
 
@@ -140,6 +153,7 @@ struct TEvWorker {
         explicit TEvStatus(std::unique_ptr<TWorkerDetailedStats>&& detailedStats);
         TString ToString() const override;
         static TEvStatus* FromOperation(EWorkerOperation operation);
+        static TEvStatus* FromAcknowledgedWriteBytes(ui64 bytes);
     };
 
     struct TEvDataEnd: public TEventLocal<TEvDataEnd, EvDataEnd> {

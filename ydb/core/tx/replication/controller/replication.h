@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sys_params.h"
+#include "target_statistics.h"
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -124,6 +125,7 @@ public:
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
         virtual const ITargetStats* GetStats() = 0;
+        virtual TTargetStatistics& GetReplicationStats() = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
@@ -159,7 +161,8 @@ public:
     TVector<TString> GetTargetTablePaths() const;
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
-    void FinishTargetDiscovery();
+    void FinishTargetDiscovery(bool success = true);
+    bool IsTargetDiscoveryComplete() const;
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
@@ -167,8 +170,9 @@ public:
     ui64 GetId() const;
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
+    bool CanDescribeSource() const;
     void AddTargetDescriber(const TActorId& actorId);
-    void RemoveTargetDescriber(const TActorId& actorId);
+    bool RemoveTargetDescriber(const TActorId& actorId);
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);

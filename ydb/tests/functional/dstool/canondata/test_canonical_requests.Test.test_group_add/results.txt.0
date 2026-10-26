@@ -46,6 +46,7 @@ Request {
           Kind: 0
         }
       }
+      BridgeMode: false
       ItemConfigGeneration: 1
       DefaultGroupSizeInUnits: 2
     }
@@ -73,6 +74,7 @@ Request {
           Kind: 0
         }
       }
+      BridgeMode: false
       ItemConfigGeneration: 2
     }
   }

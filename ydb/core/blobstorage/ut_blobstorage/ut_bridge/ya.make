@@ -6,6 +6,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SRCS(
         bridge_add_pile.cpp
+        bridge_pile_overrides_ut.cpp
         bridge_assimilation.cpp
         bridge_failover.cpp
         bridge_cluster_state.cpp
@@ -13,6 +14,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_decommit.cpp
         bridge_get.cpp
         bridge_keep_flags.cpp
+        bridge_mixed_storage.cpp
         bridge_piles.cpp
         bridge_remove_pile.cpp
         bridge_restart.cpp

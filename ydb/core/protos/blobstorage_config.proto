@@ -139,9 +139,30 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+            // Exact match on supplied string fields; omitted fields are unconstrained.
+            // Deprecated numeric location fields are not accepted.
+            NActorsInterconnect.TNodeLocation Location = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
+}
+
+// Allocation overrides shared by BSC and distconf. Selectors are independent: an empty Kind list selects no
+// dynamic pools unless AllKinds is set; StaticGroupOverride selects static groups without reserving a pool kind.
+message TStoragePoolPileOverride {
+    repeated string PileName = 1; // nonempty list of distinct pile names; settings apply to every listed pile
+    repeated string Kind = 2;
+    bool AllKinds = 3;
+    bool StaticGroupOverride = 4;
+
+    optional string ErasureSpecies = 5;
+    // Replaces the whole geometry; {} selects the erasure's default geometry. Required with ErasureSpecies.
+    TGroupGeometry Geometry = 6;
+    message TPDiskFilters {
+        repeated TPDiskFilter PDiskFilter = 1;
+    }
+    // Replaces all filters, including with an empty list. Omission inherits the base filters.
+    TPDiskFilters PDiskFilters = 7;
 }
 
 message TDefineStoragePool {
@@ -164,6 +185,9 @@ message TDefineStoragePool {
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
     repeated uint64 ExpectedGroupSlotSize = 15; // primarily for debugging purposes; expected slot size for group allocation
+    // Resolved at creation from this field or the cluster default; readback returns the stored mode.
+    // Omitted updates preserve it, and changing it is not allowed.
+    optional bool BridgeMode = 16;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;

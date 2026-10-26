@@ -320,6 +320,78 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         CheckPileData(env, checker, 2, FirstThirdPileNodeId);
     }
 
+    // groups created while the addition of the pile is stuck get no part in the pile (the addition gives it to them), so
+    // they neither fail for lack of resources there nor take the ones the addition counts on; the stuck addition is
+    // cancelled by removing the pile, which can be added again then
+    Y_UNIT_TEST(StuckAdditionCancelled) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        auto res = AddSingleSlotHostConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        res = AddPileToConfig(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId, 2);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        // validation by BSC fails, but distconf is told it succeeded, so BSC can't place the parts afterwards
+        bool spoofValidation = true;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDistconfResponse && spoofValidation) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfResponse>()->Record;
+                if (record.GetStatus() == NKikimrBlobStorage::TEvControllerDistconfResponse::Error) {
+                    record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                    record.ClearErrorReason();
+                }
+            }
+            return true;
+        };
+        res = AddPile(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        spoofValidation = false;
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env).GetClusterStateDetails().GetPendingPileOperation().HasErrorReason();
+        }, "error of BSC recorded");
+
+        // the new pool gets its group with no part in the pile
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        std::optional<ui32> newGroupId;
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+                if (group->GetIsProxyGroup()) {
+                    newGroupId = group->GetGroupId();
+                }
+            }
+        }
+        UNIT_ASSERT(newGroupId);
+        const auto info = GetGroupInfo(env, *newGroupId);
+        UNIT_ASSERT_C(!NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2)),
+            info.DebugString());
+        checker.Write(*newGroupId);
+
+        // the stuck addition is cancelled by the removal
+        RemovePileAndWait(env, "pile_3");
+        CheckPileGone(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId);
+        checker.CheckAll();
+
+        // resources appear, the pile is added with parts of both groups
+        res = ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["host_configs"][1]["drive"][0]["expected_slot_count"] = 4;
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        AddPileAndWait(env, "pile_3");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        RejoinPile(env, 2);
+        checker.Write(groupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, FirstThirdPileNodeId);
+    }
+
     // the pile can't be rejoined until BSC adds its parts to every group; BSC finishes the operation after restart
     Y_UNIT_TEST(RejoinWaitsForBsc) {
         TEnvironmentSetup env(MakeExpandableSettings());

@@ -11,6 +11,7 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/hash_multi_map.h>
@@ -1160,6 +1161,15 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
+            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
+
+            void SetLocation(const TString& serialized) {
+                Location = serialized;
+                RequiredLocation = std::make_shared<const TNodeLocation>(TNodeLocation::FromSerialized, serialized);
+            }
+
+            static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
 
             template<typename TRowset>
             static TPDiskFilter CreateFromRowset(const TRowset &rowset) {
@@ -1179,10 +1189,14 @@ public:
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
                 }
+                if (rowset.template HaveValue<T::Location>()) {
+                    result.SetLocation(rowset.template GetValue<T::Location>());
+                }
                 return result;
             }
 
-            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric) const {
+            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric,
+                    const TNodeLocation& location) const {
                 TPDiskCategory c(category);
 
                 // determine disk type in terms of configuration
@@ -1194,11 +1208,12 @@ public:
                 return (!Type || *Type == type)
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
-                    && (!Kind || *Kind == kind);
+                    && (!Kind || *Kind == kind)
+                    && (!RequiredLocation || MatchPDiskLocation(location, *RequiredLocation));
             }
 
-            bool MatchPDisk(const TPDiskInfo& pdisk) const {
-                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric);
+            bool MatchPDisk(const TPDiskInfo& pdisk, const TNodeLocation& location) const {
+                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric, location);
             }
 
             void Output(IOutputStream& s) const {
@@ -1216,6 +1231,9 @@ public:
                 if (const auto& x = Kind) {
                     s << comma() << "Kind:" << *x;
                 }
+                if (Location) {
+                    s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1230,14 +1248,26 @@ public:
             }
 
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind);
+            void Save(IOutputStream* s) const {
+                ::SaveMany(s, Type, SharedWithOs, ReadCentric, Kind, Location);
+            }
+
+            void Load(IInputStream* s) {
+                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
+                Location.Clear();
+                RequiredLocation.reset();
+                if (location) {
+                    SetLocation(*location);
+                }
+            }
         };
 
         Table::Name::Type Name;
@@ -1266,6 +1296,16 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+
+        void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
+            RealmLevelBegin = geometry.GetRealmLevelBegin();
+            RealmLevelEnd = geometry.GetRealmLevelEnd();
+            DomainLevelBegin = geometry.GetDomainLevelBegin();
+            DomainLevelEnd = geometry.GetDomainLevelEnd();
+            NumFailRealms = geometry.GetNumFailRealms();
+            NumFailDomainsPerFailRealm = geometry.GetNumFailDomainsPerFailRealm();
+            NumVDisksPerFailDomain = geometry.GetNumVDisksPerFailDomain();
+        }
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -2174,6 +2214,10 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
+    // no part in the pile, the addition gives it to them
+    bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
+    ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
@@ -2743,6 +2787,11 @@ public:
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
+    static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+    TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);

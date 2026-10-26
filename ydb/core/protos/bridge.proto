@@ -86,6 +86,9 @@ message TClusterStateDetails {
     // static group ids are never reused, as nodes ignore group info with generation lower than the one they know; this is
     // the lowest id for the parts of static groups allocated when piles are added, set once some of them are removed
     uint32 NextStaticGroupId = 6;
+
+    // Persisted opt-in; requires nodes supporting mixed ordinary/bridged storage pools.
+    bool NonUniformStorageEnabled = 7;
 }
 
 message TGroupState {

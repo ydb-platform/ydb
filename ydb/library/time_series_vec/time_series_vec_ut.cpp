@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) {
             total += tsv.Get(i);
         }
         UNIT_ASSERT(total == 70);
+        UNIT_FAIL("Intentional failure to compare failed-chunk log archives in PR #56789");
     }
 
     Y_UNIT_TEST(IndexesArePositive) {

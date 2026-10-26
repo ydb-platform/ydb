@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
         const auto schema = arrow::schema({ arrow::field("key", values->type()) });
         const auto batch = arrow::RecordBatch::Make(schema, 2, { values });
         const TLogicalTypes types = { decimal };
-        const auto one = TReplaceKey::FromBatch(batch, 0, types);
-        const auto large = TReplaceKey::FromBatch(batch, 1, types);
+        const TReplaceKey one = TReplaceKey::FromBatch(batch, 0, types);
+        const TReplaceKey large = TReplaceKey::FromBatch(batch, 1, types);
         const TStoreReplaceKey storedOne(one);
         const TStoreReplaceKey storedLarge(large);
         const TComparablePosition onePosition(one);
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(ArrowReplaceKeyLogicalTypes) {
             UNIT_ASSERT_VALUES_EQUAL(onePosition < largePosition, numeric);
             UNIT_ASSERT_VALUES_EQUAL((IsSelfSorted<false, true>(batch, types)), numeric);
             UNIT_ASSERT_VALUES_EQUAL(ScalarCompare(GetScalar(values, 0), GetScalar(values, 1), decimal) < 0, numeric);
-            for (const auto type : { uuid, NScheme::TTypeInfo(NScheme::NTypeIds::String), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) }) {
+            for (const auto& type : { uuid, NScheme::TTypeInfo(NScheme::NTypeIds::String), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) }) {
                 UNIT_ASSERT(TComparator::CompareValueNotNull(AsView(oneBytes), AsView(largeBytes), type) > 0);
             }
         };

@@ -1,4 +1,5 @@
 #include "kqp_query_compiler.h"
+#include "remote_embedder/secrets.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -583,6 +584,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
     THashMap<TString, TString> secureParams;
     NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
+    FillRemoteEmbedderSecureParams(node, secureParams);
 
     for (auto& [secretName, structuredToken] : secureParams) {
         const auto& tokenParser = CreateStructuredTokenParser(structuredToken);

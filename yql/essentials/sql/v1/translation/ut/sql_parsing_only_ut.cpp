@@ -3720,6 +3720,33 @@ Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
+Y_UNIT_TEST(RemoteEmbedderScalarAlias) {
+    for (const TStringBuf name : {"ApplyRemoteEmbedder", "applyremoteembedder", "RemoteEmbedder::ApplyRemoteEmbedder"}) {
+        const auto query = TStringBuilder() << "SELECT " << name
+            << "('text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token_path', 'Дом');";
+        const auto result = SqlToYql(query);
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "RemoteEmbedder.ApplyRemoteEmbedder");
+    }
+}
+
+Y_UNIT_TEST(RemoteEmbedderStreamAlias) {
+    const auto result = SqlToYql(R"(
+        $requests = AsList(
+            AsStruct('Молоко' AS Text, AsStruct(1 AS Id) AS PassThrough),
+            AsStruct('Корова' AS Text, AsStruct(2 AS Id) AS PassThrough)
+        );
+        SELECT Embedding, Status, PassThrough FROM (
+            PROCESS AS_TABLE($requests)
+            USING ApplyRemoteEmbedderStream(
+                'text-embedding-3-large', 'https://api.openai.com/v1',
+                'openai_token_path', TableRows(), 32u, 10240u, 5u)
+        );
+    )");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "RemoteEmbedder.ApplyRemoteEmbedderStream");
+}
+
 Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
     auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig)('2022-01-01');";
     auto res = SqlToYql(req);

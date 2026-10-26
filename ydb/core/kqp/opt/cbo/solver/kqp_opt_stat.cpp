@@ -1,5 +1,6 @@
 #include "kqp_opt_stat.h"
 
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -73,6 +74,7 @@ namespace {
     }
 
     TVector<TString> UdfBlackList = {
+        "RemoteEmbedder.",
         "RandomNumber",
         "Random",
         "RandomUuid",
@@ -142,6 +144,14 @@ namespace {
 
     bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
         if (!TCoFlatMap::Match(input.Get()) && !TCoMap::Match(input.Get())) {
+            return false;
+        }
+
+        // Remote calls require runtime secret resolution, including when they
+        // are nested inside a map over constant input.
+        if (NYql::FindNode(input->ChildPtr(1), [](const TExprNode::TPtr& node) {
+                return node->IsCallable("Udf") && node->Head().Content().StartsWith("RemoteEmbedder.");
+            })) {
             return false;
         }
 

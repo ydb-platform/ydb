@@ -55,6 +55,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/hybrid_search
     ydb/library/yql/udfs/common/knn
+    ydb/library/yql/udfs/common/remote_embedder
     ydb/library/yql/udfs/common/roaring
     ydb/library/yql/udfs/statistics_internal
     yql/essentials/parser/pg_wrapper

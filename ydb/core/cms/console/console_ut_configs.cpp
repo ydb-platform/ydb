@@ -14,6 +14,8 @@
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
@@ -5442,7 +5444,8 @@ config:
     const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
     const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
 
-    Y_UNIT_TEST(TestDatabaseConfigAllowlistRemainsBaseOnly) {
+    // Check that database selectors cannot introduce unmarked config types without permission.
+    Y_UNIT_TEST(TestDatabaseConfigAllowlistAppliesToSelectors) {
         NKikimrConfig::TAppConfig appcfg;
         appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
         TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
@@ -5450,17 +5453,24 @@ config:
         CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
             PermissiveTenantUserAttribute, "true");
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
-metadata: {kind: DatabaseConfig, database: "/dc-1/users/tenant-1", version: 0}
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
 config: {}
 allowed_labels:
-  deployment: {type: string}
+  deployment:
+    type: string
 selector_config:
 - description: existing database selector policy
-  selector: {deployment: selected}
+  selector:
+    deployment: selected
   config:
-    auth_config: {account_lockout: {attempt_reset_duration: 1s}}
-)");
+    auth_config:
+      account_lockout:
+        attempt_reset_duration: 1s
+)", "is not allowed to be used in the database configuration (for selector with description \\'existing database selector policy\\')");
     }
 
     Y_UNIT_TEST(TestAllowDatabaseConfigSelectorsOnlyWithPermissiveTenantUserAttribute) {
@@ -5649,6 +5659,219 @@ selector_config:
       enable_external_hive: true
 )";
         CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, dbConfig);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TConsoleDatabaseConfigTypesTests) {
+
+    // Check type permissions in the base config and in every declared selector independently of node labels.
+    void CheckConfigTypes(const TString& permission, bool unmarkedInBase, TMaybe<bool> unmarkedInSelector)
+    {
+        // Create a database with independent permissions for selectors and unmarked config types.
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), appConfig);
+        TVector<std::pair<TString, TString>> attributes;
+        if (permission) {
+            attributes.emplace_back(TString(TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG), permission);
+        }
+        if (unmarkedInSelector.Defined()) {
+            attributes.emplace_back(TString(TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS), "true");
+        }
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}}, attributes);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+)");
+
+        // Build the requested placement of marked and unmarked config types.
+        TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  feature_flags: {}
+)";
+        if (unmarkedInBase) {
+            config += R"(
+  auth_config:
+    account_lockout:
+      attempt_reset_duration: 1s
+)";
+        }
+        if (unmarkedInSelector.Defined()) {
+            config += R"(
+selector_config:
+- description: marked selector
+  selector: {}
+  config:
+    feature_flags: !inherit
+      enable_external_hive: true
+)";
+            if (*unmarkedInSelector) {
+                config += R"(
+- description: unmarked selector
+  selector:
+    node_type: compute
+  config:
+    auth_config: !inherit
+      account_lockout:
+        attempt_reset_duration: 1s
+)";
+            }
+        }
+
+        // Reject unmarked types when permission is absent or false and identify the offending selector.
+        const bool allowed = permission == "true" || (!unmarkedInBase && !unmarkedInSelector.GetOrElse(false));
+        if (allowed) {
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, config);
+            return;
+        }
+        auto* request = new TEvConsole::TEvReplaceYamlConfigRequest;
+        request->Record.MutableRequest()->set_config(config);
+        runtime.SendToConsole(request);
+        TAutoPtr<IEventHandle> handle;
+        auto [success, error] = runtime.GrabEdgeEventsRethrow<
+            TEvConsole::TEvReplaceYamlConfigResponse, TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT_C(!success && error, "Expected a rejected database config");
+        UNIT_ASSERT_VALUES_EQUAL(error->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(!error->Record.GetIssues().empty());
+        const auto& message = error->Record.GetIssues(0).message();
+        UNIT_ASSERT_STRING_CONTAINS(message, "'auth_config' is not allowed to be used in the database configuration");
+        if (unmarkedInBase) {
+            UNIT_ASSERT_C(message.find("for selector with description") == TString::npos, message);
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(message, "for selector with description 'unmarked selector'");
+        }
+    }
+
+    // Check both permission values with and without unmarked types in a config without selectors.
+    Y_UNIT_TEST_QUAD(ConfigTypesWithoutSelectors, allowAllTypes, unmarkedInBase) {
+        CheckConfigTypes(allowAllTypes ? "true" : "false", unmarkedInBase, Nothing());
+    }
+
+    // Check every placement of unmarked types in the base and selectors with both permission values.
+    Y_UNIT_TEST_OCTET(ConfigTypesWithSelectors, allowAllTypes, unmarkedInBase, unmarkedInSelector) {
+        CheckConfigTypes(allowAllTypes ? "true" : "false", unmarkedInBase, unmarkedInSelector);
+    }
+
+    // Check that an absent attribute defaults to false without selectors and with either selector type.
+    Y_UNIT_TEST_TWIN(ConfigTypesWithoutAttribute, unmarkedInBase) {
+        CheckConfigTypes({}, unmarkedInBase, Nothing());
+        CheckConfigTypes({}, unmarkedInBase, false);
+        CheckConfigTypes({}, unmarkedInBase, true);
+    }
+
+    // Verify attribute permissions, persistence, isolation, and validation for unmarked config types.
+    Y_UNIT_TEST_TWIN(AllowAllTypesInDatabaseConfig, allowAtCreation) {
+        // Create a database with content validation and an optional creation-time permission.
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), appcfg);
+        runtime.GetAppData().ConfigSwissKnife = configValidator.get();
+        const TString attribute = TString(TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG);
+        TVector<std::pair<TString, TString>> attributes;
+        if (allowAtCreation) {
+            attributes.emplace_back(attribute, "true");
+        }
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}}, attributes);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+)");
+        const TString configTemplate = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  auth_config:
+    account_lockout:
+      attempt_reset_duration: 1s
+)";
+        auto makeConfig = [&](int version) {
+            return SubstGlobalCopy(configTemplate, "VERSION", ToString(version).c_str());
+        };
+        const TString notAllowed = "is not allowed to be used in the database configuration";
+
+        // Require explicit permission when the attribute was not set at creation.
+        if (!allowAtCreation) {
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeConfig(0), notAllowed);
+            CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, attribute, "true");
+        }
+
+        // Accept unmarked sections and retain the permission and config across Console restarts.
+        int version = 0;
+        TString storedConfig;
+        for (int i = 0; i < 2; ++i) {
+            storedConfig = makeConfig(version++);
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, storedConfig);
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+            CheckDatabaseConfigReplacedWith(runtime, TENANT1_1_NAME, storedConfig);
+        }
+
+        // Keep the permission scoped to the database whose attribute is enabled.
+        CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        const TString otherConfig = SubstGlobalCopy(makeConfig(0), TENANT1_1_NAME, TENANT1_2_NAME);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, otherConfig, notAllowed);
+
+        // Reject new uploads after disabling or deleting the attribute while retaining the stored config.
+        for (const TString& value : {"false", "no", "off", "0", "invalid", ""}) {
+            CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, attribute, value);
+            for (int i = 0; i < 2; ++i) {
+                CheckDatabaseConfigReplacedWith(runtime, TENANT1_1_NAME, storedConfig);
+                CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, makeConfig(version), notAllowed);
+                if (i == 0) {
+                    GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+                }
+            }
+        }
+
+        // Continue accepting marked sections after the permission is removed.
+        TString markedConfig = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  feature_flags: {}
+)";
+        SubstGlobal(markedConfig, "VERSION", ToString(version++));
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, markedConfig);
+
+        // Re-enable unmarked sections without bypassing config content validation.
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, attribute, "true");
+        const TString invalidConfig = SubstGlobalCopy(makeConfig(version), "1s", "invalid");
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, invalidConfig,
+            "Cannot parse attempt reset duration");
+        const TString unknownConfig = makeConfig(version) + R"(
+  unknown_config_type: {})";
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, unknownConfig, "Unknown key");
+
+        // Keep the separate permission for database selectors in effect.
+        const TString selectorConfig = makeConfig(version) + R"(
+selector_config:
+- description: database selector
+  selector:
+    node_type: compute
+  config: {}
+)";
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, selectorConfig,
+            "are not allowed for database");
     }
 }
 

@@ -235,10 +235,24 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
                 false,
                 unknownFieldsCollector);
 
-            std::vector<TString> errors;
-            NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateDatabaseConfig(databaseCfg, errors);
-            if (result == NKikimr::NConfig::EValidationResult::Error) {
-                ythrow yexception() << errors.front();
+            if (!IsAllTypesInDatabaseConfigAllowed(opCtx.TargetDatabase)) {
+                std::vector<TString> errors;
+                NKikimr::NConfig::EValidationResult result =
+                    NKikimr::NConfig::ValidateDatabaseConfig(databaseCfg, errors);
+                if (result == NKikimr::NConfig::EValidationResult::Error) {
+                    ythrow yexception() << errors.front();
+                }
+
+                // Check all declared selectors, including those that do not match current node labels.
+                for (const auto& selector : databaseConfig.Selectors) {
+                    const auto selectorCfg = NYamlConfig::YamlToProto(selector.Config, true, false);
+                    errors.clear();
+                    result = NKikimr::NConfig::ValidateDatabaseConfig(selectorCfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front()
+                            << " (for selector with description '" << selector.Description << "')";
+                    }
+                }
             }
 
             if (!databaseConfig.Selectors.empty() || !databaseConfig.AllowedLabels.empty()) {
@@ -282,7 +296,6 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
     }
 }
 
-
 bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) const
 {
     auto* tm = Self.TenantsManager;
@@ -304,6 +317,22 @@ bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) 
     return false;
 }
 
+bool TConfigsManager::IsAllTypesInDatabaseConfigAllowed(const TString& database) const
+{
+    auto* tm = Self.TenantsManager;
+    auto tenant = tm ? tm->GetTenant(database) : nullptr;
+    if (!tenant) {
+        return false;
+    }
+
+    for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
+        if (attr.GetKey() == TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG) {
+            bool value = false;
+            return TryFromString<bool>(attr.GetValue(), value) && value;
+        }
+    }
+    return false;
+}
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {

@@ -98,6 +98,8 @@ public:
     void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
     void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
     bool IsDatabaseConfigSelectorsAllowed(const TString& database) const;
+    // Check whether the database attribute enables config types without AllowInDatabaseConfig.
+    bool IsAllTypesInDatabaseConfigAllowed(const TString& database) const;
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 

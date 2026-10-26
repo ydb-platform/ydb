@@ -38,6 +38,12 @@ namespace NKikimr::NConsole {
 //  - "false", "no", "off", "0", (absent) - disabled
 constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
 
+// Tenant UserAttribute that enables all config types in database YAML configs.
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG = "allow_all_types_in_database_config";
+
 namespace TEvConsole {
     enum EEv {
         // requests

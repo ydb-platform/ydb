@@ -16,7 +16,11 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

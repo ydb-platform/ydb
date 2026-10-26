@@ -3,7 +3,11 @@ GTEST(topic_it)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-REQUIREMENTS(ram:32 cpu:2)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:1)
+ELSE()
+    REQUIREMENTS(ram:32 cpu:2)
+ENDIF()
 
 FORK_SUBTESTS()
 

@@ -2,7 +2,11 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(ram:32 cpu:2)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:1)
+ELSE()
+    REQUIREMENTS(ram:32 cpu:2)
+ENDIF()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

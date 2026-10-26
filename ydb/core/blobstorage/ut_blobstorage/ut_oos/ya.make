@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     FORK_SUBTESTS()
 
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2 ram:16)
+    IF (NOT SANITIZER_TYPE)
+        REQUIREMENTS(cpu:1 ram:16)
+    ELSE()
+        REQUIREMENTS(cpu:2 ram:16)
+    ENDIF()
 
     SRCS(
         out_of_space.cpp

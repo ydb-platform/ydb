@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/library/yql/dq/runtime)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     dq_arrow_helpers_ut.cpp

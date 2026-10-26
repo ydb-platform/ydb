@@ -28,6 +28,7 @@ SRCS(
     task_controller.proto
     test_connection.proto
     token_accessor.proto
+    wasm_services.proto
 )
 
 PEERDIR(

@@ -13,6 +13,16 @@ namespace NFqRun {
 
 constexpr i64 MAX_RESULT_SET_ROWS = 1000;
 
+// Shared by the main thread and the actors polling asynchronous queries.
+void InstallInterruptHandlers();
+bool IsInterrupted();
+TDuration CancellationTimeout();
+
+enum class EComputeBackend {
+    InPlace,
+    Ydb
+};
+
 struct TExternalDatabase {
     TString Endpoint;
     TString Database;
@@ -58,6 +68,8 @@ struct TFqSetupSettings: public NKikimrRun::TServerSettings {
     EVerbosity VerbosityLevel = EVerbosity::Info;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
+
+    void ConfigureCompute(std::optional<EComputeBackend> backend, bool hasAnalytics);
 };
 
 struct TRunnerOptions {

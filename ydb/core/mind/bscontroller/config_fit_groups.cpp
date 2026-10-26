@@ -305,6 +305,9 @@ namespace NKikimr {
                 }
 
                 auto reassignment = PrepareGroupReassignment(*groupInfo);
+                if (!reassignment.ReplacedSlots.empty()) {
+                    CheckBridgedPartReassignment(*groupInfo, reassignment); // before looking for the place for it
+                }
                 const bool layoutRepairRequested = State.SanitizingRequests.contains(groupId);
                 if (layoutRepairRequested) {
                     if (groupInfo->Topology->QuorumChecker->OneStepFromDegradedOrWorse(reassignment.NonOperationalVDisks)) {
@@ -513,8 +516,24 @@ namespace NKikimr {
                 placement.Group = std::move(outcome.Group);
             }
 
+            void CheckBridgedPartReassignment(const TGroupInfo& groupInfo, const TGroupReassignment& reassignment) const {
+                // the replacing VDisk has no data of its own, even with the donor: the one being replaced may be
+                // unreadable; the VDisks not ready may miss data too
+                TBlobStorageGroupInfo::TGroupVDisks dataless(groupInfo.Topology.get());
+                for (const TVSlotInfo *slot : groupInfo.VDisksInGroup) {
+                    if (reassignment.ReplacedSlots.contains(slot->GetShortVDiskId()) || !slot->IsReady) {
+                        dataless |= {groupInfo.Topology.get(), slot->GetShortVDiskId()};
+                    }
+                }
+                State.CheckBridgedPartDataRestorable(groupInfo, dataless);
+            }
+
             void ApplyGroupReassignment(TGroupInfo *groupInfo, const TGroupReassignment& reassignment,
                                         const TGroupPlacement& placement) {
+                if (!reassignment.ReplacedSlots.empty()) {
+                    CheckBridgedPartReassignment(*groupInfo, reassignment); // layout repair may have added the slot
+                }
+
                 TMap<TVDiskID, TVSlotId> preservedSlots;
                 for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
                     if (!reassignment.ReplacedSlots.contains(slot->GetShortVDiskId())) {

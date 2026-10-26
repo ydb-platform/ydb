@@ -169,7 +169,6 @@ namespace NKikimr::NStorage {
             }
         }
 
-
         if (!disconnectedPileIndices.empty()) {
             std::vector<TBridgePileId> pileIds;
             for (size_t pileIndex : disconnectedPileIndices) {

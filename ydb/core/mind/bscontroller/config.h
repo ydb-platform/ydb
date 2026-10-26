@@ -288,6 +288,12 @@ namespace NKikimr {
 
             void CheckConsistency() const;
 
+            // refuse the change of VDisks of the part of the bridged group that leaves the part unable to restore its
+            // data from its pile, when the pile takes part in data quorum; dataless are VDisks having no full data after
+            // the change
+            void CheckBridgedPartDataRestorable(const TGroupInfo& group,
+                const TBlobStorageGroupInfo::TGroupVDisks& dataless) const;
+
             ui64 ApplyConfigUpdates();
 
             std::optional<TPDiskId> FindStaticPDiskByLocation(ui32 nodeId, const TString& path) const {

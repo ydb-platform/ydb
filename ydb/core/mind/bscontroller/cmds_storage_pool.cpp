@@ -410,24 +410,6 @@ namespace NKikimr::NBsController {
         const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
         const TVSlotId vslotId = group->VDisksInGroup[orderNumber]->VSlotId;
 
-        if (group->BridgePileId && BridgeInfo) {
-            // The group is a part of a bridged group residing in its pile. When the new VDisk cannot restore its
-            // data from the other VDisks of the same pile (like any move in an erasure none part does), the part
-            // keeps its SYNCED stage and the pile its SYNCHRONIZED state, while the data is gone: reads of the
-            // trusted part fail and the failover to the pile loses the data. The pile has to be taken out and
-            // rejoined to resync the part from another pile instead.
-            const auto *bridgePile = BridgeInfo->FindPile(group->BridgePileId);
-            if (bridgePile && bridgePile->State == NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                TBlobStorageGroupInfo::TGroupVDisks failed(group->Topology.get());
-                failed += TBlobStorageGroupInfo::TGroupVDisks(group->Topology.get(), vdiskId);
-                if (!group->Topology->QuorumChecker->CheckFailModelForGroup(failed)) {
-                    throw TExError() << "Reassignment of VDisk# " << vdiskId << " would leave the part of the bridged"
-                        " group in the '" << bridgePile->Name << "' pile unable to restore its data from its pile."
-                        " Take the pile out and rejoin it to resync the part from another pile";
-                }
-            }
-        }
-
         TPDiskId targetPDiskId;
         if (cmd.HasTargetPDiskId()) {
             const NKikimrBlobStorage::TPDiskId& proto = cmd.GetTargetPDiskId();
@@ -834,6 +816,15 @@ namespace NKikimr::NBsController {
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+
+        // the wiped VDisk restores its data from the other ones, the VDisks not ready may miss data too
+        TBlobStorageGroupInfo::TGroupVDisks dataless(group->Topology.get(), vslot->GetShortVDiskId());
+        for (const TVSlotInfo *slot : group->VDisksInGroup) {
+            if (!slot->IsReady) {
+                dataless |= {group->Topology.get(), slot->GetShortVDiskId()};
+            }
+        }
+        CheckBridgedPartDataRestorable(*group, dataless);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {

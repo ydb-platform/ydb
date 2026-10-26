@@ -56,6 +56,16 @@ public:
         return false;
     }
 
+    bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const override {
+        for (const auto& collector : Underlying) {
+            if (collector->NeedHistoricalPrecharge(tableId, key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
         const TRowVersion& writeVersion, TIntrusivePtr<NACLib::TUserContext> userCtx) override

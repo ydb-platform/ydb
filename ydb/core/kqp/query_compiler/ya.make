@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/runtime/common
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/ydb_convert
     ydb/library/mkql_proto
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/tasks

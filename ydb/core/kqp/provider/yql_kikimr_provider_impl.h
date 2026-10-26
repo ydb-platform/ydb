@@ -371,7 +371,7 @@ const TStringBuf& KikimrCommitModeRollback();
 const TStringBuf& KikimrCommitModeScheme();
 
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
-bool IsKikimrSystemColumn(const TStringBuf columnName);
+bool IsKikimrSystemColumn(const TStringBuf columnName, const TKikimrTableMetadata& metadata);
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 

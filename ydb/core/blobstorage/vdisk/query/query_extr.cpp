@@ -334,7 +334,7 @@ namespace NKikimr {
             // send response and die
             QueryCtx->PDiskReadBytes += Batcher.GetPDiskReadBytes();
 
-            if (neededParts.empty()) {
+            if (neededParts.empty() || BatcherCtx->OrigEv->Get()->SuppressCorruptedBlobRestoration) {
                 return Finish2(ctx);
             }
 

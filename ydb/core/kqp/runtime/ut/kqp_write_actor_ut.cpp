@@ -116,9 +116,11 @@ public:
         {}
     };
 
-    TSinkOwner(TCallbacks& callbacks, ETableKind kind)
+    TSinkOwner(TCallbacks& callbacks, ETableKind kind, TIntrusivePtr<TKqpCounters> counters, TTxId txId)
         : Callbacks(callbacks)
         , Kind(kind)
+        , Counters(std::move(counters))
+        , TxId(std::move(txId))
         , Alloc(std::make_shared<TScopedAlloc>(__LOCATION__))
         , MemoryInfo("KqpDirectWriteActorTest")
         , HolderFactory(Alloc->Ref(), MemoryInfo)
@@ -134,7 +136,7 @@ public:
     void Bootstrap() {
         TGuard guard(*Alloc);
         auto factory = MakeIntrusive<TDqAsyncIoFactory>();
-        RegisterKqpWriteActor(*factory, MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        RegisterKqpWriteActor(*factory, Counters);
         NYql::NDqProto::TTaskOutput output;
         output.MutableSink()->SetType(TString(NYql::KqpTableSinkName));
         output.MutableSink()->MutableSettings()->PackFrom(MakeSettings(Kind));
@@ -143,7 +145,7 @@ public:
             .OutputDesc = output,
             .OutputIndex = 0,
             .StatsLevel = TCollectStatsLevel::None,
-            .TxId = ui64(1),
+            .TxId = TxId,
             .TaskId = 1,
             .Callback = &Callbacks,
             .SecureParams = params,
@@ -184,6 +186,8 @@ private:
 
     TCallbacks& Callbacks;
     const ETableKind Kind;
+    TIntrusivePtr<TKqpCounters> Counters;
+    const TTxId TxId;
     std::shared_ptr<TScopedAlloc> Alloc;
     TMemoryUsageInfo MemoryInfo;
     THolderFactory HolderFactory;
@@ -196,7 +200,8 @@ public:
     using TWrite = TEvPipeCache::TEvForward::TPtr;
 
     explicit TSinkFixture(ETableKind kind = ETableKind::Column, i64 memoryLimit = 64_MB,
-            TPartitions partitions = {{ShardId, Nothing()}}, ui64 maxRetryResolvesPerShard = 5)
+            TPartitions partitions = {{ShardId, Nothing()}}, ui64 maxRetryResolvesPerShard = 5,
+            bool enableStreamingQueriesCounters = false, TTxId txId = ui64(1))
         : PreviousSettings(GetWriteActorSettings())
         , Kind(kind)
         , RowPartitions(std::move(partitions))
@@ -207,14 +212,16 @@ public:
         settings->MaxRetryResolvesPerShard = maxRetryResolvesPerShard;
         SetWriteActorSettings(settings);
 
-        Runtime.Initialize(TAppPrepare().Unwrap());
+        auto app = TAppPrepare();
+        app.FeatureFlags.SetEnableStreamingQueriesCounters(enableStreamingQueriesCounters);
+        Runtime.Initialize(app.Unwrap());
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
         Edge = Runtime.AllocateEdgeActor();
         SchemeCache = Runtime.AllocateEdgeActor();
         PipeCache = Runtime.AllocateEdgeActor();
         Runtime.RegisterService(MakeSchemeCacheID(), SchemeCache);
         Runtime.RegisterService(MakePipePerNodeCacheID(false), PipeCache);
-        Owner = Runtime.Register(new TSinkOwner(Callbacks, Kind));
+        Owner = Runtime.Register(new TSinkOwner(Callbacks, Kind, Counters, std::move(txId)));
         Resolve();
         UNIT_ASSERT_VALUES_EQUAL(Callbacks.Resumes, 1);
     }
@@ -264,6 +271,10 @@ public:
             UNIT_ASSERT(result.emplace(shardId, std::move(event)).second);
         }
         return result;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetSinkCounters() const {
+        return Counters->GetKqpCounters()->FindSubgroup("subsystem", "DqSinkTracker");
     }
 
     void AssertNoWrites() {
@@ -429,6 +440,7 @@ private:
         Runtime.Send(event->Sender, SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySetResult(request));
     }
 
+    TIntrusivePtr<TKqpCounters> Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
     const TWriteActorSettings PreviousSettings;
     const ETableKind Kind;
     TPartitions RowPartitions;
@@ -442,6 +454,57 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
+    Y_UNIT_TEST_TWIN(StreamingQuerySinkCounters, EnableCounters) {
+        const TString queryPath = "/Root/streaming_query";
+        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, EnableCounters, queryPath);
+        const auto tracker = fixture.GetSinkCounters();
+        if (!EnableCounters) {
+            UNIT_ASSERT(!tracker);
+            return;
+        }
+        UNIT_ASSERT(tracker);
+        const auto sink = tracker->FindSubgroup("sink", "TableSink");
+        UNIT_ASSERT(sink);
+        const auto query = sink->FindSubgroup("path", queryPath);
+        UNIT_ASSERT(query);
+        const auto counter = query->FindCounter("InFlyCheckpoints");
+        UNIT_ASSERT(counter);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+        const auto egressDataRate = query->FindCounter("EgressDataRate");
+        UNIT_ASSERT(egressDataRate);
+        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
+
+        fixture.Write(1, MakeCheckpoint(1));
+        const auto write = fixture.GrabWrite();
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+        // A checkpoint queued behind the active one must not increase the gauge.
+        fixture.Write(2, MakeCheckpoint(2));
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
+        fixture.Acknowledge(write);
+        const auto firstWriteBytes = egressDataRate->Val();
+        UNIT_ASSERT(firstWriteBytes > 0);
+        fixture.Execute([&](auto& sink, auto&) {
+            UNIT_ASSERT_VALUES_EQUAL(firstWriteBytes, sink.GetEgressStats().Bytes);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
+        const auto secondWrite = fixture.GrabWrite(2);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+        fixture.Acknowledge(secondWrite);
+        UNIT_ASSERT(egressDataRate->Val() > firstWriteBytes);
+        fixture.Execute([&](auto& sink, auto&) {
+            UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), sink.GetEgressStats().Bytes);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, (TVector<ui64>{1, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+    }
+
+    Y_UNIT_TEST(NoSinkCountersForRegularQuery) {
+        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, true);
+        UNIT_ASSERT(!fixture.GetSinkCounters());
+    }
+
     // These event-driven scenarios reproduce the stable-version failures.
     // Main retains in-flight column batches during re-resolution; the same tests
     // also verify checkpoint and backpressure behavior under that retry policy.

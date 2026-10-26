@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/fq/libs/wasm_services
     library/cpp/colorizer
     library/cpp/getopt
     library/cpp/json

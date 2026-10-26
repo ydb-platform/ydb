@@ -976,38 +976,48 @@ void CleanupPartKeys(
     }
 }
 
-int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel) {
-    const i64 fileSize = filePath != "-" ? GetFileLength(filePath) : 0;
-    if (fileSize < 0) {
-        Cerr << "Failed to get file size: " << filePath << Endl;
-        return 1;
-    }
+bool IsStdioPath(const TString& path) {
+    return path == "-";
+}
 
-    Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
+int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel) {
+    const bool stdio = IsStdioPath(filePath);
+    const i64 fileSize = stdio ? 0 : GetFileLength(filePath);
+    if (stdio) {
+        Cout << "Uploading data from stdin" << Endl;
+    } else {
+        if (fileSize < 0) {
+            Cerr << "Failed to get file size: " << filePath << Endl;
+            return 1;
+        }
+        Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
+    }
 
     TVector<TString> partKeys;
     partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
 
     std::unique_ptr<TFileInput> fileInput;
     IInputStream* input = nullptr;
-    if (filePath != "-") {
+    if (stdio) {
+        input = &Cin;
+    } else {
         fileInput = std::make_unique<TFileInput>(filePath);
         input = fileInput.get();
-    } else {
-        input = &Cin;
     }
 
     TVector<char> buffer(FileTransferChunkSize);
     ui64 partIndex = 0;
+    ui64 totalBytes = 0;
+    size_t readBytes = input->Load(buffer.data(), buffer.size());
+    char nextByte = 0;
+    bool hasNext = readBytes == buffer.size() && input->ReadChar(nextByte);
+    const bool singlePart = !hasNext;
 
     while (true) {
-        const size_t readBytes = input->Read(buffer.data(), buffer.size());
-        if (readBytes == 0) {
-            break;
+        const TString partKey = singlePart ? key : MakePartKey(key, partIndex);
+        if (!singlePart) {
+            partKeys.push_back(partKey);
         }
-
-        const TString partKey = MakePartKey(key, partIndex);
-        partKeys.push_back(partKey);
 
         Ydb::KeyValue::ExecuteTransactionRequest request;
         request.set_path(path);
@@ -1022,13 +1032,25 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
 
         Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
         if (const int code = ExecuteTransaction(stub, database, std::move(request), "Write"); code != 0) {
-            if (code != TryNextNode) {
+            if (stdio || code != TryNextNode) {
                 CleanupPartKeys(stub, database, path, partitionId, partKeys);
+                return code != TryNextNode ? code : 1;
             }
             return code;
         }
 
+        totalBytes += readBytes;
+        if (singlePart) {
+            Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << totalBytes << " bytes)" << Endl;
+            return 0;
+        }
         ++partIndex;
+        if (!hasNext) {
+            break;
+        }
+        buffer[0] = nextByte;
+        readBytes = 1 + input->Load(buffer.data() + 1, buffer.size() - 1);
+        hasNext = readBytes == buffer.size() && input->ReadChar(nextByte);
     }
 
     Ydb::KeyValue::ExecuteTransactionRequest request;
@@ -1044,13 +1066,13 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
 
     Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
     if (const int code = ExecuteTransaction(stub, database, std::move(request), "Concat"); code != 0) {
-        if (code != TryNextNode) {
+        if (stdio || code != TryNextNode) {
             CleanupPartKeys(stub, database, path, partitionId, partKeys);
         }
-        return code;
+        return stdio ? 1 : code;
     }
 
-    Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << fileSize << " bytes)" << Endl;
+    Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << totalBytes << " bytes)" << Endl;
     return 0;
 }
 
@@ -1064,12 +1086,12 @@ int DownloadFile(TKvStub& stub, const TString& database, const TString& path, ui
     while (true) {
         Ydb::KeyValue::ReadResult result;
         if (const int code = ReadValueChunk(stub, database, path, partitionId, key, offset, FileTransferChunkSize, result); code != 0) {
-            return code;
+            return (IsStdioPath(filePath) && code == TryNextNode) ? 1 : code;
         }
 
         if (result.value().empty()) {
             if (offset == 0) {
-                if (filePath != "-") {
+                if (!IsStdioPath(filePath)) {
                     TFileOutput emptyOut(filePath);
                     emptyOut.Finish();
                     Cerr << "File downloaded successfully: key=" << key << " -> " << filePath << " (0 bytes)" << Endl;
@@ -1080,7 +1102,7 @@ int DownloadFile(TKvStub& stub, const TString& database, const TString& path, ui
         }
 
         if (!out) {
-            if (filePath == "-") {
+            if (IsStdioPath(filePath)) {
                 out = &Cout;
             } else {
                 outHolder = std::make_unique<TFileOutput>(filePath);

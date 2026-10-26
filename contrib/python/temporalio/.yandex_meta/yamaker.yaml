@@ -10,6 +10,7 @@ exclude:
   - temporalio/contrib/langsmith/*
   - temporalio/contrib/strands/*
 exclude_from_macros:
+  - temporalio/bridge/ya.make
   - temporalio/bridge/sdk-core/*
   - temporalio/bridge/src/*
   - temporalio/bridge/Cargo.lock

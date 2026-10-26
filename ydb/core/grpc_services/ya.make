@@ -277,4 +277,5 @@ RECURSE_FOR_TESTS(
     grpc_request_check_actor_ut
     grpc_request_tracing_ut
     ut
+    ut_read_rows_bench
 )

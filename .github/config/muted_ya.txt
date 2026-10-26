@@ -47,6 +47,7 @@ ydb/core/tx/replication/controller/ut_schema_change StatsDescription.Unresponsiv
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapCredentialRetry
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion-Deferred
@@ -60,12 +61,14 @@ ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.MissingSource
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.SessionAcquisitionFailureRetries
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.TerminalSessionAcquisitionFailureReplies
 ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.MissingTransferSourceDnsNameRecoversAfterRetryBudget
+ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.SourceAuthorizationFailureRemainsTerminal
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export TExportToS3Tests.CheckItemProgress
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_restore TRestoreTests.ImportBigEncryptedFileWithRebootAfterLastPortion
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging

@@ -1,4 +1,3 @@
-#include "alter_table_request_view.h"
 #include "column_families.h"
 #include "table_description.h"
 #include "table_settings.h"
@@ -119,8 +118,7 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
 
 THashSet<EAlterOperationKind> GetAlterOperationKinds(const NKikimrKqp::TKqpAlterTableRequest* req)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return GetAlterOperationKindsImpl(&view);
+    return GetAlterOperationKindsImpl(req);
 }
 
 namespace {
@@ -310,7 +308,7 @@ static bool FillAlterTableSettingsDescImpl(NKikimrSchemeOp::TTableDescription& o
         changed = true;
     }
 
-    return NKikimr::FillAlterTableSettingsDesc(out, NPrivate::GetAlterTableRequest(in), code, error, changed);
+    return NKikimr::FillAlterTableSettingsDesc(out, in, code, error, changed);
 }
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
@@ -324,8 +322,7 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const NKikimrKqp::TKqpAlterTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData)
 {
-    const NPrivate::TKqpAlterTableRequestView view(in);
-    return FillAlterTableSettingsDescImpl(out, view, profiles, code, error, appData);
+    return FillAlterTableSettingsDescImpl(out, in, profiles, code, error, appData);
 }
 
 template <typename TRequest>
@@ -333,7 +330,7 @@ static bool BuildAlterTableAddIndexRequestImpl(const TRequest* req, NKikimrIndex
     ui64 flags,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const auto ops = GetAlterOperationKindsImpl(req);
+    const auto ops = GetAlterOperationKinds(req);
     if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::AddIndex) {
         code = Ydb::StatusIds::INTERNAL_ERROR;
         error = "Unexpected build alter table add index call.";
@@ -400,8 +397,7 @@ bool BuildAlterTableAddIndexRequest(const NKikimrKqp::TKqpAlterTableRequest* req
     ui64 flags,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableAddIndexRequestImpl(&view, settings, flags, code, error);
+    return BuildAlterTableAddIndexRequestImpl(req, settings, flags, code, error);
 }
 
 // For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
@@ -504,8 +500,7 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const NKikimrKq
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableBloomFilterModifySchemeImpl(path, &view, modifyScheme, code, error);
+    return BuildAlterTableBloomFilterModifySchemeImpl(path, req, modifyScheme, code, error);
 }
 
 template <typename TRequest>
@@ -513,7 +508,7 @@ static bool BuildAlterTableBloomFilterModifySchemeImpl(const TRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    return BuildAlterTableBloomFilterModifySchemeImpl(req->path(), req, modifyScheme, code, error);
+    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
@@ -527,8 +522,7 @@ bool BuildAlterTableBloomFilterModifyScheme(const NKikimrKqp::TKqpAlterTableRequ
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableBloomFilterModifySchemeImpl(&view, modifyScheme, code, error);
+    return BuildAlterTableBloomFilterModifySchemeImpl(req, modifyScheme, code, error);
 }
 
 template <typename TRequest>
@@ -538,7 +532,7 @@ static bool BuildAlterTableSetColumnConstraintRequestImpl(
     Ydb::StatusIds::StatusCode& status,
     TString& error)
 {
-    const auto ops = GetAlterOperationKindsImpl(req);
+    const auto ops = GetAlterOperationKinds(req);
     if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::SetColumnConstraint) {
         status = Ydb::StatusIds::INTERNAL_ERROR;
         error = "Unexpected build alter table set column constraint call.";
@@ -587,8 +581,7 @@ bool BuildAlterTableSetColumnConstraintRequest(
     Ydb::StatusIds::StatusCode& status,
     TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableSetColumnConstraintRequestImpl(&view, settings, status, error);
+    return BuildAlterTableSetColumnConstraintRequestImpl(req, settings, status, error);
 }
 
 
@@ -596,7 +589,7 @@ template <typename TRequest>
 static bool BuildAlterTableCompactRequestImpl(const TRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    const auto ops = GetAlterOperationKindsImpl(req);
+    const auto ops = GetAlterOperationKinds(req);
     if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::Compact) {
         status = Ydb::StatusIds::INTERNAL_ERROR;
         error = "Unexpected build alter table compact call.";
@@ -638,8 +631,7 @@ bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKi
 bool BuildAlterTableCompactRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableCompactRequestImpl(&view, settings, status, error);
+    return BuildAlterTableCompactRequestImpl(req, settings, status, error);
 }
 
 static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
@@ -748,7 +740,7 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     std::pair<TString, TString> pathPair;
-    const auto ops = GetAlterOperationKindsImpl(req);
+    const auto ops = GetAlterOperationKinds(req);
     if (ops.empty()) {
         code = Ydb::StatusIds::BAD_REQUEST;
         error = "Empty alter";
@@ -925,7 +917,7 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
             desc->ClearPartitionConfig();
         }
 
-        if (!FillAlterTableSettingsDesc(*desc, NPrivate::GetAlterTableRequest(*req), profiles, code, error,
+        if (!FillAlterTableSettingsDesc(*desc, *req, profiles, code, error,
                                         AppData())) {
             return false;
         }
@@ -991,15 +983,14 @@ bool BuildAlterTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlte
     const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableModifySchemeImpl(path, &view, modifyScheme, profiles, resolvedPathId, code, error);
+    return BuildAlterTableModifySchemeImpl(path, req, modifyScheme, profiles, resolvedPathId, code, error);
 }
 
 template <typename TRequest>
 static bool BuildAlterTableModifySchemeImpl(const TRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    return BuildAlterTableModifySchemeImpl(req->path(), req, modifyScheme, profiles, resolvedPathId, code, error);
+    return BuildAlterTableModifyScheme(req->path(), req, modifyScheme, profiles, resolvedPathId, code, error);
 }
 
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
@@ -1011,8 +1002,7 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
 bool BuildAlterTableModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterTableModifySchemeImpl(&view, modifyScheme, profiles, resolvedPathId, code, error);
+    return BuildAlterTableModifySchemeImpl(req, modifyScheme, profiles, resolvedPathId, code, error);
 }
 
 template <typename TColumn>
@@ -1901,7 +1891,7 @@ static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRe
         return false;
     }
 
-    const auto ops = GetAlterOperationKindsImpl(req);
+    const auto ops = GetAlterOperationKinds(req);
 
     if (ops.empty()) {
         status = Ydb::StatusIds::BAD_REQUEST;
@@ -1965,7 +1955,7 @@ static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRe
         }
 
         if (req->has_set_ttl_settings()) {
-            if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->set_ttl_settings(), status, error)) {
+            if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
                 return false;
             }
         } else if (req->has_drop_ttl_settings()) {
@@ -2173,15 +2163,14 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 bool BuildAlterColumnTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterColumnTableModifySchemeImpl(path, &view, modifyScheme, alteredTable, status, error);
+    return BuildAlterColumnTableModifySchemeImpl(path, req, modifyScheme, alteredTable, status, error);
 }
 
 template <typename TRequest>
 static bool BuildAlterColumnTableModifySchemeImpl(
     const TRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    return BuildAlterColumnTableModifySchemeImpl(req->path(), req, modifyScheme, alteredTable, code, error);
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, alteredTable, code, error);
 }
 
 bool BuildAlterColumnTableModifyScheme(
@@ -2193,8 +2182,7 @@ bool BuildAlterColumnTableModifyScheme(
 bool BuildAlterColumnTableModifyScheme(
     const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error)
 {
-    const NPrivate::TKqpAlterTableRequestView view(*req);
-    return BuildAlterColumnTableModifySchemeImpl(&view, modifyScheme, alteredTable, code, error);
+    return BuildAlterColumnTableModifySchemeImpl(req, modifyScheme, alteredTable, code, error);
 }
 
 template <typename TYdbProto>

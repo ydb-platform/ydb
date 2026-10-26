@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    service_expression_transform.cpp
+    service_expression.cpp
     dq_function_load_meta.cpp
     dq_function_intent_transformer.cpp
     dq_function_provider.cpp

@@ -15,6 +15,7 @@ class TDqFunctionDataSource : public TDataProviderBase {
 public:
     TDqFunctionDataSource(TDqFunctionState::TPtr state)
         : State(std::move(state))
+        , ExpressionDiscovery(CreateServiceExpressionDiscovery(State))
         , LoadMetaDataTransformer(CreateDqFunctionMetaLoader(State))
     {}
 
@@ -43,12 +44,17 @@ public:
         return false;
     }
 
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *ExpressionDiscovery;
+    }
+
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         return *LoadMetaDataTransformer;
     }
 
 private:
     const TDqFunctionState::TPtr State;
+    const THolder<IGraphTransformer> ExpressionDiscovery;
     const THolder<IGraphTransformer> LoadMetaDataTransformer;
 };
 }

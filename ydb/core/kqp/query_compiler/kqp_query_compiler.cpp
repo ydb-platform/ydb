@@ -1,6 +1,8 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/external_sources/external_service.h>
+#include <ydb/core/fq/libs/wasm_services/query/execution.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -10,17 +12,21 @@
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
+#include <ydb/core/kqp/wasm_services/connection.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
+#include <util/generic/bitmap.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -28,8 +34,6 @@
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-
-#include <util/generic/bitmap.h>
 
 namespace NKikimr::NKqp {
 
@@ -1119,21 +1123,43 @@ private:
                     YQL_ENSURE(maybeTransformNode);
                     auto transformNode = maybeTransformNode.Cast();
 
-                    AFL_ENSURE(IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category()));
-
+                    const bool internal = IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category());
                     auto* transformProto = stageProto.AddOutputTransforms();
-                    transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
+                    if (internal) {
+                        transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
 
-                    NKikimrKqp::TKqpTableSinkSettings settingsProto;
-                    auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
-                    YQL_ENSURE(settings, "Unsupported sink type");
+                        NKikimrKqp::TKqpTableSinkSettings settingsProto;
+                        auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
+                        YQL_ENSURE(settings, "Unsupported sink type");
 
-                    FillKqpSinkSettings(
-                        settings.Cast(),
-                        settingsProto,
-                        tablesMap,
-                        stage);
-                    transformProto->MutableInternalSink()->MutableSettings()->PackFrom(settingsProto);
+                        FillKqpSinkSettings(settings.Cast(), settingsProto, tablesMap, stage);
+                        transformProto->MutableInternalSink()->MutableSettings()->PackFrom(settingsProto);
+                        hasTxTableSink = true;
+                    } else {
+                        YQL_ENSURE(transformNode.DataSink().Cast<TCoDataSink>().Category().Value() == NYql::FunctionProviderName &&
+                                       transformNode.Type().Value() == NFq::NWasmServices::ServiceTransformType, "Unsupported output transform");
+                        auto provider = TypesCtx.DataSinkMap.at(TString(NYql::FunctionProviderName));
+                        auto* external = transformProto->MutableExternalTransform();
+                        external->SetType(TString(transformNode.Type().Value()));
+                        provider->GetDqIntegration()->FillTransformSettings(transformNode.Ref(), *external->MutableSettings());
+                        NYql::NProto::TFunctionTransform settings;
+                        YQL_ENSURE(external->GetSettings().UnpackTo(&settings));
+                        const auto id = NFq::NWasmServices::ServiceInvocationConnection(settings.GetInvokeUrl());
+                        const auto connection = NExternalSource::TServiceConnectionSettings::Deserialize(
+                            NFq::NWasmServices::ServiceInvocationSettings(settings.GetInvokeUrl()));
+                        const auto metadata = TablesData->ExistingTable(Cluster, id).Metadata;
+                        YQL_ENSURE(metadata && metadata->IsExternalDataSource());
+                        ValidateWasmServiceConnection(NFq::NWasmServices::ServiceInvocationSettings(settings.GetInvokeUrl()), *metadata);
+                        external->MutableConnection()->SetOwnerId(metadata->PathId.OwnerId());
+                        external->MutableConnection()->SetTableId(metadata->PathId.TableId());
+                        external->MutableConnection()->SetVersion(metadata->SchemaVersion);
+                        external->MutableConnection()->SetPath(id);
+                        if (connection.SecretReference) {
+                            SecretNames.insert(connection.SecretReference);
+                            (*stageProto.MutableSecureParams())[NFq::NWasmServices::ServiceConnectionKey(id)] =
+                                TStructuredTokenBuilder().SetTokenAuthWithSecret(connection.SecretReference, "").ToJson();
+                        }
+                    }
                     transformProto->SetOutputIndex(FromString(TStringBuf(transformNode.Index())));
 
                     const auto inputRowType = transformNode.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -1145,8 +1171,6 @@ private:
                     TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
                     transformProto->SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputRowType), TypeEnv));
                     transformProto->SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputRowType), TypeEnv));
-
-                    hasTxTableSink = true;
                 }
             }
         }

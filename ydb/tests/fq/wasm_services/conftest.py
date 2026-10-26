@@ -1,0 +1,260 @@
+import concurrent.futures
+import http.server
+import json
+import ssl
+import struct
+import threading
+
+import grpc
+import pytest
+import yatest.common
+
+from ydb.public.api.protos.draft import fq_pb2 as fq
+from ydb.udfs.wasm.profile.proto.schema import profile_pb2
+from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403
+from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
+from ydb.tests.library.harness.tls_tools import generate_selfsigned_cert
+from ydb.tests.tools.fq_runner.kikimr_utils import (
+    DefaultConfigExtension, ComputeExtension, ExtensionPoint, YQv2Extension, start_kikimr,
+)
+
+
+class MockServices:
+    def __init__(self, tls=False):
+        self.requests = []
+        self.auth_secret = None
+        self.auth_requests = []
+        self.auth_headers = []
+        self.lock = threading.Lock()
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.delay_timeout = 30
+        self.pause_all = False
+        self.cancelled = threading.Event()
+        owner = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers['Content-Length']))
+                if self.path == '/auth':
+                    with owner.lock:
+                        owner.auth_requests.append(body)
+                    accepted = body == owner.auth_secret
+                    ticket = b'synthetic-auth-ticket'
+                    payload = struct.pack('<IIQ', 1, len(ticket), 60000) + ticket if accepted else b''
+                    self.send_response(200 if accepted else 403)
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                if not owner.check_wasm_auth('http', self.headers.get('X-Auth-Test')):
+                    self.send_response(401)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+                if owner.pause_all:
+                    owner.started.set()
+                    owner.release.wait(owner.delay_timeout)
+                if self.path == '/echo':
+                    with owner.lock:
+                        owner.requests.append(('echo', body, self.headers.get('Authorization')))
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                request = json.loads(body)
+                batch = 'ids' in request
+                ids = request['ids'] if batch else [request['id']]
+                with owner.lock:
+                    owner.requests.append(('http', tuple(ids) if batch else ids[0], self.headers.get('Authorization')))
+                if 999 in ids:
+                    owner.started.set()
+                    owner.release.wait(owner.delay_timeout)
+                profiles = [{'id': id, 'name': 'Ada', 'score': 97, 'version': 1} for id in ids]
+                if batch and 401 in ids:
+                    profiles = profiles[:-1]
+                payload = b'not json' if 400 in ids else json.dumps(profiles if batch else profiles[0]).encode()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                try:
+                    self.wfile.write(payload)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        self.http = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.tls = tls
+        self.ca_certificate = ''
+        cert, key = (b'', b'')
+        if tls:
+            cert, key = generate_selfsigned_cert('localhost')
+            self.ca_certificate = cert.decode()
+            cert_path = yatest.common.output_path('mock-service.crt')
+            key_path = yatest.common.output_path('mock-service.key')
+            with open(cert_path, 'wb') as output:
+                output.write(cert)
+            with open(key_path, 'wb') as output:
+                output.write(key)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(cert_path, key_path)
+            self.http.socket = context.wrap_socket(self.http.socket, server_side=True)
+        self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
+        self.thread.start()
+        self.grpc = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2))
+        self.grpc.add_generic_rpc_handlers((grpc.method_handlers_generic_handler(
+            'NFq.NWasmServices.NTest.MockService', {'Lookup': grpc.unary_unary_rpc_method_handler(
+                self.lookup, request_deserializer=profile_pb2.ProfileRequest.FromString,
+                response_serializer=profile_pb2.ProfileReply.SerializeToString,
+            ), 'LookupBatch': grpc.unary_unary_rpc_method_handler(
+                self.lookup_batch, request_deserializer=profile_pb2.ProfileBatchRequest.FromString,
+                response_serializer=profile_pb2.ProfileBatchReply.SerializeToString,
+            )}),))
+        self.grpc_port = self.grpc.add_secure_port('127.0.0.1:0', grpc.ssl_server_credentials(((key, cert),))) if tls else \
+            self.grpc.add_insecure_port('127.0.0.1:0')
+        self.grpc.start()
+
+    def check_wasm_auth(self, protocol, ticket):
+        if self.auth_secret is None:
+            return True
+        with self.lock:
+            self.auth_headers.append((protocol, ticket))
+        return ticket == 'synthetic-auth-ticket'
+
+    def lookup(self, request, context):
+        if not self.check_wasm_auth('grpc', dict(context.invocation_metadata()).get('x-auth-test')):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing test auth header')
+        with self.lock:
+            self.requests.append(('grpc', request.id, dict(context.invocation_metadata()).get('authorization')))
+        if request.id == 999:
+            context.add_callback(self.cancelled.set)
+            self.started.set()
+            (self.release if self.delay_timeout > 30 else self.cancelled).wait(self.delay_timeout)
+        profile = profile_pb2.Profile(id=request.id, name=b'Ada', score=97, version=1)
+        return profile_pb2.ProfileReply(payload=profile.SerializeToString())
+
+    def lookup_batch(self, request, context):
+        if not self.check_wasm_auth('grpc', dict(context.invocation_metadata()).get('x-auth-test')):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing test auth header')
+        with self.lock:
+            self.requests.append(('grpc', tuple(request.ids), dict(context.invocation_metadata()).get('authorization')))
+        if 999 in request.ids:
+            context.add_callback(self.cancelled.set)
+            self.started.set()
+            (self.release if self.delay_timeout > 30 else self.cancelled).wait(self.delay_timeout)
+        ids = request.ids[:-1] if 401 in request.ids else request.ids
+        profiles = profile_pb2.ProfileBatchPayload(profiles=[
+            profile_pb2.Profile(id=id, name=b'Ada', score=97, version=1) for id in ids
+        ])
+        return profile_pb2.ProfileBatchReply(payload=profiles.SerializeToString())
+
+    def stop(self):
+        self.release.set()
+        self.cancelled.set()
+        self.grpc.stop(0).wait(10)
+        self.http.shutdown()
+        self.http.server_close()
+        self.thread.join(10)
+
+
+class WasmExtension(ExtensionPoint):
+    def __init__(self, timeout_ms, batch_config):
+        self.timeout_ms = timeout_ms
+        self.batch_config = batch_config
+
+    def is_applicable(self, request):
+        return True
+
+    def apply_to_kikimr_conf(self, request, configuration):
+        pass
+
+    def apply_to_kikimr(self, request, kikimr):
+        config = {
+            'enabled': True,
+            'module_source': 'LOCAL_FILES',
+            'modules': [
+                {'module_path': yatest.common.source_path('ydb/udfs/wasm/profile/ut/data/profile.wasm'),
+                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/profile/manifest.json')},
+                {'module_path': yatest.common.source_path('ydb/udfs/wasm/echo/ut/data/echo.wasm'),
+                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/echo/manifest.json')},
+            ],
+            'call_timeout_ms': self.timeout_ms,
+            'max_buffered_rows': self.batch_config.get('buffered_rows', 65536),
+            'max_buffered_bytes': self.batch_config.get('buffered_bytes', 64 << 20),
+            'max_batch_rows': self.batch_config.get('rows', 1),
+            'max_batch_bytes': self.batch_config.get('bytes', 32768),
+        }
+        if self.batch_config.get('echo_small_result_limit'):
+            with open(config['modules'][1]['manifest_path']) as source:
+                manifest = json.load(source)
+            manifest['service_methods'][0]['output'][0]['max_bytes'] = 1
+            path = yatest.common.output_path(request.node.name + '_echo_manifest.json')
+            with open(path, 'w') as output:
+                json.dump(manifest, output)
+            config['modules'][1]['manifest_path'] = path
+        for tenant in kikimr.tenants.values():
+            tenant.fq_config['wasm_services'] = config
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('EXTERNAL_SERVICE')
+        if self.batch_config.get('streaming'):
+            for tenant in kikimr.tenants.values():
+                tenant.fq_config['checkpoint_coordinator'].update(enabled=True, checkpointing_period_millis=1000)
+            kikimr.control_plane.fq_config['control_plane_storage']['task_lease_ttl'] = '3s'
+            kikimr.compute_plane.fq_config['pinger']['ping_period'] = '1s'
+
+
+@pytest.fixture
+def services(request):
+    mock = MockServices(tls=getattr(request, 'param', False))
+    try:
+        yield mock
+    finally:
+        mock.stop()
+
+
+@pytest.fixture
+def batch_config(request):
+    return getattr(request, 'param', {})
+
+
+@pytest.fixture
+def kikimr(request, services, yq_version, batch_config):
+    timeout = 200 if 'deadline' in request.node.originalname else (180000 if batch_config.get('streaming') else 30000)
+    extensions = [DefaultConfigExtension(''), YQv2Extension(yq_version), ComputeExtension(),
+                  WasmExtension(timeout, batch_config)]
+    with start_kikimr(request, extensions) as cluster:
+        cluster.control_plane.wait_bootstrap(1)
+        yield cluster
+
+
+@pytest.fixture
+def client(kikimr, services, batch_config):
+    client = FederatedQueryClient('my_folder', streaming_over_kikimr=kikimr)
+    host = 'localhost' if services.tls else '127.0.0.1'
+    scheme = 'https' if services.tls else 'http'
+    client.create_external_service_connection(
+        'profiles_http', f'{scheme}://{host}:{services.http.server_port}',
+        insecure=not services.tls, ca_certificate=services.ca_certificate, token='host-secret',
+    )
+    client.create_external_service_connection(
+        'profiles_grpc', f'{host}:{services.grpc_port}', protocol=fq.ExternalService.GRPC,
+        insecure=not services.tls, ca_certificate=services.ca_certificate, token='host-secret',
+    )
+    client.create_external_service_connection(
+        'echo_http', f'{scheme}://{host}:{services.http.server_port}', insecure=not services.tls,
+        ca_certificate=services.ca_certificate, token='host-secret',
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+    return client
+
+
+@pytest.fixture
+def downstream_service():
+    mock = MockServices()
+    mock.delay_timeout = 180
+    try:
+        yield mock
+    finally:
+        mock.stop()

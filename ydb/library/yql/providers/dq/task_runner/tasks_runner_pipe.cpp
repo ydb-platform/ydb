@@ -1359,6 +1359,11 @@ public:
         }
     }
 
+    ui64 PopWithAdmission(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes, const TRowAdmission&) override {
+        // Pipe sinks expose serialized batches, not allocator-owned narrow rows.
+        return Pop(batch, bytes);
+    }
+
     ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
         Y_UNUSED(batch);
         Y_UNUSED(bytes);

@@ -13,14 +13,14 @@ General format of the command:
 * `kind`: The type of operation. Possible values:
 
   * `buildindex`: The build index operations.
-  * `compaction`: The table compaction operations.
-  * `export/s3`: The export to S3 operations.
+  * `export/s3`: The [export to S3 operations](export-import/export-s3.md).
   * `export/nfs`: The export to NFS operations.
-  * `import/s3`: The import from S3 operations.
+  * `import/s3`: The [import from S3 operations](export-import/import-s3.md).
   * `import/nfs`: The import from NFS operations.
   * `scriptexec`: The script execution operations.
-  * `incbackup`: The incremental backup operations.
-  * `restore`: The backup collection restore operations.
+  * `fullbackup`: The [full backup operations](../../concepts/backup.md#full-backup).
+  * `incbackup`: The [incremental backup operations](../../concepts/backup.md#incremental-backup).
+  * `restore`: The [backup collection restore operations](../../concepts/datamodel/backup-collection.md).
 
 View a description of the command to get a list of long-running operations:
 

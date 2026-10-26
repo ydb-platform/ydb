@@ -70,9 +70,14 @@ TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, c
     if (!node.Maybe<TKqlReadTableBase>() &&
         !node.Maybe<TKqlLookupTableBase>() &&
         !node.Maybe<TKqlReadTableRangesBase>() &&
-        !node.Maybe<TKqlReadTableFullTextIndex>()
+        !node.Maybe<TKqlReadTableFullTextIndex>() &&
+        !node.Maybe<TKqlReadTableVectorIndex>()
     ) {
         return node;
+    }
+
+    if (const auto vector = node.Maybe<TKqlReadTableVectorIndex>(); vector && !vector.Cast().ScoreColumn().IsValid()) {
+        return node; // The legacy actor still requires its embedding in the output.
     }
 
     // TKqpReadOlapTableRangesBase is derived from TKqlReadTableRangesBase, but should be handled separately
@@ -91,6 +96,20 @@ TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, c
         return node;
     }
 
+    if (const auto vector = node.Maybe<TKqlReadTableVectorIndex>(); vector && vector.Cast().ScoreColumn().IsValid()) {
+        const auto score = vector.Cast().ScoreColumn().Cast();
+        if (AllOf(usedColumns.Cast(), [&](const auto& column) { return column.Value() != score.Value(); })) {
+            auto columns = usedColumns.Cast().Ref().ChildrenList();
+            columns.push_back(score.Ptr());
+            usedColumns = Build<TCoAtomList>(ctx, node.Pos()).Add(columns).Done();
+        }
+    }
+    if (usedColumns.Cast().Size() == columnsNode.Size()
+            && AllOf(usedColumns.Cast(), [&](const auto& column) {
+                return AnyOf(columnsNode, [&](const auto& original) { return original.Value() == column.Value(); });
+            })) {
+        return node;
+    }
     return TExprBase(ctx.ChangeChild(*node.Raw(), TKqlReadColumnsNodeIdx, usedColumns.Cast().Ptr()));
 }
 

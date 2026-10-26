@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_data_executer.cpp
+    kqp_vector_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
     kqp_literal_executer.cpp

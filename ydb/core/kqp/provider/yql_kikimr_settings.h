@@ -130,6 +130,14 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<ui32, Static> HNSWEfSearch;
+    NCommon::TConfSetting<bool, Static> HNSWUseClusterRouting;
+    NCommon::TConfSetting<bool, Static> HNSWPreciseShardRouting;
+    NCommon::TConfSetting<double, Static> HNSWAdaptiveProbeRatio;
+    NCommon::TConfSetting<ui32, Static> HNSWAdaptiveOneProbeEfSearch;
+    NCommon::TConfSetting<bool, Static> HNSWFuseTopSort;
+    NCommon::TConfSetting<bool, Static> HNSWReturnScores;
+    NCommon::TConfSetting<bool, Static> HNSWSpecializedExecution;
     NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
     NCommon::TConfSetting<double, Static> HybridSearchK;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;

@@ -17,6 +17,9 @@
 #include <util/string/vector.h>
 
 #include <algorithm>
+#include <util/system/hp_timer.h>
+#include <cmath>
+#include <limits>
 
 namespace NKikimr {
     namespace NKqp {
@@ -74,10 +77,11 @@ namespace NKikimr {
                 const NWilson::TTraceId& traceId,
                 TIntrusivePtr<TKqpCounters> counters,
                 TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
-                TKqpVectorInnerReadFactory innerReadFactory)
+                TKqpVectorInnerReadFactory innerReadFactory, bool collectCpuTime)
                 : Settings(std::move(settings))
                 , TopK(Settings.GetTopK())
                 , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
+                , EffectiveHnswEfSearch(Settings.GetHnswEfSearch())
                 , OverlapClusters(Settings.GetOverlapClusters())
                 , PostingCovers(Settings.GetPostingCovers())
                 , HasPrefix(Settings.GetHasPrefix())
@@ -94,6 +98,7 @@ namespace NKikimr {
                 , TraceId(traceId)
                 , LevelsCache(std::move(levelsCache))
                 , InnerReadFactory(std::move(innerReadFactory))
+                , CollectCpuTime(collectCpuTime)
                 , MySpan(TWilsonKqp::VectorResolveActor, NWilson::TTraceId(traceId), "VectorSearchActor")
             {
                 IngressStats.Level = statsLevel;
@@ -140,19 +145,35 @@ namespace NKikimr {
             void BuildCoveredPostingColumns() {
                 YQL_ENSURE(Settings.PostingOutputColumnIdsSize() == Settings.OutputColumnsSize());
                 THashMap<ui32, ui32> idToPos;
-                for (size_t i = 0; i < Settings.PostingOutputColumnIdsSize(); ++i) {
-                    idToPos.emplace(Settings.GetPostingOutputColumnIds(i), i);
+                CoveredOutputPositions.resize(Settings.OutputColumnsSize());
+                ui32 nextPos = 0;
+                for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                    if (Settings.HasScoreColumnIndex() && i == Settings.GetScoreColumnIndex()) {
+                        continue;
+                    }
+                    idToPos.emplace(Settings.GetPostingOutputColumnIds(i), nextPos);
+                    CoveredOutputPositions[i] = nextPos++;
+                }
+                if (Settings.HasScoreColumnIndex()) {
+                    const auto [it, inserted] = idToPos.emplace(Settings.GetPostingEmbeddingColumnId(), nextPos);
+                    CoveredNeedsEmbedding = inserted;
+                    if (inserted) {
+                        ++nextPos;
+                    }
+                    CoveredEmbeddingPosition = it->second;
                 }
                 CoveredPkPositions.resize(Settings.MainTableKeyColumnsSize());
-                ui32 nextPos = Settings.OutputColumnsSize();
-                for (size_t j = 0; j < Settings.MainTableKeyColumnsSize(); ++j) {
-                    ui32 id = Settings.GetPostingTableKeyColumnIds(j + 1);
-                    auto [it, inserted] = idToPos.emplace(id, nextPos);
+                for (ui32 j = 0; j < Settings.MainTableKeyColumnsSize(); ++j) {
+                    const auto [it, inserted] = idToPos.emplace(Settings.GetPostingTableKeyColumnIds(j + 1), nextPos);
                     if (inserted) {
                         CoveredExtraPkIndices.push_back(j);
                         ++nextPos;
                     }
                     CoveredPkPositions[j] = it->second;
+                }
+                CoveredScorePosition = nextPos;
+                if (Settings.HasScoreColumnIndex()) {
+                    CoveredOutputPositions[Settings.GetScoreColumnIndex()] = CoveredScorePosition;
                 }
             }
 
@@ -178,13 +199,19 @@ namespace NKikimr {
             }
 
             STFUNC(StateFunc) {
+                const auto started = CollectCpuTime ? GetCycleCountFast() : 0;
                 try {
                     switch (ev->GetTypeRewrite()) {
                         hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
                     }
+                } catch (const TMemoryLimitExceededException&) {
+                    RuntimeError("Vector search memory limit exceeded", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
                 } catch (const yexception& e) {
                     RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
+                if (CollectCpuTime) {
+                    CpuTimeUs += NHPTimer::GetSeconds(GetCycleCountFast() - started) * 1'000'000;
                 }
             }
 
@@ -264,6 +291,12 @@ namespace NKikimr {
                 RankClusters = NKikimr::NKMeans::CreateClustersAutoDetect(Settings.GetIndexSettings(), TargetVector, 0, error);
                 if (!RankClusters) {
                     RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                    return;
+                }
+
+                if (Settings.GetFullRangeHnsw()) {
+                    YQL_ENSURE(!HasPrefix, "Full-range HNSW cannot discard a prefix filter");
+                    StartPosting();
                     return;
                 }
 
@@ -434,7 +467,57 @@ namespace NKikimr {
                 }
             }
 
+            void MaybeReduceHnswProbes() {
+                const double ratio = Settings.GetHnswAdaptiveProbeRatio();
+                CA_LOG_D("Adaptive probes: ratio=" << ratio
+                    << " oneProbeEf=" << Settings.GetHnswAdaptiveOneProbeEfSearch()
+                    << " routing=" << Settings.GetHnswShardRouting()
+                    << " precise=" << Settings.GetHnswPreciseShardRouting()
+                    << " metric=" << Settings.GetIndexSettings().metric()
+                    << " levels=" << Settings.GetIndexLevels()
+                    << " remaining=" << LevelsRemaining << " candidates=" << LevelCandidates.size());
+                if (!Settings.GetHnswShardRouting() || !Settings.GetHnswPreciseShardRouting()
+                        || HasPrefix || Settings.GetFullRangeHnsw() || Settings.GetIndexLevels() != 1
+                        || LevelsRemaining != 1 || LevelCandidates.size() < 2
+                        || Settings.GetIndexSettings().metric() != Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+                        || !std::isfinite(ratio) || ratio < 1.0 || ratio > 1000000.0) {
+                    return;
+                }
+                // Ranking uses Euclidean distance. The policy is expressed in
+                // squared L2, so compare squares in double precision. Preserve
+                // the original heap and probe count for ties or invalid scores.
+                for (const auto& candidate : LevelCandidates) {
+                    if (!std::isfinite(candidate.second) || candidate.second < 0) {
+                        return;
+                    }
+                }
+                const auto nearest = std::min_element(LevelCandidates.begin(), LevelCandidates.end(),
+                    [](const auto& a, const auto& b) { return a.second < b.second; });
+                double second = std::numeric_limits<double>::max();
+                for (const auto& candidate : LevelCandidates) {
+                    if (&candidate != &*nearest) {
+                        second = std::min(second, candidate.second);
+                    }
+                }
+                CA_LOG_D("Adaptive distances: nearest=" << nearest->second << " runnerUp=" << second);
+                if (second * second <= nearest->second * nearest->second * ratio) {
+                    return;
+                }
+                const auto selected = *nearest;
+                AdaptiveFallbackParents.reserve(LevelCandidates.size());
+                for (const auto& candidate : LevelCandidates) {
+                    AdaptiveFallbackParents.push_back(candidate.first);
+                }
+                LevelCandidates.clear();
+                LevelCandidates.push_back(selected);
+                const ui32 oneProbeEf = Settings.GetHnswAdaptiveOneProbeEfSearch();
+                if (oneProbeEf > 0 && oneProbeEf <= NKMeans::MaxHnswEfSearch) {
+                    EffectiveHnswEfSearch = oneProbeEf;
+                }
+            }
+
             void OnLevelRoundDone() {
+                MaybeReduceHnswProbes();
                 // Children were ranked incrementally as rows arrived: LevelCandidates already
                 // holds (at most) the LevelTop nearest as a bounded heap. Hand their ids to
                 // the next round -- parent order does not affect correctness, so no sort.
@@ -471,7 +554,7 @@ namespace NKikimr {
                 toRead.insert(toRead.end(), DirectPostingParents.begin(), DirectPostingParents.end());
                 PendingMainKeys.clear();
                 Phase = EPhase::Posting;
-                if (toRead.empty()) {
+                if (toRead.empty() && !Settings.GetFullRangeHnsw()) {
                     // No leaf clusters to scan: empty result (covered and non-covered alike).
                     FinalizeResults();
                 } else {
@@ -654,6 +737,7 @@ namespace NKikimr {
                 *topK->MutableSettings() = Settings.GetIndexSettings();
                 topK->SetTargetVector(TargetVector);
                 topK->SetLimit(limit);
+                topK->SetHnswEfSearch(EffectiveHnswEfSearch);
                 return topK;
             }
 
@@ -690,7 +774,25 @@ namespace NKikimr {
             void StartPostingRead(TVector<TClusterId>& parents) {
                 TIntrusivePtr<NActors::TProtoArenaHolder> arena;
                 auto* src = MakeSourceSettings(arena, Settings.GetPostingTable(), Settings.GetUseFollowers());
-                AddParentRanges(src, parents);
+                if (Settings.GetFullRangeHnsw()) {
+                    // Let the read actor resolve the whole posting table and fan out
+                    // across its current partitions, including after automatic splits.
+                    // A complete NULL lower key denotes -infinity. An empty
+                    // key is +infinity in the legacy partition-border comparator.
+                    const TVector<TCell> from(Settings.MainTableKeyColumnsSize() + 1);
+                    TSerializedTableRange(from, true, {}, false).Serialize(*src->MutableFullRange());
+                } else {
+                    AddParentRanges(src, parents);
+                }
+                // Cluster boundaries need not coincide with graph partitions.
+                // Restricting a shared graph to a cluster can repeatedly widen
+                // traversal and eventually fall back to a table scan. Route to
+                // the intersecting graphs and search those graphs completely.
+                if (Settings.GetHnswShardRouting()) {
+                    YQL_ENSURE(!HasPrefix && !Settings.GetFullRangeHnsw());
+                    src->SetHnswShardRouting(true);
+                    src->SetHnswPreciseShardRouting(Settings.GetHnswPreciseShardRouting());
+                }
 
                 // Posting key is (__ydb_parent, <main PK columns>).
                 AddUint64KeyColumnType(src);
@@ -701,8 +803,13 @@ namespace NKikimr {
                     // Covered index: read output columns (with their posting-table ids)
                     // plus any PK columns not already among them for per-row dedup; see
                     // BuildCoveredPostingColumns.
-                    for (size_t i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                        AddColumnMeta(src, Settings.GetPostingOutputColumnIds(i), Settings.GetOutputColumns(i));
+                    for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                        if (!Settings.HasScoreColumnIndex() || i != Settings.GetScoreColumnIndex()) {
+                            AddColumnMeta(src, Settings.GetPostingOutputColumnIds(i), Settings.GetOutputColumns(i));
+                        }
+                    }
+                    if (CoveredNeedsEmbedding) {
+                        AddColumnMeta(src, Settings.GetPostingEmbeddingColumnId(), Settings.GetEmbeddingColumn());
                     }
                     for (ui32 j : CoveredExtraPkIndices) {
                         AddColumnMeta(src, Settings.GetPostingTableKeyColumnIds(j + 1), Settings.GetMainTableKeyColumns(j));
@@ -712,9 +819,16 @@ namespace NKikimr {
                     // leaf clusters, and with overlap the same row can appear under multiple
                     // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
                     // crowd out distinct nearest rows (the actor still dedups across shards).
-                    auto* topK = SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
-                    for (ui32 pos : CoveredPkPositions) {
-                        topK->AddDistinctColumns(pos);
+                    auto* topK = SetVectorTopK(src, Settings.HasScoreColumnIndex() ? CoveredEmbeddingPosition : Settings.GetVectorColumnIndex(), TopK);
+                    if (Settings.HasScoreColumnIndex()) {
+                        topK->SetReturnScores(true);
+                        topK->SetOmitVectorPayload(CoveredNeedsEmbedding
+                            && Find(CoveredPkPositions.begin(), CoveredPkPositions.end(), CoveredEmbeddingPosition) == CoveredPkPositions.end());
+                    }
+                    if ((!Settings.GetFullRangeHnsw() && !Settings.GetHnswShardRouting()) || OverlapClusters > 1) {
+                        for (ui32 pos : CoveredPkPositions) {
+                            topK->AddDistinctColumns(pos);
+                        }
                     }
                 } else {
                     // Read the PK columns (using posting table column ids) to feed the
@@ -990,6 +1104,22 @@ namespace NKikimr {
                 // came from the main reads (or there were none -> empty result).
                 if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
                     CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
+                    if (Candidates.size() < TopK && !AdaptiveFallbackParents.empty()) {
+                        // A small graph, missing embedding or deleted main row
+                        // must not make adaptation lose rows that the original
+                        // probe count could return. Retry once under the same
+                        // read settings, discarding the partial attempt first.
+                        {
+                            auto guard = BindAllocator();
+                            Candidates.clear();
+                        }
+                        SeenKeys.clear();
+                        CurrentParents.swap(AdaptiveFallbackParents);
+                        AdaptiveFallbackParents.clear();
+                        EffectiveHnswEfSearch = Settings.GetHnswEfSearch();
+                        StartPosting();
+                        return;
+                    }
                     FinalizeResults();
                 }
             }
@@ -1092,10 +1222,19 @@ namespace NKikimr {
             // Build a candidate (output row + distance to the target) from a read row
             // whose first OutputColumns elements are the output columns in order.
             void AddCandidate(NUdf::TUnboxedValue& value) {
-                auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
                 double distance = std::numeric_limits<double>::max();
-                if (embedding.IsString() || embedding.IsEmbedded()) {
-                    distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
+                if (Settings.HasScoreColumnIndex()) {
+                    const float score = value.GetElement(CoveredScorePosition).Get<float>();
+                    // Output rows hold SQL similarity, while the candidate
+                    // heap consistently keeps the smallest canonical distance.
+                    distance = Settings.GetIndexSettings().metric()
+                        == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                        ? -double(score) : double(score);
+                } else {
+                    auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
+                    if (embedding.IsString() || embedding.IsEmbedded()) {
+                        distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
+                    }
                 }
                 // Bounded max-heap of the TopK nearest (worst distance at the top). Once full,
                 // a row no nearer than the current worst is dropped before its output holder
@@ -1110,7 +1249,7 @@ namespace NKikimr {
                 NUdf::TUnboxedValue* items = nullptr;
                 auto row = HolderFactory.CreateDirectArrayHolder(Settings.OutputColumnsSize(), items);
                 for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                    items[i] = value.GetElement(i);
+                    items[i] = value.GetElement(Settings.HasScoreColumnIndex() ? CoveredOutputPositions[i] : i);
                 }
                 // The early-out above guarantees this row belongs (heap below TopK, or nearer
                 // than the current worst), so hand it to the bounded-heap insert.
@@ -1162,6 +1301,9 @@ namespace NKikimr {
             void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats*) override {
                 if (!last) {
                     return;
+                }
+                if (CollectCpuTime) {
+                    stats->SetCpuTimeUs(stats->GetCpuTimeUs() + static_cast<ui64>(CpuTimeUs));
                 }
                 // Report rows/bytes actually read from each index impl table (level,
                 // posting) and the main table, as accumulated from the inner read actors.
@@ -1224,6 +1366,7 @@ namespace NKikimr {
             const NKikimrTxDataShard::TKqpVectorSearchSettings Settings;
             const ui32 TopK;
             ui32 LevelTop;
+            ui32 EffectiveHnswEfSearch;
             const ui32 OverlapClusters;
             const bool PostingCovers;
             const bool HasPrefix;
@@ -1253,6 +1396,10 @@ namespace NKikimr {
 
             // Reusable scratch for extracting a posting row's PK cells (dedup key, and
             // the main-read key in the non-covered path). See PostingPkCells.
+            TVector<ui32> CoveredOutputPositions;
+            ui32 CoveredEmbeddingPosition = 0;
+            ui32 CoveredScorePosition = 0;
+            bool CoveredNeedsEmbedding = false;
             TVector<TCell> PkCellsScratch;
             // Backing storage for those cells when MakeCell cannot reference the row.
             NMiniKQL::TStringProviderBackend PkCellsPool;
@@ -1282,11 +1429,14 @@ namespace NKikimr {
             // Ranking reuses RankClusters' metric (CalcDistance is SetClusters-independent),
             // so no centroid bytes are copied into this accumulator. See PushLevelCandidate.
             TVector<std::pair<TClusterId, double>> LevelCandidates;
+            TVector<TClusterId> AdaptiveFallbackParents;
 
             // Shared, process-wide cache of immutable level-table rows.
             TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;
             // Launches every inner read; defaults to CreateKqpReadActor, substituted by tests.
             TKqpVectorInnerReadFactory InnerReadFactory;
+            const bool CollectCpuTime;
+            double CpuTimeUs = 0;
             TPathId LevelTablePathId;
             bool UseLevelCache = false;
             // Per-parent accumulators for the round's cache-miss parents; their read rows
@@ -1337,23 +1487,28 @@ namespace NKikimr {
             const NWilson::TTraceId& traceId,
             TIntrusivePtr<TKqpCounters> counters,
             TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
-            TKqpVectorInnerReadFactory innerReadFactory)
+            TKqpVectorInnerReadFactory innerReadFactory, bool collectCpuTime)
         {
             auto actor = new TKqpVectorSearchActor(std::move(settings), inputIndex, input, statsLevel, txId,
                                                    taskId, computeActorId, typeEnv, holderFactory, alloc, traceId, counters, std::move(levelsCache),
-                                                   std::move(innerReadFactory));
+                                                   std::move(innerReadFactory), collectCpuTime);
             return {actor, actor};
         }
 
         void RegisterKqpVectorSearchActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters,
                                           TIntrusivePtr<TVectorIndexLevelsCache> levelsCache) {
-            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
-                "VectorSearchInputTransformer", [counters, levelsCache](NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
-                                                                        NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
+            auto creator = [counters, levelsCache](bool collectCpuTime) {
+                return [counters, levelsCache, collectCpuTime](NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
+                    NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
                     return CreateKqpVectorSearchActor(std::move(settings),
-                                                      args.InputIndex, args.TransformInput, args.StatsLevel, args.TxId, args.TaskId, args.ComputeActorId,
-                                                      args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, levelsCache);
-                });
+                        args.InputIndex, args.TransformInput, args.StatsLevel, args.TxId, args.TaskId, args.ComputeActorId,
+                        args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, levelsCache, {}, collectCpuTime);
+                };
+            };
+            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
+                "VectorSearchInputTransformer", creator(false));
+            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
+                "VectorSearchExecution", creator(true));
         }
 
     } // namespace NKqp

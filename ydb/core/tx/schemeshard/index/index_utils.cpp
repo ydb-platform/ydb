@@ -8,6 +8,79 @@
 namespace NKikimr {
 namespace NTableIndex {
 
+void ConfigureHnswPostingPartitions(const NSchemeShard::TTableInfo::TPtr& baseTable,
+        const Ydb::Table::KMeansTreeSettings& settings, ui64 maxPartitions,
+        NKikimrSchemeOp::TTableDescription& posting) {
+    if (posting.SplitBoundarySize() || posting.HasUniformPartitionsCount()
+            || !settings.clusters() || !settings.levels() || !settings.settings().vector_dimension()) {
+        return;
+    }
+    ui64 firstLeaf = 1;
+    ui64 leaves = settings.clusters();
+    for (ui32 level = 1; level < settings.levels(); ++level) {
+        if (leaves > (NKMeans::PostingParentFlag - firstLeaf) / settings.clusters()) {
+            return;
+        }
+        firstLeaf += leaves;
+        leaves *= settings.clusters();
+    }
+    if (firstLeaf >= NKMeans::PostingParentFlag || leaves > NKMeans::PostingParentFlag - firstLeaf) {
+        return;
+    }
+    auto* policy = posting.MutablePartitionConfig()->MutablePartitioningPolicy();
+    if (policy->GetMaxPartitionsCount()) {
+        maxPartitions = Min<ui64>(maxPartitions, policy->GetMaxPartitionsCount());
+    }
+    const auto& baseParts = baseTable->GetPartitions();
+    if (baseParts.empty() || !maxPartitions) {
+        return;
+    }
+    // Planning estimate, not a memory grant: scan input, graph vector copies,
+    // links and per-row bookkeeping. Real size/skew is checked after upload.
+    const ui64 bytesPerRow = 3ull * settings.settings().vector_dimension() * sizeof(float)
+        + 512 + 2ull * (settings.settings().has_m() ? settings.settings().m() : 16) * sizeof(ui32) + 64;
+    const ui64 rows = baseTable->GetStats().Aggregated.RowCount;
+    const ui64 bytes = rows > Max<ui64>() / bytesPerRow ? Max<ui64>() : rows * bytesPerRow;
+    const ui64 targetBytes = policy->GetSizeToSplit() ? policy->GetSizeToSplit() : 2_GB;
+    // Keep tiny/unknown tables compact even when the base has many empty
+    // partitions; expose base-shard parallelism once there is useful work.
+    const ui64 parallelParts = rows / baseParts.size() >= 10000 ? baseParts.size() : 1;
+    const ui64 desired = Max<ui64>(parallelParts, Max<ui64>(policy->GetMinPartitionsCount(),
+        bytes ? 1 + (bytes - 1) / targetBytes : 1));
+    // A bounded initial layout; later size splits handle skew and large leaves.
+    constexpr ui64 MaxInitialPartitions = 32;
+    if (policy->GetMinPartitionsCount() > Min(maxPartitions, MaxInitialPartitions)) {
+        return; // Preserve an explicitly requested larger minimum.
+    }
+    const ui64 parts = Min<ui64>(Min(maxPartitions, MaxInitialPartitions), Min<ui64>(desired,
+        leaves > Max<ui64>() / baseParts.size() ? Max<ui64>() : leaves * baseParts.size()));
+    if (parts <= 1) {
+        return;
+    }
+    if (parts <= leaves) {
+        for (ui64 i = 1; i < parts; ++i) {
+            const ui64 parent = NKMeans::SetPostingParentFlag(firstLeaf + leaves / parts * i + leaves % parts * i / parts);
+            posting.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({TCell::Make(parent)}));
+        }
+    } else {
+        for (ui64 leaf = 0; leaf < leaves; ++leaf) {
+            const ui64 parent = NKMeans::SetPostingParentFlag(firstLeaf + leaf);
+            if (leaf) {
+                posting.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({TCell::Make(parent)}));
+            }
+            const ui64 slices = parts / leaves + (leaf < parts % leaves);
+            for (ui64 slice = 1; slice < slices; ++slice) {
+                const auto& baseEnd = baseParts[slice * baseParts.size() / slices - 1]->EndOfRange;
+                const TSerializedCellVec key(baseEnd);
+                TVector<TCell> cells{TCell::Make(parent)};
+                cells.insert(cells.end(), key.GetCells().begin(), key.GetCells().end());
+                posting.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize(cells));
+            }
+        }
+    }
+    policy->SetMinPartitionsCount(Max<ui64>(policy->GetMinPartitionsCount(), parts));
+}
+
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
     TIndexObjectCounts res;
     res.IndexTableCount = 1;
@@ -19,7 +92,8 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);
@@ -1065,7 +1139,8 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         impl.push_back(CalcImplTableDesc(baseTable, implTableColumns, userIndexDesc, uniqueKeySize));
         break;
     }
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+    case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
         const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
         NKikimrSchemeOp::TTableDescription levelTableDesc, postingTableDesc, prefixTableDesc;
         if (static_cast<int>(indexDesc.IndexImplTableDescriptionsSize()) == 2 + static_cast<int>(prefixVectorIndex)) {

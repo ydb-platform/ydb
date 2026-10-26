@@ -62,6 +62,7 @@ enum class EExecutionUnitKind: ui32 {
     ReceiveSnapshot,
     ReceiveSnapshotCleanup,
     AlterMoveShadow,
+    BuildHnswIndex,
     AlterTable,
     DropTable,
     DirectOp,

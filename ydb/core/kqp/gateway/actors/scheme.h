@@ -223,6 +223,12 @@ public:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         auto& response = ev->Get()->Record;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(NYql::TIssue({}, response.GetError())));
+            NTabletPipe::CloseClient(ctx, ShemePipeActorId);
+            this->Die(ctx);
+            return;
+        }
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request",
             {"txId", response.GetTxId()});

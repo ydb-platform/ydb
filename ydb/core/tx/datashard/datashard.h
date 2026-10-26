@@ -13,6 +13,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/hnsw.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -409,10 +410,14 @@ namespace TEvDataShard {
         EvS3DirectWriteFinishResult,
         EvS3DirectWriteAbort,
 
+        EvHnswReplicaStatus,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD)");
+    struct TEvHnswReplicaStatus : TEventPB<TEvHnswReplicaStatus,
+            NKikimrHnsw::TReplicaProbeResult, EvHnswReplicaStatus> {};
+
     struct TEvGetShardState : public TEventPB<TEvGetShardState, NKikimrTxDataShard::TEvGetShardState,
         TEvDataShard::EvGetShardState> {
         TEvGetShardState()

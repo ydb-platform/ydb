@@ -478,7 +478,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     NKikimrSchemeOp::TModifyScheme indexBuildProto;
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
     const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
-    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+        Y_ENSURE(!indexColumns.KeyColumns.empty());
+        indexDataColumns.insert(indexColumns.KeyColumns.back());
+    }
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);
@@ -495,7 +500,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
 
     using namespace NTableIndex::NKMeans;
     addCreateTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), {}));
-    addCreateTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}));
+    auto posting = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {});
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !buildInfo.IsBuildPrefixedVectorIndex()) {
+        const auto domain = TPath::Init(buildInfo.TablePathId, ss).DomainInfo();
+        const auto& limits = domain->GetSchemeLimits();
+        const ui64 used = domain->GetShardsInside() - domain->GetBackupShards();
+        const ui64 available = used + 1 < limits.MaxShards ? limits.MaxShards - used - 1 : 1;
+        ConfigureHnswPostingPartitions(tableInfo, indexDesc.GetVectorIndexKmeansTreeDescription().GetSettings(),
+            Min<ui64>(limits.MaxShardsInPath, available), posting);
+    }
+    addCreateTable(std::move(posting));
     if (buildInfo.IsBuildPrefixedVectorIndex()) {
         const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
         auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
@@ -600,7 +614,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1 && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
         // When OverlapClusters is active, first build table for each level contains 2 additional columns: __ydb_distance and __ydb_foreign,
         // and its primary key has different order - original table's primary key comes first and the cluster ID comes next
-        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels) {
+        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels
+                && buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
         }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
@@ -1024,7 +1039,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    if (buildInfo.IsBuildVectorIndex() && buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+    if (buildInfo.IsBuildVectorIndex()
+            && (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                || buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw)) {
         if (auto* desc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&buildInfo.SpecializedIndexDescription)) {
             *indexBuild.MutableVectorIndexKmeansTreeDescription() = *desc;
         }
@@ -1148,6 +1165,148 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    bool ScheduleHnswProgress = false;
+    bool CloseHnswPipes = false;
+
+    bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, TTransactionContext& txc, const TActorContext& ctx) {
+        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return false;
+        }
+        // The apply transaction has released the impl-table schema operation,
+        // so its size splits may proceed. Keep the main-table build lock until
+        // the current posting partitions have finished their graph work.
+        const auto posting = TPath::Init(buildInfo.TablePathId, Self)
+            .Child(buildInfo.IndexName).Child(NTableIndex::NKMeans::PostingTable);
+        if (!posting.IsResolved() || posting.IsDeleted() || !Self->Tables.contains(posting->PathId)) {
+            // Schema locks normally prevent this, but recovery must not crash
+            // on a path that has disappeared. The published index is optional
+            // cache work's only owner, so there is nothing left to wait for.
+            CloseHnswPipes = true;
+            return false;
+        }
+        if (!buildInfo.HnswWaitStartedAt) {
+            buildInfo.HnswWaitStartedAt = ctx.Now();
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswWaitStartedAt>(buildInfo.HnswWaitStartedAt.MicroSeconds()));
+        }
+        const auto timeout = Self->HnswIndexBuildWaitTimeout;
+        const bool finishWithFallback = !Self->EnableHnswIndex || ctx.Now() >= buildInfo.HnswWaitStartedAt + timeout;
+        const auto table = Self->Tables.at(posting->PathId);
+        THashSet<ui64> tablets;
+        for (const auto* partition : table->GetPartitions()) {
+            tablets.insert(ui64(Self->ShardInfos.at(partition->ShardIdx).TabletID));
+        }
+        const bool samePartitions = buildInfo.HnswPostingPathId == posting->PathId
+            && buildInfo.HnswProbeTablets == tablets;
+        bool allReplied = samePartitions && !tablets.empty()
+            && buildInfo.HnswBuildStatuses.size() == tablets.size();
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            allReplied &= status.HasAllReplies();
+        }
+        bool topologyReady = allReplied && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation();
+        bool partitionsReady = topologyReady;
+        bool sizeSplitPending = false;
+        const auto domain = posting.DomainInfo();
+        const auto& limits = domain->GetSchemeLimits();
+        const bool splitFitsQuota = posting->GetShardsInside() + 2 <= limits.MaxShardsInPath
+            && domain->GetShardsInside() - domain->GetBackupShards() + 2 <= limits.MaxShards;
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            TString reason;
+            if (status.ShardState != NKikimrTxDataShard::Ready) {
+                topologyReady = false;
+                partitionsReady = false;
+            }
+            if (!status.StatisticsReady) {
+                partitionsReady = false;
+            } else if (!status.StatisticsDisabled && splitFitsQuota && status.CanSplit
+                    && table->ShouldSplitBySize(status.DataSize, Self->SplitSettings.GetForceShardSplitSettings(), reason)) {
+                sizeSplitPending = true;
+                partitionsReady = false;
+            }
+        }
+        using EPhase = TIndexBuildInfo::EHnswPhase;
+        bool phaseChanged = false;
+        auto changePhase = [&](EPhase phase) {
+            buildInfo.HnswPhase = phase;
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswPhase>(ui32(phase)));
+            YDB_LOG_NOTICE("HNSW build phase changed", {"buildId", buildInfo.Id},
+                {"phase", ui32(phase)}, {"partitions", tablets.size()},
+                {"elapsed", ctx.Now() - buildInfo.HnswWaitStartedAt});
+            buildInfo.HnswBuildStatuses.clear();
+            phaseChanged = true;
+        };
+        // Once planned partitions are authorized, writes may keep statistics
+        // changing. Wait for graphs and known topology work, not a quiet table.
+        bool finished = topologyReady && !sizeSplitPending;
+        bool released = topologyReady && !sizeSplitPending;
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            finished &= status.Finished && !status.HasActiveBuilds();
+            released &= status.Released;
+        }
+        if (finishWithFallback) {
+            YDB_LOG_NOTICE((Self->EnableHnswIndex
+                ? "HNSW readiness wait expired; completing with scan fallback"
+                : "HNSW disabled; completing with scan fallback"), {"buildId", buildInfo.Id});
+            // Best-effort release; the persisted shard deadline also releases
+            // an unavailable tablet when it eventually recovers.
+        } else if (buildInfo.HnswPhase == EPhase::Releasing && released && finished) {
+            CloseHnswPipes = true;
+            return false;
+        } else if (!samePartitions && buildInfo.HnswPhase != EPhase::Partitioning) {
+            changePhase(EPhase::Partitioning);
+        } else if (buildInfo.HnswPhase == EPhase::Partitioning && partitionsReady) {
+            changePhase(EPhase::Building);
+        } else if (buildInfo.HnswPhase == EPhase::Building && finished) {
+            for (const auto& [tabletId, status] : buildInfo.HnswBuildStatuses) {
+                if (!status.FallbackReason.empty()) {
+                    YDB_LOG_NOTICE("HNSW shard completed with scan fallback", {"buildId", buildInfo.Id},
+                        {"tabletId", tabletId}, {"reason", status.FallbackReason});
+                }
+            }
+            changePhase(EPhase::Releasing);
+        } else if (buildInfo.HnswPhase != EPhase::Partitioning && allReplied && (!topologyReady || sizeSplitPending)) {
+            // New topology work needs another planning pass. Split children
+            // inherit the deferred schema, not the parent's authorization.
+            changePhase(EPhase::Partitioning);
+        }
+
+        // Re-probe after every partitioning change, and retry missing replies.
+        // Rounds prevent a delayed response from a preceding probe from making
+        // a replacement shard look ready. Only the round is persisted.
+        if (finishWithFallback || phaseChanged || !samePartitions || allReplied || !buildInfo.HnswProbeRound
+                || ctx.Now() >= buildInfo.HnswProbeSentAt + TDuration::Seconds(10)) {
+            CloseHnswPipes = !samePartitions;
+            buildInfo.HnswPostingPathId = posting->PathId;
+            buildInfo.HnswProbeTablets = std::move(tablets);
+            buildInfo.HnswBuildStatuses.clear();
+            ++buildInfo.HnswProbeRound;
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswProbeRound>(buildInfo.HnswProbeRound));
+            buildInfo.HnswProbeSentAt = ctx.Now();
+            for (ui64 tabletId : buildInfo.HnswProbeTablets) {
+                auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(ui64(posting->PathId.LocalPathId));
+                request->Record.SetHnswIndexBuildId(ui64(BuildId));
+                request->Record.SetHnswProbeRound(buildInfo.HnswProbeRound);
+                request->Record.SetHnswStartBuild(!finishWithFallback && buildInfo.HnswPhase == EPhase::Building
+                    && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation());
+                request->Record.SetHnswReleaseBuild(finishWithFallback || buildInfo.HnswPhase == EPhase::Releasing);
+                ToTabletSend.emplace(TTabletId(tabletId), std::move(request));
+            }
+        }
+        if (finishWithFallback) {
+            CloseHnswPipes = true;
+            return false;
+        }
+        if (!buildInfo.HnswProgressScheduled) {
+            buildInfo.HnswProgressScheduled = true;
+            ScheduleHnswProgress = true;
+        }
+        return true;
+    }
 
     template <bool WithSnapshot = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1272,6 +1431,24 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
+    template <typename TRecord>
+    void FillKMeansDataColumns(TRecord& record, const TIndexBuildInfo& buildInfo) {
+        *record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        const auto& embedding = buildInfo.IndexColumns.back();
+        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                || std::find(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end(), embedding) != buildInfo.DataColumns.end()) {
+            return;
+        }
+        const auto& table = *Self->Tables.at(buildInfo.TablePathId);
+        // Primary-key embeddings already travel in the output key cells.
+        for (ui32 tag : table.KeyColumnIds) {
+            if (table.Columns.at(tag).Name == embedding) {
+                return;
+            }
+        }
+        record.AddDataColumns(embedding);
+    }
+
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
@@ -1302,9 +1479,7 @@ private:
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1406,9 +1581,7 @@ private:
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1482,9 +1655,7 @@ private:
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
         const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
@@ -3684,6 +3855,9 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
+                    if (WaitForHnswBuilds(buildInfo, txc, ctx)) {
+                        break;
+                    }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
                 }
                 Progress(BuildId);
@@ -3901,6 +4075,12 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
+        if (CloseHnswPipes) {
+            Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+        }
+        if (ScheduleHnswProgress) {
+            ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvProgressHnswIndexBuild(ui64(BuildId)));
+        }
         for (auto& [shardId, ev]: ToTabletSend) {
             Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }
@@ -4008,19 +4188,34 @@ public:
     {}
 
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
-        const auto& shardIdx = Self->GetShardIdx(ShardId);
-
-        YDB_LOG_NOTICE(LogPrefix << "TTxReply : PipeRetry",
-            {"buildId", BuildId},
-            {"shardId", ShardId},
-            {"shardIdx", shardIdx},
-        );
-
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
             return true;
         }
         auto& buildInfo = *buildInfoPtr->get();
+        if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone
+                && buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            // Readiness probes use posting shards, which are not the source
+            // shards in buildInfo.Shards and may disappear after a split.
+            // Replace the dead pipe before sending another probe round.
+            Self->IndexBuildPipes.Close(BuildId, ShardId, ctx);
+            buildInfo.HnswBuildStatuses.erase(ui64(ShardId));
+            buildInfo.HnswProbeSentAt = TInstant::Zero();
+            Progress(BuildId);
+            return true;
+        }
+        if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
+            YDB_LOG_INFO(LogPrefix << "TTxReply : PipeRetry superfluous event",
+                {"buildId", BuildId},
+            );
+            return true;
+        }
+        const auto& shardIdx = Self->GetShardIdx(ShardId);
+        YDB_LOG_NOTICE(LogPrefix << "TTxReply : PipeRetry",
+            {"buildId", BuildId},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx},
+        );
         YDB_LOG_DEBUG(LogPrefix << "TTxReply : PipeRetry",
             {"buildInfo", buildInfo},
             {"shardId", ShardId},
@@ -4028,13 +4223,6 @@ public:
         );
 
         if (!buildInfo.Shards.contains(shardIdx)) {
-            return true;
-        }
-
-        if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            YDB_LOG_INFO(LogPrefix << "TTxReply : PipeRetry superfluous event",
-                {"buildId", BuildId},
-            );
             return true;
         }
 

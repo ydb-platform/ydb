@@ -761,6 +761,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         }
     }
 
+    VectorSpecializedStarted = KqpGroup->GetCounter("Vector/SpecializedStarted", true);
+    VectorSpecializedCompleted = KqpGroup->GetCounter("Vector/SpecializedCompleted", true);
+    VectorSpecializedFallback = KqpGroup->GetCounter("Vector/SpecializedFallback", true);
+
     /* Lease updates counters */
     LeaseUpdateLatency = KqpGroup->GetHistogram(
         "LeaseUpdatesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -853,6 +857,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
+    VectorScoreRows = KqpGroup->GetCounter("IteratorReads/VectorScoreRows", true);
+    VectorScoreEmbeddingPayloadBytes = KqpGroup->GetCounter("IteratorReads/VectorScoreEmbeddingPayloadBytes", true);
+    VectorScoreOmittedRows = KqpGroup->GetCounter("IteratorReads/VectorScoreOmittedRows", true);
     StreamLookupIteratorTotalQuotaBytesInFlight = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesInFlight", false);
     StreamLookupIteratorTotalQuotaBytesExceeded = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesExceeded", true);
     

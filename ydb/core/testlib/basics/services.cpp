@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include <ydb/core/tx/datashard/hnsw/cache.h>
 #include "storage.h"
 #include "appdata.h"
 #include "runtime.h"
@@ -112,6 +113,10 @@ namespace NKikimr {
             TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
         runtime.AddLocalService(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        for (ui32 i = 0; i < VectorReadFollowerPipeCacheCount; ++i) {
+            runtime.AddLocalService(MakeVectorReadFollowerPipeCacheID(i),
+                TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        }
     }
 
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig)
@@ -164,6 +169,8 @@ namespace NKikimr {
 
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& config)
     {
+        runtime.AddLocalService(NDataShard::MakeHnswCacheId(),
+            TActorSetupCmd(NDataShard::CreateHnswCache(), TMailboxType::ReadAsFilled, 0), nodeIndex);
         runtime.AddLocalService(NSharedCache::MakeSharedPageCacheId(0),
             TActorSetupCmd(
                 NSharedCache::CreateSharedPageCache(config, runtime.GetDynamicCounters(nodeIndex)),

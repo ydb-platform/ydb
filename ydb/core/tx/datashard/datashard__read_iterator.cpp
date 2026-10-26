@@ -2,6 +2,7 @@
 #include "read_iterator_sampling.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
+#include "hnsw_index.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 #include "probes.h"
@@ -9,6 +10,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
@@ -29,6 +31,35 @@ namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+
+bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        return false;
+    }
+    // ANN candidate reads cannot observe conflicts on rows they did not visit.
+    if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
+        return false;
+    }
+    const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
+    const auto& record = state.Request->Record;
+    if (!table->HnswSettings || !table->HnswVectorColumnTag
+            || table->HnswSettings->vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+            || !record.HasVectorTopK()
+            || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
+            || table->HnswVectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
+        return false;
+    }
+    if (!shard.IsFollower()) {
+        return !state.ReadVersion.IsMax();
+    }
+    const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
+    return repeatable && state.ReadVersion <= edge;
+}
+
+} // namespace
+
+
 struct TReadIteratorVectorTopItem {
     TOwnedCellVec Row;
     double Distance = 0;
@@ -48,12 +79,21 @@ struct TReadIteratorVectorTopItem {
 struct TReadIteratorVectorTop {
     ui32 Column = 0;
     ui32 Limit = 0;
+    ui32 HnswEfSearch = 15;
+    bool ReturnScores = false;
+    bool OmitVectorPayload = false;
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
 
+    // Set when a ready in-memory HNSW index is available for this table/column;
+    // if set, TReader::IterateRange uses it instead of the brute-force scan below.
+    std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
+    std::optional<std::pair<NTable::TDatabase::TChangeCounter, TRowVersion>> FollowerHnswSnapshot;
+
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
+    TVector<TCell> CompactRowScratch;
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
 
@@ -76,6 +116,13 @@ struct TReadIteratorVectorTop {
             return;
         }
         double distance = KMeans->CalcDistance(embedding, Target);
+        if (OmitVectorPayload) {
+            // Keep the ranking score and keys, without retaining another copy
+            // of each embedding. Logical read-byte accounting above is unchanged.
+            CompactRowScratch.assign(cells.begin(), cells.end());
+            CompactRowScratch[Column] = TCell();
+            cells = TConstArrayRef<TCell>(CompactRowScratch);
+        }
         if (Rows.size() < Limit) {
             if (DistinctColumns.size()) {
                 UniqueKeys.insert(serializedKey);
@@ -97,12 +144,19 @@ struct TReadIteratorVectorTop {
     }
 
     // Move all rows to BlockBuilder in sorted order
-    size_t ToBlockBuilder(IBlockBuilder& blockBuilder, const NScheme::TTypeInfo* columnTypes) {
+    size_t ToBlockBuilder(IBlockBuilder& blockBuilder, const NScheme::TTypeInfo* columnTypes,
+            NKikimrTxDataShard::TEvReadResult& record) {
         size_t n = Rows.size();
         for (auto it = Rows.end(); it != Rows.begin(); it--) {
             std::pop_heap(Rows.begin(), it);
         }
+        if (ReturnScores) {
+            record.SetHasVectorScores(true);
+        }
         for (auto& item: Rows) {
+            if (ReturnScores) {
+                record.AddVectorScores(item.Distance);
+            }
             blockBuilder.AddRow(TDbTupleRef(), TDbTupleRef(columnTypes, item.Row.data(), item.Row.size()));
         }
         Rows.clear();
@@ -254,6 +308,10 @@ struct TShortTableInfo {
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
+        KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
+        ShardRange = tableInfo->Range;
+        HnswSettings = tableInfo->HnswSettings;
+        HnswVectorColumnTag = tableInfo->HnswVectorColumnTag;
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -304,12 +362,36 @@ struct TShortTableInfo {
         return result;
     }
 
+    bool CoversFullShard(const TTableRange& range) const {
+        if (range.Point) {
+            return false;
+        }
+        if (range.IsFullRange(KeyColumnCount)) {
+            return true;
+        }
+        if (!ShardRange) {
+            return false;
+        }
+        const auto shardRange = ShardRange->ToTableRange();
+        return CompareBorders<false, false>(range.From, shardRange.From,
+                   range.InclusiveFrom, shardRange.InclusiveFrom, KeyColumnTypes) <= 0
+            && CompareBorders<true, true>(range.To, shardRange.To,
+                   range.InclusiveTo, shardRange.InclusiveTo, KeyColumnTypes) >= 0;
+    }
+
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
+    std::optional<TSerializedTableRange> ShardRange;
+    std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
+    ui32 HnswVectorColumnTag = 0;
 };
+
+std::vector<TRawTypeValue> ToRawTypeValue(
+    TArrayRef<const TCell> keyCells, const TShortTableInfo& tableInfo, bool addNulls);
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -469,6 +551,7 @@ public:
         , StartTs(ts)
         , Self(self)
         , TableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion)
+        , ColumnTypes(tableInfo.GetColumnTypes(state.Columns))
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
@@ -520,6 +603,9 @@ public:
         iterRange.MaxKey = keyTo;
         iterRange.MinInclusive = fromInclusive;
         iterRange.MaxInclusive = toInclusive;
+        const TTableRange tableRange(
+            keyFromCells.GetCells(), fromInclusive,
+            keyToCells.GetCells(), toInclusive);
         const bool reverse = State.Reverse;
 
         if (TArrayRef<const TCell> cells = (reverse ? keyToCells.GetCells() : keyFromCells.GetCells())) {
@@ -532,16 +618,22 @@ public:
             }
         }
 
+        // The follower graph is an immutable copy of this exact table
+        // snapshot. Covered results need no table iterator or page fetches.
+        if (TryReadHnswCoveredRange(tableRange, txc)) {
+            return EReadStatus::Done;
+        }
+
         EReadStatus result;
 
         txc.Env.EnableReadMissingReferences();
 
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), iterRange, txc);
+            result = IterateRange(iter.Get(), iterRange, tableRange, txc);
         }
 
         txc.Env.DisableReadMissingReferences();
@@ -562,14 +654,6 @@ public:
             range.ToInclusive = true;
             range.FromInclusive = true;
             return ReadRange(txc, range);
-        }
-
-        if (ColumnTypes.empty()) {
-            for (auto tag: State.Columns) {
-                auto it = TableInfo.Columns.find(tag);
-                Y_ASSERT(it != TableInfo.Columns.end());
-                ColumnTypes.emplace_back(it->second.Type);
-            }
         }
 
         const auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
@@ -949,7 +1033,7 @@ public:
             if (State.VectorTopK) {
                 record.MutableStats()->SetRows(State.VectorTopK->TotalReadRows);
                 record.MutableStats()->SetBytes(State.VectorTopK->TotalReadBytes);
-                RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data());
+                RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data(), record);
             }
         }
 
@@ -1316,8 +1400,250 @@ private:
                             State.ReadVersion);
     }
 
+    // Fetches full rows for a set of HNSW search results and appends them
+    // to VectorTopK's row buffer for output via ToBlockBuilder. Returns
+    // NeedData on page fault, leaving VectorTopK untouched so the whole
+    // scan can be retried from the top (HNSW search is cheap to redo).
+    //
+    // The keys come from the HNSW graph in distance order, i.e. in arbitrary
+    // key order, so they are scattered across the table's pages. Precharge
+    // them all up front and only then Select: otherwise each missing page
+    // costs a separate transaction restart, turning one top-K query into up
+    // to Limit sequential restart round-trips.
+    // HNSW indexes posting-table rows, while overlap queries need unique base
+    // table keys. Those keys are part of the posting-table primary key, so we
+    // can deduplicate candidates before touching the table and progressively
+    // over-fetch until Limit unique neighbors have been found.
+    THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
+        const auto& topK = *State.VectorTopK;
+        // Search resolves vector versions and tombstones before selecting K.
+        // Range filtering and posting-key deduplication may need more candidates.
+        const size_t availableCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
+        // Cluster prefixes can use the shared graph by progressively asking
+        // for more neighbors. Bound work for selective or empty ranges and
+        // retain the table-scan fallback when the graph cannot fill top-K.
+        constexpr size_t MaxFilteredHnswCandidates = 1024;
+        const size_t maxCandidates = TableInfo.CoversFullShard(range)
+            ? availableCandidates
+            : Min(availableCandidates, Max<size_t>(topK.Limit, MaxFilteredHnswCandidates));
+        size_t requested = Min(maxCandidates, static_cast<size_t>(topK.Limit));
+        if (!topK.DistinctColumns.empty()) {
+            requested = Min(maxCandidates, Max<size_t>(requested * 2, 32));
+        }
+
+        while (true) {
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
+            if (!candidates.Covered) {
+                return candidates;
+            }
+
+            THnswSearchResult inRange;
+            for (auto& candidate : candidates.Results) {
+                TSerializedCellVec key(candidate.first);
+                // ReadRange uses legacy borders: a shortened key ends in
+                // +infinity, including an exclusive lower cluster prefix.
+                // ComparePointAndRange treats the missing lower suffix as
+                // NULL and would admit rows from the preceding cluster.
+                const bool afterFrom = range.From.empty()
+                    || CompareBorders<false, false>(key.GetCells(), range.From,
+                        true, range.InclusiveFrom, TableInfo.KeyColumnTypes) >= 0;
+                const bool beforeTo = range.To.empty()
+                    || CompareBorders<true, true>(key.GetCells(), range.To,
+                        true, range.InclusiveTo, TableInfo.KeyColumnTypes) <= 0;
+                if (afterFrom && beforeTo) {
+                    inRange.Results.push_back(std::move(candidate));
+                }
+            }
+
+            if (topK.DistinctColumns.empty()) {
+                if (inRange.Results.size() >= topK.Limit) {
+                    inRange.Results.resize(topK.Limit);
+                    return inRange;
+                }
+                if (requested == maxCandidates) {
+                    return inRange;
+                }
+                requested = Min(maxCandidates, requested * 2);
+                continue;
+            }
+
+            TVector<size_t> distinctKeyPositions;
+            bool keysOnly = true;
+            for (ui32 columnIndex : topK.DistinctColumns) {
+                const auto tag = State.Columns[columnIndex];
+                auto it = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
+                if (it == TableInfo.KeyColumnIds.end()) {
+                    keysOnly = false;
+                    break;
+                }
+                distinctKeyPositions.push_back(it - TableInfo.KeyColumnIds.begin());
+            }
+            if (!keysOnly) {
+                // Non-key DISTINCT values are unavailable in the graph. Keep
+                // the exact table path; returning unfiltered graph rows here
+                // would also violate the bounds of a restricted range.
+                return THnswSearchResult{.Covered = false};
+            }
+
+            THnswSearchResult unique;
+            THashSet<TString> seen;
+            for (auto& candidate : inRange.Results) {
+                TSerializedCellVec key(candidate.first);
+                TVector<TCell> cells;
+                for (size_t position : distinctKeyPositions) {
+                    cells.push_back(key.GetCells().at(position));
+                }
+                if (seen.insert(TSerializedCellVec::Serialize(cells)).second) {
+                    unique.Results.push_back(std::move(candidate));
+                    if (unique.Results.size() == topK.Limit) {
+                        return unique;
+                    }
+                }
+            }
+            if (requested == maxCandidates) {
+                return unique;
+            }
+            requested = Min(maxCandidates, requested * 2);
+        }
+    }
+
+    bool TryReadHnswCoveredRange(const TTableRange& range, TTransactionContext& txc) {
+        if (!Self->IsFollower() || !CanUseHnsw(*Self, State)
+                || !State.VectorTopK || !State.VectorTopK->HnswIndex) {
+            return false;
+        }
+        auto& topK = *State.VectorTopK;
+        if (!topK.FollowerHnswSnapshot
+                || topK.FollowerHnswSnapshot->first != txc.DB.Head(TableInfo.LocalTid)
+                || topK.FollowerHnswSnapshot->second != State.ReadVersion
+                || !topK.HnswIndex->CanRead(State.ReadVersion)
+                || topK.HnswIndex->HasChanges()) {
+            return false;
+        }
+
+        TVector<size_t> positions;
+        positions.reserve(State.Columns.size());
+        const ui32 vectorTag = State.Columns[topK.Column];
+        for (const auto tag : State.Columns) {
+            if (tag == vectorTag) {
+                positions.push_back(Max<size_t>());
+            } else {
+                const auto key = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
+                if (key == TableInfo.KeyColumnIds.end()) {
+                    return false; // Other covered-index payload still comes from the table.
+                }
+                positions.push_back(key - TableInfo.KeyColumnIds.begin());
+            }
+        }
+
+        const auto candidates = SearchHnswDistinct(range);
+        if (!candidates.Covered || candidates.Results.size() < topK.Limit) {
+            return false;
+        }
+        TVector<TOwnedCellVec> rows;
+        rows.reserve(candidates.Results.size());
+        for (const auto& [serializedKey, _] : candidates.Results) {
+            const TSerializedCellVec key(serializedKey);
+            TString vector;
+            if (key.GetCells().size() != TableInfo.KeyColumnCount
+                    || !topK.HnswIndex->GetVector(serializedKey, vector, State.ReadVersion)) {
+                return false;
+            }
+            TVector<TCell> cells;
+            cells.reserve(positions.size());
+            for (const auto position : positions) {
+                cells.push_back(position == Max<size_t>()
+                    ? TCell(vector.data(), vector.size()) : key.GetCells()[position]);
+            }
+            rows.emplace_back(TConstArrayRef<TCell>(cells));
+        }
+        // Commit to the top-K accumulator only after all cached values exist.
+        for (const auto& row : rows) {
+            ++RowsProcessed;
+            topK.AddRow(row);
+        }
+        return true;
+    }
+
+    EReadStatus MaterializeHnswResults(
+        const THnswSearchResult& results,
+        TTransactionContext& txc)
+    {
+        auto& topK = *State.VectorTopK;
+
+        TVector<TSerializedCellVec> keys;
+        keys.reserve(results.Results.size());
+        for (const auto& [serializedKey, _] : results.Results) {
+            keys.emplace_back(serializedKey);
+        }
+
+        bool ready = true;
+        for (const auto& keyCells : keys) {
+            ready &= PrechargeKey(txc, keyCells).Ready;
+        }
+        if (!ready) {
+            return EReadStatus::NeedData;
+        }
+
+        // All pages are resident, so no Select below can page fault; collect
+        // the rows first and only mutate VectorTopK once every key resolved,
+        // so a retry can never append the same row twice.
+        struct TFetchedRow {
+            NTable::TRowState RowState;
+        };
+        TVector<TFetchedRow> fetched;
+        fetched.reserve(keys.size());
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            const auto rawKey = ToRawTypeValue(keys[i].GetCells(), TableInfo, /* addNulls */ false);
+
+            TFetchedRow row;
+            row.RowState.Init(State.Columns.size());
+            NTable::TSelectStats stats;
+            auto status = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, row.RowState, stats, 0,
+                State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+            if (status == NTable::EReady::Page) {
+                // Precharge reported everything resident, so this should not
+                // happen; retry from the top rather than emit a partial result.
+                return EReadStatus::NeedData;
+            }
+            if (status == NTable::EReady::Gone) {
+                continue; // Row was deleted since the index was built.
+            }
+            fetched.emplace_back(std::move(row));
+        }
+
+        for (const auto& row : fetched) {
+            TDbTupleRef value(ColumnTypes.data(), (*row.RowState).data(), ColumnTypes.size());
+            RowsProcessed++;
+            topK.AddRow(value.Cells());
+        }
+
+        return EReadStatus::Done;
+    }
+
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+    EReadStatus IterateRange(
+        TIterator* iter,
+        NTable::TKeyRange& iterRange,
+        const TTableRange& tableRange,
+        TTransactionContext& txc)
+    {
+        // SearchHnswDistinct widens graph exploration for cluster ranges
+        // and keeps only visible keys inside this request's bounds.
+        if (CanUseHnsw(*Self, State) && State.VectorTopK && State.VectorTopK->HnswIndex
+                && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
+            auto results = SearchHnswDistinct(tableRange);
+            // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
+            // the exact path when it cannot supply enough visible neighbors.
+            if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
+                return MaterializeHnswResults(results, txc);
+            }
+            Self->RegisterHnswFallback(TableInfo.LocalTid, TableInfo.CoversFullShard(tableRange)
+                ? TDataShard::EHnswFallback::Candidates : TDataShard::EHnswFallback::PartialRange);
+        }
+
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
@@ -1817,7 +2143,7 @@ private:
         if (last && VectorTopK) {
             record.MutableStats()->SetRows(VectorTopK->TotalReadRows);
             record.MutableStats()->SetBytes(VectorTopK->TotalReadBytes);
-            auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data());
+            auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data(), record);
             BlockRows += topRows;
             TotalRows += topRows;
         }
@@ -2703,6 +3029,9 @@ public:
                 }
                 topState->DistinctColumns.push_back(colIdx);
             }
+            if (topK.GetHnswEfSearch() == 0 || topK.GetHnswEfSearch() > NKMeans::MaxHnswEfSearch) {
+                error = "HNSWEfSearch must be in 1..1000";
+            }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                     << error << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
@@ -2710,7 +3039,76 @@ public:
             }
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
+            topState->HnswEfSearch = topK.GetHnswEfSearch();
+            // CellVec score transport is explicitly negotiated. Arrow and older
+            // consumers retain the original row representation.
+            topState->ReturnScores = topK.GetReturnScores()
+                && record.GetResultFormat() == NKikimrDataEvents::FORMAT_CELLVEC;
+            topState->OmitVectorPayload = topState->ReturnScores && topK.GetOmitVectorPayload();
             topState->Target = topK.GetTargetVector();
+
+            // Prefer the index built at vector-index finalization. If it is
+            // absent (pre-deployment index or tablet restart), scan once and
+            // construct it asynchronously; this read continues by brute force.
+            const ui32 localTid = TableInfo.LocalTid;
+            const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
+            const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0
+                && !topK.GetSettings().has_m()
+                && !topK.GetSettings().has_ef_construction();
+            auto hnswSettings = topK.GetSettings();
+            if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
+                NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());
+            }
+            if (useCachedHnswParameters && TableInfo.HnswSettings
+                    && TableInfo.HnswVectorColumnTag == vectorColumnTag
+                    && TableInfo.HnswSettings->metric() == hnswSettings.metric()
+                    && TableInfo.HnswSettings->vector_type() == hnswSettings.vector_type()
+                    && TableInfo.HnswSettings->vector_dimension() == hnswSettings.vector_dimension()) {
+                hnswSettings = *TableInfo.HnswSettings;
+            }
+            const bool canUseHnsw = CanUseHnsw(*Self, state);
+            if (!canUseHnsw && TableInfo.HnswSettings && AppData()->FeatureFlags.GetEnableHnswIndex()) {
+                Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
+            }
+            if (Self->IsFollower() && TableInfo.HnswSettings
+                    && TableInfo.HnswSettings->vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    && AppData()->FeatureFlags.GetEnableHnswIndex()) {
+                const auto cache = Self->HnswIndexCache.find(localTid);
+                if (cache == Self->HnswIndexCache.end() || !cache->second.Index)
+                    Self->ScheduleHnswFollowerSync();
+                if (canUseHnsw)
+                    Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion);
+            }
+            // Select a generation whose base and committed journal cover this read.
+            Self->PruneHnswIndexes();
+            if (canUseHnsw) {
+                if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, useCachedHnswParameters, state.ReadVersion)) {
+                    Self->RegisterHnswCacheLookup(localTid, true);
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
+                        << " size=" << cached->Size());
+                    topState->HnswIndex = std::move(cached);
+                    if (Self->IsFollower()) {
+                        topState->FollowerHnswSnapshot.emplace(txc.DB.Head(localTid), state.ReadVersion);
+                    }
+                } else {
+                    Self->RegisterHnswCacheLookup(localTid, false);
+                }
+            }
+            const auto buildVersion = Self->GetHnswBuildVersion();
+            if (!Self->IsFollower() && !topState->HnswIndex
+                    && canUseHnsw
+                    && !Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, useCachedHnswParameters)
+                    && buildVersion < Self->Pipeline.GetUnreadableEdge()
+                    && Self->GetHnswCacheMemoryLimit() != 0
+                    && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
+                        hnswSettings, buildVersion)) {
+                Self->TrackHnswOpenTransactions(localTid, txc.DB);
+                Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
+            }
             state.VectorTopK = std::move(topState);
         }
 

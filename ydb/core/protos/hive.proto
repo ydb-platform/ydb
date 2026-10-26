@@ -521,6 +521,7 @@ message TTabletInfo {
     optional bool InWaitQueue = 25;
     optional bool IsBackup = 26 [default = false];
     optional uint32 ConfirmedStorageVersion = 27;
+    optional uint32 DesiredFollowers = 28;
 }
 
 message TEvSeizeTabletsReply {

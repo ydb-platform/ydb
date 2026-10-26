@@ -77,6 +77,10 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TVectorIndexSettings, stream, value) {
         "{ " << value.Metric << 
         ", vector_type: " << value.VectorType << 
         ", vector_dimension: " << value.VectorDimension  << 
+        ", min_rows: " << value.MinRows <<
+        ", M: " << value.M <<
+        ", ef_construction: " << value.EfConstruction <<
+        ", delta_rows: " << value.DeltaRows <<
         " }";
 }
 

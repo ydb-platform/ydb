@@ -237,6 +237,11 @@ public:
         for (ui32 resId = 0; resId < Tx.Results().Size(); ++resId) {
             auto res = Tx.Results().Item(resId);
             auto& planNode = AddPlanNode(phaseNode);
+            if (TxProto.HasVectorExecution()) {
+                // Runtime isolation/resource checks can still select the
+                // ordinary stages retained in this cached plan.
+                planNode.NodeInfo["VectorExecutionCandidate"] = true;
+            }
 
             TStringBuilder typeName;
             if (SerializerCtx.PrecomputePhases.find(TxId) != SerializerCtx.PrecomputePhases.end()) {
@@ -677,6 +682,10 @@ private:
             TVector<TString> readColumns;
             readColumns.reserve(vectorSearch.Columns().Size());
             for (const auto& column : vectorSearch.Columns()) {
+                if (vectorSearch.ScoreColumn().IsValid() && column.Value() == vectorSearch.ScoreColumn().Cast().Value()) {
+                    planNode.NodeInfo["VectorScores"] = true;
+                    continue;
+                }
                 columns.AppendValue(column.Value());
                 readColumns.push_back(TString(column.Value()));
                 if (postingMeta && !postingMeta->Columns.contains(readColumns.back())) {

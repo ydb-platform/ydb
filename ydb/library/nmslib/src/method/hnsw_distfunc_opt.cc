@@ -62,7 +62,7 @@ namespace similarity {
             NormalizeVect(pVectq, qty);
         }
 
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
@@ -153,7 +153,6 @@ namespace similarity {
                 }
             }
         }
-        visitedlistpool->releaseVisitedList(vl);
     }
 
     template <typename dist_t>
@@ -175,14 +174,27 @@ namespace similarity {
             NormalizeVect(pVectq, qty);
         }
 
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        alignas(32) uint8_t byteQuery[256];
+        const bool useBytes = !normalize && byteL2DistFunc_ && qty == byteL2Dimension_
+            && EncodeLosslessL2Bytes(pVectq, byteQuery, qty);
+        const auto distance = useBytes ? byteL2DistFunc_ : fstdistfunc_;
+        if (useBytes) {
+            pVectq = reinterpret_cast<float*>(byteQuery);
+        }
+        const auto vectorFor = [&](int node) -> const float* {
+            return useBytes
+                ? reinterpret_cast<const float*>(byteL2Data_.data() + size_t(node) * qty)
+                : reinterpret_cast<const float*>(data_level0_memory_ + size_t(node) * memoryPerObject_ + offsetData_ + 16);
+        };
+
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
         int maxlevel1 = maxlevel_;
         int curNodeNum = enterpointId_;
-        dist_t curdist = (fstdistfunc_(
-            pVectq, (float *)(data_level0_memory_ + enterpointId_ * memoryPerObject_ + offsetData_ + 16), qty, TmpRes));
+        dist_t curdist = (distance(
+            pVectq, vectorFor(enterpointId_), qty, TmpRes));
 
         for (int i = maxlevel1; i > 0; i--) {
             bool changed = true;
@@ -191,7 +203,7 @@ namespace similarity {
                 int *data = (int *)(linkLists_[curNodeNum] + (maxM_ + 1) * (i - 1) * sizeof(int));
                 int size = *data;
                 for (int j = 1; j <= size; j++) {
-                    PREFETCH(data_level0_memory_ + (*(data + j)) * memoryPerObject_ + offsetData_, _MM_HINT_T0);
+                    PREFETCH(vectorFor(data[j]), _MM_HINT_T0);
                 }
 #ifdef DIST_CALC
                 query->distance_computations_ += size;
@@ -200,8 +212,8 @@ namespace similarity {
                 for (int j = 1; j <= size; j++) {
                     int tnum = *(data + j);
 
-                    dist_t d = (fstdistfunc_(
-                        pVectq, (float *)(data_level0_memory_ + tnum * memoryPerObject_ + offsetData_ + 16), qty, TmpRes));
+                    dist_t d = (distance(
+                        pVectq, vectorFor(tnum), qty, TmpRes));
                     if (d < curdist) {
                         curdist = d;
                         curNodeNum = tnum;
@@ -220,6 +232,23 @@ namespace similarity {
         vector<QueueItem> &queueData = sortedArr.get_data();
         vector<QueueItem> itemBuff(1 + max(maxM_, maxM0_));
 
+        // Wide vectors span many cache lines. Fetch a bounded number of future
+        // neighbors before calculating their distances, without warming vectors
+        // that this search has already visited.
+        const bool prefetchWideVectors = qty >= 128;
+        constexpr int PrefetchAhead = 4;
+        const size_t vectorBytes = qty * (useBytes ? sizeof(uint8_t) : sizeof(float));
+        const auto prefetchVector = [&](int node) {
+            const char* vector = reinterpret_cast<const char*>(vectorFor(node));
+            for (size_t offset = 0; offset < vectorBytes; offset += 64) {
+                PREFETCH(vector + offset, _MM_HINT_T0);
+            }
+            // The first element need not be aligned to a cache-line boundary.
+            if (vectorBytes) {
+                PREFETCH(vector + vectorBytes - 1, _MM_HINT_T0);
+            }
+        };
+
         massVisited[curNodeNum] = currentV;
 
         while (currElem < min(sortedArr.size(), ef)) {
@@ -234,22 +263,40 @@ namespace similarity {
 
             int *data = (int *)(data_level0_memory_ + curNodeNum * memoryPerObject_ + offsetLevel0_);
             int size = *data;
-            PREFETCH((char *)(massVisited + *(data + 1)), _MM_HINT_T0);
-            PREFETCH((char *)(massVisited + *(data + 1) + 64), _MM_HINT_T0);
-            PREFETCH(data_level0_memory_ + (*(data + 1)) * memoryPerObject_ + offsetData_, _MM_HINT_T0);
-            PREFETCH((char *)(data + 2), _MM_HINT_T0);
+            if (prefetchWideVectors) {
+                for (int j = 1; j <= size; ++j) {
+                    PREFETCH(massVisited + data[j], _MM_HINT_T0);
+                }
+                for (int j = 1; j <= std::min(size, PrefetchAhead); ++j) {
+                    if (massVisited[data[j]] != currentV) {
+                        prefetchVector(data[j]);
+                    }
+                }
+            } else if (size) {
+                PREFETCH(massVisited + data[1], _MM_HINT_T0);
+                PREFETCH(vectorFor(data[1]), _MM_HINT_T0);
+            }
 
             for (int j = 1; j <= size; j++) {
                 int tnum = *(data + j);
-                PREFETCH((char *)(massVisited + *(data + j + 1)), _MM_HINT_T0);
-                PREFETCH(data_level0_memory_ + (*(data + j + 1)) * memoryPerObject_ + offsetData_, _MM_HINT_T0);
+                const int future = j + (prefetchWideVectors ? PrefetchAhead : 1);
+                if (future <= size) {
+                    const int nextNode = data[future];
+                    if (prefetchWideVectors) {
+                        if (massVisited[nextNode] != currentV) {
+                            prefetchVector(nextNode);
+                        }
+                    } else {
+                        PREFETCH(massVisited + nextNode, _MM_HINT_T0);
+                        PREFETCH(vectorFor(nextNode), _MM_HINT_T0);
+                    }
+                }
                 if (!(massVisited[tnum] == currentV)) {
 #ifdef DIST_CALC
                     query->distance_computations_++;
 #endif
                     massVisited[tnum] = currentV;
-                    char *currObj1 = (data_level0_memory_ + tnum * memoryPerObject_ + offsetData_);
-                    dist_t d = (fstdistfunc_(pVectq, (float *)(currObj1 + 16), qty, TmpRes));
+                    dist_t d = distance(pVectq, vectorFor(tnum), qty, TmpRes);
 
                     if (d < topKey || sortedArr.size() < ef) {
                         CHECK_MSG(itemBuff.size() > itemQty,
@@ -293,7 +340,6 @@ namespace similarity {
             // query->CheckAndAddToResult(queueData[i].key, new Object(currObj));
             query->CheckAndAddToResult(queueData[i].key, data_rearranged_[tnum]);
         }
-        visitedlistpool->releaseVisitedList(vl);
     }
 
     template class Hnsw<float>;

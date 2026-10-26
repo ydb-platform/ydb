@@ -25,6 +25,13 @@ struct TIndexObjectCounts {
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+// Non-prefixed HNSW posting keys are [flagged leaf id, base primary key...].
+// Explicit layouts are preserved; otherwise estimate construction memory and
+// spread partitions across populated leaf ids and existing base-key boundaries.
+void ConfigureHnswPostingPartitions(const NSchemeShard::TTableInfo::TPtr& baseTable,
+    const Ydb::Table::KMeansTreeSettings& settings, ui64 maxPartitions,
+    NKikimrSchemeOp::TTableDescription& posting);
+
 // Fulltext index key columns are ordered [prefix..., text]; the text column is always last.
 // Returns the leading prefix columns (empty for a non-prefixed index).
 inline TVector<TString> GetFulltextPrefixColumns(const NProtoBuf::RepeatedPtrField<TString>& keyColumnNames) {
@@ -385,7 +392,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 

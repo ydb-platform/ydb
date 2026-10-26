@@ -1,4 +1,5 @@
 #include "kqp_query_compiler.h"
+#include "kqp_vector_execution.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -87,7 +88,7 @@ template <typename TColumnsRange>
 void FillVectorTopKSettings(
     NKqpProto::TKqpPhyVectorTopK& vectorTopK,
     const TKqpReadTableSettings& settings,
-    const TColumnsRange& columns)
+    const TColumnsRange& columns, ui32 hnswEfSearch)
 {
     // Find column index
     ui32 columnIdx = 0;
@@ -101,6 +102,7 @@ void FillVectorTopKSettings(
     }
     YQL_ENSURE(columnFound, "VectorTopK column " << settings.VectorTopKColumn << " not found in read columns");
     vectorTopK.SetColumn(columnIdx);
+    vectorTopK.SetHnswEfSearch(hnswEfSearch);
 
     // Set the metric settings
     auto* indexSettings = vectorTopK.MutableSettings();
@@ -488,7 +490,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto) {
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto, ui32 hnswEfSearch) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
@@ -525,7 +527,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
     // Handle VectorTopK settings for brute force vector search
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadRanges>) {
         if (settings.VectorTopKColumn) {
-            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns());
+            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns(), hnswEfSearch);
         }
     }
 
@@ -1027,7 +1029,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges(), Config->HNSWEfSearch.Get().GetOrElse(15));
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1037,7 +1039,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
@@ -1050,7 +1052,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
@@ -1320,6 +1322,9 @@ private:
         for (const auto& secretName : SecretNames) {
             txProto.AddSecretNames(secretName);
         }
+        if (SecretNames.empty() && Config->HNSWSpecializedExecution.Get().GetOrElse(false)) {
+            TryCompileVectorExecution(tx, txProto);
+        }
     }
 
     void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
@@ -1391,7 +1396,7 @@ private:
 
             // Handle VectorTopK settings for brute force vector search
             if (readSettings.VectorTopKColumn) {
-                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
+                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast(), Config->HNSWEfSearch.Get().GetOrElse(15));
             }
 
         } else if (auto settings = source.Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
@@ -2625,13 +2630,14 @@ private:
     void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
         const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
         NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
+        vectorTopK.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
         const auto implTablePath = streamLookup.Table().Path();
         const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
         const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
 
         const TIndexDescription *indexDesc = nullptr;
         for (const auto& index: mainTable->Metadata->Indexes) {
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+            if (TIndexDescription::IsVectorIndex(index.Type) &&
                 index.Name == settings.VectorTopIndex) {
                 indexDesc = &index;
             }
@@ -3097,6 +3103,7 @@ private:
                 copyColumns.insert(keyColumn);
             }
             if (vectorResolve.WithData() == "true") {
+                copyColumns.insert(vectorColumn);
                 for (const auto& dataColumn : indexDesc->DataColumns) {
                     copyColumns.insert(dataColumn);
                 }
@@ -3133,10 +3140,25 @@ private:
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
             proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            proto.SetFullRangeHnsw(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && indexDesc->KeyColumns.size() == 1
+                && !Config->HNSWUseClusterRouting.Get().GetOrElse(false));
+            proto.SetHnswShardRouting(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && indexDesc->KeyColumns.size() == 1
+                && Config->HNSWUseClusterRouting.Get().GetOrElse(false));
+            proto.SetHnswPreciseShardRouting(proto.GetHnswShardRouting()
+                && Config->HNSWPreciseShardRouting.Get().GetOrElse(false));
             proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
 
             const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
             proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
+            proto.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
+            if (proto.GetHnswPreciseShardRouting() && proto.GetLevels() == 1
+                    && proto.GetIndexSettings().metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN) {
+                proto.SetHnswAdaptiveProbeRatio(Config->HNSWAdaptiveProbeRatio.Get().GetOrElse(0.0));
+                proto.SetHnswAdaptiveOneProbeEfSearch(
+                    Config->HNSWAdaptiveOneProbeEfSearch.Get().GetOrElse(proto.GetHnswEfSearch()));
+            }
 
             // Main table
             FillTablesMap(vectorSearch.Table(), tablesMap);
@@ -3189,12 +3211,20 @@ private:
             // the actor emits rows matching OutputType. The embedding column must be present
             // (the logical optimizer includes it) so the actor can rank rows by distance.
             const auto& embeddingColumn = indexDesc->KeyColumns.back();
+            if (vectorSearch.ScoreColumn().IsValid()) {
+                proto.SetScoreColumnName(TString(vectorSearch.ScoreColumn().Cast().Value()));
+                proto.SetEmbeddingColumnName(embeddingColumn);
+            }
             ui32 vectorColumnIndex = 0;
             bool hasEmbedding = false;
             ui32 columnIndex = 0;
             for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
                 const auto name = TString(item->GetName());
                 proto.AddColumns(name);
+                if (proto.HasScoreColumnName() && name == proto.GetScoreColumnName()) {
+                    ++columnIndex;
+                    continue;
+                }
                 tablesMap[vectorSearch.Table().Path()].emplace(name);
                 // Covered index: the actor reads output columns straight from the
                 // posting table, so register them there too (not just main table).
@@ -3207,8 +3237,13 @@ private:
                 }
                 ++columnIndex;
             }
-            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
+            YQL_ENSURE(hasEmbedding || proto.HasScoreColumnName(), "Vector search output columns must contain the embedding column: " << embeddingColumn);
             proto.SetVectorColumnIndex(vectorColumnIndex);
+
+            if (proto.HasScoreColumnName()) {
+                tablesMap[postingTablePath].emplace(embeddingColumn);
+                tablesMap[vectorSearch.Table().Path()].emplace(embeddingColumn);
+            }
 
             // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
             // a parameter is resolved to an actual value at execution time.

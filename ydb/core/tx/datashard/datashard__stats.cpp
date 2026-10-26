@@ -232,6 +232,10 @@ private:
     TAutoPtr<TSpent> Spent;
 };
 
+namespace {
+constexpr TStringBuf HnswReadinessAuxPrefix = "HnswBuildReadiness/v1:";
+}
+
 class TDataShard::TTxGetTableStats : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
@@ -252,6 +256,16 @@ public:
 
         Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
         Result->Record.SetFollowerId(Self->FollowerId());
+        if (Ev->Get()->Record.HasHnswIndexBuildId()) {
+            Result->Record.SetHnswIndexBuildId(Ev->Get()->Record.GetHnswIndexBuildId());
+            Result->Record.SetHnswProbeRound(Ev->Get()->Record.GetHnswProbeRound());
+            Result->Record.SetHnswStatisticsDisabled(Self->StatisticsDisabled);
+            if (Self->IsFollower() && Ev->Get()->Record.HasHnswTableOwnerId()) {
+                // A follower without reads may not have loaded user-table
+                // metadata yet. It cannot have a graph worker in that case.
+                Result->Record.SetTableOwnerId(Ev->Get()->Record.GetHnswTableOwnerId());
+            }
+        }
 
         const auto appData = AppData(ctx);
         const bool dropHistogram = appData->FeatureFlags.GetEnableDataShardSplitHistogramOmission();
@@ -268,7 +282,65 @@ public:
             return true;
         }
 
+        const auto& request = Ev->Get()->Record;
+        if (request.HasHnswIndexBuildId() && !Self->IsFollower() && Self->State == TShardState::Ready) {
+            const auto& table = *tableInfoIt->second;
+            const bool matchingBuild = table.HnswInitialBuildId == request.GetHnswIndexBuildId();
+            if (request.GetHnswReleaseBuild() && matchingBuild) {
+                // Only coordination metadata changes. Preserve graph and journal,
+                // and persist before acknowledging so later split children are free
+                // to reconstruct their graphs without the completed coordinator.
+                auto updated = MakeIntrusive<TUserTable>(table);
+                NKikimrSchemeOp::TTableDescription schema;
+                updated->GetSchema(schema);
+                schema.ClearHnswInitialBuildId();
+                schema.ClearHnswInitialBuildDeadlineUs();
+                updated->HnswInitialBuildId = 0;
+                updated->HnswInitialBuildDeadline = TInstant::Zero();
+                updated->SetSchema(schema);
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistUserTable(db, tableId, *updated);
+                Self->SetUserTable(TPathId(Self->PathOwnerId, tableId), updated);
+            } else if (request.GetHnswStartBuild() && (matchingBuild || !table.HnswInitialBuildId)
+                    && (!table.HnswInitialBuildId || ctx.Now() < table.HnswInitialBuildDeadline) && table.HnswSettings) {
+                auto& entry = Self->HnswIndexCache[table.LocalTid];
+                if (entry.CoordinatedBuildId != request.GetHnswIndexBuildId()) {
+                    entry.CoordinatedBuildId = request.GetHnswIndexBuildId();
+                    entry.InitialBuildAttemptsLeft = 30;
+                }
+                Self->ScheduleHnswRebuild(table.LocalTid);
+            }
+        }
         const TUserTable& tableInfo = *(tableInfoIt->second);
+        if (Ev->Get()->Record.HasHnswIndexBuildId()) {
+            Result->Record.SetShardState(Self->State);
+            const auto cache = Self->HnswIndexCache.find(tableInfo.LocalTid);
+            Result->Record.SetHnswBuildInProgress(cache != Self->HnswIndexCache.end()
+                && (cache->second.Building || cache->second.RebuildScheduled));
+            if (!Self->IsFollower()) {
+                const bool installed = tableInfo.HnswSettings && Self->GetHnswIndex(tableInfo.LocalTid,
+                    tableInfo.HnswVectorColumnTag, *tableInfo.HnswSettings, false);
+                TString fallback;
+                if (!appData->FeatureFlags.GetEnableHnswIndex()) {
+                    fallback = "feature disabled";
+                } else if (Self->IsHnswCacheMemoryLimitKnown() && !Self->GetHnswCacheMemoryLimit()) {
+                    fallback = "cache disabled";
+                } else if (cache != Self->HnswIndexCache.end() && !Result->Record.GetHnswBuildInProgress()
+                        && cache->second.CoordinatedBuildId == request.GetHnswIndexBuildId()) {
+                    if (cache->second.NextScanAttemptAt == TInstant::Max()) {
+                        fallback = "below min_rows";
+                    } else if (!cache->second.InitialBuildAttemptsLeft) {
+                        fallback = "build retries exhausted";
+                    }
+                }
+                Result->Record.SetHnswBuildFinished(installed || !fallback.empty());
+                Result->Record.SetHnswFallbackReason(fallback);
+                Result->Record.SetHnswBuildReleased(!tableInfo.HnswInitialBuildId);
+            }
+            // Size decisions must include the final uploaded parts, not an
+            // earlier statistics snapshot that could hide an imminent split.
+            Result->Record.SetHnswStatsFresh(!tableInfo.StatsNeedUpdate && !tableInfo.StatsUpdateInProgress);
+        }
 
         // Return the key access sample if it has been collected no more
         // than 30 seconds ago or it has been active for at least 5 seconds
@@ -397,6 +469,18 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (Ev->Get()->Record.HasHnswIndexBuildId() && !Self->IsFollower()) {
+            const auto followers = Self->Executor()->GetStats().FollowersCount;
+            Result->Record.SetHnswFollowersCount(followers);
+            if (followers) {
+                auto request = Ev->Get()->Record;
+                ActorIdToProto(Ev->Sender, request.MutableHnswReplyTo());
+                request.SetHnswTableOwnerId(Self->PathOwnerId);
+                TString payload;
+                Y_ENSURE(request.SerializeToString(&payload));
+                Self->Executor()->SendUserAuxUpdateToFollowers(TString(HnswReadinessAuxPrefix) + payload, ctx);
+            }
+        }
         ctx.Send(Ev->Sender, Result.Release());
     }
 
@@ -480,8 +564,27 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) {
-    Executor()->Execute(new TTxGetTableStats(this, ev), ctx);
+void TDataShard::OnLeaderUserAuxUpdate(TString update) {
+    if (IsFollower() && TStringBuf(update).StartsWith(HnswGraphAuxPrefix)) {
+        auto event = MakeHolder<TEvHnswCache::TEvGraphAnnouncement>();
+        const auto payload = TStringBuf(update).SubStr(HnswGraphAuxPrefix.size());
+        if (event->Record.ParseFromArray(payload.data(), payload.size()))
+            TActivationContext::Send(new IEventHandle(SelfId(), SelfId(), event.Release()));
+        return;
+    }
+    if (!IsFollower() || !TStringBuf(update).StartsWith(HnswReadinessAuxPrefix)) {
+        return;
+    }
+    auto request = MakeHolder<TEvDataShard::TEvGetTableStats>();
+    const TStringBuf payload = TStringBuf(update).SubStr(HnswReadinessAuxPrefix.size());
+    if (!request->Record.ParseFromArray(payload.data(), payload.size())
+            || !request->Record.HasHnswIndexBuildId() || !request->Record.HasHnswReplyTo()) {
+        return;
+    }
+    const auto replyTo = ActorIdFromProto(request->Record.GetHnswReplyTo());
+    // Auxiliary updates are applied inside an executor transaction zone.
+    // Queue the stats request instead of recursively entering the executor.
+    TActivationContext::Send(new IEventHandle(SelfId(), replyTo, request.Release()));
 }
 
 template <class TTables>
@@ -738,6 +841,15 @@ public:
         Y_UNUSED(ctx);
     }
 };
+
+void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Record.HasHnswIndexBuildId() && !IsFollower() && !StatisticsDisabled) {
+        // Readiness must not depend on the periodic reporting interval. This
+        // transaction starts a builder only when the part statistics changed.
+        Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
+    }
+    Executor()->Execute(new TTxGetTableStats(this, ev), ctx);
+}
 
 TDuration TDataShard::GetStatsReportInterval(const TAppData& appData) const {
     const auto& userTables = GetUserTables();

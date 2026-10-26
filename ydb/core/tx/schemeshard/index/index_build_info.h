@@ -75,6 +75,44 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     virtual ~TIndexBuildInfo() = default;
 
+    struct THnswBuildStatus {
+        bool LeaderReported = false;
+        ui32 Followers = 0;
+        THashMap<ui32, bool> FollowerBuilds;
+
+        bool HasAllReplies() const {
+            return LeaderReported && FollowerBuilds.size() >= Followers;
+        }
+        bool HasActiveBuilds() const {
+            if (Building) {
+                return true;
+            }
+            for (const auto& [_, building] : FollowerBuilds) {
+                if (building) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        bool StatisticsReady = false;
+        bool StatisticsDisabled = false;
+        bool Building = false;
+        bool Finished = false;
+        bool Released = false;
+        TString FallbackReason;
+        ui32 ShardState = 0;
+        ui64 DataSize = 0;
+        bool CanSplit = false;
+    };
+    // Reconstruct partition/status caches after restart. Persist the round so
+    // delayed pre-restart replies cannot collide with a new probe.
+    TPathId HnswPostingPathId;
+    ui64 HnswProbeRound = 0;
+    THashSet<ui64> HnswProbeTablets;
+    THashMap<ui64, THnswBuildStatus> HnswBuildStatuses;
+    TInstant HnswProbeSentAt;
+    bool HnswProgressScheduled = false;
+
     enum class EState: ui32 {
         Invalid = 0,
         AlterMainTable = 5,
@@ -319,6 +357,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 private:
     TString Issue;
 public:
+    TInstant HnswWaitStartedAt; // Persisted readiness deadline origin.
+    enum class EHnswPhase : ui32 { Partitioning = 0, Building = 1, Releasing = 2 };
+    EHnswPhase HnswPhase = EHnswPhase::Partitioning;
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
     bool IsBroken = false;
@@ -605,6 +646,9 @@ public:
         }
         indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
         indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
+        indexInfo->HnswWaitStartedAt = TInstant::MicroSeconds(row.template GetValueOrDefault<Schema::IndexBuild::HnswWaitStartedAt>());
+        indexInfo->HnswPhase = EHnswPhase(row.template GetValueOrDefault<Schema::IndexBuild::HnswPhase>());
+        indexInfo->HnswProbeRound = row.template GetValueOrDefault<Schema::IndexBuild::HnswProbeRound>();
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(

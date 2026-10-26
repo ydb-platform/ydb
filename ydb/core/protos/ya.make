@@ -95,6 +95,7 @@ SRCS(
     grpc_pq_old.proto
     grpc_status_proxy.proto
     health.proto
+    hnsw.proto
     hive.proto
     http_config.proto
     import.proto

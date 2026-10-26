@@ -440,6 +440,9 @@ public:
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, const TPlacementParams& placementParams = {});
     void BuildLiteralTasks();
+    NKikimrTxDataShard::TKqpVectorSearchSettings* CreateVectorSearchSettings(
+        const TStageInfo& stageInfo, const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch);
+
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;

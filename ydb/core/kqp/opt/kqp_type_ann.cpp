@@ -2532,7 +2532,7 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             TStringBuilder() << "Index does not exist"));
         return TStatus::Error;
     }
-    if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
             TStringBuilder() << "Index is not a vector index"));
         return TStatus::Error;
@@ -2598,6 +2598,18 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     }
 
     if (node->Child(TKqpCnVectorResolve::idx_WithData)->Content() == "true") {
+        const auto& embeddingColumn = indexDesc->KeyColumns.back();
+        if (!outputColSet.contains(embeddingColumn)) {
+            auto type = tableDesc->GetColumnType(embeddingColumn);
+            YQL_ENSURE(type, "No embedding column: " << embeddingColumn);
+            auto itemType = ctx.MakeType<TItemExprType>(embeddingColumn, type);
+            if (!itemType->Validate(node->Pos(), ctx)) {
+                return TStatus::Error;
+            }
+            rowItems.push_back(itemType);
+            outputColSet.insert(embeddingColumn);
+        }
+
         // Then index data columns which are not also part of the PK
         for (const auto& dataColumn : indexDesc->DataColumns) {
             YQL_ENSURE(inputColSet.contains(dataColumn), "No data column in input: " << dataColumn);
@@ -2626,13 +2638,41 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     return TStatus::Ok;
 }
 
+const TTypeAnnotationNode* GetVectorSearchRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TCoAtomList columns, TMaybeNode<TCoAtom> scoreColumn, bool withSystemColumns)
+{
+    if (!scoreColumn.IsValid()) {
+        return GetReadTableRowType(ctx, tablesData, cluster, table, columns, withSystemColumns);
+    }
+    TVector<TCoAtom> realColumns;
+    bool hasScore = false;
+    for (const auto& column : columns) {
+        if (column.Value() == scoreColumn.Cast().Value()) {
+            hasScore = true;
+        } else {
+            realColumns.push_back(column);
+        }
+    }
+    const auto real = Build<TCoAtomList>(ctx, columns.Pos()).Add(realColumns).Done();
+    const auto* row = GetReadTableRowType(ctx, tablesData, cluster, table, real, withSystemColumns);
+    if (!row) {
+        return nullptr;
+    }
+    TVector<const TItemExprType*> items(row->Cast<TStructExprType>()->GetItems().begin(), row->Cast<TStructExprType>()->GetItems().end());
+    if (hasScore) {
+        items.push_back(ctx.MakeType<TItemExprType>(TString(scoreColumn.Cast().Value()),
+            ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Float))));
+    }
+    return ctx.MakeType<TStructExprType>(items);
+}
+
 // Logical node TKqlReadTableVectorIndex: reads the top-K rows of the main table
 // nearest to the target vector. Output type is a list of the requested main-table columns.
 TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     // PrefixRows (the per-prefix-group root cluster rows) is an optional last child.
-    if (!EnsureMinMaxArgsCount(*node, 5, 6, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 5, 7, ctx)) {
         return TStatus::Error;
     }
 
@@ -2650,7 +2690,8 @@ TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& 
     }
     TCoAtomList columns{node->ChildPtr(TKqlReadTableVectorIndex::idx_Columns)};
 
-    if (node->ChildrenSize() > TKqlReadTableVectorIndex::idx_PrefixRows) {
+    if (node->ChildrenSize() > TKqlReadTableVectorIndex::idx_PrefixRows
+            && !TCoVoid::Match(node->Child(TKqlReadTableVectorIndex::idx_PrefixRows))) {
         // Prefixed index: the prefix-table rows carry the root __ydb_parent id per group.
         const TTypeAnnotationNode* prefixType = node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->GetTypeAnn();
         const TTypeAnnotationNode* prefixItemType = nullptr;
@@ -2669,7 +2710,7 @@ TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& 
         }
     }
 
-    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    auto rowType = GetVectorSearchRowType(ctx, tablesData, cluster, table.first, columns, TKqlReadTableVectorIndex{node}.ScoreColumn(), withSystemColumns);
     if (!rowType) {
         return TStatus::Error;
     }
@@ -2685,7 +2726,7 @@ TStatus AnnotateVectorSearchConnection(const TExprNode::TPtr& node, TExprContext
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     // HasPrefix is an optional last child (prefixed index).
-    if (!EnsureMinMaxArgsCount(*node, 6, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 6, 8, ctx)) {
         return TStatus::Error;
     }
 
@@ -2716,7 +2757,7 @@ TStatus AnnotateVectorSearchConnection(const TExprNode::TPtr& node, TExprContext
     }
     TCoAtomList columns{node->ChildPtr(TKqpCnVectorSearch::idx_Columns)};
 
-    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    auto rowType = GetVectorSearchRowType(ctx, tablesData, cluster, table.first, columns, TKqpCnVectorSearch{node}.ScoreColumn(), withSystemColumns);
     if (!rowType) {
         return TStatus::Error;
     }

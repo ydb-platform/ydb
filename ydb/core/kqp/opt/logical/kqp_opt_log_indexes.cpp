@@ -157,7 +157,7 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& index
 }
 
 bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBuf methodName, bool ascending, TString* expectedUsage = nullptr) {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "Unsupported index type");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "Unsupported index type");
 
     const auto& col = indexDesc.KeyColumns.back();
     const auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
@@ -204,7 +204,7 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
 }
 
 bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
@@ -304,7 +304,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -324,7 +324,7 @@ struct TReadMatch {
                 return {};
             }
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
                 return {};
             }
 
@@ -342,7 +342,7 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
             return {};
         }
 
@@ -835,7 +835,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     YQL_ENSURE(!implTable.Next->Next);
@@ -932,9 +932,10 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
 TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
-    TExprContext& ctx, const TIndexDescription& indexDesc)
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const TIndexDescription& indexDesc,
+    const TKikimrTableMetadata& postingTable)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
 
     const auto pos = match.Pos();
 
@@ -967,14 +968,84 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
         .TargetVector(TExprBase{targetVector})
         .Done().Ptr();
 
-    if (flatMap) {
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription).settings().settings();
+    const TString scoreColumn = "__ydb_vector_score";
+    const bool covered = AllOf(columns, [&](const auto& column) {
+        return postingTable.Columns.contains(column.Value());
+    });
+    const bool distanceInProjection = flatMap && lambdaArgs.Raw() == flatMap.Cast().Lambda().Args().Raw();
+    const auto projection = flatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+    const bool passthroughProjection = projection && AnyOf(projection.Cast().Args(), [&](const auto& item) {
+        const auto field = TCoNameValueTuple{item};
+        const auto member = field.Value().Maybe<TCoMember>();
+        return field.Name().Value() == embeddingColumn && member
+            && member.Cast().Name().Value() == embeddingColumn
+            && member.Cast().Struct().Raw() == flatMap.Cast().Lambda().Args().Arg(0).Raw();
+    }) && AllOf(projection.Cast().Args(), [&](const auto& item) {
+        return TCoNameValueTuple{item}.Name().Value() != scoreColumn;
+    });
+    const bool simpleProjection = !flatMap || (flatMap.Cast().Lambda().Body().Maybe<TCoJust>()
+        && (distanceInProjection || passthroughProjection));
+    const bool ranked = kqpCtx.Config->HNSWReturnScores.Get().GetOrElse(false)
+        && indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw
+        && (settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+            || settings.metric() == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT)
+        && settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+        && covered && simpleProjection
+        && !kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, match.Table().Path()).Metadata->Columns.contains(scoreColumn)
+        && !postingTable.Columns.contains(scoreColumn)
+        && AllOf(columns, [&](const auto& c) { return c.Value() != scoreColumn; });
+    auto topNode = top.Ptr();
+    TVector<TCoAtom> projectedColumns;
+    if (ranked) {
+        columns.push_back(Build<TCoAtom>(ctx, pos).Value(scoreColumn).Done());
+        read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+            .Table(match.Table()).Index(ctx.NewAtom(pos, indexDesc.Name))
+            .Columns<TCoAtomList>().Add(columns).Build()
+            .TopK(top.Count()).TargetVector(TExprBase{targetVector})
+            .PrefixRows<TCoVoid>().Build().ScoreColumn().Build(scoreColumn)
+            .Done().Ptr();
+        const auto score = Build<TCoMember>(ctx, pos)
+            .Struct(TExprBase{lambdaArgs.Ref().ChildPtr(0)}).Name().Build(scoreColumn).Done();
+        if (flatMap && distanceInProjection) {
+            read = ctx.NewCallable(flatMap.Cast().Pos(), "FlatMap", {
+                read, ctx.ReplaceNode(flatMap.Cast().Lambda().Ptr(), lambdaBody.Ref(), score.Ptr())});
+        } else if (flatMap) {
+            // Carry the shard score through a projection such as an ID cast.
+            // Require the embedding to pass through unchanged, since the outer
+            // sort was matched against that projected embedding.
+            auto fields = projection.Cast().Ref().ChildrenList();
+            for (const auto& field : projection.Cast().Args()) {
+                projectedColumns.push_back(TCoNameValueTuple{field}.Name());
+            }
+            fields.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build(scoreColumn)
+                .Value<TCoMember>().Struct(flatMap.Cast().Lambda().Args().Arg(0))
+                    .Name().Build(scoreColumn).Build().Done().Ptr());
+            auto extended = ctx.ChangeChildren(projection.Cast().Ref(), std::move(fields));
+            read = ctx.NewCallable(flatMap.Cast().Pos(), "FlatMap", {
+                read, ctx.ReplaceNode(flatMap.Cast().Lambda().Ptr(), projection.Cast().Ref(), extended)});
+            topNode = ctx.ReplaceNode(std::move(topNode), lambdaBody.Ref(), score.Ptr());
+        } else {
+            topNode = ctx.ReplaceNode(std::move(topNode), lambdaBody.Ref(), score.Ptr());
+        }
+    } else if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
             .Input(read)
             .Lambda(ctx.DeepCopyLambda(flatMap.Cast().Lambda().Ref()))
         .Done().Ptr();
     }
 
-    VectorTopMain(ctx, top, read);
+    VectorTopMain(ctx, TCoTopBase{topNode}, read);
+    if (ranked && flatMap && !distanceInProjection) {
+        read = Build<TCoExtractMembers>(ctx, pos).Input(read)
+            .Members<TCoAtomList>().Add(projectedColumns).Build().Done().Ptr();
+    } else if (ranked && !flatMap) {
+        // The score belongs to the internal search/sort, not the SQL result.
+        // In particular SELECT * must retain exactly the original row schema.
+        columns.pop_back();
+        read = Build<TCoExtractMembers>(ctx, pos).Input(read)
+            .Members<TCoAtomList>().Add(columns).Build().Done().Ptr();
+    }
 
     return TExprBase{read};
 }
@@ -1011,7 +1082,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+    Y_ASSERT(TIndexDescription::IsVectorIndex(indexDesc.Type));
     Y_ASSERT(indexDesc.KeyColumns.size() > 1);
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
@@ -1198,7 +1269,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    YQL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree, "expected a kmeans-tree vector index");
+    YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
     YQL_ENSURE(indexDesc.KeyColumns.size() > 1, "expected a prefixed vector index");
 
     const auto* prefixTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Next->Name);
@@ -1343,7 +1414,7 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
         const auto indexName = indexRead.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
         // TODO(mbkkt) instead of ensure should be warning and main table read?
-        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+        YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
             "index read doesn't support vector index: " << indexName);
 
         return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, {});
@@ -1364,7 +1435,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     const auto indexName = streamLookupIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
     // TODO(mbkkt) instead of ensure should be warning and main table lookup?
-    YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
+    YQL_ENSURE(!TIndexDescription::IsVectorIndex(indexDesc->Type),
         "stream lookup doesn't support vector index: " << indexName);
 
     const bool isCovered = CheckIndexCovering(streamLookupIndex.Columns(), implTable);
@@ -3119,8 +3190,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             auto checkVectorIndex = [&](const TIndexDescription& idx) -> TMaybe<TString> {
-                if (idx.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                    return TStringBuilder() << "index '" << idx.Name << "' is not a vector kmeans-tree index";
+                if (!TIndexDescription::IsVectorIndex(idx.Type)) {
+                    return TStringBuilder() << "index '" << idx.Name << "' is not a distributed vector index";
                 }
                 return Nothing();
             };
@@ -3163,7 +3234,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
-                        && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                        && TIndexDescription::IsVectorIndex(idx.Type)
                         && idx.KeyColumns.back() == b.ScoredColumn
                         && IsVectorIndexMetricCompatible(idx, knnMethodName, !b.IsSimilarity))
                     {
@@ -3863,7 +3934,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
         const auto indexName = readTableIndex.Index().Value();
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-        YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+        YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc->Type));
 
         auto reject = [&] (std::string_view because) {
             auto message = TStringBuilder{} << "Given predicate is not suitable for used index: "
@@ -3933,9 +4004,12 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        if (kqpCtx.Config->GetEnableVectorSearchActor()) {
+        // Unprefixed HNSW uses the actor's all-partition search;
+        // the legacy lookup chain only implements k-means cluster traversal.
+        if (kqpCtx.Config->GetEnableVectorSearchActor()
+                || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
-                                                                ctx, *indexDesc);
+                                                                ctx, kqpCtx, *indexDesc, *implTable->Next);
         }
         return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
@@ -4019,7 +4093,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
     const auto indexName = read.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }
@@ -4094,7 +4168,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
     const auto indexName = readTableIndex.Index().Value();
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-    if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         // TODO(mbkkt) some warning?
         return node;
     }

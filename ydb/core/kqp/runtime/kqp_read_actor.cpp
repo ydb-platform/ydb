@@ -1,5 +1,7 @@
 #include "kqp_read_actor.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
+
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
@@ -25,6 +27,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/generic/scope.h>
 #include <util/string/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -402,7 +405,13 @@ public:
         if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
-            PipeCacheId = FollowersPipeCacheId;
+            // One node-wide pipe pins every query for a tablet to the same
+            // follower. When HNSW is enabled, spread independent vector searches
+            // across connections, while ACKs, retries and cancellation keep the
+            // same read affinity.
+            PipeCacheId = Settings->HasVectorTopK() && AppData()->FeatureFlags.GetEnableHnswIndex()
+                ? MakeVectorReadFollowerPipeCacheID(computeActorId.Hash() % VectorReadFollowerPipeCacheCount)
+                : FollowersPipeCacheId;
             UseFollowers = true;
         }
 
@@ -458,7 +467,19 @@ public:
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (!DirectKeyPoints.empty()) {
+        if (Settings->GetHnswShardRouting()) {
+            YQL_ENSURE(Settings->HasVectorTopK() && Settings->HasRanges()
+                && Settings->GetRanges().KeyRangesSize() > 0
+                && Settings->GetRanges().KeyPointsSize() == 0
+                && DirectKeyPoints.empty() && !Settings->HasShardIdHint()
+                && !Settings->HasSampling());
+            // Resolve the complete layout to obtain both borders of every
+            // selected shard. Keep the original cluster ranges for selection;
+            // retries retain the selected shard's complete range and use the
+            // ordinary split/re-resolution path below.
+            const TVector<TCell> from(KeyColumnTypes.size());
+            state.AddRange(TSerializedTableRange(from, true, {}, false));
+        } else if (!DirectKeyPoints.empty()) {
             // Points handed over pre-parsed by an in-process parent actor; consume
             // them as-is instead of copying and re-parsing the settings' KeyPoints.
             YQL_ENSURE(!Settings->HasFullRange() && !Settings->HasRanges());
@@ -688,6 +709,29 @@ public:
             state->FillUnprocessedPoints(points, Settings->GetReverse());
         }
 
+        TVector<TSerializedTableRange> hnswRoutingRanges;
+        if (state->IsFake && Settings->GetHnswShardRouting()) {
+            for (const auto& range : Settings->GetRanges().GetKeyRanges()) {
+                if (Settings->GetHnswPreciseShardRouting()) {
+                    const TSerializedTableRange clusterRange(range);
+                    const auto parent = clusterRange.To.GetCells();
+                    YQL_ENSURE(parent.size() == 1 && !parent.front().IsNull()
+                        && clusterRange.ToInclusive && KeyColumnTypes.size() > 1);
+                    // The scan's (parent-1, parent] prefix range is correct for
+                    // rows, but its empty gap before (parent, NULL, ...) also
+                    // intersects the preceding partition's conservative bounds.
+                    // Start at the selected parent's actual minimum key when
+                    // choosing complete graphs. NULL is the minimum of every
+                    // suffix key type, including nullable and composite keys.
+                    TVector<TCell> from(KeyColumnTypes.size());
+                    from.front() = parent.front();
+                    hnswRoutingRanges.emplace_back(from, true, parent, true);
+                } else {
+                    hnswRoutingRanges.emplace_back(range);
+                }
+            }
+        }
+
         for (ui64 idx = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
             const auto& partition = keyDesc->GetPartitions()[idx];
 
@@ -707,6 +751,25 @@ public:
                 {"pointsCount", points.size()});
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
+
+            if (state->IsFake && Settings->GetHnswShardRouting()) {
+                for (const auto& clusterRange : hnswRoutingRanges) {
+                    if (Settings->GetHnswPreciseShardRouting()
+                            && partitionRange.From.size() == 1
+                            && CompareTypedCells(partitionRange.From.front(), clusterRange.To.GetCells().front(),
+                                KeyColumnTypes.front()) == 0) {
+                        // A short lower prefix denotes the end of that entire
+                        // parent subtree; the next graph contains no such rows.
+                        continue;
+                    }
+                    if (CompareRanges(partitionRange, clusterRange.ToTableRange(), KeyColumnTypes) == 0) {
+                        newShard->AddRange(TSerializedTableRange(partitionRange));
+                        newShards.push_back(std::move(newShard));
+                        break;
+                    }
+                }
+                continue;
+            }
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
@@ -1322,6 +1385,9 @@ public:
         if (ResultColumns.empty()) {
             rowStats.AddStatistics({sizeof(ui64), sizeof(ui64)});
         }
+        if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()) {
+            rowStats.AddStatistics({sizeof(float), sizeof(NUdf::TUnboxedValue)});
+        }
         return rowStats;
     }
 
@@ -1414,6 +1480,16 @@ public:
     NMiniKQL::TBytesStatistics PackCells(TResult& handle, i64& freeSpace) {
         auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
         NMiniKQL::TBytesStatistics stats;
+        ui64 scoreRows = 0;
+        ui64 scoreVectorBytes = 0;
+        ui64 omittedScoreRows = 0;
+        Y_DEFER {
+            if (scoreRows) {
+                Counters->VectorScoreRows->Add(scoreRows);
+                Counters->VectorScoreEmbeddingPayloadBytes->Add(scoreVectorBytes);
+                Counters->VectorScoreOmittedRows->Add(omittedScoreRows);
+            }
+        };
         batch->reserve(batch->size());
         YDB_LOG_DEBUG("Entering PackCells for read result",
             {"logPrefix", this->LogPrefix},
@@ -1425,7 +1501,7 @@ public:
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
-            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings->ColumnsSize(), rowItems));
+            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings->ColumnsSize() + (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores() ? 1 : 0), rowItems));
 
             i64 rowSize = 0;
             size_t columnIndex = 0;
@@ -1444,7 +1520,15 @@ public:
                 if (column.IsSystem) {
                     NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                 } else {
-                    if (column.NotNull && row[columnIndex].IsNull()) {
+                    const bool omittedVector = Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()
+                        && Settings->GetVectorTopK().GetOmitVectorPayload() && result->Get()->Record.GetHasVectorScores()
+                        && resultColumnIndex == Settings->GetVectorTopK().GetColumn();
+                    if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()
+                            && resultColumnIndex == Settings->GetVectorTopK().GetColumn()) {
+                        scoreVectorBytes += row[columnIndex].Size();
+                        omittedScoreRows += omittedVector && row[columnIndex].IsNull();
+                    }
+                    if (column.NotNull && row[columnIndex].IsNull() && !omittedVector) {
                         ReportNullValue(result, columnIndex);
                         return stats;
                     }
@@ -1453,6 +1537,32 @@ public:
                 }
             }
 
+            if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()) {
+                ++scoreRows;
+                const auto& record = result->Get()->Record;
+                double score;
+                if (record.GetHasVectorScores()) {
+                    YQL_ENSURE(record.VectorScoresSize() == result->Get()->GetRowsCount(), "Invalid vector score count");
+                    score = record.GetVectorScores(rowIndex);
+                } else {
+                    const auto& top = Settings->GetVectorTopK();
+                    if (!VectorScoreClusters) {
+                        TString error;
+                        VectorScoreClusters = NKMeans::CreateClustersAutoDetect(top.GetSettings(), top.GetTargetVector(), 0, error);
+                        YQL_ENSURE(VectorScoreClusters, "Invalid vector score settings: " << error);
+                    }
+                    const auto embedding = rowItems[top.GetColumn()];
+                    score = embedding ? VectorScoreClusters->CalcDistance(top.GetTargetVector(), embedding.AsStringRef()) : Max<double>();
+                }
+                // Shards transport canonical lower-is-better distances. SQL
+                // inner-product similarity exposes the opposite sign.
+                if (Settings->GetVectorTopK().GetSettings().metric()
+                        == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT) {
+                    score = -score;
+                }
+                rowItems[Settings->ColumnsSize()] = NUdf::TUnboxedValuePod(static_cast<float>(score));
+                rowSize += sizeof(double);
+            }
             stats.DataBytes += rowSize;
             stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
             freeSpace -= rowSize;
@@ -1668,7 +1778,7 @@ public:
             }
             Send(::MainPipeCacheId, new TEvPipeCache::TEvUnlink(0));
             if (UseFollowers) {
-                Send(::FollowersPipeCacheId, new TEvPipeCache::TEvUnlink(0));
+                Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
             }
         }
         if (ReadActorSpan) {
@@ -1756,6 +1866,7 @@ private:
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
+    std::unique_ptr<NKMeans::IClusters> VectorScoreClusters;
     ui64 ScannedRowCount = 0;  // Actual rows scanned (for VectorTopK, may differ from ReceivedRowCount)
     ui64 ScannedBytesCount = 0;
     ui64 ProcessedRowCount = 0;

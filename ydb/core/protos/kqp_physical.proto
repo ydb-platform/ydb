@@ -314,6 +314,7 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    optional uint32 HnswEfSearch = 6;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -364,6 +365,21 @@ message TKqpPhyCnVectorSearch {
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
+    // Unprefixed hnsw searches every partition-local graph.
+    bool FullRangeHnsw = 14;
+    optional uint32 HnswEfSearch = 15;
+    // Unprefixed HNSW: use centroid ranges to select complete posting shards.
+    bool HnswShardRouting = 16;
+    // Avoid the empty keyspace gap before a selected cluster's minimum key.
+    bool HnswPreciseShardRouting = 17;
+    // One-level L2 routing may keep only the nearest centroid when the
+    // runner-up's squared distance exceeds this ratio times the nearest's.
+    // Zero disables the policy. It requires precise whole-shard routing.
+    double HnswAdaptiveProbeRatio = 18;
+    uint32 HnswAdaptiveOneProbeEfSearch = 19;
+    // Internal SQL-compatible float score, separate from the projected embedding.
+    optional string ScoreColumnName = 20;
+    optional string EmbeddingColumnName = 21;
 }
 
 message TKqpPhyCnSequencer {
@@ -743,6 +759,24 @@ message TKqpSchemeOperation {
     }
 }
 
+// A checked subset of a vector SQL transaction. The ordinary stages remain in
+// the cached query for runtime fallback and compatibility with older executers.
+message TKqpPhyVectorExecution {
+    uint32 SearchStageIndex = 1;
+    TKqpPhyValue Target = 2;
+    // Member of a (possibly optional) scalar-subquery result parameter.
+    optional uint32 TargetMemberIndex = 3;
+    bool TargetStructOptional = 4;
+    message TProjection {
+        uint32 SourceIndex = 1;
+        // Only total Int64/Uint64 -> String casts are recognized.
+        bool IntegerToString = 2;
+        bool SignedInteger = 3;
+    }
+    // In canonical result struct order, independent of SQL column hints.
+    repeated TProjection Projection = 5;
+}
+
 message TKqpPhyTx {
     enum EType {
         TYPE_UNSPECIFIED = 0;
@@ -765,6 +799,7 @@ message TKqpPhyTx {
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
     bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
+    optional TKqpPhyVectorExecution VectorExecution = 13;
 }
 
 message TKqpTableInfo {

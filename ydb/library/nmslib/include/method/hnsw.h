@@ -27,8 +27,10 @@
 
 #include "index.h"
 #include "params.h"
+#include "visited_list_pool.h"
 
 #include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -457,7 +459,8 @@ namespace similarity {
 
         virtual void LoadIndex(const string &location) override;
 
-        Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data);
+        Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data,
+            bool preferHugePages = false);
         void CreateIndex(const AnyParams &IndexParams) override;
 
         ~Hnsw();
@@ -467,8 +470,22 @@ namespace similarity {
         void Search(KNNQuery<dist_t> *query, IdType) const override;
         // Query-local search breadth for concurrent readers of the same graph.
         void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
+        void ConfigureSearchWorkspaces(VisitedListPoolPolicy policy);
+        void SetSearchWorkspaceRetentionLimit(size_t limit) const;
+        void TrimSearchWorkspaces() const;
+        VisitedListPoolStats GetSearchWorkspaceStats() const;
+
+        // Call before publishing the immutable index. The caller must budget
+        // up to data_.size() * dimension additional bytes. Other graphs and
+        // queries retain float distances; this representation is lossless.
+        bool EnableLosslessL2Bytes();
 
         void SetQueryTimeParams(const AnyParams &) override;
+
+        // Portable topology over the caller-owned data_, in little-endian
+        // uint32 words. Loading restores links without running construction.
+        void SaveTopology(std::ostream& output) const;
+        void LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes);
 
     private:
         typedef std::vector<HnswNode *> ElementList;
@@ -499,6 +516,7 @@ namespace similarity {
         }
 
 
+        void OptimizeIndex();
         void SaveOptimizedIndex(std::ostream& output);
         void LoadOptimizedIndex(std::istream& input);
 
@@ -535,6 +553,7 @@ namespace similarity {
         size_t indexThreadQty_;
         const Space<dist_t> &space_;
         bool PrintProgress_;
+        const bool PreferHugePages_;
         int delaunay_type_;
         double mult_;
         int maxlevel_;
@@ -558,6 +577,27 @@ namespace similarity {
         char **linkLists_;
         size_t memoryPerObject_;
         EfficientDistFunc fstdistfunc_;
+        EfficientDistFunc byteL2DistFunc_ = nullptr;
+        std::vector<uint8_t> byteL2Data_;
+        size_t byteL2Dimension_ = 0;
+
+        void ResetLosslessL2Bytes() {
+            byteL2Data_ = std::vector<uint8_t>{};
+            byteL2DistFunc_ = nullptr;
+            byteL2Dimension_ = 0;
+        }
+
+        static bool EncodeLosslessL2Bytes(const float* values, uint8_t* bytes, size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                const float value = values[i];
+                // This also rejects NaNs and infinities before the cast.
+                if (!(value >= 0 && value <= 255) || value != static_cast<uint8_t>(value)) {
+                    return false;
+                }
+                bytes[i] = static_cast<uint8_t>(value);
+            }
+            return true;
+        }
 
         enum AlgoType { kOld, kV1Merge, kHybrid };
 
@@ -567,76 +607,4 @@ namespace similarity {
         DISABLE_COPY_AND_ASSIGN(Hnsw);
     };
 
-    typedef unsigned char vl_type;
-    class VisitedList {
-    public:
-        vl_type curV;
-        vl_type *mass;
-        unsigned int numelements;
-
-        VisitedList(int numelements1)
-        {
-            curV = -1;
-            numelements = numelements1;
-            // we allocate an extra sentinel element to prevent prefetch from accessing out of range memory
-            mass = new vl_type[numelements + 1];
-        }
-        void reset()
-        {
-            curV++;
-            if (curV == 0) {
-                memset(mass, 0, sizeof(vl_type) * numelements);
-                curV++;
-            }
-        };
-        ~VisitedList() { delete [] mass; }
-    };
-    ///////////////////////////////////////////////////////////
-    //
-    // Class for multi-threaded pool-management of VisitedLists
-    //
-    /////////////////////////////////////////////////////////
-
-    class VisitedListPool {
-        deque<VisitedList *> pool;
-        mutex poolguard;
-        int numelements;
-
-    public:
-        VisitedListPool(int initmaxpools, int numelements1)
-        {
-            numelements = numelements1;
-            for (int i = 0; i < initmaxpools; i++)
-                pool.push_front(new VisitedList(numelements));
-        }
-        VisitedList *getFreeVisitedList()
-        {
-            VisitedList *rez;
-            {
-                unique_lock<mutex> lock(poolguard);
-                if (pool.size() > 0) {
-                    rez = pool.front();
-                    pool.pop_front();
-                } else {
-                    rez = new VisitedList(numelements);
-                }
-            }
-            rez->reset();
-            return rez;
-        };
-        void releaseVisitedList(VisitedList *vl)
-        {
-            unique_lock<mutex> lock(poolguard);
-            pool.push_front(vl);
-        };
-        ~VisitedListPool()
-        {
-            //LOG(LIB_INFO) << "Total " << pool.size() << " lists allocated";
-            while (pool.size()) {
-                VisitedList *rez = pool.front();
-                pool.pop_front();
-                delete rez;
-            }
-        };
-    };
 }

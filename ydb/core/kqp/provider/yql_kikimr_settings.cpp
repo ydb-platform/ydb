@@ -6,7 +6,10 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 #include <util/string/split.h>
+
+#include <cmath>
 
 namespace NYql {
 
@@ -158,6 +161,18 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, HNSWEfSearch).Lower(1U).Upper(1000U);
+    REGISTER_SETTING(*this, HNSWUseClusterRouting);
+    REGISTER_SETTING(*this, HNSWPreciseShardRouting);
+    REGISTER_SETTING(*this, HNSWAdaptiveProbeRatio).Validator([](const TKikimrSettings&, const TString&, double value) {
+        if (!std::isfinite(value) || (value != 0 && (value < 1 || value > 1000000))) {
+            throw yexception() << "HNSWAdaptiveProbeRatio must be 0 or in 1..1000000";
+        }
+    });
+    REGISTER_SETTING(*this, HNSWAdaptiveOneProbeEfSearch).Upper(1000U);
+    REGISTER_SETTING(*this, HNSWFuseTopSort);
+    REGISTER_SETTING(*this, HNSWReturnScores);
+    REGISTER_SETTING(*this, HNSWSpecializedExecution);
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);

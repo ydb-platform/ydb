@@ -6,6 +6,21 @@ namespace NKikimr {
 using namespace Tests;
 using namespace NTableIndex::NKMeans;
 
+void AssertPostingTableEqual(TString actual, const TString& expected) {
+    if (!expected.Contains("embedding = ")) {
+        constexpr TStringBuf embeddingPrefix = "embedding = ";
+        constexpr TStringBuf dataPrefix = ", data = ";
+        size_t pos = 0;
+        while ((pos = actual.find(embeddingPrefix, pos)) != TString::npos) {
+            const size_t dataPos = actual.find(dataPrefix, pos + embeddingPrefix.size());
+            UNIT_ASSERT_C(dataPos != TString::npos, "Malformed posting row: " << actual);
+            UNIT_ASSERT_C(dataPos > pos + embeddingPrefix.size(), "Empty embedding in posting row: " << actual);
+            actual.erase(pos, dataPos + 2 - pos);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+}
+
 const char* MainTableForOverlap = R"(UPSERT INTO `/Root/table-main`
     (key, embedding, data) VALUES
 
@@ -195,6 +210,7 @@ void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTa
     options.Columns({
         {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
         {"key", "Uint32", true, true},
+        {"embedding", "String", false, false},
         {"data", "String", false, false},
     });
     CreateShardedTable(server, sender, "/Root", "table-posting", options);

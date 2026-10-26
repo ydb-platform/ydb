@@ -418,8 +418,8 @@ namespace {
 namespace {
 
     struct TDataCenterStatesEnv : TEnvironmentSetup {
-        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        using D = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TDataCenter = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
         TMap<ui32, TString> NodeDataCenters;
 
         TDataCenterStatesEnv()
@@ -451,7 +451,7 @@ namespace {
             return response.GetStatus(0).GetStoragePool(0);
         }
 
-        NKikimrBlobStorage::TConfigRequest Define(std::initializer_list<std::pair<TString, D::EState>> states) {
+        NKikimrBlobStorage::TConfigRequest Define(std::initializer_list<std::pair<TString, TDataCenter::EState>> states) {
             NKikimrBlobStorage::TConfigRequest request;
             auto* command = request.AddCommand()->MutableDefineDataCenterStates();
             for (const auto& [dc, state] : states) {
@@ -484,7 +484,7 @@ namespace {
             return result;
         }
 
-        void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, R::EState state) const {
+        void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, TFailRealm::EState state) const {
             for (const auto& [id, group] : groups) {
                 if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
@@ -492,7 +492,7 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(group.RingsSize(), 3);
                 for (const auto& realm : group.GetRings()) {
                     const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
-                    const auto expected = NodeDataCenters.at(node) == "2" ? state : R::N0;
+                    const auto expected = NodeDataCenters.at(node) == "2" ? state : TFailRealm::N0;
                     UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
                 }
             }
@@ -503,20 +503,20 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(DataCenterStatesTransitions) {
-        using D = TDataCenterStatesEnv::D;
-        using R = TDataCenterStatesEnv::R;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
         UNIT_ASSERT_VALUES_EQUAL(before.size(), 5);
-        env.CheckStates(before, R::N0);
-        auto response = env.Invoke(env.Define({{"2", D::INCLUDED}}));
+        env.CheckStates(before, TFailRealm::N0);
+        auto response = env.Invoke(env.Define({{"2", TDataCenter::INCLUDED}}));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         for (const auto& [id, group] : env.ReadGroups()) {
             UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
         }
         auto previous = before;
         for (const auto& [dcState, realmState] : {
-                std::pair{D::EXCLUDED, R::F}, std::pair{D::RECOVERING, R::R}, std::pair{D::INCLUDED, R::N0}}) {
+                std::pair{TDataCenter::EXCLUDED, TFailRealm::F}, std::pair{TDataCenter::RECOVERING, TFailRealm::R}, std::pair{TDataCenter::INCLUDED, TFailRealm::N0}}) {
             const auto request = env.Define({{"2", dcState}});
             response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
@@ -539,10 +539,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(DataCenterStatesResetAllMirrorGroups) {
-        using D = TDataCenterStatesEnv::D;
-        using R = TDataCenterStatesEnv::R;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
-        auto response = env.Invoke(env.Define({{"2", D::EXCLUDED}}));
+        auto response = env.Invoke(env.Define({{"2", TDataCenter::EXCLUDED}}));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         // Reset republishes all mirror-3-dc groups even after the override has already been cleared.
         for (ui32 attempt = 0; attempt < 2; ++attempt) {
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             response = env.Invoke(env.Reset());
             UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
             const auto after = env.ReadGroups();
-            env.CheckStates(after, R::N0);
+            env.CheckStates(after, TFailRealm::N0);
             for (const auto& [id, group] : after) {
                 if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
                     UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), before.at(id).GetGroupGeneration() + 1);
@@ -562,16 +562,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(DataCenterStatesAreNotPersisted) {
-        using D = TDataCenterStatesEnv::D;
-        using R = TDataCenterStatesEnv::R;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
-        const auto response = env.Invoke(env.Define({{"2", D::EXCLUDED}}));
+        const auto response = env.Invoke(env.Define({{"2", TDataCenter::EXCLUDED}}));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.CheckStates(env.ReadGroups(), R::F);
+        env.CheckStates(env.ReadGroups(), TFailRealm::F);
         const auto before = env.ReadGroups();
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         // Read fresh GroupInfo from BSC. Reset then advances generations beyond cached overrides.
-        env.CheckStates(env.ReadGroups(), R::N0);
+        env.CheckStates(env.ReadGroups(), TFailRealm::N0);
         const auto reset = env.Invoke(env.Reset());
         UNIT_ASSERT_C(reset.GetSuccess(), reset.DebugString());
         for (const auto& [id, group] : env.ReadGroups()) {
@@ -581,18 +581,18 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(DataCenterStatesValidationAndRollback) {
-        using D = TDataCenterStatesEnv::D;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
         for (const auto& request : {
-                env.Define({{"", D::EXCLUDED}}),
-                env.Define({{"2", D::EXCLUDED}, {"2", D::INCLUDED}}),
-                env.Define({{"2", static_cast<D::EState>(77)}}),
-                env.Define({{"1", D::RECOVERING}, {"2", D::RECOVERING}})}) {
+                env.Define({{"", TDataCenter::EXCLUDED}}),
+                env.Define({{"2", TDataCenter::EXCLUDED}, {"2", TDataCenter::INCLUDED}}),
+                env.Define({{"2", static_cast<TDataCenter::EState>(77)}}),
+                env.Define({{"1", TDataCenter::RECOVERING}, {"2", TDataCenter::RECOVERING}})}) {
             const auto response = env.Invoke(request);
             UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
         }
-        for (auto request : {env.Define({{"2", D::EXCLUDED}}), env.Reset()}) {
+        for (auto request : {env.Define({{"2", TDataCenter::EXCLUDED}}), env.Reset()}) {
             request.SetRollback(true);
             const auto response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetRollbackSuccess(), response.DebugString());
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
         }
         // A later failure also rolls back the cluster-wide settings from an earlier command.
-        auto request = env.Define({{"2", D::EXCLUDED}});
+        auto request = env.Define({{"2", TDataCenter::EXCLUDED}});
         request.AddCommand()->MutableDeleteStoragePool()->SetBoxId(999);
         UNIT_ASSERT(!env.Invoke(request).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
@@ -613,14 +613,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         *request.AddCommand()->MutableDefineStoragePool() = pool;
         const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.CheckStates(env.ReadGroups(), TDataCenterStatesEnv::R::N0);
+        env.CheckStates(env.ReadGroups(), TDataCenterStatesEnv::TFailRealm::N0);
     }
 
     Y_UNIT_TEST(DataCenterStatesApplyToNewGroupsAndReplaceList) {
-        using D = TDataCenterStatesEnv::D;
-        using R = TDataCenterStatesEnv::R;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
-        auto response = env.Invoke(env.Define({{"2", D::EXCLUDED}}));
+        auto response = env.Invoke(env.Define({{"2", TDataCenter::EXCLUDED}}));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         const auto before = env.ReadGroups();
         auto pool = env.ReadPool();
@@ -631,13 +631,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         const auto after = env.ReadGroups();
         UNIT_ASSERT_VALUES_EQUAL(after.size(), before.size() + 1);
-        env.CheckStates(after, R::F);
+        env.CheckStates(after, TFailRealm::F);
         for (const auto& [id, group] : before) {
             UNIT_ASSERT_VALUES_EQUAL(after.at(id).SerializeAsString(), group.SerializeAsString());
         }
-        response = env.Invoke(env.Define({{"1", D::INCLUDED}}));
+        response = env.Invoke(env.Define({{"1", TDataCenter::INCLUDED}}));
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.CheckStates(env.ReadGroups(), R::N0);
+        env.CheckStates(env.ReadGroups(), TFailRealm::N0);
     }
 
     Y_UNIT_TEST(PDiskLocationFilterMatchesSuppliedFields) {

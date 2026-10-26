@@ -66,13 +66,13 @@ namespace NConsoleClient {
 
     void AdjustPathToDatabase(TString& path, TClientCommand::TConfig& config) {
         AdjustPath(path, config);
-        if (path.empty() && !config.Database.empty() && !config.Database.StartsWith('/')) {
+        if (!path.StartsWith('/') && !config.Database.empty() && !config.Database.StartsWith('/')) {
             TScopedDriver driver{TDriver(config.CreateDriverConfigWithBuildInfo())};
             NScheme::TSchemeClient client(driver);
             auto root = client.ListDirectory("/").GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(root);
             Y_ENSURE(root.GetChildren().size() == 1, "Exactly one cluster root expected");
-            path = "/" + root.GetChildren().front().Name + "/" + config.Database;
+            path = NormalizePath("/" + root.GetChildren().front().Name + "/" + config.Database + "/" + path);
         }
     }
 

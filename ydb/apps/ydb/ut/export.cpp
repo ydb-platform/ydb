@@ -405,24 +405,26 @@ Y_UNIT_TEST_SUITE(ExportTest) {
     }
 
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {
+        const TString path = GetDatabase() + "/tenant/a";
         Service<TSchemeImpl>().Database = "tenant";
         Service<TSchemeImpl>()
-            .ExpectListDirectory("a")
-            .ExpectChild("a", "data", Ydb::Scheme::Entry::TABLE)
-            .ExpectChild("a", "skip", Ydb::Scheme::Entry::TABLE)
-            .ExpectChild("a", "nested", Ydb::Scheme::Entry::DIRECTORY)
-            .ExpectListDirectory("a/nested")
-            .ExpectChild("a/nested", "keep_nested", Ydb::Scheme::Entry::TABLE);
+            .ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectListDirectory(path)
+            .ExpectChild(path, "data", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild(path, "skip", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild(path, "nested", Ydb::Scheme::Entry::DIRECTORY)
+            .ExpectListDirectory(path + "/nested")
+            .ExpectChild(path + "/nested", "keep_nested", Ydb::Scheme::Entry::TABLE);
 
         Service<TExportImpl>()
             .ExpectBucket(TEST_BUCKET)
             .ExpectS3Endpoint(TEST_S3_ENDPOINT)
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
-            .ExpectCommonSourcePrefix("a")
+            .ExpectCommonSourcePrefix(path)
             .ExpectCommonDstPrefix("dst")
-            .ExpectItem("a/data", "dst/data")
-            .ExpectItem("a/nested/keep_nested", "dst/nested/keep_nested");
+            .ExpectItem(path + "/data", "dst/data")
+            .ExpectItem(path + "/nested/keep_nested", "dst/nested/keep_nested");
 
         RunCli(
             {

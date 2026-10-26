@@ -35,7 +35,7 @@ public:
     const TString Debug() const;
 };
 
-class TPortionsMetadataCachePolicy: public NBlobOperations::TCacheRequestPriority {
+class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = std::shared_ptr<TPortionDataAccessor>;

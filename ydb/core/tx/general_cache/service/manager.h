@@ -142,7 +142,7 @@ private:
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    // Key is TPolicy::GetRequestPriority. Higher keys are dispatched first.
+    // Key is GetCacheRequestPriority(consumer). Higher keys are dispatched first.
     std::map<ui32, std::deque<std::shared_ptr<TRequest>>> RequestsByPriority;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
@@ -176,7 +176,7 @@ public:
 
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        RequestsByPriority[TPolicy::GetRequestPriority(request->GetConsumer())].emplace_back(request);
+        RequestsByPriority[GetCacheRequestPriority(request->GetConsumer())].emplace_back(request);
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -300,7 +300,7 @@ public:
         const TMonotonic now = TMonotonic::Now();
 
         for (auto it = RequestsByPriority.rbegin(); it != RequestsByPriority.rend(); ++it) {
-            const bool highPriority = it->first >= TPolicy::RequestPriorityHigh;
+            const bool highPriority = it->first >= GetCacheRequestPriority(EConsumer::SCAN);
             auto& queue = it->second;
             while (!queue.empty() && Counters->CheckTotalLimit()) {
                 if (highPriority) {

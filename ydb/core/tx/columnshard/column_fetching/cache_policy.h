@@ -58,7 +58,7 @@ public:
     }
 };
 
-class TColumnDataCachePolicy: public NBlobOperations::TCacheRequestPriority {
+class TColumnDataCachePolicy {
 public:
     using TAddress = TGlobalColumnAddress;
     using TObject = std::shared_ptr<NArrow::NAccessor::IChunkedArray>;

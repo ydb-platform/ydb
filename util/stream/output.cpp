@@ -297,6 +297,7 @@ DEF_OPTIONAL(TString);
 DEF_OPTIONAL(TStringBuf);
 #if defined(_darwin_) and defined(_arm64_)
 DEF_OPTIONAL(std::int64_t);
+DEF_OPTIONAL(std::uint64_t);
 #endif
 
 #if defined(_android_)

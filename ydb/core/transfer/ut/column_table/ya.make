@@ -26,6 +26,8 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 #TIMEOUT(60)
 SIZE(MEDIUM)
+FORK_SUBTESTS()
+SPLIT_FACTOR(30)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)

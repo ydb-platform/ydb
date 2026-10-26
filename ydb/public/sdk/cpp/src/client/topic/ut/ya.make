@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(50)
 
 PEERDIR(
     ydb/library/persqueue

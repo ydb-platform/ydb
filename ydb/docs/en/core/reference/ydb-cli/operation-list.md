@@ -16,15 +16,16 @@ General command format:
 
   * `analyze` — [ANALYZE](../../yql/reference/syntax/analyze.md) statistics collection operations
   * `buildindex` — index building operations
-  * `compaction` — table compaction operations
-  * `export/s3` — export to S3 operations
-  * `export/nfs` — export to NFS operations
-  * `import/s3` — import from S3 operations
-  * `import/nfs` — import from NFS operations
+  * `compaction` — table [compaction](../../concepts/glossary.md#compaction) operations
+  * `export/s3` — [export to S3 operations](export-import/export-s3.md)
+  * `export/nfs` — [export to NFS operations](export-import/export-nfs.md)
+  * `import/s3` — [import from S3 operations](export-import/import-s3.md)
+  * `import/nfs` — [import from NFS operations](export-import/import-nfs.md)
   * `scriptexec` — script execution operations
-  * `incbackup` — incremental backup operations
-  * `restore` — restore from backup operations
-  * `setnotnull` — operations for setting the `NOT NULL` limit.
+  * `fullbackup` — [full backup operations](../../concepts/backup.md#full-backup)
+  * `incbackup` — [incremental backup operations](../../concepts/backup.md#incremental-backup)
+  * `restore` — [restore from a backup collection](../../concepts/datamodel/backup-collection.md)
+  * `setnotnull` — operations for setting the `NOT NULL` constraint.
 
 View the description of the command for getting a list of background operations:
 

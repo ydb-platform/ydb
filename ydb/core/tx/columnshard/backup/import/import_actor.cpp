@@ -120,7 +120,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     if (Stage == EStage::WaitData) {
         Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
     } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
+        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, false);
     }
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
@@ -252,7 +252,7 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         AbortImport(ev->Get()->GetError());
         return;
     }
-    Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
+    Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, true);
     AFL_VERIFY(!PendingBlobs.empty());
     PendingBlobs.pop_front();
     WriteRetryState.reset();

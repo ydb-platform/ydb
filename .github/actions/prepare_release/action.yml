@@ -12,7 +12,7 @@ inputs:
     required: false
     default: ''
   branch-prefix:
-    description: 'Release branch prefix (e.g., cli-release/)'
+    description: 'Release branch prefix (e.g., robots/cli-release/)'
     required: true
   product-name:
     description: 'Product name for commit message (e.g., YDB CLI)'

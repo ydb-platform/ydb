@@ -68,7 +68,7 @@ jobs:
           version-change: ${{ inputs.version-change }}
           version-file: ydb/apps/ydb/version.txt
           changelog-file: ydb/apps/ydb/CHANGELOG.md
-          branch-prefix: "cli-release/"
+          branch-prefix: "robots/cli-release/"
           product-name: "YDB CLI"
           version-artifact-name: "cli-version"
           version-artifact-file: "cli_version.txt"

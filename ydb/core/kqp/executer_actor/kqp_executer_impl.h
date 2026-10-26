@@ -1257,12 +1257,15 @@ protected:
                     }
                     case TEvents::TEvUndelivered::EReason::Disconnected: {
                         InvalidateNode(ev->Sender.NodeId());
+                        // Not retried, do not wait for its tasks on shutdown
+                        Planner->RequestNotStarted(ev->Cookie);
                         ReplyUnavailable(TStringBuilder()
                             << "Failed to send EvStartKqpTasksRequest because node is unavailable: " << ev->Sender.NodeId());
                         return;
                     }
                     case TEvents::TEvUndelivered::EReason::ReasonUnknown: {
                         InvalidateNode(ev->Sender.NodeId());
+                        Planner->RequestNotStarted(ev->Cookie);
                         InternalError(TStringBuilder() << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
                         return;
                     }
@@ -1287,6 +1290,9 @@ protected:
         }
         const ui32 nodeId = ev->Get()->Target.NodeId();
         InvalidateNode(nodeId);
+        if (Planner) {
+            Planner->RequestNotStarted(ev->Get()->RequestId);
+        }
         return ReplyUnavailable(TStringBuilder()
             << "Failed to send EvStartKqpTasksRequest because node is unavailable: " << nodeId);
     }
@@ -1319,6 +1325,18 @@ protected:
         }
     }
 
+    // Do not wait for the tasks which the node has not started
+    void ForgetNotStartedTasks(const NKikimrKqp::TEvStartKqpTasksResponse& record) {
+        for (const auto& notStartedTask : record.GetNotStartedTasks()) {
+            const auto& task = TasksGraph.GetTask(notStartedTask.GetTaskId());
+            // A request failed on the node lists its started (and aborted there) tasks as well:
+            // skip a known compute actor, an unknown one is acknowledged again if it reports
+            if (!task.ComputeActorId && !task.Meta.Completed) {
+                Planner->TaskNotStarted(task.Id);
+            }
+        }
+    }
+
     void HandleStartKqpTasksResponse(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         YQL_ENSURE(record.GetTxId() == TxId);
@@ -1335,6 +1353,11 @@ protected:
                 {"reason", NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)},
                 {"message", message},
                 {"traceId", TraceId()});
+
+            // Do not wait for the tasks on shutdown, unless they are redirected below
+            if (reason != NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                ForgetNotStartedTasks(record);
+            }
 
             switch (reason) {
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY: {
@@ -1368,6 +1391,7 @@ protected:
                             {"txId", TxId},
                             {"ctx", *GetUserRequestContext()},
                             {"traceId", TraceId()});
+                        ForgetNotStartedTasks(record);
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                                 "Compute node is unavailable"));
@@ -1386,6 +1410,7 @@ protected:
 
                     // changes requests nodeId when redirect tasks on local node: used to check on disconnected
                     if (!Planner->SendStartKqpTasksRequest(requestId, localNode, true)) {
+                        ForgetNotStartedTasks(record);
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                             MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
                                 "Compute node is unavailable"));

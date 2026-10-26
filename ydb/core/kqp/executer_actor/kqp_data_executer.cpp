@@ -1110,25 +1110,52 @@ private:
     }
 
     STATEFN(WaitShutdownState) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(TEvDqCompute::TEvState, HandleShutdown);
-            hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
-            hFunc(TEvents::TEvPoison, HandleShutdown);
-            hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
-            default:
-                YDB_LOG_ERROR("Unexpected event while waiting for shutdown",
-                    {"marker", "KQPDATA"},
-                    {"actorId", SelfId()},
-                    {"txId", TxId},
-                    {"ctx", *GetUserRequestContext()},
-                    {"eventType", ev->GetTypeName()},
-                    {"traceId", TraceId()});
+        try {
+            switch(ev->GetTypeRewrite()) {
+                hFunc(TEvDqCompute::TEvState, HandleShutdown);
+                hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
+                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleShutdown);
+                hFunc(TEvents::TEvUndelivered, HandleShutdown);
+                hFunc(TEvPrivate::TEvRetry, HandleShutdown);
+                hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
+                hFunc(TEvents::TEvPoison, HandleShutdown);
+                hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
+                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                default:
+                    YDB_LOG_ERROR("Unexpected event while waiting for shutdown",
+                        {"marker", "KQPDATA"},
+                        {"actorId", SelfId()},
+                        {"txId", TxId},
+                        {"ctx", *GetUserRequestContext()},
+                        {"eventType", ev->GetTypeName()},
+                        {"traceId", TraceId()});
+            }
+        } catch (const yexception& e) {
+            // The response is ready, InternalError() cannot change it
+            YDB_LOG_ERROR("Error while waiting for shutdown - forcing shutdown",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"error", e.what()},
+                {"traceId", TraceId()});
+            // Unless PassAway() has already sent the response
+            if (ResponseEv) {
+                PassAway();
+            }
         }
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        HandleComputeStats(ev);
+        const auto& state = ev->Get()->Record;
+
+        // The first report of a compute actor unknown to TerminateComputeActors()
+        if (HandleComputeStats(ev)
+            && state.GetState() != NYql::NDqProto::COMPUTE_STATE_FINISHED
+            && state.GetState() != NYql::NDqProto::COMPUTE_STATE_FAILURE)
+        {
+            AbortLateComputeActor(state.GetTaskId(), ev->Sender);
+        }
 
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
@@ -1139,6 +1166,100 @@ private:
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
         }
+    }
+
+    void HandleShutdown(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        for (const auto& startedTask : record.GetStartedTasks()) {
+            const TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
+            // Unless its first state has come before the response
+            if (Planner->AcknowledgeCA(startedTask.GetTaskId(), computeActorId, nullptr)) {
+                AbortLateComputeActor(startedTask.GetTaskId(), computeActorId);
+            }
+        }
+
+        if (record.NotStartedTasksSize()) {
+            YDB_LOG_INFO("Tasks are not started while waiting for shutdown",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"sender", ev->Sender},
+                {"reason", NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(record.GetNotStartedTasks(0).GetReason())},
+                {"tasks", record.NotStartedTasksSize()},
+                {"traceId", TraceId()});
+
+            // Neither redirected nor retried while shutting down
+            ForgetNotStartedTasks(record);
+        }
+
+        PassAwayIfNothingToWait();
+    }
+
+    void HandleShutdown(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType != TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+            YDB_LOG_WARN("Event lost while waiting for shutdown",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"eventType", ev->Get()->SourceType},
+                {"reason", ev->Get()->Reason},
+                {"traceId", TraceId()});
+            return;
+        }
+
+        ForgetStartRequest(ev->Cookie, TStringBuilder() << "undelivered: " << ev->Get()->Reason);
+    }
+
+    void HandleShutdown(TEvPrivate::TEvRetry::TPtr& ev) {
+        // The start request has bounced before the shutdown
+        ForgetStartRequest(ev->Get()->RequestId, "retry");
+    }
+
+    // The start request is not retried while shutting down. If it has reached the node after all,
+    // its compute actors are aborted as soon as they report.
+    void ForgetStartRequest(ui32 requestId, const TString& reason) {
+        YDB_LOG_INFO("Start request is not retried while waiting for shutdown",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"requestId", requestId},
+            {"reason", reason},
+            {"traceId", TraceId()});
+
+        Planner->RequestNotStarted(requestId);
+        PassAwayIfNothingToWait();
+    }
+
+    // Finishes the shutdown once nothing is pending, filling the locks like the other forced exits
+    void PassAwayIfNothingToWait() {
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            FillLocksFromExtraData();
+            PassAway();
+        }
+    }
+
+    // TerminateComputeActors() has skipped the compute actor which was not known yet, abort it the same way
+    void AbortLateComputeActor(ui64 taskId, const TActorId& computeActorId) {
+        // ReplyErrorAndDie() has put the error into the response before the shutdown
+        const auto status = ResponseEv->Record.GetResponse().GetStatus();
+
+        YDB_LOG_INFO("Aborting compute actor unknown when execution was terminated",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"computeActor", computeActorId},
+            {"taskId", taskId},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"traceId", TraceId()});
+
+        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status),
+            NYql::TIssues({NYql::TIssue("Terminate execution")}));
+        Send(computeActorId, ev.Release());
     }
 
     void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -1164,10 +1285,7 @@ private:
             }
         }
 
-        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-            FillLocksFromExtraData();
-            PassAway();
-        }
+        PassAwayIfNothingToWait();
     }
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {

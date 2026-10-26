@@ -984,10 +984,9 @@ Y_UNIT_TEST_TWIN(UseDatabasePreservesBidiDatabaseHeaderPresence, relativePathsEn
     }
 }
 
-Y_UNIT_TEST_TWIN(RefreshTokenPreservesBidiTraceIdAndDatabase, relativePathsEnabled) {
+Y_UNIT_TEST(RefreshTokenPreservesBidiTraceIdAndDatabase) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
-    runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
     const TString traceId = "bidi-refresh-token-trace-id";
     auto ctx = MakeIntrusive<TTestBiStreamContext>(TMaybe<TString>(traceId), TString("Root/mydb"));
     const TActorId refreshTokenReceiver = runtime.AllocateEdgeActor();

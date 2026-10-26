@@ -79,46 +79,28 @@ namespace {
         return PageSettingFromProto<NPage::ECacheMode>(value, "Invalid cache mode value");
     }
 
-    TScheme::TTier TierFromProto(const NTabletFlatScheme::TTierSettings& proto) {
-        TScheme::TTier tier;
-        tier.Room = proto.GetRoomId();
-        tier.Codec = CodecFromProto(proto.GetCodec());
-        tier.Cache = CacheFromProto(proto.GetCache());
-        tier.CacheMode = CacheModeFromProto(proto.GetCacheMode());
-        return tier;
-    }
-
     /**
-     * Checks the tiering changes of a SetTable record against the tiers and the
-     * policy they produce, so that an invalid record is rejected before it
-     * changes anything. Returns the policy set by the record, if any.
+     * Checks the dropped families and the tiering policy of a SetTable record
+     * against the families and the policy they produce, so that an invalid record
+     * is rejected before it changes anything. Returns the policy set by the record, if any.
      */
     std::optional<TTieringPolicy> ValidateTiering(const TScheme::TTableInfo& tableInfo, const TAlterRecord& delta) {
-        // TAlter writes every tiering change as a separate record, so a record
-        // never both sets and resets the policy or both sets and drops a tier
+        // TAlter writes every change as a separate record, so a record never both sets and resets the policy
         Y_ENSURE(!delta.HasTieringPolicy() || !delta.GetResetTieringPolicy(),
             "Tiering policy is both set and reset in one record");
 
-        THashSet<ui32> tiers;
-        for (const auto& it : tableInfo.Tiers) {
-            tiers.insert(it.first);
+        // Tiers of the policy are families of the table
+        THashSet<ui32> families;
+        for (const auto& it : tableInfo.Families) {
+            families.insert(it.first);
         }
 
-        for (const auto& tierProto : delta.GetSetTiers()) {
-            const ui32 tierId = tierProto.GetTierId();
-            Y_ENSURE(tierId != TTierPredicate::DefaultTierId && tierId != Max<ui32>(), "Invalid tier id " << tierId);
-            Y_ENSURE(tableInfo.Rooms.contains(tierProto.GetRoomId()),
-                "Room " << tierProto.GetRoomId() << " of tier " << tierId << " does not exist");
-            TierFromProto(tierProto); // validates page settings
-            tiers.insert(tierId);
-        }
-
-        for (const ui32 tierId : delta.GetDropTiers()) {
-            for (const auto& tierProto : delta.GetSetTiers()) {
-                Y_ENSURE(tierProto.GetTierId() != tierId,
-                    "Tier " << tierId << " is both set and dropped in one record");
+        for (const ui32 family : delta.GetDropFamilies()) {
+            Y_ENSURE(family != TColumn::LeaderFamily, "Cannot drop the leader family");
+            for (const auto& [id, column] : tableInfo.Columns) {
+                Y_ENSURE(column.Family != family, "Cannot drop family " << family << " of column " << id);
             }
-            tiers.erase(tierId);
+            families.erase(family);
         }
 
         std::optional<TTieringPolicy> newPolicy;
@@ -131,13 +113,14 @@ namespace {
             TTierPredicate::ValidateColumn(*newPolicy, column->PType);
 
             for (const auto& rule : newPolicy->Rules) {
-                Y_ENSURE(tiers.contains(rule.TierId),
-                    "Tiering policy refers to tier " << rule.TierId << " that does not exist");
+                // Rows that match no rule stay in the default tier, rules move rows to other tiers
+                Y_ENSURE(rule.TierId != TTierPredicate::DefaultTierId && families.contains(rule.TierId),
+                    "Tiering policy refers to tier " << rule.TierId << " that is not a family of the table");
             }
         } else if (tableInfo.TieringPolicy && !delta.GetResetTieringPolicy()) {
             for (const auto& rule : tableInfo.TieringPolicy->Rules) {
-                Y_ENSURE(tiers.contains(rule.TierId),
-                    "Cannot drop tier " << rule.TierId << " used by the tiering policy");
+                Y_ENSURE(families.contains(rule.TierId),
+                    "Cannot drop family " << rule.TierId << " used by the tiering policy as a tier");
             }
         }
 
@@ -327,24 +310,15 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
         }
 
-        // Tiering changes are validated by ValidateTiering above
-        for (const auto& tierProto : delta.GetSetTiers()) {
-            const ui32 tierId = tierProto.GetTierId();
-            if (!tableInfo.Tiers.contains(tierId)) {
-                PreserveTable(table);
-                changes |= true;
-            }
-            changes |= ChangeTableSetting(table, tableInfo.Tiers[tierId], TierFromProto(tierProto));
-        }
-
+        // Tiering changes and dropped families are validated by ValidateTiering above
         if (tieringPolicy || delta.GetResetTieringPolicy()) {
             changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, tieringPolicy);
         }
 
-        for (const ui32 tierId : delta.GetDropTiers()) {
-            if (tableInfo.Tiers.contains(tierId)) {
+        for (const ui32 family : delta.GetDropFamilies()) {
+            if (tableInfo.Families.contains(family)) {
                 PreserveTable(table);
-                tableInfo.Tiers.erase(tierId);
+                tableInfo.Families.erase(family);
                 changes |= true;
             }
         }

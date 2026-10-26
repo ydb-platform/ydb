@@ -10717,8 +10717,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
                 .AddColumn(TableId, "key", KeyColumnId, NScheme::TUint64::TypeId, false, false)
                 .AddColumn(TableId, "created_at", TimeColumnId, NScheme::NTypeIds::Timestamp, false, false)
                 .AddColumnToKey(TableId, KeyColumnId)
-                .SetTier(TableId, ColdTierId, NTable::TScheme::DefaultRoom,
-                    NTable::NPage::ECodec::LZ4, NTable::NPage::ECache::None, NTable::NPage::ECacheMode::Regular)
+                .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
+                .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
                 .SetTieringPolicy(TableId, MakeTieringPolicy());
             return true;
         }
@@ -10734,10 +10734,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
         {
             const auto* table = txc.DB.GetScheme().GetTableInfo(TableId);
             UNIT_ASSERT(table);
-            UNIT_ASSERT_VALUES_EQUAL(table->Tiers.size(), 1u);
-            const auto& tier = table->Tiers.at(ColdTierId);
-            UNIT_ASSERT(tier.Room == NTable::TScheme::DefaultRoom);
-            UNIT_ASSERT(tier.Codec == NTable::NPage::ECodec::LZ4);
+            const auto* tier = table->Families.FindPtr(ColdTierId);
+            UNIT_ASSERT(tier);
+            UNIT_ASSERT(tier->Room == NTable::TScheme::DefaultRoom);
+            UNIT_ASSERT(tier->Codec == NTable::NPage::ECodec::LZ4);
             UNIT_ASSERT(table->TieringPolicy);
             UNIT_ASSERT(*table->TieringPolicy == MakeTieringPolicy());
             return true;

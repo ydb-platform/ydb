@@ -5,15 +5,6 @@ import "ydb/core/scheme/protos/type_info.proto";
 package NTabletFlatScheme;
 option java_package = "ru.yandex.kikimr.proto";
 
-// Placement of a non-default tier: data and metadata pages go to the room channels
-message TTierSettings {
-    optional uint32 TierId = 1;
-    optional uint32 RoomId = 2;
-    optional uint32 Codec = 3;      // Read NPage::ECodec for details
-    optional uint32 Cache = 4;      // Read NPage::ECache for details
-    optional uint32 CacheMode = 5;  // NPage::ECacheMode
-}
-
 message TTierBoundSettings {
     oneof Kind {
         uint64 RelativeOffsetUs = 1; // now - offset
@@ -103,12 +94,11 @@ message TAlterRecord {
     repeated NKikimrSchemeOp.TByKeyFilterPrefix ByKeyFilterPrefixes = 30; // Bloom filters on PK prefixes
     optional uint32 SpecialTableType = 32;
 
-    //_ Table: Data tiering (SetTable records, ignored by older versions)
+    //_ Table: Families drop and data tiering (SetTable records, ignored by older versions)
 
-    repeated TTierSettings SetTiers = 33;
-    repeated uint32 DropTiers = 34;
-    optional TTieringPolicySettings TieringPolicy = 35;
-    optional bool ResetTieringPolicy = 36 [default = false];
+    repeated uint32 DropFamilies = 33;
+    optional TTieringPolicySettings TieringPolicy = 34; // Tiers are families of the table
+    optional bool ResetTieringPolicy = 35 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

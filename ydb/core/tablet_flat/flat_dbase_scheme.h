@@ -45,7 +45,10 @@ public:
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };
 
-    struct TFamily /* group of columns configuration */ {
+    /* Configuration of a group of columns, or placement of a tier when the
+        tiering policy refers to the family (such a family has no columns)
+     */
+    struct TFamily {
         using ECodec = NPage::ECodec;
         using ECacheMode = NPage::ECacheMode;
 
@@ -55,24 +58,6 @@ public:
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
         ECacheMode CacheMode = ECacheMode::Regular;
-    };
-
-    /* Placement of a non-default tier. Tier 0 is not stored: it is placed by
-        column families as usual. A tier refers to a room for its channels,
-        just like a family does. An external tier (e.g. S3) will keep its
-        metadata pages in the room and add a reference to the external storage
-        for data pages, without secrets (resolved at runtime).
-     */
-    struct TTier {
-        using ECodec = NPage::ECodec;
-        using ECacheMode = NPage::ECacheMode;
-
-        ui32 Room = DefaultRoom;
-        ECache Cache = ECache::None;
-        ECodec Codec = ECodec::Plain;
-        ECacheMode CacheMode = ECacheMode::Regular;
-
-        bool operator==(const TTier&) const = default;
     };
 
     using TColumn = NTable::TColumn;
@@ -116,8 +101,7 @@ public:
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
         ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
 
-        THashMap<ui32, TTier> Tiers; // non-default tiers by tier id
-        std::optional<TTieringPolicy> TieringPolicy;
+        std::optional<TTieringPolicy> TieringPolicy; // refers to families as tiers
 
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
@@ -270,6 +254,7 @@ public:
     TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
+    TAlter& DropFamily(ui32 table, ui32 family);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);
@@ -284,8 +269,6 @@ public:
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
-    TAlter& SetTier(ui32 tableId, ui32 tierId, ui32 room, ECodec codec, ECache cache, ECacheMode cacheMode);
-    TAlter& DropTier(ui32 tableId, ui32 tierId);
     TAlter& SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy);
     TAlter& ResetTieringPolicy(ui32 tableId);
     TAlter& SetRewrite();

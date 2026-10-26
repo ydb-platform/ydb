@@ -9,6 +9,7 @@ TEST_SRCS(
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/tests/stability/nemesis
     ydb/tests/library
     ydb/public/sdk/python
 )

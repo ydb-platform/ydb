@@ -1,7 +1,6 @@
 #include "consumer_attributes.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/services/sqs_topic/queue_url/arn.h>
 
@@ -184,16 +183,12 @@ namespace NKikimr::NSqsTopic::V1 {
             ));
         }
 
-        if (newConfig.DeadLetterQueue.Defined()) {
-            const auto dlqPath = [&](const TString& path) {
-                return HasAppData() && AppData()->FeatureFlags.GetEnableRelativePaths()
-                    ? ResolvePathToDatabase(existingConfig.GetYdbDatabasePath(), path) : path;
-            };
-            if (dlqPath(existingConsumer.GetDeadLetterQueue()) != dlqPath(*newConfig.DeadLetterQueue)) {
-                return std::unexpected(TStringBuilder()
-                    << "DeadLetterQueue mismatch: new value is '" << *newConfig.DeadLetterQueue
-                    << "', existing value is '" << existingConsumer.GetDeadLetterQueue() << "'");
-            }
+        if (newConfig.DeadLetterQueue.Defined() &&
+            NPQ::NormalizeDlqTopicPath(existingConsumer.GetDeadLetterQueue(), existingConfig.GetYdbDatabasePath()) !=
+                NPQ::NormalizeDlqTopicPath(*newConfig.DeadLetterQueue, existingConfig.GetYdbDatabasePath())) {
+            return std::unexpected(TStringBuilder()
+                << "DeadLetterQueue mismatch: new value is '" << *newConfig.DeadLetterQueue
+                << "', existing value is '" << existingConsumer.GetDeadLetterQueue() << "'");
         }
 
         if (newConfig.MessageRetentionPeriod.Defined()) {

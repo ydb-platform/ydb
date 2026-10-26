@@ -40,7 +40,6 @@ ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.Replace
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.UnresponsiveProxyReturnsPartialStats
@@ -59,7 +58,6 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Termi
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.MissingSourceDnsNameDuringConsumerCreationRetries
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.SessionAcquisitionFailureRetries
-ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.TerminalSessionAcquisitionFailureReplies
 ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.MissingTransferSourceDnsNameRecoversAfterRetryBudget
 ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.SourceAuthorizationFailureRemainsTerminal
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket0]
@@ -157,11 +155,7 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithStor
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
-ydb/tests/functional/serverless test_serverless.py.test_connect_permission_not_inherited_in_serverless[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
-ydb/tests/functional/serverless test_serverless.py.test_create_table[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_create_table_with_quotas[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
-ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
-ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]

@@ -27,8 +27,8 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         TActorSystemStub actorSystem;
         for (const bool stored : {false, true}) {
             NKikimrKqp::TKqpAlterTableRequest request;
-            request.set_path("/Root/Table");
-            auto& column = *request.add_add_columns();
+            request.SetPath("/Root/Table");
+            auto& column = *request.AddAddColumns();
             column.SetName("generated");
             column.SetType("Int32");
             column.SetTypeId(NScheme::NTypeIds::Int32);
@@ -54,29 +54,29 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
     Y_UNIT_TEST(InternalAlterDefaultsPreserveNullability) {
         TActorSystemStub actorSystem;
         NKikimrKqp::TKqpAlterTableRequest request;
-        request.set_path("/Root/Dir/Table");
+        request.SetPath("/Root/Dir/Table");
         using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
 
-        auto& literal = *request.add_alter_columns();
+        auto& literal = *request.AddAlterColumns();
         literal.SetName("literal");
         literal.SetDefaultKind(TColumn::DEFAULT_KIND_LITERAL);
         literal.MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::INT32);
         literal.MutableDefaultFromLiteral()->mutable_value()->set_int32_value(42);
-        auto& relative = *request.add_alter_columns();
+        auto& relative = *request.AddAlterColumns();
         relative.SetName("relative");
         relative.SetDefaultKind(TColumn::DEFAULT_KIND_SEQUENCE);
         relative.SetDefaultFromSequence("sequence");
-        auto& absolute = *request.add_alter_columns();
+        auto& absolute = *request.AddAlterColumns();
         absolute.SetName("absolute");
         absolute.SetDefaultKind(TColumn::DEFAULT_KIND_SEQUENCE);
         absolute.SetDefaultFromSequence("/Root/Other/sequence");
-        auto& clear = *request.add_alter_columns();
+        auto& clear = *request.AddAlterColumns();
         clear.SetName("clear");
         clear.SetDefaultKind(TColumn::DEFAULT_KIND_NULL);
-        auto& unchanged = *request.add_alter_columns();
+        auto& unchanged = *request.AddAlterColumns();
         unchanged.SetName("unchanged");
         unchanged.AddFamily("family");
-        auto& nullable = *request.add_alter_columns();
+        auto& nullable = *request.AddAlterColumns();
         nullable.SetName("nullable");
         nullable.SetNotNull(false);
 
@@ -102,24 +102,24 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
     Y_UNIT_TEST(InternalAddedColumnTypesAndMixedSettings) {
         TActorSystemStub actorSystem;
         NKikimrKqp::TKqpAlterTableRequest request;
-        request.set_path("/Root/Table");
-        auto& decimal = *request.add_add_columns();
+        request.SetPath("/Root/Table");
+        auto& decimal = *request.AddAddColumns();
         decimal.SetName("amount");
         decimal.SetType("Decimal(22,9)");
         decimal.SetTypeId(NScheme::NTypeIds::Decimal);
         decimal.MutableTypeInfo()->SetDecimalPrecision(22);
         decimal.MutableTypeInfo()->SetDecimalScale(9);
         decimal.AddFamily("family");
-        auto& pg = *request.add_add_columns();
+        auto& pg = *request.AddAddColumns();
         pg.SetName("text");
         pg.SetType("pgvarchar");
         pg.SetTypeId(NScheme::NTypeIds::Pg);
         pg.MutableTypeInfo()->SetPgTypeId(1043);
         pg.MutableTypeInfo()->SetPgTypeMod("(32)");
-        request.add_add_column_families()->set_name("family");
-        request.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
-        request.mutable_drop_ttl_settings();
-        request.add_drop_columns("old");
+        request.AddAddColumnFamilies()->set_name("family");
+        request.SetSetKeyBloomFilter(Ydb::FeatureFlag::ENABLED);
+        request.MutableDropTtlSettings();
+        request.AddDropColumns("old");
 
         const auto result = BuildInternalAlter(request);
         const auto& table = result.GetAlterTable();
@@ -174,8 +174,8 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
     Y_UNIT_TEST(InternalColumnTableCompressionAndEncoding) {
         TActorSystemStub actorSystem;
         NKikimrKqp::TKqpAlterTableRequest request;
-        request.set_path("/Root/Table");
-        auto& added = *request.add_add_columns();
+        request.SetPath("/Root/Table");
+        auto& added = *request.AddAddColumns();
         added.SetName("added");
         added.SetType("Uint64");
         added.SetTypeId(NScheme::NTypeIds::Uint64);
@@ -183,11 +183,11 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         added.MutableCompression()->SetAlgorithm("zstd");
         added.MutableCompression()->SetLevel(3);
         added.AddEncoding()->MutablePlain();
-        auto& altered = *request.add_alter_columns();
+        auto& altered = *request.AddAlterColumns();
         altered.SetName("altered");
         altered.MutableCompression()->SetAlgorithm("lz4");
         altered.AddEncoding(); // Explicitly reset to the default accessor.
-        request.add_alter_columns()->SetName("unchanged");
+        request.AddAlterColumns()->SetName("unchanged");
 
         NKikimrSchemeOp::TModifyScheme result;
         auto status = Ydb::StatusIds::SUCCESS;
@@ -214,8 +214,8 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         for (const bool enabled : {false, true}) {
             actorSystem.AppData.FeatureFlags.SetEnableCsDictionaryEncoding(enabled);
             NKikimrKqp::TKqpAlterTableRequest request;
-            request.set_path("/Root/Table");
-            auto& column = *request.add_alter_columns();
+            request.SetPath("/Root/Table");
+            auto& column = *request.AddAlterColumns();
             column.SetName("value");
             column.AddEncoding()->MutableDictionary();
             NKikimrSchemeOp::TModifyScheme result;
@@ -235,8 +235,8 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         TActorSystemStub actorSystem;
         for (const bool added : {false, true}) {
             NKikimrKqp::TKqpAlterTableRequest request;
-            request.set_path("/Root/Table");
-            auto& column = *(added ? request.add_add_columns() : request.add_alter_columns());
+            request.SetPath("/Root/Table");
+            auto& column = *(added ? request.AddAddColumns() : request.AddAlterColumns());
             column.SetName("generated");
             column.SetType("Int32");
             column.SetTypeId(NScheme::NTypeIds::Int32);

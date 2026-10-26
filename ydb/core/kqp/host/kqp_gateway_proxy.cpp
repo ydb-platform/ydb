@@ -1321,11 +1321,11 @@ public:
             // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
             // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
             // handled by AlterColumnTable and never reaches this path.
-            const bool hasLocalBloom = std::any_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool hasLocalBloom = std::any_of(req.GetAddIndexes().begin(), req.GetAddIndexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
-            const bool isLocalBloom = hasLocalBloom && std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool isLocalBloom = hasLocalBloom && std::all_of(req.GetAddIndexes().begin(), req.GetAddIndexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
@@ -2611,7 +2611,7 @@ public:
             }
         } else {
             try {
-                auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
+                auto metadata = SessionCtx->Tables().GetTable(cluster, req.GetPath()).Metadata;
                 NKikimrSchemeOp::TModifyScheme schemeTx;
                 Ydb::StatusIds::StatusCode code;
                 TString error;

@@ -1,3 +1,4 @@
+#include "alter_table_request_view.h"
 #include "column_families.h"
 #include "table_description.h"
 #include "table_settings.h"
@@ -517,7 +518,8 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     const NKikimrKqp::TKqpAlterTableRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
 {
-    return FillAlterTableSettingsDescImpl(tableDesc, proto, code, error, changed);
+    const NPrivate::TKqpAlterTableRequestView view(proto);
+    return FillAlterTableSettingsDescImpl(tableDesc, view, code, error, changed);
 }
 
 bool FillIndexTablePartitioning(

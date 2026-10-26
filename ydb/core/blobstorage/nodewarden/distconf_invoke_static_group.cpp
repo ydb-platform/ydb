@@ -20,18 +20,32 @@ namespace NKikimr::NStorage {
             }
             Y_ABORT_UNLESS(generation);
 
+            THashMap<TGroupId, ui32> bumpedInlineGroups;
             for (auto& group : *ss->MutableGroups()) {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
+                bool updated = false;
                 NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
                         NKikimrBridge::TGroupState::TPile& pile) {
                     if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
                         pile.SetGroupGeneration(*generation);
-                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                        updated = true;
                     }
                 });
+                if (updated) {
+                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                    // The proxy may still contain the original pile's VDisks. Reassigning another pile bumps
+                    // this physical group's generation too, including its self-reference and live VDisks.
+                    const auto proxyId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                    if (auto *inlinePile = NBridge::FindGroupPileByGroupId(group.MutableBridgeGroupState(), proxyId);
+                            inlinePile && proxyId != groupId) {
+                        inlinePile->SetGroupGeneration(group.GetGroupGeneration());
+                        bumpedInlineGroups.emplace(proxyId, group.GetGroupGeneration());
+                    }
+                }
             }
+            UpdateStaticVDiskGenerations(ss, bumpedInlineGroups);
         }
 
     }
@@ -450,7 +464,12 @@ namespace NKikimr::NStorage {
         if (groupRemoved && isDropDonor) {
             throw TExError() << "Group not found";
         }
-        Y_ABORT_UNLESS(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration);
+        if (!groupRemoved && vdiskId.GroupGeneration >= actualGroupGeneration) {
+            // A node may have applied the replacement config before the newly elected root has recovered it.
+            // Keep the slot intact and let the sender retry after the root catches up.
+            throw TExRace() << "Static VDisk report is ahead of current group configuration VDiskId# " << vdiskId
+                << " ActualGroupGeneration# " << actualGroupGeneration;
+        }
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {

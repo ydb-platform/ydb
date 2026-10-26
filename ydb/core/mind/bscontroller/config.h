@@ -161,6 +161,11 @@ namespace NKikimr {
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+
+            TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+            }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
 
@@ -193,6 +198,7 @@ namespace NKikimr {
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
                 , BridgeInfo(controller.BridgeInfo)
+                , StorageConfig(storageConfig ? std::make_shared<const NKikimrBlobStorage::TStorageConfig>(*storageConfig) : controller.StorageConfig)
             {
                 Y_ABORT_UNLESS(HostRecords);
                 if (storageConfig && storageConfig->HasBlobStorageConfig()) {

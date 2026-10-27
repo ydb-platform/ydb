@@ -2992,7 +2992,11 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
     Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
     TString extraData;
-    if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
+    if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+        if (txState.DropReplication) {
+            Y_ABORT_UNLESS(txState.DropReplication->SerializeToString(&extraData));
+        }
+    } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_ABORT_UNLESS(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);

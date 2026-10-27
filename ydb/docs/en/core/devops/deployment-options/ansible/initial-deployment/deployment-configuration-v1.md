@@ -263,6 +263,8 @@ Encrypt this file with the command `ansible-vault encrypt inventory/99-inventory
 
 ## Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
+The examples below contain a `feature_flags` section. Before changing its values, read about [feature flags and guidelines for changing them](../../../../reference/configuration/feature_flags.md).
+
 Create the file `files/config.yaml` and fill it according to the chosen topology (see [topology selection](./deployment-preparation.md#topology-select)). Examples for each supported topology are in the tabs below — choose the one that fits.
 
 {% list tabs %}

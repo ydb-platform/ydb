@@ -45,7 +45,9 @@ void THnswJournalSnapshot::Save(std::ostream& destination) const {
     NHnswSerialization::TSnapshotStreamBuf buffer(destination.rdbuf());
     std::ostream output(&buffer);
     output.exceptions(std::ios::badbit | std::ios::failbit);
-    WriteWord(output, 1);
+    WriteWord(output, 2);
+    WriteWord(output, LowerReadVersion.Step);
+    WriteWord(output, LowerReadVersion.TxId);
     WriteWord(output, Changes.size());
     for (const auto& change : Changes) {
         WriteBytes(output, change.Key);
@@ -63,13 +65,16 @@ void THnswJournalSnapshot::Save(std::ostream& destination) const {
 std::shared_ptr<THnswJournalSnapshot> THnswJournalSnapshot::Load(std::istream& source, ui64 budget) {
     NHnswSerialization::TSnapshotStreamBuf buffer(source.rdbuf());
     std::istream input(&buffer);
-    if (ReadWord(input) != 1)
+    if (ReadWord(input) != 2)
         ythrow yexception() << "Unsupported HNSW journal format";
+    const ui64 lowerStep = ReadWord(input);
+    const ui64 lowerTxId = ReadWord(input);
     const auto count = ReadWord(input);
     if (count > budget / sizeof(TChange))
         ythrow yexception() << "HNSW journal exceeds memory budget";
     budget -= count * sizeof(TChange);
     auto result = std::make_shared<THnswJournalSnapshot>();
+    result->LowerReadVersion = TRowVersion(lowerStep, lowerTxId);
     result->Changes.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
         TChange change;

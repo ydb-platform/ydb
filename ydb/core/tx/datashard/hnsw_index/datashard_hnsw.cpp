@@ -399,9 +399,6 @@ namespace NKikimr::NDataShard {
                                                          const Ydb::Table::VectorIndexSettings& settings, bool useCachedHnswParameters,
                                                          TRowVersion readVersion, TPathId indexId) const {
         indexId = ResolveHnswIndexId(localTid, indexId);
-        if (IsFollower()) {
-            return {};
-        }
         const auto* it = FindHnswIndexEntry(localTid, indexId);
         if (!it) {
             return {};
@@ -634,6 +631,22 @@ namespace NKikimr::NDataShard {
         entry.Pending.clear();
         entry.PendingReservations.clear();
         entry.UntrackedTransactions.clear();
+        entry.FollowerBootstrapChanges = {};
+        entry.FollowerDesiredBase = TRowVersion::Min();
+        entry.FollowerJournalTracking = false;
+        entry.FollowerNotRequired = false;
+        entry.FollowerGraph.reset();
+        entry.FollowerJournal.reset();
+        entry.FollowerSnapshot.Clear();
+        entry.FollowerChangeCounter.reset();
+        entry.FollowerReadVersion = TRowVersion::Min();
+        entry.FollowerLeaderGeneration = 0;
+        if (entry.FollowerPipe) {
+            NTabletPipe::CloseAndForgetClient(SelfId(), entry.FollowerPipe);
+        }
+        if (Executor() && TlsActivationContext && IsFollower() && !IsStopping()) {
+            ScheduleHnswFollowerSync();
+        }
         entry.RowCountAtBuild = 0;
         entry.EvictedMemoryBytes = 0;
         entry.NextScanAttemptAt = TInstant::Zero();
@@ -665,7 +678,7 @@ namespace NKikimr::NDataShard {
         if (buildToken && !IsHnswBuildCurrent(localTid, buildToken, indexId)) {
             return;
         }
-        if (IsFollower() || IsStopping() || State != TShardState::Ready || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        if (IsStopping() || (!IsFollower() && State != TShardState::Ready) || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
             InvalidateHnswIndex(localTid, indexId);
             DeferHnswIndexBuild(localTid, TDuration::Zero(), indexId);
             return;
@@ -683,8 +696,9 @@ namespace NKikimr::NDataShard {
         if (!entry.Changes->Valid) {
             ResetHnswIndexChanges(entry);
         }
-        index->SetSnapshot(baseVersion, entry.Changes);
-        Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
+        index->SetSnapshot(baseVersion, entry.Changes,
+            IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
+        Y_ENSURE(memoryReservation || index->HasGraphReservation(), "HNSW index installed without a memory reservation");
         if (!index->HasGraphReservation()) {
             index->SetGraphReservation(std::move(memoryReservation));
         }
@@ -705,7 +719,9 @@ namespace NKikimr::NDataShard {
         entry.BuildReadPin.reset();
         entry.NextScanAttemptAt = TInstant::Zero();
         HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
-        PublishHnswGraph(localTid, indexId);
+        if (!IsFollower()) {
+            PublishHnswGraph(localTid, indexId);
+        }
         PruneHnswIndexes();
         ScheduleHnswRebuild(localTid, indexId);
     }
@@ -721,6 +737,22 @@ namespace NKikimr::NDataShard {
         event->Graph = entry.Index->CreateView(entry.Index->GetBaseVersion(), std::make_shared<THnswIndexChanges>());
         event->Settings = entry.Settings;
         Send(MakeHnswCacheId(), event.Release());
+        for (const auto& [pathId, table] : TableInfos) {
+            if (table->LocalTid == localTid) {
+                NKikimrHnsw::TGraphAnnouncement announcement;
+                announcement.SetTableOwnerId(PathOwnerId);
+                announcement.SetTablePathId(pathId);
+                announcement.SetSchemaVersion(table->GetTableSchemaVersion());
+                announcement.SetIndexOwnerId(indexId.OwnerId);
+                announcement.SetIndexLocalId(indexId.LocalPathId);
+                announcement.SetLeaderGeneration(Executor()->Generation());
+                announcement.SetBaseStep(entry.Index->GetBaseVersion().Step);
+                announcement.SetBaseTxId(entry.Index->GetBaseVersion().TxId);
+                Executor()->SendUserAuxUpdateToFollowers(TString(HnswGraphAuxPrefix) + announcement.SerializeAsString(),
+                    TActivationContext::AsActorContext());
+                break;
+            }
+        }
     }
 
     void TDataShard::RefreshHnswSnapshotPins(THnswIndexCacheEntry& entry) {
@@ -804,6 +836,9 @@ namespace NKikimr::NDataShard {
         const auto floor = GetHnswBuildVersion();
         THashMap<ui32, std::vector<TRowVersion>> readVersions;
         ForEachHnswIndexEntry([&](ui32 tid, const TPathId&, auto& entry) {
+            if (IsFollower() && entry.Building) {
+                return;
+            }
             if (entry.Changes->Valid) {
                 RefreshHnswSnapshotPins(entry);
             }
@@ -866,7 +901,9 @@ namespace NKikimr::NDataShard {
         if (entry.Index || entry.Building) {
             // Readers, stored snapshots and builds pin their versions directly.
             // Advancing the floor is constant time; Set compacts just this key.
-            entry.Changes->AdvanceRetentionFloor(GetHnswBuildVersion());
+            if (!IsFollower()) {
+                entry.Changes->AdvanceRetentionFloor(GetHnswBuildVersion());
+            }
             entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
         }
         if (entry.NextScanAttemptAt == TInstant::Max()) {

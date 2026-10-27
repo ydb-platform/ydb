@@ -2956,6 +2956,9 @@ public:
             topState->Target = topK.GetTargetVector();
 
             if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswTable) {
+                if (Self->IsFollower()) {
+                    Self->ScheduleHnswFollowerSync();
+                }
                 const ui32 localTid = TableInfo.LocalTid;
                 const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
                 auto requested = topK.GetSettings();
@@ -2990,6 +2993,9 @@ public:
                     SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST,
                         TStringBuilder() << "HNSWEfSearch must be in 1.." << NKMeans::MaxHnswEfSearch);
                     return;
+                }
+                if (selected && Self->IsFollower()) {
+                    Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion, selected);
                 }
                 topState->HnswIndexId = selected;
                 const bool canUseHnsw = selected && CanUseHnsw(*Self, state, selected);

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import random
+import socket
 import tempfile
 import time
+from pathlib import Path
 
 import pytest
 import ydb
@@ -20,6 +22,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.local_cluster_view import (
     LocalClusterView,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import use_cluster
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
     BoundaryNemesisScheduler,
 )
@@ -447,6 +450,264 @@ def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
         assert released[0]["reason"] == "recovered"
         assert all(node.is_alive() for node in local_multinode_cluster.nodes.values())
     finally:
+        scheduler.stop()
+        probe.stop()
+        reporter.stop_healthchecks()
+        driver.stop()
+
+
+def test_stop_start_holds_ports_rotates_log_and_recovers_exact_node(
+    local_multinode_cluster,
+    local_multinode_model,
+):
+    view, _, inventory, guard = local_multinode_model
+    expected_hosts = {f"node-{node_id}" for node_id in range(1, 9)}
+    reporter = HealthCheckReporter(
+        [
+            HealthCheckEndpoint(
+                logical_host=node.logical_host,
+                connect_host=node.connect_host,
+                grpc_port=node.grpc_port,
+            )
+            for node in view.nodes.values()
+        ],
+        store_results=True,
+        publish_results=False,
+    )
+    reporter.hc_period_seconds = 2
+    reporter.hc_request_timeout_seconds = 30
+    reporter.start_healthchecks()
+
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if (
+            set(reporter.last_results) == expected_hosts
+            and all(
+                result["self_check_result"] == "GOOD"
+                for result in reporter.last_results.values()
+            )
+        ):
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("Eight-node healthcheck did not become GOOD before stop/start")
+
+    metrics = NemesisMetrics(
+        run_id="local-multinode-stop-start",
+        mon=_NoopMonitor(),
+    )
+    guard.set_metrics(metrics)
+    blind_events = []
+    stuck_faults = []
+    probe = RecoveryProbe(
+        guard=guard,
+        hc_source=reporter,
+        on_blind=lambda: blind_events.append(time.monotonic()),
+        on_stuck=stuck_faults.append,
+        poll_interval=0.1,
+        min_hold_sec=0.5,
+        max_hc_age_sec=90,
+        metrics=metrics,
+    )
+    probe.start()
+
+    chaos_store = ChaosOrchestratorStore(
+        failure_guard=guard,
+        inventory=inventory,
+        planner_types=["StopStartNodeNemesis"],
+    )
+    schedule = OrchestratorNemesisSchedule(
+        chaos_store=chaos_store,
+        get_hosts=lambda: list(expected_hosts),
+        is_local_host=lambda host: host in expected_hosts,
+        get_app_port=lambda: 0,
+        failure_guard=guard,
+        recovery_probe=probe,
+        inventory=inventory,
+        metrics=metrics,
+    )
+    scheduler = BoundaryNemesisScheduler(
+        guard=guard,
+        inventory=inventory,
+        plan_inject=chaos_store.plan_inject_target,
+        plan_extract=chaos_store.plan_extract_target,
+        dispatch=lambda command: schedule.dispatch_command(
+            command,
+            track_history=True,
+        ),
+        recovery_probe=probe,
+        enabled_types=["StopStartNodeNemesis"],
+        recovery_sec_for=lambda nemesis_type: 5,
+        base_interval=10,
+        jitter=0,
+        max_per_tick=1,
+        max_bypass_per_tick=1,
+        rng=random.Random(2),
+    )
+    runner = NEMESIS_TYPES["StopStartNodeNemesis"]["runner"]
+
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database="/Root",
+            endpoint=local_multinode_cluster.nodes[1].endpoint,
+        )
+    )
+    driver.wait(timeout=60)
+    pids_before = {
+        node_id: node.pid
+        for node_id, node in local_multinode_cluster.nodes.items()
+    }
+    logs_before = {
+        node_id: node.ydbd_log_file_path
+        for node_id, node in local_multinode_cluster.nodes.items()
+    }
+    workload_progress = 0
+    saw_non_good = False
+    held_since = None
+    stopped_node_id = None
+    try:
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries(
+                """
+                CREATE TABLE `local_nemesis_stop_start` (
+                    id Uint64 NOT NULL,
+                    value Uint64,
+                    PRIMARY KEY (id)
+                )
+                """
+            )
+
+            with use_cluster(local_multinode_cluster):
+                assert scheduler.status()["enabled_types"] == [
+                    "StopStartNodeNemesis"
+                ]
+                assert scheduler.status()["max_per_tick"] == 1
+                assert scheduler.tick() == 1
+                assert guard.snapshot()["tracked_executions"] == 1
+                agent_router.wait_for_local_processes()
+
+                stopped = runner.local_stopped_node_ids()
+                assert len(stopped) == 1
+                stopped_node_id = stopped[0]
+                stopped_node = local_multinode_cluster.nodes[stopped_node_id]
+                assert stopped_node.is_alive() is False
+                assert all(
+                    node.is_alive()
+                    for node_id, node in local_multinode_cluster.nodes.items()
+                    if node_id != stopped_node_id
+                )
+                held_ports = runner.local_held_ports(stopped_node_id)
+                assert set(held_ports) >= {
+                    stopped_node.ic_port,
+                    stopped_node.grpc_port,
+                    stopped_node.mon_port,
+                }
+                for port in held_ports:
+                    probe_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+                    try:
+                        with pytest.raises(OSError):
+                            probe_socket.bind(("::", port))
+                    finally:
+                        probe_socket.close()
+                held_since = time.monotonic()
+
+                deadline = time.monotonic() + 120
+                while time.monotonic() < deadline:
+                    saw_non_good = saw_non_good or any(
+                        result["self_check_result"] != "GOOD"
+                        for result in reporter.last_results.values()
+                    )
+                    try:
+                        pool.execute_with_retries(
+                            f"""
+                            UPSERT INTO `local_nemesis_stop_start` (id, value)
+                            VALUES (1, {workload_progress})
+                            """
+                        )
+                        result = pool.execute_with_retries(
+                            """
+                            SELECT value
+                            FROM `local_nemesis_stop_start`
+                            WHERE id = 1
+                            """
+                        )
+                        assert result[0].rows[0]["value"] == workload_progress
+                        workload_progress += 1
+                    except ydb.Error:
+                        pass
+                    if (
+                        workload_progress > 0
+                        and guard.snapshot()["tracked_executions"] == 0
+                        and stopped_node.is_alive()
+                    ):
+                        break
+                    time.sleep(0.05)
+
+                agent_router.wait_for_local_processes()
+                pid_after_recovery = stopped_node.pid
+                repeated = agent_router.create_process_helper(
+                    "StopStartNodeNemesis",
+                    "extract",
+                    payload={
+                        "host": f"node-{stopped_node_id}",
+                        "chaos_target": next(
+                            target
+                            for target in inventory.entities(TargetKind.NODE)
+                            if target.node_id == stopped_node_id
+                        ).to_dict(),
+                    },
+                )
+                assert repeated["status"] != "error", repeated
+                agent_router.wait_for_local_processes()
+                assert stopped_node.pid == pid_after_recovery
+
+        assert stopped_node_id is not None
+        assert held_since is not None
+        assert time.monotonic() - held_since >= 1
+        assert saw_non_good is True
+        assert workload_progress > 0
+        assert runner.local_stopped_node_ids() == ()
+        assert guard.snapshot()["tracked_executions"] == 0
+        assert probe.pending() == []
+        assert stuck_faults == []
+        assert blind_events == []
+
+        pids_after = {
+            node_id: node.pid
+            for node_id, node in local_multinode_cluster.nodes.items()
+        }
+        assert pids_after[stopped_node_id] != pids_before[stopped_node_id]
+        assert all(
+            pids_after[node_id] == pids_before[node_id]
+            for node_id in pids_before
+            if node_id != stopped_node_id
+        )
+        new_log = local_multinode_cluster.nodes[
+            stopped_node_id
+        ].ydbd_log_file_path
+        assert new_log != logs_before[stopped_node_id]
+        assert new_log is not None and Path(new_log).is_file()
+
+        events = metrics.recent_events(100)
+        acquired = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_ACQUIRED
+        ]
+        released = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_RELEASED
+        ]
+        assert len(acquired) == 1
+        assert len(released) == 1
+        assert acquired[0]["lease_id"] == released[0]["lease_id"]
+        assert acquired[0]["target"]["node_id"] == stopped_node_id
+        assert released[0]["reason"] == "recovered"
+        assert all(node.is_alive() for node in local_multinode_cluster.nodes.values())
+    finally:
+        with use_cluster(local_multinode_cluster):
+            runner.restore_local_harness_nodes()
         scheduler.stop()
         probe.stop()
         reporter.stop_healthchecks()

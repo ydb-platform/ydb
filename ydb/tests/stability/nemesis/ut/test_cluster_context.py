@@ -34,13 +34,14 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
             )
             is None
         )
-        assert cluster_context.nemesis_rejection_reason("KillNodeNemesis") is None
-        assert (
-            "requires at least 8 block-4-2 nodes"
-            in cluster_context.scheduled_nemesis_rejection_reason(
-                "KillNodeNemesis"
+        for process_type in ("KillNodeNemesis", "StopStartNodeNemesis"):
+            assert cluster_context.nemesis_rejection_reason(process_type) is None
+            assert (
+                "requires at least 8 block-4-2 nodes"
+                in cluster_context.scheduled_nemesis_rejection_reason(
+                    process_type
+                )
             )
-        )
         reason = cluster_context.nemesis_rejection_reason("NetworkNemesis")
         assert reason is not None
         assert "not enabled for local harness execution" in reason
@@ -50,7 +51,8 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
         nodes={node_id: object() for node_id in range(1, 9)},
     )
     with cluster_context.use_cluster(safe_cluster):
-        assert (
-            cluster_context.scheduled_nemesis_rejection_reason("KillNodeNemesis")
-            is None
-        )
+        for process_type in ("KillNodeNemesis", "StopStartNodeNemesis"):
+            assert (
+                cluster_context.scheduled_nemesis_rejection_reason(process_type)
+                is None
+            )

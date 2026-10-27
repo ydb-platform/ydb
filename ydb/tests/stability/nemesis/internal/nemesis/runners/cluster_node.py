@@ -8,10 +8,18 @@ from __future__ import annotations
 
 import signal
 import subprocess
+import threading
 import time
 from typing import Any
 
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    local_harness_mode,
+    require_cluster,
+    require_external_cluster,
+)
+from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import (
+    HarnessNodeController,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
@@ -256,6 +264,50 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
     def __init__(self) -> None:
         super().__init__(scope="node")
         self._stopped_node = None
+        self._local_cluster = None
+        self._local_controller: HarnessNodeController | None = None
+        self._local_controller_lock = threading.Lock()
+
+    def _controller(self) -> HarnessNodeController:
+        cluster = require_cluster()
+        with self._local_controller_lock:
+            if self._local_cluster is cluster and self._local_controller is not None:
+                return self._local_controller
+            if (
+                self._local_controller is not None
+                and self._local_controller.stopped_node_ids()
+            ):
+                raise RuntimeError(
+                    "Cannot replace local harness controller while nodes are stopped"
+                )
+            self._local_cluster = cluster
+            self._local_controller = HarnessNodeController(cluster)
+            return self._local_controller
+
+    @staticmethod
+    def _local_node_id(payload: dict) -> int:
+        target = target_from_payload(payload)
+        node_id = payload.get("node_id")
+        if node_id is None and target is not None:
+            node_id = target.node_id
+        if node_id is None:
+            raise ValueError(
+                "StopStartNodeNemesis: local harness target must include node_id"
+            )
+        return int(node_id)
+
+    def restore_local_harness_nodes(self) -> None:
+        controller = self._local_controller
+        if controller is not None:
+            controller.restore_all()
+
+    def local_stopped_node_ids(self) -> tuple[int, ...]:
+        controller = self._local_controller
+        return controller.stopped_node_ids() if controller is not None else ()
+
+    def local_held_ports(self, node_id: int) -> tuple[int, ...]:
+        controller = self._local_controller
+        return controller.held_ports(node_id) if controller is not None else ()
 
     def _try_start_stopped(self) -> bool:
         if self._stopped_node is None:
@@ -267,12 +319,36 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
         return True
 
     def extract_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            node_id = self._local_node_id(payload)
+            started = self._controller().start(node_id)
+            if started is not None:
+                self._logger.info(
+                    "Started local harness node_id=%d pid=%d->%d log=%s",
+                    started.node_id,
+                    started.previous_pid,
+                    started.current_pid,
+                    started.log_file,
+                )
+            self.on_success_extract_fault()
+            return
         if not self._try_start_stopped():
             self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            node_id = self._local_node_id(payload)
+            stopped = self._controller().stop(node_id)
+            self._logger.info(
+                "Stopped local harness node_id=%d pid=%d held_ports=%s",
+                stopped.node_id,
+                stopped.previous_pid,
+                stopped.held_ports,
+            )
+            self.on_success_inject_fault()
+            return
         cluster = require_external_cluster()
         if len(cluster.nodes) < 8:
             self._logger.info("Stop/start prohibited (< 8 nodes)")

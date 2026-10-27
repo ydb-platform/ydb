@@ -132,7 +132,7 @@
 * [query run](../../reference/ydb-cli/workload-query.md#run)
 * [kv run](../../reference/ydb-cli/workload-kv.md#run)
 * [stock run](../../reference/ydb-cli/commands/workload/stock.md#run)
-* [topic run](../../reference/ydb-cli/workload-topic.md)
+* [topic run](../../reference/ydb-cli/workload-topic.md#run)
 * [transfer run](../../reference/ydb-cli/workload-transfer.md#run)
 
 ## Очистка {#cleanup}

@@ -52,8 +52,8 @@ View structure:
 | `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instant |
 | `LastTtlRowsErased` | Number of partition rows deleted during the last TTL cleanup | `Uint64` | Instant |
 | `LocksAcquired` | Number of acquired [locks](../contributor/datashard-locks-and-change-visibility.md). | `Uint64` | Cumulative |
-| `LocksWholeShard` | Number of set [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#limitations). | `Uint64` | Cumulative |
-| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#how-locks-are-used-for-reads). | `Uint64` | Cumulative |
+| `LocksWholeShard` | Number of set [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#whole-shard-locks). | `Uint64` | Cumulative |
+| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#broken-locks). | `Uint64` | Cumulative |
 
 ### Query examples {#partitions-examples}
 

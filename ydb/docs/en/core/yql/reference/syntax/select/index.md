@@ -146,7 +146,7 @@ To specify the cluster of the merged tables, you need to specify it before the f
 
 All arguments of the functions described above can be declared separately using [named expressions](../expressions.md#named-nodes). In this case, simple expressions are also allowed in them by implicitly calling [EvaluateExpr](../../builtins/basic.md#evaluate_expr_atom).
 
-The name of the source table from which each row was originally obtained can be obtained using the TablePath() function.
+The name of the source table from which each row was originally obtained can be obtained using the {% if feature_bulk_tables %}[TablePath()](../../builtins/basic.md#tablepath){% else %}TablePath(){% endif %} function.
 
 ### Examples
 

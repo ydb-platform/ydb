@@ -100,10 +100,10 @@ linq2db — лёгкий и быстрый ORM для .NET, предоставл
 | `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                                                                                                                                                                                                        |
 | `string`                      | `Json`                                    | `Json`             | Текстовый JSON.                                                                                                                                                                                                          |
 | `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Бинарный JSON.                                                                                                                                                                                                           |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | Более широкий диапазон дат. Укажите DbType = "Date32". [Пример](#primer-kastomnogo-decimal)                                                                                                                              |
-| `DateTime`                    | `DateTime`                                | `Datetime64`       | Точность до секунд, расширенный диапазон. Укажите DbType = "Datetime64". [Пример](#primer-kastomnogo-decimal)                                                                                                            |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Точность до микросекунд, расширенный диапазон. Укажите DbType = "Timestamp64". [Пример](#primer-kastomnogo-decimal)                                                                                                      |
-| `TimeSpan`                    | `Interval`                                | `Interval64`       | Более широкий диапазон интервалов. Укажите DbType = "Interval64". [Пример](#primer-kastomnogo-decimal)                                                                                                                   |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | Более широкий диапазон дат. Укажите DbType = "Date32". [Пример](#primer-kastomnogo-dbtype)                                                                                                                              |
+| `DateTime`                    | `DateTime`                                | `Datetime64`       | Точность до секунд, расширенный диапазон. Укажите DbType = "Datetime64". [Пример](#primer-kastomnogo-dbtype)                                                                                                            |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Точность до микросекунд, расширенный диапазон. Укажите DbType = "Timestamp64". [Пример](#primer-kastomnogo-dbtype)                                                                                                      |
+| `TimeSpan`                    | `Interval`                                | `Interval64`       | Более широкий диапазон интервалов. Укажите DbType = "Interval64". [Пример](#primer-kastomnogo-dbtype)                                                                                                                   |
 
 {% note tip %}
 
@@ -134,7 +134,7 @@ public sealed class AmountRow
 }
 ```
 
-### Пример кастомного DbType
+### Пример кастомного DbType {#primer-kastomnogo-dbtype}
 
 ```csharp
 [Table("events")]

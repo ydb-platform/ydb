@@ -24,7 +24,7 @@ For a more detailed and specific analysis of query execution, {{ ydb-short-name 
 - Volumes of transferred data.
 - Waits that occurred during interaction between individual [nodes](../../concepts/glossary.md#node) of the distributed system.
 
-Each step of the plan is executed as a set of tasks, in parallel on many [nodes](../../concepts/glossary.md#node). Detailed information for each individual task would take up too much space; instead, it is processed by the server and, for each set of identical tasks, published in an aggregated form, enriching the plan in [JSON](https://en.wikipedia.org/wiki/JSON) format.
+Each step of the plan is executed as a set of [tasks](layout.md#progress), in parallel on many [nodes](../../concepts/glossary.md#node). Detailed information for each individual task would take up too much space; instead, it is processed by the server and, for each set of identical [tasks](layout.md#progress), published in an aggregated form, enriching the plan in [JSON](https://en.wikipedia.org/wiki/JSON) format.
 
 But even in aggregated form, **execution statistics** are still too large for independent analysis. To solve this problem, a special way of visualizing this statistics together with the plan in [SVG](https://en.wikipedia.org/wiki/SVG) format has been developed. To learn how to obtain such a plan, see [Query execution plan](plans.md).
 

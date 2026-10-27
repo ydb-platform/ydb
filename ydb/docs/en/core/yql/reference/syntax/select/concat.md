@@ -32,7 +32,7 @@ To specify a cluster of unioned tables, add it before the function name.
 
 All arguments of the functions described above can be declared separately using [named expressions](../expressions.md#named-nodes). In this case, you can also use  simple expressions in them by implicitly calling [EvaluateExpr](../../builtins/basic.md#evaluate_expr_atom).
 
-To get the name of the source table from which you originally obtained each row, use TablePath().
+To get the name of the source table from which you originally obtained each row, use {% if feature_bulk_tables %}[TablePath()](../../builtins/basic.md#tablepath){% else %}TablePath(){% endif %}.
 
 ### Examples
 

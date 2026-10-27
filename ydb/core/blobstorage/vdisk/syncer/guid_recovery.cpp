@@ -3,7 +3,6 @@
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncquorum.h"
 #include "guid_history.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 
 #include <ydb/library/actors/core/interconnect.h>
@@ -749,9 +748,9 @@ namespace NKikimr {
                     LegacySources |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), msg->VDiskId);
                 }
                 HistoryComplete = RestoreHistory
-                    && TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, HistorySources);
+                    && HasAllNormalGuidSources(*GInfo, HistorySources);
                 const bool historyBlockedByLegacySources = RestoreHistory
-                    && !TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, ~LegacySources);
+                    && !HasAllNormalGuidSources(*GInfo, ~LegacySources);
                 const bool canFinishSurvey = !RestoreHistory || HistoryComplete || historyBlockedByLegacySources;
                 if (DecisionMaker.GotQuorum() && canFinishSurvey) {
                     // kill actors that didn't respond

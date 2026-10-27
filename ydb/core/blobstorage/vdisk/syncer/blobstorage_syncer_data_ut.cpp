@@ -9,6 +9,39 @@ using namespace NSync;
 
 Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
 
+    Y_UNIT_TEST(GuidHistoryRequiresEveryNormalSourceRegardlessOfCopyGuarantees) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TGroupVDisks = TBlobStorageGroupInfo::TGroupVDisks;
+        for (const auto normalState : {TFailRealm::N0, TFailRealm::N1, TFailRealm::N2}) {
+            TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
+            dynamic.FailRealmStates = {normalState, normalState, TFailRealm::R};
+            const TBlobStorageGroupInfo info(TBlobStorageGroupInfo::TTopology(
+                TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), std::move(dynamic), "");
+            const auto& topology = info.GetTopology();
+            TGroupVDisks sources(&topology);
+            // A complete first normal realm and all R peers cannot replace the second normal realm.
+            for (const ui32 realm : {0u, 2u}) {
+                for (const auto& domain : topology.FailRealms[realm].FailDomains) {
+                    for (const auto& disk : domain.VDisks) {
+                        sources |= TGroupVDisks(&topology, info.GetVDiskId(disk.OrderNumber));
+                    }
+                }
+            }
+            UNIT_ASSERT(!NSyncer::HasAllNormalGuidSources(info, sources));
+            const auto& domains = topology.FailRealms[1].FailDomains;
+            for (ui32 index = 0; index < domains.size(); ++index) {
+                for (const auto& disk : domains[index].VDisks) {
+                    sources |= TGroupVDisks(&topology, info.GetVDiskId(disk.OrderNumber));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(NSyncer::HasAllNormalGuidSources(info, sources), index + 1 == domains.size());
+            }
+            const TGroupVDisks legacyRecoveringPeer(&topology, info.GetVDiskId(6));
+            UNIT_ASSERT(NSyncer::HasAllNormalGuidSources(info, ~legacyRecoveringPeer));
+            const TGroupVDisks legacyNormalPeer(&topology, info.GetVDiskId(0));
+            UNIT_ASSERT(!NSyncer::HasAllNormalGuidSources(info, ~legacyNormalPeer));
+        }
+    }
+
     Y_UNIT_TEST(GuidHistorySurvivesEntryPointReload) {
         auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1U, 3U, 3U);
         const auto self = info->GetVDiskId(0);

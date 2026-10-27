@@ -1,8 +1,41 @@
 #pragma once
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 namespace NKikimr::NSyncer {
+
+// Blob copy guarantees do not constrain where GUID witnesses were published.
+// Collect every normal source before declaring the recovered history complete.
+inline bool HasAllNormalGuidSources(const TBlobStorageGroupInfo& info,
+        const TBlobStorageGroupInfo::TGroupVDisks& sources) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    const auto& topology = info.GetTopology();
+    if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+            || topology.GetTotalFailRealmsNum() != 3 || sources.GetTopology() != &topology) {
+        return false;
+    }
+    if (!GetMirror3dcGroupState(info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2))) {
+        return false;
+    }
+    bool hasNormalSource = false;
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        const auto state = info.GetFailRealmState(realm);
+        if (state == TFailRealm::F || state == TFailRealm::R) {
+            continue;
+        }
+        hasNormalSource = true;
+        for (const auto& domain : topology.FailRealms[realm].FailDomains) {
+            for (const auto& disk : domain.VDisks) {
+                if (!sources[disk.OrderNumber]) {
+                    return false;
+                }
+            }
+        }
+    }
+    return hasNormalSource;
+}
 
 // One Final observation per owner is sufficient to remember that the owner existed.
 // Keep its original witness when forwarding; this is not a fresh quorum vote.

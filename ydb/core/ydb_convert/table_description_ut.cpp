@@ -171,6 +171,28 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         UNIT_ASSERT_STRING_CONTAINS(error, "Not consistent column type and not_null option");
     }
 
+    Y_UNIT_TEST(ColumnTablesRejectSetNotNull) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.FeatureFlags.SetEnableSetColumnConstraint(true);
+
+        const auto check = [](auto request) {
+            request.set_path("/Root/Table");
+            request.add_set_not_null()->set_column_name("value");
+            NKikimrSchemeOp::TModifyScheme result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+
+            UNIT_ASSERT(!BuildAlterColumnTableModifyScheme(&request, &result, {}, status, error));
+            UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT_VALUES_EQUAL(error, "SET NOT NULL is not supported for column tables");
+            UNIT_ASSERT(!result.HasOperationType());
+            UNIT_ASSERT(!result.HasAlterColumnTable());
+        };
+
+        check(Ydb::Table::AlterTableRequest{});
+        check(NKikimrKqp::TKqpAlterTableRequest{});
+    }
+
     Y_UNIT_TEST(InternalColumnTableCompressionAndEncoding) {
         TActorSystemStub actorSystem;
         NKikimrKqp::TKqpAlterTableRequest request;

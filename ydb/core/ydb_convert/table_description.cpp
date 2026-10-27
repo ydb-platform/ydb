@@ -32,6 +32,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
@@ -1540,47 +1542,77 @@ NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterCol
     return out.MutableAlterSchema()->AddAddColumns();
 }
 
+namespace {
+
+struct TColumnCompressionAlgorithm {
+    ui32 PublicAlgorithm;
+    TStringBuf InternalAlgorithm;
+    NKikimrSchemeOp::EColumnCodec Codec;
+
+    bool Matches(ui32 algorithm) const {
+        return PublicAlgorithm == algorithm;
+    }
+
+    bool Matches(TStringBuf algorithm) const {
+        return InternalAlgorithm == algorithm;
+    }
+};
+
+template <typename TAlgorithm>
+std::optional<NKikimrSchemeOp::EColumnCodec> GetColumnCompressionCodec(TAlgorithm algorithm) {
+    static constexpr TColumnCompressionAlgorithm algorithms[] = {
+        {Ydb::Table::ColumnCompression::ALGORITHM_OFF, "off", NKikimrSchemeOp::ColumnCodecPlain},
+        {Ydb::Table::ColumnCompression::ALGORITHM_LZ4, "lz4", NKikimrSchemeOp::ColumnCodecLZ4},
+        {Ydb::Table::ColumnCompression::ALGORITHM_ZSTD, "zstd", NKikimrSchemeOp::ColumnCodecZSTD},
+    };
+    for (const auto& entry : algorithms) {
+        if (entry.Matches(algorithm)) {
+            return entry.Codec;
+        }
+    }
+    return std::nullopt;
+}
+
+template <class TColumnDesc, typename TAlgorithm>
+bool FillColumnCompressionSettings(TColumnDesc* to, bool hasAlgorithm, TAlgorithm algorithm,
+    std::optional<i64> level, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    auto* serializer = to->MutableSerializer();
+    if (hasAlgorithm) {
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto* arrowCompression = serializer->MutableArrowCompression();
+        const auto codec = GetColumnCompressionCodec(algorithm);
+        if (!codec) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unsupported compression algorithm " << algorithm << " in compression settings";
+            return false;
+        }
+        arrowCompression->SetCodec(*codec);
+    }
+    if (level) {
+        if (!hasAlgorithm) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Compression level specified without an algorithm";
+            return false;
+        }
+        serializer->MutableArrowCompression()->SetLevel(*level);
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 template <class TColumnDesc>
 bool FillColumnCompression(
     const Ydb::Table::ColumnMeta& from, TColumnDesc* to, Ydb::StatusIds::StatusCode& status, TString& error) {
 
-    if (from.has_compression()) {
-        const auto fromCompression = from.compression();
-        auto toSerializer = to->MutableSerializer();
-
-        if (fromCompression.has_algorithm()) {
-            toSerializer->SetClassName("ARROW_SERIALIZER");
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            switch (fromCompression.algorithm()) {
-                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
-                    break;
-
-                default:
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.algorithm() << " in compression settings";
-                    return false;
-            }
-        }
-
-        if (fromCompression.has_compression_level()) {
-            if (!fromCompression.has_algorithm()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Compression level specified without an algorithm";
-                return false;
-            }
-
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            arrowCompression->SetLevel(fromCompression.compression_level());
-        }
+    if (!from.has_compression()) {
+        return true;
     }
-    return true;
+    const auto& compression = from.compression();
+    return FillColumnCompressionSettings(to, compression.has_algorithm(), ui32(compression.algorithm()),
+        compression.has_compression_level() ? std::optional<i64>(compression.compression_level()) : std::nullopt,
+        status, error);
 }
 
 template <typename TColumnTable>
@@ -1785,30 +1817,10 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
     }
     if (column.HasCompression()) {
         const auto& compression = column.GetCompression();
-        auto& serializer = *description->MutableSerializer();
-        if (compression.HasAlgorithm()) {
-            serializer.SetClassName("ARROW_SERIALIZER");
-            auto& arrow = *serializer.MutableArrowCompression();
-            const auto& algorithm = compression.GetAlgorithm();
-            if (algorithm == "off") {
-                arrow.SetCodec(NKikimrSchemeOp::ColumnCodecPlain);
-            } else if (algorithm == "lz4") {
-                arrow.SetCodec(NKikimrSchemeOp::ColumnCodecLZ4);
-            } else if (algorithm == "zstd") {
-                arrow.SetCodec(NKikimrSchemeOp::ColumnCodecZSTD);
-            } else {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unsupported compression algorithm " << algorithm << " in compression settings";
-                return false;
-            }
-        }
-        if (compression.HasLevel()) {
-            if (!compression.HasAlgorithm()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Compression level specified without an algorithm";
-                return false;
-            }
-            serializer.MutableArrowCompression()->SetLevel(compression.GetLevel());
+        if (!FillColumnCompressionSettings(description, compression.HasAlgorithm(), TStringBuf(compression.GetAlgorithm()),
+            compression.HasLevel() ? std::optional<i64>(compression.GetLevel()) : std::nullopt, status, error))
+        {
+            return false;
         }
     }
     using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
@@ -2145,6 +2157,10 @@ static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRe
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
         alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
+    } else if (OpType == EAlterOperationKind::SetColumnConstraint) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "SET NOT NULL is not supported for column tables";
+        return false;
     } else if (OpType == EAlterOperationKind::Compact) {
         status = Ydb::StatusIds::INTERNAL_ERROR;
         error = "Compact operation must be handled by PrepareAlterColumnTable, not BuildAlterColumnTableModifyScheme";

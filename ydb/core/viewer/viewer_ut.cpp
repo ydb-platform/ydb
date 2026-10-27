@@ -374,6 +374,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
         UNIT_ASSERT(handler);
+        ev = IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(
+            new IEventHandle(TActorId(), TActorId(), new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         ev->Get()->Database = "/Root/resolved_database";
         auto healthcheck = std::make_unique<TJsonHealthCheck>(nullptr, ev);
         UNIT_ASSERT_VALUES_EQUAL(healthcheck->MakeSelfCheckRequest()->Database, "/Root/resolved_database");

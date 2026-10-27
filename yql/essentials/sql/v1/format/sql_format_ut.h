@@ -574,14 +574,45 @@ Y_UNIT_TEST(AsyncReplication) {
          "DROP ASYNC REPLICATION user;\n"},
         {"drop async replication user cascade",
          "DROP ASYNC REPLICATION user CASCADE;\n"},
-        {"drop async replication force with (force=true)",
-         "DROP ASYNC REPLICATION force WITH (force = TRUE);\n"},
-        {"drop async replication user cascade with (force=true)",
-         "DROP ASYNC REPLICATION user CASCADE WITH (force = TRUE);\n"},
-        {"drop async replication user with (force=false)",
-         "DROP ASYNC REPLICATION user WITH (force = FALSE);\n"},
     };
 
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AsyncReplicationForce) {
+    TCases cases = {
+        {"drop async replication force fOrCe",
+         "DROP ASYNC REPLICATION force FORCE;\n"},
+        {"drop async replication plato.force force",
+         "DROP ASYNC REPLICATION plato.force FORCE;\n"},
+        {"drop async replication `/Root/force` force",
+         "DROP ASYNC REPLICATION `/Root/force` FORCE;\n"},
+    };
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AsyncReplicationCascadeForce) {
+    TCases cases = {
+        {"drop async replication force cascade force",
+         "DROP ASYNC REPLICATION force CASCADE FORCE;\n"},
+    };
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AsyncReplicationForceIdentifiers) {
+    TCases cases = {
+        {"drop async replication force", "DROP ASYNC REPLICATION force;\n"},
+        {"drop async replication force cascade", "DROP ASYNC REPLICATION force CASCADE;\n"},
+        {"drop async replication plato.force", "DROP ASYNC REPLICATION plato.force;\n"},
+        {"drop async replication `/Root/force`", "DROP ASYNC REPLICATION `/Root/force`;\n"},
+        {"select force as force from plato.force as force",
+         "SELECT\n\tforce AS force\nFROM\n\tplato.force AS force\n;\n"},
+        {"declare $force as Int32; select $force as force",
+         "DECLARE $force AS Int32;\n\nSELECT\n\t$force AS force\n;\n"},
+    };
     TSetup setup;
     setup.Run(cases);
 }

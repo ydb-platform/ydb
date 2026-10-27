@@ -6203,6 +6203,7 @@ Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("forceLocal"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
         }
@@ -6224,6 +6225,7 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("forceLocal"));
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
         }
     };
@@ -6234,17 +6236,85 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
-Y_UNIT_TEST(DropAsyncReplicationForceOptions) {
-    for (const TString& suffix : {"WITH (FORCE = TRUE)", "CASCADE WITH (FORCE = TRUE)", "WITH (FORCE = FALSE)"}) {
-        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION force " << suffix << ";");
+// FORCE must select the existing forceLocal AST mode without changing CASCADE.
+Y_UNIT_TEST(DropAsyncReplicationForce) {
+    for (const TString& path : {"force", "plato.force", "`/Root/force`"}) {
+        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION " << path << " FORCE;");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "forceLocal");
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropMode");
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("dropCascade"));
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
-    for (const TString& options : {"FORCE = 'TRUE'", "FORCE = 1", "FORCE = NULL", "FORCE = TRUE, FORCE = FALSE", "UNKNOWN = TRUE"}) {
-        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION r WITH (" << options << ");");
-        UNIT_ASSERT_C(!res.IsOk(), options);
+}
+
+Y_UNIT_TEST(DropAsyncReplicationCascadeForce) {
+    const auto res = SqlToYql("USE plato; DROP ASYNC REPLICATION force CASCADE FORCE;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropCascade");
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropMode");
+            UNIT_ASSERT_STRING_CONTAINS(line, "forceLocal");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(DropAsyncReplicationForceIdentifiers) {
+    for (const TString& query : {
+        "USE plato; DROP ASYNC REPLICATION force;",
+        "USE plato; DROP ASYNC REPLICATION force CASCADE;",
+        "DROP ASYNC REPLICATION plato.force;",
+        "USE plato; DROP ASYNC REPLICATION `/Root/force`;",
+        "SELECT force AS force FROM plato.force AS force;",
+        "DECLARE $force AS Int32; SELECT $force AS force;",
+        "CREATE TABLE ydb.force (force Int32, PRIMARY KEY (force));"
+    }) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), query << "\n" << Err2Str(res));
     }
-    UNIT_ASSERT(!SqlToYql("USE plato; DROP TRANSFER r WITH (FORCE = TRUE);").IsOk());
-    UNIT_ASSERT(!SqlToYql("USE plato; DROP TABLE r WITH (FORCE = TRUE);").IsOk());
+}
+
+Y_UNIT_TEST(DropAsyncReplicationRejectForceSettingsTrue) {
+    const auto res = SqlToYql("USE plato; DROP ASYNC REPLICATION r WITH (FORCE = TRUE);");
+    UNIT_ASSERT_C(!res.IsOk(), "Obsolete WITH (FORCE = TRUE) must be rejected");
+}
+
+Y_UNIT_TEST(DropAsyncReplicationRejectForceSettingsFalse) {
+    const auto res = SqlToYql("USE plato; DROP ASYNC REPLICATION r CASCADE WITH (FORCE = FALSE);");
+    UNIT_ASSERT_C(!res.IsOk(), "Obsolete WITH (FORCE = FALSE) must be rejected");
+}
+
+Y_UNIT_TEST(DropAsyncReplicationInvalidForceSuffix) {
+    for (const TString& suffix : {
+        "FORCE CASCADE", "FORCE FORCE", "CASCADE CASCADE", "CASCADE FORCE FORCE",
+        "FORCE = TRUE", "FORCE TRUE", "FORCE FALSE", "FORCE WITH (FORCE = TRUE)",
+        "WITH (FORCE = 'TRUE')", "WITH (FORCE = 1)", "WITH (FORCE = NULL)",
+        "WITH (FORCE = TRUE, FORCE = FALSE)", "WITH (UNKNOWN = TRUE)"
+    }) {
+        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION r " << suffix << ";");
+        UNIT_ASSERT_C(!res.IsOk(), suffix);
+    }
+}
+
+Y_UNIT_TEST(DropAsyncReplicationForceNotForOtherObjects) {
+    for (const TString& query : {
+        "USE plato; DROP TRANSFER r FORCE;",
+        "USE plato; DROP TRANSFER r CASCADE FORCE;",
+        "USE plato; DROP TABLE r FORCE;",
+        "USE plato; DROP VIEW r FORCE;",
+        "USE plato; DROP TRANSFER r WITH (FORCE = TRUE);",
+        "USE plato; DROP TABLE r WITH (FORCE = TRUE);"
+    }) {
+        UNIT_ASSERT_C(!SqlToYql(query).IsOk(), query);
+    }
 }
 
 Y_UNIT_TEST(PragmaCompactGroupBy) {

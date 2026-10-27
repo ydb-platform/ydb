@@ -1935,6 +1935,40 @@ Y_UNIT_TEST(UnaryOp) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ForceIdentifierDropTopicConsumer) {
+    TCases cases;
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        cases.emplace_back(TStringBuilder() << "alter topic ydb.t drop consumer " << name,
+            TStringBuilder() << "ALTER TOPIC ydb.t\n\tDROP CONSUMER " << name << "\n;\n");
+    }
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ForceIdentifierAlterTopicConsumer) {
+    TCases cases;
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        cases.emplace_back(TStringBuilder() << "alter topic ydb.t alter consumer " << name << " set (important = false)",
+            TStringBuilder() << "ALTER TOPIC ydb.t\n\tALTER CONSUMER " << name << " SET (important = FALSE)\n;\n");
+        cases.emplace_back(TStringBuilder() << "alter topic ydb.t alter consumer " << name << " reset (read_from)",
+            TStringBuilder() << "ALTER TOPIC ydb.t\n\tALTER CONSUMER " << name << " RESET (read_from)\n;\n");
+    }
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ForceIdentifierMatchRecognize) {
+    TCases cases;
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        cases.emplace_back(TStringBuilder() << "select * from plato.Input match_recognize (pattern (" << name
+            << ") define " << name << " as " << name << ")",
+            TStringBuilder() << "SELECT\n\t*\nFROM\n\tplato.Input MATCH_RECOGNIZE (\n\t\tPATTERN (" << name
+            << ")\n\t\tDEFINE\n\t\t\t" << name << " AS " << name << "\n\t)\n;\n");
+    }
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(MatchRecognize) {
     TCases cases = {
         {TrimIndent(R"sql(

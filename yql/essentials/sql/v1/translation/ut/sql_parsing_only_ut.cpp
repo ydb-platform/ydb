@@ -6282,6 +6282,37 @@ Y_UNIT_TEST(DropAsyncReplicationForceIdentifiers) {
     }
 }
 
+// Newly non-reserved FORCE must retain contexts that accept pure identifiers.
+Y_UNIT_TEST(ForceIdentifierDropTopicConsumer) {
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        const auto res = SqlToYql(TStringBuilder() << "ALTER TOPIC ydb.t DROP CONSUMER " << name << ";");
+        UNIT_ASSERT_C(res.IsOk(), name << "\n"
+                                       << Err2Str(res));
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), name == "`force`" ? "force" : name);
+    }
+}
+
+Y_UNIT_TEST(ForceIdentifierAlterTopicConsumer) {
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        for (const TString& action : {"SET (important = false)", "RESET (read_from)"}) {
+            const auto res = SqlToYql(TStringBuilder() << "ALTER TOPIC ydb.t ALTER CONSUMER " << name << " " << action << ";");
+            UNIT_ASSERT_C(res.IsOk(), name << " " << action << "\n"
+                                           << Err2Str(res));
+            UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), name == "`force`" ? "force" : name);
+        }
+    }
+}
+
+Y_UNIT_TEST(ForceIdentifierMatchRecognize) {
+    for (const TString& name : {"control", "`force`", "force", "FoRcE"}) {
+        const auto res = SqlToYql(TStringBuilder() << "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN ("
+                                                   << name << ") DEFINE " << name << " AS " << name << ");");
+        UNIT_ASSERT_C(res.IsOk(), name << "\n"
+                                       << Err2Str(res));
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), name == "`force`" ? "force" : name);
+    }
+}
+
 Y_UNIT_TEST(DropAsyncReplicationRejectForceSettingsTrue) {
     const auto res = SqlToYql("USE plato; DROP ASYNC REPLICATION r WITH (FORCE = TRUE);");
     UNIT_ASSERT_C(!res.IsOk(), "Obsolete WITH (FORCE = TRUE) must be rejected");

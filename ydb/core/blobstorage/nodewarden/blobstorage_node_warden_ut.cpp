@@ -1611,8 +1611,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 auto oldInfo = makeInfo(1, before);
                 record.RuntimeData.emplace(TNodeWarden::TVDiskRecord::TRuntimeData{
                     .GroupInfo = oldInfo,
-                    .ActorId = actorId,
-                    .ServiceId = slot.GetVDiskServiceId(),
                     .OrderNumber = oldInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
                     .DonorMode = false,
                     .ReadOnly = false,
@@ -1627,7 +1625,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 UNIT_ASSERT_VALUES_EQUAL(record.RestartAfterShutdown, restart);
                 UNIT_ASSERT(!group.VDisksOfGroup.Empty());
                 UNIT_ASSERT(warden.SlayInFlight.empty());
-                if (!restart) {
+                UNIT_ASSERT(warden.VDiskIdByActor.at(actorId) == slot);
+                if (restart) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.Status, NKikimrBlobStorage::EVDiskStatus::ERROR);
+                } else {
                     UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData->GroupInfo->GroupGeneration, 2);
                 }
             });
@@ -1702,7 +1703,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         // Setup BSNodeWarden
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
         if (manageStateStorage) {
-            nodeWardenConfig->DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>();
+            nodeWardenConfig->DomainsConfig.emplace();
         }
         IActor* nodeWardenActor = CreateBSNodeWarden(nodeWardenConfig.Release());
         TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
@@ -1727,11 +1728,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         auto makeConfig = [&](ui32 version, ui32 disabledRings) {
             auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
-            auto fill = [&](NKikimrConfig::TStateStorageConfig* stateStorage) {
+            auto fill = [&](NKikimrConfig::TDomainsConfig::TStateStorage* stateStorage) {
                 stateStorage->SetStateStorageVersion(version);
                 auto* group = stateStorage->AddRingGroups();
                 group->SetNToSelect(3);
-                group->SetPileState(NKikimrConfig::TStateStorageConfig::PRIMARY);
+                group->SetPileState(NKikimrConfig::TDomainsConfig::TStateStorage::PRIMARY);
                 for (ui32 index = 0; index < 3; ++index) {
                     auto* ring = group->AddRing();
                     ring->AddNode(nodeId);

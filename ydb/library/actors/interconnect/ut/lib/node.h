@@ -71,18 +71,11 @@ public:
             settingsCustomizer(nodeId, common->Settings);
         }
 
-<<<<<<< HEAD
-        if (common->Settings.V2.Enable) {
-            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
-            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
-            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
-=======
         if (common->Settings.V2.Threads) {
             // Mirror production: the engine is created up front whenever Threads is non-zero (regardless of
             // Settings.V2.Enable, which only gates handshake negotiation and may be flipped at runtime) and
             // published in Common; OnActorSystemCreated installs its actor-system client. Shard
             // count is overridable via YDB_IC_V2_SHARDS so tests can force many connections onto one ring.
->>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
                 common->Settings.V2.Threads = FromString<ui32>(s);
             }

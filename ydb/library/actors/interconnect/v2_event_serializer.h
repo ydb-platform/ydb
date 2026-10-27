@@ -11,6 +11,7 @@
 #include <contrib/libs/xxhash/xxhash.h>
 
 #include <deque>
+#include <exception>
 
 namespace NActorsInterconnect {
     class TSystemPayloadV2;
@@ -18,8 +19,6 @@ namespace NActorsInterconnect {
 
 namespace NActors {
 
-<<<<<<< HEAD
-=======
     class IEventDestructor;
 
     struct TExEventFormatError : std::exception {
@@ -34,7 +33,6 @@ namespace NActors {
         }
     };
 
->>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
     // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
     // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so
     // GetPayloadWithHeader can take the reserved-headroom fast path.

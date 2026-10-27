@@ -13,13 +13,8 @@ SRCS(
     connection_checker_ut.cpp
     direct_session_ut.cpp
     event_holder_pool_ut.cpp
-<<<<<<< HEAD
-=======
-    event_output_channel_ut.cpp
-    interconnect_session_pool_mapping_ut.cpp
     interconnect_uring_engine_client_ut.cpp
     interconnect_uring_engine_ut.cpp
->>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
     interconnect_ut.cpp
     large.cpp
     outgoing_stream_ut.cpp

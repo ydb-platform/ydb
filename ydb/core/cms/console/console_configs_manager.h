@@ -148,6 +148,10 @@ public:
                                                 const TActorContext &ctx) const;
 
 private:
+    // Read a tenant bool attribute, defaulting to false for a missing tenant,
+    // missing attribute, or invalid value.
+    bool IsTenantBoolAttributeEnabled(const TString& database, TStringBuf key) const;
+
     class TTxAddConfigSubscription;
     class TTxCleanupSubscriptions;
     class TTxConfigure;

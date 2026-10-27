@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/cms/console/ut_configs_dispatcher/ut_private_database_config.pb.h>
 #include <ydb/library/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -2902,7 +2903,9 @@ config:
         label->SetName("tenant");
         label->SetValue(TENANT1_1_NAME);
         appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
         TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+        runtime.GetAppData().ConfigSwissKnife = configValidator.get();
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);
         AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
@@ -2946,7 +2949,9 @@ config: {}
             label->SetName("node_type");
             label->SetValue(nodeType);
             appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+            auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
             TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+            runtime.GetAppData().ConfigSwissKnife = configValidator.get();
             CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}},
                 {{PermissiveTenantAttribute, "true"}, {TString(TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS), "true"}});
             CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);
@@ -2991,7 +2996,9 @@ selector_config:
             label->SetName("tenant");
             label->SetValue(TENANT1_1_NAME);
             appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+            auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
             TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+            runtime.GetAppData().ConfigSwissKnife = configValidator.get();
             CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}},
                 {{PermissiveTenantAttribute, "true"}});
             CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);

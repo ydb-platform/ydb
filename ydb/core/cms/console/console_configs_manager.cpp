@@ -298,26 +298,16 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
 bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) const
 {
-    auto* tm = Self.TenantsManager;
-    auto tenant = tm ? tm->GetTenant(database) : nullptr;
-
-    if (!tenant) {
-        return false;
-    }
-
-    for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
-        if (attr.GetKey() == TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS) {
-            bool value = false;
-            if (TryFromString<bool>(attr.GetValue(), value) && value) {
-                return true;
-            }
-        }
-    }
-
-    return false;
+    return IsTenantBoolAttributeEnabled(database, TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
 }
 
 bool TConfigsManager::IsAllTypesInDatabaseConfigAllowed(const TString& database) const
+{
+    return IsTenantBoolAttributeEnabled(database, TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG);
+}
+
+// Read the matching tenant attribute and return false if lookup or parsing fails.
+bool TConfigsManager::IsTenantBoolAttributeEnabled(const TString& database, TStringBuf key) const
 {
     auto* tm = Self.TenantsManager;
     auto tenant = tm ? tm->GetTenant(database) : nullptr;
@@ -326,7 +316,7 @@ bool TConfigsManager::IsAllTypesInDatabaseConfigAllowed(const TString& database)
     }
 
     for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
-        if (attr.GetKey() == TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG) {
+        if (attr.GetKey() == key) {
             bool value = false;
             return TryFromString<bool>(attr.GetValue(), value) && value;
         }

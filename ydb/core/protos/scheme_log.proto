@@ -80,6 +80,8 @@ message TAlterRecord {
     optional uint32 Large = 14;     // When keep values in single blobs
     optional uint32 Small = 18;     // When pack values to outer blobs
     optional uint32 CacheMode = 27; // NPage::ECacheMode
+    optional bool KeyIndexInDescriptor = 36 [default = true];     // Main group index of tier parts is in the descriptor page collection
+    optional bool GroupIndexesInDescriptor = 37 [default = true]; // Other groups indexes of tier parts are in the descriptor page collection
 
     //_ Table: Attributes of single colimn
 

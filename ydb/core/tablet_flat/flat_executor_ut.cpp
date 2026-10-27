@@ -10719,6 +10719,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
                 .AddColumnToKey(TableId, KeyColumnId)
                 .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
                 .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
+                .SetFamilyIndexPlacement(TableId, ColdTierId, false, false)
                 .SetTieringPolicy(TableId, MakeTieringPolicy());
             return true;
         }
@@ -10738,6 +10739,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
             UNIT_ASSERT(tier);
             UNIT_ASSERT(tier->Room == NTable::TScheme::DefaultRoom);
             UNIT_ASSERT(tier->Codec == NTable::NPage::ECodec::LZ4);
+            UNIT_ASSERT(!tier->KeyIndexInDescriptor);
+            UNIT_ASSERT(!tier->GroupIndexesInDescriptor);
             UNIT_ASSERT(table->TieringPolicy);
             UNIT_ASSERT(*table->TieringPolicy == MakeTieringPolicy());
             return true;

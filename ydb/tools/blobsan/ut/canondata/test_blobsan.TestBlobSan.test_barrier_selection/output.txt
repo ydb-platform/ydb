@@ -1,7 +1,7 @@
 ===== testcase =====
 soft barrier without quorum
 When a kept blob has incomplete local data and a soft barrier without quorum,
-then default mode ignores the barrier and skips the blob; write2x2 mode accepts it and reports a candidate under the barrier with FULL.
+then default mode ignores the barrier and skips the blob; restore mode accepts it and reports a candidate under the barrier with FULL.
 Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=False, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
   VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x080))])
   VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x002))])
@@ -13,9 +13,9 @@ Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=False, know
 blobsan mirror-3-dc
 Exit Status: 0
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -45,7 +45,7 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 ===== testcase =====
 soft barrier without quorum and without Keep
 When a blob without Keep is covered by a soft barrier whose ingress lacks quorum,
-then default mode skips it above any accepted barrier; write2x2 mode accepts the barrier and excludes the soft-collected blob.
+then default mode skips it above any accepted barrier; restore mode accepts the barrier and excludes the soft-collected blob.
 Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=False, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
   VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x080))])
   VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x002))])
@@ -57,7 +57,7 @@ Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=False, know
 blobsan mirror-3-dc
 Exit Status: 0
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
 
 ===== testcase =====
@@ -107,9 +107,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -142,7 +142,7 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 ===== testcase =====
 duplicate barrier ingress still has no quorum
 When two records for the same barrier both carry ingress 0x007,
-then merging leaves 0x007 without quorum; default mode skips the blob and write2x2 mode reports the kept candidate.
+then merging leaves 0x007 without quorum; default mode skips the blob and restore mode reports the kept candidate.
 Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), barriers=[{'ingress': 7}, {'ingress': 7}])
   VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x007)), (key=(1, 0, 2, 1), value=(1, 1, 0x007))])
   VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x007)), (key=(1, 0, 2, 1), value=(1, 1, 0x007))])
@@ -157,9 +157,9 @@ Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_f
 blobsan mirror-3-dc
 Exit Status: 0
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -192,7 +192,7 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 ===== testcase =====
 newer barrier lacks quorum
 When confirmed barrier record (2, 1) is followed by unconfirmed record (3, 1),
-then default mode selects (2, 1) collecting through (1, 1); write2x2 mode selects (3, 1) collecting through (1, 2); both report a candidate.
+then default mode selects (2, 1) collecting through (1, 1); restore mode selects (3, 1) collecting through (1, 2); both report a candidate.
 Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), barriers=[{}, {'record': (3, 1), 'collect': (1, 2), 'ingress': 0}])
   VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 0, 3, 1), value=(1, 2, 0x000))])
   VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 0, 3, 1), value=(1, 2, 0x000))])
@@ -236,9 +236,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -315,9 +315,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[3:1=>1:2](collect)(keep)
 	Barrier[8]#         soft[3:1=>1:2](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -394,9 +394,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[2:2=>1:2](collect)(keep)
 	Barrier[8]#         soft[2:2=>1:2](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -429,7 +429,7 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 ===== testcase =====
 hard barrier without quorum supersedes soft barrier
 When a confirmed soft barrier and an unconfirmed hard barrier both cover a kept blob,
-then default mode ignores the hard barrier and reports a soft-barrier candidate; write2x2 mode accepts the hard barrier and excludes the blob.
+then default mode ignores the hard barrier and reports a soft-barrier candidate; restore mode accepts the hard barrier and excludes the blob.
 Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), barriers=[{}, {'kind': 'hard', 'record': (3, 1), 'ingress': 0}])
   VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 1, 0x000))])
   VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 1, 0x000))])
@@ -473,5 +473,5 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0

@@ -238,14 +238,14 @@ class ConnectionParams:
         self.cafile = args.cafile
         self.insecure = args.insecure
 
-    def add_host_access_options(self, parser, with_endpoint=True):
+    def add_host_access_options(self, parser, with_endpoint=True, endpoint_required=True):
         self.parser = parser
         parser.add_argument('--verbose', '-v', action='store_true', help='Be verbose during operation')
         parser.add_argument('--debug', '-d', action='store_true', help='Be very verbose during operation')
         parser.add_argument('--quiet', '-q', action='store_true', help="Don't show non-vital messages")
         g = parser.add_argument_group('Server access options')
         if with_endpoint:
-            g.add_argument('--endpoint', '-e', metavar='[PROTOCOL://]HOST[:PORT]', type=str, required=True, action='append', help=ConnectionParams.ENDPOINT_HELP)
+            g.add_argument('--endpoint', '-e', metavar='[PROTOCOL://]HOST[:PORT]', type=str, required=endpoint_required, action='append', help=ConnectionParams.ENDPOINT_HELP)
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
         token_group = g.add_mutually_exclusive_group()
@@ -1466,8 +1466,8 @@ def filter_healthy_groups(groups, base_config, vslot_map):
     return healthy
 
 
-def add_host_access_options(parser):
-    connection_params.add_host_access_options(parser)
+def add_host_access_options(parser, endpoint_required=True):
+    connection_params.add_host_access_options(parser, endpoint_required=endpoint_required)
 
 
 def add_vdisk_ids_option(g, required=False):

@@ -45,9 +45,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Barrier[7]#         soft[2:1=>1:1](collect)
 	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -124,9 +124,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:5:0:100:0]
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:5:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:5:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [0 3 6 1 4 7 2 5 8]
 	KeepMode#           keep
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
@@ -171,9 +171,9 @@ Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_f
 blobsan mirror-3-dc
 Exit Status: 0
 
-blobsan --write2x2-candidates mirror-3-dc
+blobsan --restore-canidates mirror-3-dc
 Exit Status: 0
-Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL inv1_candidate inv2_candidate
 	OrderNums#          [7 1 4 8 2 5 6 0 3]
 	KeepMode#           default
 	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}

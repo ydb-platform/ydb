@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
     library/cpp/streams/bzip2
     ydb/core/blobstorage
     ydb/core/blobstorage/groupinfo

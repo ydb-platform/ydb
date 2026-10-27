@@ -174,14 +174,14 @@ private:
     TMonotonic SessionStartedAt;
 };
 
-TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions)
+TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters)
     : MaxActiveSessions(maxActiveSessions)
 {
     if (counters) {
         ActiveSessionsCounter = counters->GetCounter("ActiveSessions");
         SessionLimitExceeded = counters->GetCounter("SessionLimitExceeded", true);
-        SessionHoldDurationMs = counters->GetHistogram("SessionHoldDurationMs",
-            NMonitoring::ExplicitHistogram({1, 10, 100, 1000, 10000, 30000, 60000}));
+        SessionHoldDurationMs =
+            counters->GetHistogram("SessionHoldDurationMs", NMonitoring::ExplicitHistogram({ 1, 10, 100, 1000, 10000, 30000, 60000 }));
     }
 }
 

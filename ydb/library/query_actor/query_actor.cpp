@@ -7,11 +7,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/protobuf/interop/cast.h>
-
 #include <google/protobuf/util/time_util.h>
+#include <library/cpp/protobuf/interop/cast.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <algorithm>
 
@@ -245,8 +243,7 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
 
     if (operationTimeout) {
         const auto maxTimeout = TDuration::Seconds(google::protobuf::util::TimeUtil::kDurationMaxSeconds);
-        *request.mutable_operation_params()->mutable_operation_timeout() =
-            NProtoInterop::CastToProto(std::min(operationTimeout, maxTimeout));
+        *request.mutable_operation_params()->mutable_operation_timeout() = NProtoInterop::CastToProto(std::min(operationTimeout, maxTimeout));
     }
 
     if (params) {

@@ -63,8 +63,8 @@ private:
 
         const auto& settings = ev->Get()->ExecDataQuerySettings;
         auto operationTimeout = settings.OperationTimeout_;
-        if (!operationTimeout && settings.ClientTimeout_ && settings.ClientTimeout_ != TDuration::Max()
-            && settings.UseClientTimeoutForOperation_) {
+        if (!operationTimeout && settings.ClientTimeout_ && settings.ClientTimeout_ != TDuration::Max() &&
+            settings.UseClientTimeoutForOperation_) {
             operationTimeout = settings.ClientTimeout_;
         }
 

@@ -11,12 +11,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
-
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimrConfig {
@@ -78,7 +76,8 @@ struct IYdbConnection: public TThrRefBase {
     virtual TString GetTablePathPrefixWithoutDb() const = 0;
 };
 
-IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters = {});
+IYdbConnection::TPtr CreateLocalYdbConnection(
+    const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters = {});
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
     const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);

@@ -934,6 +934,31 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
         }
     }
 
+    // A write that does not end on an append block is padded with zeroes, as PDisk does. With sectors a block is
+    // 4064 bytes, so the 4096-byte writes common in PDisk tests take two blocks.
+    Y_UNIT_TEST(UnalignedWriteSizeIsPadded) {
+        for (const bool sectorFormat : {false, true}) {
+            TMockOwner mock(sectorFormat);
+            const ui32 block = mock.AppendBlockSize;
+            const auto [chunkIdx, chunkNonce] = mock.Reserve();
+            Y_UNUSED(chunkNonce);
+            const TString data(4096 + 100, 'q');
+            mock.Send(new NPDisk::TEvChunkWrite(mock.Owner, mock.OwnerRound, chunkIdx, 0,
+                new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)), nullptr, true, 0));
+            UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+
+            const ui32 blocks = (data.size() + block - 1) / block;
+            mock.Send(new NPDisk::TEvChunkRead(mock.Owner, mock.OwnerRound, chunkIdx, 0, blocks * block, 0, nullptr));
+            auto res = mock.Wait<NPDisk::TEvChunkReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(res->Get()->Data.IsReadable());
+            const TRcBuf read = res->Get()->Data.ToString();
+            UNIT_ASSERT(TString(read.data(), data.size()) == data);
+            UNIT_ASSERT(TString(read.data() + data.size(), read.size() - data.size())
+                == TString(read.size() - data.size(), '\0'));
+        }
+    }
+
     Y_UNIT_TEST(ChunkLockAndUnlock) {
         TMockOwner mock(false);
         const ui32 freeChunks = mock.GetFreeChunks();

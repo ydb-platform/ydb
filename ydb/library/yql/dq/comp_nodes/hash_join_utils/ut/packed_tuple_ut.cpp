@@ -119,11 +119,11 @@ Y_UNIT_TEST(CreateLayout) {
 
 template <size_t ColsNum>
 static void TestPackFixedColumnsRoundTrip(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&),
+    const std::array<size_t, ColsNum>& colSizes, size_t expectedRowSize) {
     if (!NX86::HaveAVX2()) {
         return;
     }
-    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&),
-    const std::array<size_t, ColsNum>& colSizes, size_t expectedRowSize) {
 
     TScopedAlloc alloc(__LOCATION__);
 

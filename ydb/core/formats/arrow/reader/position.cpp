@@ -152,18 +152,13 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     return *pos;
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch,
-    const std::vector<std::string>& columns, const std::vector<NScheme::TTypeInfo>& logicalTypes)
-    : LogicalTypes(logicalTypes) {
-    for (auto&& i : columns) {
-        auto c = batch->GetAccessorByNameOptional(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
-        Columns.emplace_back(c);
-        auto f = batch->GetSchema()->GetFieldByName(i);
-        AFL_VERIFY(f);
-        Fields.emplace_back(f);
-    }
-    BuildPosition(position);
+void TSortableScanData::AddColumn(const std::shared_ptr<TGeneralContainer>& batch, const std::string& name) {
+    auto c = batch->GetAccessorByNameOptional(name);
+    AFL_VERIFY(c)("column_name", name)("batch", batch->DebugString());
+    Columns.emplace_back(c);
+    auto f = batch->GetSchema()->GetFieldByName(name);
+    AFL_VERIFY(f);
+    Fields.emplace_back(f);
 }
 
 TSortableScanData::TSortableScanData(
@@ -174,18 +169,13 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::string>& columns, const std::vector<NScheme::TTypeInfo>& logicalTypes)
-    : LogicalTypes(logicalTypes) {
-    for (auto&& i : columns) {
-        auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
-        Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
-        auto f = batch->schema()->GetFieldByName(i);
-        AFL_VERIFY(f);
-        Fields.emplace_back(f);
-    }
-    BuildPosition(position);
+void TSortableScanData::AddColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const std::string& name) {
+    auto c = batch->GetColumnByName(name);
+    AFL_VERIFY(c)("column_name", name)("batch_names", JoinSeq(",", batch->schema()->field_names()));
+    Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
+    auto f = batch->schema()->GetFieldByName(name);
+    AFL_VERIFY(f);
+    Fields.emplace_back(f);
 }
 
 TSortableScanData::TSortableScanData(
@@ -198,18 +188,13 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes)
-    : LogicalTypes(logicalTypes) {
-    for (auto&& i : columns) {
-        auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
-        Columns.emplace_back(std::make_shared<NAccessor::TTrivialChunkedArray>(c));
-        auto f = batch->schema()->GetFieldByName(i);
-        AFL_VERIFY(f);
-        Fields.emplace_back(f);
-    }
-    BuildPosition(position);
+void TSortableScanData::AddColumn(const std::shared_ptr<arrow::Table>& batch, const std::string& name) {
+    auto c = batch->GetColumnByName(name);
+    AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", name);
+    Columns.emplace_back(std::make_shared<NAccessor::TTrivialChunkedArray>(c));
+    auto f = batch->schema()->GetFieldByName(name);
+    AFL_VERIFY(f);
+    Fields.emplace_back(f);
 }
 
 TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
@@ -353,12 +338,12 @@ void TCursor::AppendPositionTo(TConstArrayRef<std::unique_ptr<arrow::ArrayBuilde
     }
 }
 
-TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes)
-    : Position(position)
-    , LogicalTypes(logicalTypes) {
-    AFL_VERIFY(logicalTypes.size() == columns.size());
-    PositionAddress = TSortableScanData(position, table, columns, logicalTypes).GetPositionAddress();
+TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema)
+    : Position(position) {
+    const TSortableScanData data(position, table, schema);
+    PositionAddress = data.GetPositionAddress();
+    LogicalTypes = data.GetLogicalTypes();
 }
 
 }   // namespace NKikimr::NArrow::NMerger

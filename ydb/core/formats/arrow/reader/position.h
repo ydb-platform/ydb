@@ -30,13 +30,7 @@ private:
 
 public:
     TCursor() = default;
-    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
-
-    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema)
-        : TCursor(table, position, ColumnNames(schema), ColumnTypes(schema))
-    {
-    }
+    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
 
     TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses,
         const std::vector<NScheme::TTypeInfo>& logicalTypes)
@@ -87,6 +81,10 @@ private:
     void BuildPosition(const ui64 position);
     ui64 LastInit = 0;
 
+    void AddColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const std::string& name);
+    void AddColumn(const std::shared_ptr<arrow::Table>& batch, const std::string& name);
+    void AddColumn(const std::shared_ptr<TGeneralContainer>& batch, const std::string& name);
+
     bool Contains(const ui64 position) const {
         return StartPosition <= position && position < FinishPosition;
     }
@@ -134,13 +132,30 @@ private:
 public:
     TSortableScanData(
         const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+
+    template <class TRecords>
+    TSortableScanData(const ui64 position, const std::shared_ptr<TRecords>& batch,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+        LogicalTypes.reserve(schema.size());
+        for (const auto& [name, logicalType] : schema) {
+            AddColumn(batch, std::string(name.data(), name.size()));
+            LogicalTypes.emplace_back(logicalType);
+        }
+
+        BuildPosition(position);
+    }
+
+    template <class TRecords>
+    TSortableScanData(const ui64 position, const std::shared_ptr<TRecords>& batch, const std::vector<std::string>& columns,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        : LogicalTypes(logicalTypes) {
+        for (const auto& name : columns) {
+            AddColumn(batch, name);
+        }
+
+        BuildPosition(position);
+    }
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
         const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes)
@@ -279,6 +294,20 @@ protected:
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
+
+    template <class TRecords>
+    void InitBatch(const std::shared_ptr<TRecords>& batch, const std::vector<std::string>& dataColumns) {
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_rows());
+        RecordsCount = batch->num_rows();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+
+        if (dataColumns.size()) {
+            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{});
+        }
+
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+    }
 
     TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting,
         const std::shared_ptr<TSortableScanData>& data)
@@ -451,8 +480,11 @@ public:
     TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position,
         const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const std::vector<std::string>& dataColumns,
         const bool reverseSort)
-        : TSortableBatchPosition(batch, position, ColumnNames(sortingSchema), dataColumns, reverseSort, ColumnTypes(sortingSchema))
-    {
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        InitBatch(batch, dataColumns);
+        Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingSchema);
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     template <class TRecords>
@@ -461,16 +493,8 @@ public:
         : Position(position)
         , ReverseSort(reverseSort) {
         AFL_VERIFY(logicalTypes.size() == sortingColumns.size());
-        Y_ABORT_UNLESS(batch);
-        Y_ABORT_UNLESS(batch->num_rows());
-        RecordsCount = batch->num_rows();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
-
-        if (dataColumns.size()) {
-            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{});
-        }
+        InitBatch(batch, dataColumns);
         Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns, logicalTypes);
-        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 

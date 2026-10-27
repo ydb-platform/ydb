@@ -565,7 +565,7 @@ NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName
     std::shared_ptr<arrow::Table> table =
         arrow::Table::Make(arrow::schema({ arrow::field(columnName, arrow::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
 
-    return NArrow::NMerger::TCursor{ table, 0, { columnName }, { TTypeInfo(NTypeIds::Uint64) } };
+    return NArrow::NMerger::TCursor{ table, 0, { { columnName, TTypeInfo(NTypeIds::Uint64) } } };
 }
 
 THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow::UInt64Array>& array) {

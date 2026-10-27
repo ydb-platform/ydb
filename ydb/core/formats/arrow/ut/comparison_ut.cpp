@@ -206,28 +206,33 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         const std::vector<std::shared_ptr<arrow::RecordBatch>> batches = { makeBatch(one, zero, 7, 100, 99, 10),
             makeBatch(one, zero, 8, 0, 0, 11), makeBatch(one, zero, 8, 1, 0, 12), makeBatch(one, zero, 8, 1, 1, 13),
             makeBatch(twoHundredFiftySix, zero, 0, 0, 0, 20), makeBatch(one, one, 0, 0, 0, 30) };
-        for (const bool reverse : { false, true }) {
-            // The merger must own the schema after the constructor arguments expire.
-            NMerger::TMergePartialStream merger({ { "decimal", decimalType }, { "uuid", uuidType } }, schema, reverse,
-                { { "plan_step", versionType }, { "tx_id", versionType }, { "write_id", versionType } }, std::nullopt, std::nullopt);
-            for (const auto& batch : batches) {
-                merger.AddSource(batch, nullptr, NMerger::TIterationOrder(reverse, 0));
-            }
+        const auto checkMerge = [&](const auto& makeSource) {
+            for (const bool reverse : { false, true }) {
+                // The merger must own the schema after the constructor arguments expire.
+                NMerger::TMergePartialStream merger({ { "decimal", decimalType }, { "uuid", uuidType } }, schema, reverse,
+                    { { "plan_step", versionType }, { "tx_id", versionType }, { "write_id", versionType } }, std::nullopt, std::nullopt);
+                for (const auto& batch : batches) {
+                    merger.AddSource(makeSource(batch), nullptr, NMerger::TIterationOrder(reverse, 0));
+                }
 
-            NMerger::TRecordBatchBuilder builder(schema->fields());
-            merger.DrainAll(builder);
-            const auto result = builder.Finalize();
-            std::vector<ui32> expected = NumericComparison ? std::vector<ui32>{ 13, 30, 20 } : std::vector<ui32>{ 20, 13, 30 };
-            if (reverse) {
-                std::reverse(expected.begin(), expected.end());
-            }
+                NMerger::TRecordBatchBuilder builder(schema->fields());
+                merger.DrainAll(builder);
+                const auto result = builder.Finalize();
+                std::vector<ui32> expected = NumericComparison ? std::vector<ui32>{ 13, 30, 20 } : std::vector<ui32>{ 20, 13, 30 };
+                if (reverse) {
+                    std::reverse(expected.begin(), expected.end());
+                }
 
-            UNIT_ASSERT_VALUES_EQUAL(result->num_rows(), expected.size());
-            const auto& ids = static_cast<const arrow::UInt32Array&>(*result->GetColumnByName("id"));
-            for (ui32 i = 0; i < expected.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL_C(ids.Value(i), expected[i], TStringBuilder() << "reverse=" << reverse << "; row=" << i);
+                UNIT_ASSERT_VALUES_EQUAL(result->num_rows(), expected.size());
+                const auto& ids = static_cast<const arrow::UInt32Array&>(*result->GetColumnByName("id"));
+                for (ui32 i = 0; i < expected.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ids.Value(i), expected[i], TStringBuilder() << "reverse=" << reverse << "; row=" << i);
+                }
             }
-        }
+        };
+        checkMerge([](const auto& batch) { return batch; });
+        checkMerge([](const auto& batch) { return arrow::Table::FromRecordBatches({ batch }).ValueOrDie(); });
+        checkMerge([](const auto& batch) { return std::make_shared<TGeneralContainer>(batch); });
     }
 
     Y_UNIT_TEST(PrimitivePrefixComparison) {

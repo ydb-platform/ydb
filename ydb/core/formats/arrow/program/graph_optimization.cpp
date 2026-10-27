@@ -577,25 +577,10 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     }
 }
 
-// Checkers attach only when this kernel feeds a Filter, or an AND chain that itself feeds a Filter.
-// Re2.Match returns false for a NULL input, so in WHERE an index deny and the kernel agree.
-// ApplyToFilter, which drops the portion, is set only for that filter consumer. A projection keeps
-// the kernel result.
-bool FeedsFilter(const TGraphNode* node) {
-    if (!node || node->GetOutputEdges().size() != 1) {
-        return false;
-    }
-    const TGraphNode* consumer = node->GetOutputEdges().begin()->second;
-    if (consumer->Is(EProcessorType::Filter)) {
-        return true;
-    }
-    if (!consumer->Is(EProcessorType::StreamLogic)) {
-        return false;
-    }
-    const auto logic = consumer->GetProcessorAs<TStreamLogicProcessor>();
-    return logic->GetOperation() == NKernels::EOperation::And && FeedsFilter(consumer);
-}
-
+// ANDs one index check per hint into the kernel result. A check yields a constant column: all false
+// when the index denies the probe, all true otherwise. A deny means no row of the portion contains
+// the probe, and the kernel is false on every such row, so the AND changes no value. The rewrite
+// moves the kernel's only output edge, hence the single-consumer requirement.
 TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -605,7 +590,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
         return false;
     }
     const auto& hints = calc->GetKernelLogic()->GetIndexHints();
-    if (hints.empty() || !FeedsFilter(condNode)) {
+    if (hints.empty() || condNode->GetOutputEdges().size() != 1) {
         return false;
     }
     if (IndexesConstructed.contains(condNode->GetIdentifier())) {

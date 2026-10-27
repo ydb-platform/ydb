@@ -944,10 +944,11 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         return { column->Value(0), column->Value(1) };
     }
 
+    // A projected match gets the same checks as a filtered one, and the projected values stay those of the kernel.
     Y_UNIT_TEST(PatternHintProjection) {
         TPatternSetup setup(3);
         const auto projected = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 0, false), true);
-        UNIT_ASSERT_C(!projected.first.Contains(::ToString(NArrow::NSSA::EProcessorType::CheckIndexData)), projected.first);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountIndexChecks(projected.first), 2, projected.first);
         UNIT_ASSERT_VALUES_EQUAL(Uint8Pair(projected.second), (std::pair<ui8, ui8>(1, 0)));
     }
 

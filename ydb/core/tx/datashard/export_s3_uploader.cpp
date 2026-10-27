@@ -540,13 +540,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"upload", upload});
 
         if (!upload) {
-<<<<<<< HEAD
-            auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
-            this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
-=======
             CreateMultipartUpload();
->>>>>>> dd5bc7af558 (Restart multipart exports with fresh upload sessions (#56756))
         } else if (ForceNewUpload) {
             ForceNewUpload = false;
             UploadId.Clear();

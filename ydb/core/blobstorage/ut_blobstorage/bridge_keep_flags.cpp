@@ -54,11 +54,12 @@ namespace {
             TStringBuilder() << "barrier in effect in GroupId# " << pileGroupId, TDuration::Seconds(1), 300);
     }
 
+    // nodeId: a node of the pile of pileGroupId
     void CollectGarbage(TEnvironmentSetup& env, TEvBlobStorage::TEvCollectGarbage *request,
-            std::optional<ui32> pileGroupId = std::nullopt, ui32 groupId = 0) {
+            std::optional<ui32> pileGroupId = std::nullopt, ui32 groupId = 0, ui32 nodeId = 1) {
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> res;
         if (pileGroupId) {
-            res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, *pileGroupId, 1, request);
+            res = QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(env, *pileGroupId, nodeId, request);
         } else {
             const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
             env.Runtime->WrapInActorContext(edge, [&] {
@@ -68,6 +69,83 @@ namespace {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
     }
+
+    // The blob and its Keep flag are in piles 0 and 1, pile 2 lacks the blob; the barrier is in all piles, with a probe
+    // blob not kept in each to see it in effect
+    struct TThreePileBlob {
+        TEnvironmentSetup Env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        ui32 GroupId = 0;
+        std::vector<ui32> PileGroups;
+        const TString Data = "blob to be restored";
+        const TLogoBlobID Id = TLogoBlobID(100500, 1, 1, 0, Data.size(), 0);
+
+        // what the restore puts of the blob asked for
+        ui32 NumRestorePuts = 0;
+        ui32 NumRestorePutsWithKeep = 0;
+
+        static ui32 NodeOf(ui32 pile) {
+            return 1 + 8 * pile;
+        }
+
+        TThreePileBlob() {
+            Env.CreatePool();
+            Env.Sim(TDuration::Seconds(30));
+            GroupId = Env.GetGroups().front();
+            PileGroups = GetPileGroups(Env, GroupId);
+
+            const TLogoBlobID probe(Id.TabletID(), 1, 2, 0, Data.size(), 0);
+            for (ui32 pile : {0, 1}) {
+                PutToPileGroup(Env, PileGroups[pile], NodeOf(pile), Id, Data);
+                CollectGarbage(Env, new TEvBlobStorage::TEvCollectGarbage(Id.TabletID(), 1, 0, 0, false, 0, 0,
+                    new TVector<TLogoBlobID>{Id}, nullptr, TInstant::Max(), false), PileGroups[pile], 0, NodeOf(pile));
+            }
+            for (ui32 pile : {0, 1, 2}) {
+                PutToPileGroup(Env, PileGroups[pile], NodeOf(pile), probe, Data);
+            }
+            CollectGarbage(Env, new TEvBlobStorage::TEvCollectGarbage(Id.TabletID(), 1, 1, 0, true, 1, 10, nullptr,
+                nullptr, TInstant::Max(), false), {}, GroupId);
+            for (ui32 pile : {0, 1, 2}) {
+                WaitForBarrierInEffect(Env, PileGroups[pile], NodeOf(pile), probe, Data);
+            }
+            for (ui32 pile : {0, 1}) {
+                UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(Env, PileGroups[pile], NodeOf(pile), Id, Data), NKikimrProto::OK);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(Env, PileGroups[2], NodeOf(2), Id, Data), NKikimrProto::NODATA);
+        }
+
+        bool IsToBridgeProxy(const IEventHandle& ev) {
+            IActor *actor = Env.Runtime->GetActor(ev.GetRecipientRewrite());
+            return actor && TypeName(*actor).Contains("TBridgedBlobStorageProxyActor");
+        }
+
+        // counts the restore puts of the blob and the Keep flag they carry
+        void CountRestorePut(IEventHandle& ev) {
+            if (ev.GetTypeRewrite() == TEvBlobStorage::EvPut && ev.HasEvent()) {
+                auto *msg = ev.Get<TEvBlobStorage::TEvPut>();
+                if (msg->Id == Id && msg->WriteSource == TWriteSource::BridgeProxyRestorePut) {
+                    ++NumRestorePuts;
+                    NumRestorePutsWithKeep += msg->IssueKeepFlag;
+                }
+            }
+        }
+
+        // the copy restored into pile 2 is behind the barrier there, so it stays only if it is kept
+        void CheckRestoredAndKept() {
+            UNIT_ASSERT(NumRestorePuts);
+            UNIT_ASSERT_VALUES_EQUAL(NumRestorePutsWithKeep, NumRestorePuts);
+            const TLogoBlobID probe2(Id.TabletID(), 1, 3, 0, Data.size(), 0);
+            PutToPileGroup(Env, PileGroups[2], NodeOf(2), probe2, Data);
+            WaitForBarrierInEffect(Env, PileGroups[2], NodeOf(2), probe2, Data);
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(Env, PileGroups[2], NodeOf(2), Id, Data), NKikimrProto::OK);
+        }
+    };
 
 } // anonymous
 
@@ -152,6 +230,93 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         UNIT_ASSERT(numDropped); // the blob has been read for restoration
 
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
+    }
+
+    // A Get restoring the blob into pile 2 collects the responses of all piles first. Only the first pile to answer
+    // shows the Keep flag, as if the other one didn't know it yet; a later response without the flag must not erase
+    // it from the restore, whatever the order of the piles.
+    Y_UNIT_TEST(GetRestoreKeepsKeepFlagOfAnyPile) {
+        TThreePileBlob t;
+
+        bool keepSeen = false;
+        ui32 numDropped = 0;
+        t.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            t.CountRestorePut(*ev);
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->HasEvent() && t.IsToBridgeProxy(*ev)) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                    if (auto& r = msg->Responses[i]; r.Id == t.Id && r.Status == NKikimrProto::OK && r.Keep) {
+                        if (std::exchange(keepSeen, true)) {
+                            r.Keep = false;
+                            ++numDropped;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+        const TActorId edge = t.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        t.Env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, t.GroupId, new TEvBlobStorage::TEvGet(t.Id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        auto res = t.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        t.Env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT(res->Get()->Responses[0].Keep);
+        UNIT_ASSERT(numDropped); // the second pile to answer didn't show the flag
+
+        t.CheckRestoredAndKept();
+    }
+
+    // A Range restoring the blob into pile 2: the first pile to answer doesn't show the Keep flag, a later one does.
+    // The restore takes the flag from the later response; the read of the blob for the restore doesn't show it either.
+    Y_UNIT_TEST(RangeRestoreKeepsKeepFlagOfLaterPile) {
+        TThreePileBlob t;
+
+        bool firstRangeSeen = false;
+        ui32 numDropped = 0;
+        t.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            t.CountRestorePut(*ev);
+            if (!ev->HasEvent() || !t.IsToBridgeProxy(*ev)) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvRangeResult) {
+                for (auto& r : ev->Get<TEvBlobStorage::TEvRangeResult>()->Responses) {
+                    if (r.Id == t.Id && r.Keep && !std::exchange(firstRangeSeen, true)) {
+                        r.Keep = false;
+                        ++numDropped;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                    if (auto& r = msg->Responses[i]; r.Id == t.Id && r.Keep) {
+                        r.Keep = false;
+                        ++numDropped;
+                    }
+                }
+            }
+            return true;
+        };
+        const TActorId edge = t.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        t.Env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, t.GroupId, new TEvBlobStorage::TEvRange(t.Id.TabletID(),
+                TLogoBlobID(t.Id.TabletID(), 0, 0, 0, 0, 0),
+                TLogoBlobID(t.Id.TabletID(), Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize,
+                TLogoBlobID::MaxCookie), /*mustRestoreFirst=*/ true, TInstant::Max(), /*isIndexOnly=*/ true));
+        });
+        auto res = t.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        t.Env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses.size(), 1);
+        UNIT_ASSERT(res->Get()->Responses[0].Keep);
+        UNIT_ASSERT(firstRangeSeen);
+        UNIT_ASSERT(numDropped);
+
+        t.CheckRestoredAndKept();
     }
 
 }

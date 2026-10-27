@@ -97,9 +97,21 @@ namespace NKikimr {
                 TRcBuf Buffer;
                 TBridgePileId ReadFrom;
                 TDynBitMap WriteTo;
-                bool IssueKeepFlag = false;
+                // Keep and DoNotKeep seen for this blob in any response, as piles may not all know them yet; the
+                // absence of a flag in one response does not erase what another one showed
+                bool Keep = false;
+                bool DoNotKeep = false;
 
                 TRestoreItem() = default;
+
+                void AddFlags(bool keep, bool doNotKeep) {
+                    Keep |= keep;
+                    DoNotKeep |= doNotKeep;
+                }
+
+                bool IssueKeepFlag() const {
+                    return DoNotKeep < Keep;
+                }
 
                 TRestoreItem(TLogoBlobID id, const TString& buffer)
                     : Id(id)
@@ -310,7 +322,7 @@ namespace NKikimr {
                         RestoreQueue[payload.Index].Buffer = static_cast<TRcBuf>(response.Buffer);
                         // the flag may be known from the earlier response about this blob, while this read may come from
                         // VDisks not knowing it yet
-                        RestoreQueue[payload.Index].IssueKeepFlag |= response.DoNotKeep < response.Keep;
+                        RestoreQueue[payload.Index].AddFlags(response.Keep, response.DoNotKeep);
                         IssueRestorePut(self, payload.Index);
                         return nullptr;
                     } else {
@@ -397,7 +409,7 @@ namespace NKikimr {
                         item.Id = current.Id;
                         item.Buffer = TRcBuf(current.Buffer);
                         item.ReadFrom = pile.BridgePileId;
-                        item.IssueKeepFlag = current.DoNotKeep < current.Keep;
+                        item.AddFlags(current.Keep, current.DoNotKeep);
                     } else if (current.Status == NKikimrProto::NODATA) {
                         item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                         RestoreIndex = Min(RestoreIndex, i); // we gonna restore this
@@ -482,7 +494,7 @@ namespace NKikimr {
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,
                             .DataKind = DataKind,
-                            .IssueKeepFlag = item.IssueKeepFlag,
+                            .IssueKeepFlag = item.IssueKeepFlag(),
                             .IgnoreBlock = true,
                         }), {.Index = index});
                 }
@@ -589,12 +601,17 @@ namespace NKikimr {
                             auto& item = getRestoreItem(*sourceIt);
                             item.ReadFrom = pile.BridgePileId;
                             item.WriteTo |= Processed;
-                            item.IssueKeepFlag = sourceIt->DoNotKeep < sourceIt->Keep;
+                            item.AddFlags(sourceIt->Keep, sourceIt->DoNotKeep);
                             itemsToAdd.push_back(std::move(*sourceIt));
                             ++sourceIt;
                         } else { // items in both ranges, so both present
                             targetIt->Keep |= sourceIt->Keep;
                             targetIt->DoNotKeep |= sourceIt->DoNotKeep;
+                            // every item of the target came with a restore item, which a later pile lacking the blob
+                            // restores from, so it needs the flags too
+                            const auto index = RestoreQueueIndex.find(sourceIt->Id);
+                            Y_ABORT_UNLESS(index != RestoreQueueIndex.end());
+                            RestoreQueue[index->second].AddFlags(sourceIt->Keep, sourceIt->DoNotKeep);
                             Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
                             if (targetIt->Buffer && sourceIt->Buffer) {
                                 Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);

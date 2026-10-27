@@ -3,11 +3,13 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -96,10 +98,10 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
-    Y_UNIT_TEST_TWIN(HnswApiRemainsUnavailable, FlagEnabled) {
+    Y_UNIT_TEST(HnswFeatureFlagRejectsApi) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(FlagEnabled);
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableHnswIndex());
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -138,10 +140,273 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/HnswApiTable", index));
         const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "HNSW index implementation is not available yet");
+        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "EnableHnswIndex");
         TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
     }
 
+    Y_UNIT_TEST_TWIN(HnswRebuildCannotChangeIndexType, ExistingHnsw) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui64 txId = 100;
+        const auto type = ExistingHnsw ? "EIndexTypeGlobalHnsw" : "EIndexTypeGlobalVectorKmeansTree";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+            TableDescription {
+                Name: "VectorType"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx" KeyColumnNames: ["embedding"] Type: )" << type << R"(
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 2 levels: 1
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto posting = DescribePath(runtime, "/MyRoot/VectorType/idx/indexImplPostingTable", true, true, true);
+        bool hasEmbedding = false;
+        for (const auto& column : posting.GetPathDescription().GetTable().GetColumns()) {
+            hasEmbedding |= column.GetName() == "embedding";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(hasEmbedding, ExistingHnsw);
+        Ydb::Table::TableIndex index;
+        index.set_name("idx");
+        index.add_index_columns("embedding");
+        if (ExistingHnsw) {
+            index.mutable_global_vector_kmeans_tree_index();
+        } else {
+            index.mutable_global_hnsw_index();
+        }
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/MyRoot/VectorType");
+        settings.set_is_rebuild(true);
+        *settings.mutable_index() = index;
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+            new TEvIndexBuilder::TEvCreateRequest(++txId, "/MyRoot", std::move(settings)));
+        const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "cannot change index type");
+        const auto desc = DescribePath(runtime, "/MyRoot/VectorType/idx", true, true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTableIndex().GetType(), ExistingHnsw
+            ? NKikimrSchemeOp::EIndexTypeGlobalHnsw : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+    }
+
+
+
+    Y_UNIT_TEST(HnswInlineDefaultsAndCopy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "HnswSource"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx" KeyColumnNames: ["embedding"] Type: EIndexTypeGlobalHnsw
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCopyTable(runtime, ++txId, "/MyRoot", "HnswCopy", "/MyRoot/HnswSource");
+        env.TestWaitNotification(runtime, txId);
+        for (const TString name : {"HnswSource", "HnswCopy"}) {
+            const TString path = TStringBuilder() << "/MyRoot/" << name << "/idx";
+            const auto desc = DescribePath(runtime, path, true, true, true);
+            TestDescribeResult(desc, {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalHnsw),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            const auto& settings = desc.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1u);
+            // Materialized-backup compatibility must use the same embedding layout.
+            const auto base = DescribePath(runtime, TStringBuilder() << "/MyRoot/" << name);
+            NKikimrSchemeOp::TIndexCreationConfig config;
+            config.SetName("idx");
+            config.SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+            config.AddKeyColumnNames("embedding");
+            const auto impl = NTableIndex::CalcIndexImplTables(base.GetPathDescription().GetTable(), config);
+            UNIT_ASSERT_VALUES_EQUAL(impl.size(), 2u);
+            bool hasEmbedding = false;
+            for (const auto& column : impl[NTableIndex::NKMeans::PostingTablePosition].GetColumns()) {
+                hasEmbedding |= column.GetName() == "embedding";
+            }
+            UNIT_ASSERT(hasEmbedding);
+            const auto tablets = GetTableShards(runtime, TTestTxConfig::SchemeShard, path + "/indexImplPostingTable");
+            UNIT_ASSERT(!tablets.empty());
+            for (ui64 tablet : tablets) {
+                auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, tablet)));
+                UNIT_ASSERT(shard);
+                const auto& table = *shard->GetUserTables().begin()->second;
+                UNIT_ASSERT_C(table.HnswSettings, path);
+                UNIT_ASSERT_VALUES_EQUAL(table.HnswSettings->vector_dimension(), 2u);
+                UNIT_ASSERT_VALUES_EQUAL(table.Columns.at(table.HnswVectorColumnTag).Name, "embedding");
+            }
+        }
+    }
+
+    void DoHnswBuildRecovery(bool prefixed, bool cancel, bool embeddingKey = false) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+            Name: "HnswBuild"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint32" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: )" << (embeddingKey ? R"(["key", "embedding"])" : R"(["key"])"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Real float vectors exercise eager finalization as well as clustering.
+        TVector<TString> vectors;
+        TVector<TCell> cells;
+        vectors.reserve(64);
+        for (ui32 key = 0; key < 64; ++key) {
+            const float vector[] = {float(key + 1), float(64 - key)};
+            vectors.emplace_back(reinterpret_cast<const char*>(vector), sizeof(vector));
+            vectors.back().push_back(char(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT));
+            cells.push_back(TCell::Make(key));
+            cells.emplace_back(vectors.back().data(), vectors.back().size());
+            cells.push_back(TCell::Make(ui32(key % 2)));
+            cells.emplace_back("payload", 7);
+        }
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/HnswBuild", 0,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3, 4}, TSerializedCellMatrix(cells, 64, 4), true);
+
+        Ydb::Table::TableIndex index;
+        index.set_name("idx");
+        if (prefixed) {
+            index.add_index_columns("prefix");
+        }
+        index.add_index_columns("embedding");
+        index.add_data_columns("value");
+        auto* tree = index.mutable_global_hnsw_index()->mutable_vector_settings();
+        tree->set_levels(1);
+        tree->set_clusters(1);
+        auto* settings = tree->mutable_settings();
+        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings->set_vector_dimension(2);
+        settings->set_min_rows(1);
+        settings->set_m(8);
+        settings->set_ef_construction(40);
+        settings->set_delta_rows(256);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/HnswBuild", index);
+        runtime.WaitFor("HNSW build creation", [&] { return !blocker.empty(); });
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        blocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildTx);
+        const auto status = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            status.DebugString());
+        UNIT_ASSERT(status.GetIndexBuild().GetSettings().index().has_global_hnsw_index());
+
+        auto check = [&] {
+            const auto desc = DescribePath(runtime, "/MyRoot/HnswBuild/idx", true, true, true);
+            TestDescribeResult(desc, {NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalHnsw),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            const auto& persisted = desc.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            UNIT_ASSERT_VALUES_EQUAL(persisted.SerializeAsString(), tree->SerializeAsString());
+            const auto posting = DescribePath(runtime, "/MyRoot/HnswBuild/idx/indexImplPostingTable", true, true, true);
+            bool embedding = false;
+            for (const auto& column : posting.GetPathDescription().GetTable().GetColumns()) {
+                embedding |= column.GetName() == "embedding";
+            }
+            UNIT_ASSERT(embedding);
+            const auto tablets = GetTableShards(runtime, TTestTxConfig::SchemeShard,
+                "/MyRoot/HnswBuild/idx/indexImplPostingTable");
+            UNIT_ASSERT(!tablets.empty());
+            ui32 rows = 0;
+            for (ui64 tablet : tablets) {
+                const auto& keys = posting.GetPathDescription().GetTable().GetKeyColumnNames();
+                const auto result = ReadTable(runtime, tablet, "indexImplPostingTable",
+                    {keys.begin(), keys.end()}, {"key", "embedding", "value"});
+                const auto value = NClient::TValue::Create(result);
+                const auto list = value["Result"]["List"];
+                for (size_t i = 0; i < list.Size(); ++i) {
+                    const ui32 key = list[i]["key"];
+                    UNIT_ASSERT(key < vectors.size());
+                    UNIT_ASSERT_VALUES_EQUAL(TString(list[i]["embedding"]), vectors[key]);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(list[i]["value"]), "payload");
+                    ++rows;
+                }
+                auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, tablet)));
+                UNIT_ASSERT(shard);
+                const auto& table = *shard->GetUserTables().begin()->second;
+                UNIT_ASSERT(table.HnswSettings);
+                UNIT_ASSERT_VALUES_EQUAL(table.HnswSettings->SerializeAsString(), settings->SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(table.Columns.at(table.HnswVectorColumnTag).Name, "embedding");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(rows, 64u);
+        };
+        check();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (ui64 tablet : GetTableShards(runtime, TTestTxConfig::SchemeShard,
+                "/MyRoot/HnswBuild/idx/indexImplPostingTable")) {
+            RebootTablet(runtime, tablet, runtime.AllocateEdgeActor());
+        }
+        check();
+
+        // A rebuild with omitted settings must preserve the persisted HNSW parameters.
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rebuildBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+        Ydb::Table::TableIndex rebuildIndex = index;
+        rebuildIndex.mutable_global_hnsw_index()->clear_vector_settings();
+        NKikimrIndexBuilder::TIndexBuildSettings rebuild;
+        rebuild.set_source_path("/MyRoot/HnswBuild");
+        rebuild.set_is_rebuild(true);
+        *rebuild.mutable_index() = rebuildIndex;
+        const ui64 rebuildTx = ++txId;
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+            new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot", std::move(rebuild)));
+        const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+            response->Get()->Record.DebugString());
+        runtime.WaitFor("HNSW rebuild creation", [&] { return !rebuildBlocker.empty(); });
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        if (cancel) {
+            TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", rebuildTx);
+        }
+        rebuildBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, rebuildTx);
+        const auto rebuilt = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", rebuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(rebuilt.GetIndexBuild().GetState(),
+            cancel ? Ydb::Table::IndexBuildState::STATE_CANCELLED : Ydb::Table::IndexBuildState::STATE_DONE,
+            rebuilt.DebugString());
+        check();
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(TableName: "HnswBuild" IndexName: "idx")");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswBuild"), {NLs::IndexesCount(0)});
+    }
+
+    Y_UNIT_TEST_QUAD(HnswBuildRecovery, Prefixed, Cancel) {
+        DoHnswBuildRecovery(Prefixed, Cancel);
+    }
+
+    Y_UNIT_TEST(HnswEmbeddingPrimaryKeyBuild) {
+        DoHnswBuildRecovery(false, false, true);
+    }
 
     Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
@@ -682,7 +947,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndex) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected on the schemeshard side too.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -737,7 +1002,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             "rebuild of a non-vector index must fail");
         UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()),
-            "only supported for vector_kmeans_tree");
+            "only supported for vector indexes");
     }
 
     Y_UNIT_TEST(VectorIndexAutodetect) {

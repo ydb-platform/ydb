@@ -51,6 +51,22 @@ namespace NKikimr::NKMeans {
             UNIT_ASSERT(!ValidateHnswSettings(settings, error));
         }
 
+        Y_UNIT_TEST(DefaultRoutingSettings) {
+            auto settings = MakeSettings();
+            settings.clear_clusters();
+            settings.clear_levels();
+            TString error;
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 0, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+            settings.clear_clusters();
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 3ull << 30, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 4u);
+            settings.clear_clusters();
+            UNIT_ASSERT(!AutoSelectHnswSettings(settings, Max<ui64>(), error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "clusters");
+        }
+
         Y_UNIT_TEST(ConstructionResourceLimits) {
             auto settings = MakeSettings();
             auto* vector = settings.mutable_settings();

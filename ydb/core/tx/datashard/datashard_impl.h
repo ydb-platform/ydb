@@ -439,6 +439,7 @@ class TDataShard
             TRowVersion BaseVersion;
             ui64 BuildToken = 0;
             THnswSnapshotScanCallback Finish;
+            std::shared_ptr<THnswSnapshotScanControl> Control;
         };
 
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
@@ -1927,7 +1928,8 @@ public:
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db);
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
-        TTransactionContext& txc, THnswSnapshotScanCallback finish = {});
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {},
+        std::shared_ptr<THnswSnapshotScanControl> control = {});
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
     class TTxRebuildHnswIndex;

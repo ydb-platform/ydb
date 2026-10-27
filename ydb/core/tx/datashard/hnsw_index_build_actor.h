@@ -8,6 +8,12 @@
 
 namespace NKikimr::NDataShard {
 
+    // Accessed only from the DataShard mailbox; ownership survives deferred scan start.
+    struct THnswSnapshotScanControl {
+        ui64 ScanId = 0;
+        bool Cancelled = false;
+    };
+
     struct THnswSnapshotScanResult {
         std::vector<std::pair<TString, TString>> Rows;
         std::shared_ptr<void> MemoryReservation;

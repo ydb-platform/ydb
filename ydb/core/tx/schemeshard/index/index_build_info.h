@@ -735,7 +735,10 @@ public:
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
+                    const bool valid = indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(desc.settings(), createError)
+                        : NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError);
+                    Y_ENSURE(valid, createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();

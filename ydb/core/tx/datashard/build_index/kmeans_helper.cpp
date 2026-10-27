@@ -100,7 +100,12 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
         dataPos = result.size();
     } else {
         embeddingPos = result.size();
-        dataPos = result.size() + (forBuild ? 0 : 1); // always include embedding in build tables
+        // The embedding is already emitted as part of sourcePk when it belongs
+        // to the main table key. Keep scanning it for distance calculations,
+        // but don't duplicate it among the output value cells.
+        const bool embeddingIsKey = std::find(table.KeyColumnIds.begin(), table.KeyColumnIds.end(), embeddingTag)
+            != table.KeyColumnIds.end();
+        dataPos = result.size() + (!forBuild || embeddingIsKey);
         result.push_back(embeddingTag);
     }
     for (const auto& column : data) {

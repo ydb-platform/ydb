@@ -80,6 +80,7 @@ enum class EExecutionUnitKind: ui32 {
     RotateCdcStream,
     MoveIndex,
     Truncate,
+    BuildHnswIndex,
     Count,
     Unspecified
 };

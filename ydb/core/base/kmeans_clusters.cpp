@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKMeans {
 
@@ -905,6 +906,22 @@ bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TStrin
 
 bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error, true);
+}
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error) {
+    if (!settings.has_levels() || !settings.levels()) {
+        settings.set_levels(1);
+    }
+    if (!settings.has_clusters() || !settings.clusters()) {
+        const ui64 clusters = dataSizeBytes / 1_GB + 1;
+        // Validate before narrowing to the protobuf's uint32 field. Keep the
+        // routing-table bounds enforced for explicit settings as well.
+        if (!ValidateSettingInRange("clusters", clusters, 1, MaxClusters, error)) {
+            return false;
+        }
+        settings.set_clusters(clusters);
+    }
+    return ValidateHnswSettingsPartial(settings, error);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

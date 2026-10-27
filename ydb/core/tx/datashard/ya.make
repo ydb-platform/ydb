@@ -4,6 +4,8 @@ SRCS(
     datashard_hnsw.cpp
     hnsw_index_build_actor.cpp
     hnsw_index_build_actor.h
+    hnsw_index_build_unit.cpp
+    hnsw_index_build_unit.h
     hnsw_memory_tracker.h
     datashard.h
     datashard__engine_host.h

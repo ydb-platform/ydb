@@ -74,6 +74,8 @@ bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TSt
 bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error);
+
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 

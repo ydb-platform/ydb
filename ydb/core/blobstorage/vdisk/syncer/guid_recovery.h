@@ -127,6 +127,8 @@ namespace NKikimr {
         TEventLocal<TEvVDiskGuidRecovered, TEvBlobStorage::EvVDiskGuidRecovered> {
 
         NSyncer::TOutcome Outcome;
+        std::optional<NKikimrBlobStorage::TSyncGuidHistory> GuidHistory;
+        bool GuidHistoryComplete = false;
 
         TEvVDiskGuidRecovered(const NSyncer::TOutcome &outcome)
             : Outcome(outcome)
@@ -145,6 +147,7 @@ namespace NKikimr {
                                          const TActorId &committerId,
                                          const TActorId &notifyId,
                                          const NSyncer::TLocalSyncerState &localState,
+                                         const NKikimrBlobStorage::TSyncGuidHistory& guidHistory,
                                          bool readOnly);
 
 } // NKikimr

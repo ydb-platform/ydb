@@ -419,6 +419,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     }
 
     if (CommonSourcePath) {
+        AdjustPathToDatabase(CommonSourcePath, config);
         settings.SourcePath(CommonSourcePath);
     }
 

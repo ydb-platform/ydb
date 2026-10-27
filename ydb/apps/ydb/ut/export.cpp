@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(ExportTest) {
             .ExpectS3Endpoint(TEST_S3_ENDPOINT)
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
-            .ExpectCommonSourcePrefix("root/path")
+            .ExpectCommonSourcePrefix("/test_database/root/path")
             .ExpectCommonDstPrefix("dest/prefix")
             .ExpectItem("/test_database/root/path/path", "")
             .ExpectItem("/test_database/root/path/srcpath", "dstpath");

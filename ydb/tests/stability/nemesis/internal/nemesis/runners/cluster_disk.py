@@ -163,6 +163,10 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
 
     def __init__(self) -> None:
         super().__init__(scope="disk")
+        # External clusters keep the historical "restore every observed non-ACTIVE
+        # drive" state. Local harness runs track only drives changed by this actor.
+        self._states: dict = {}
+        self._broken_drives: set = set()
         self._changed_drives: dict[str, set[tuple[int, str]]] = {}
 
     def _state_ready(self, cluster) -> bool:
@@ -170,6 +174,24 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
             self._logger.info("Disk break is prohibited (< 8 nodes).")
             return False
         return blobstorage.cluster_has_no_unreplicated_vdisks(cluster, 1, self._logger)
+
+    def _refresh_drive_states_for_node(self, cluster, node_id: int) -> None:
+        node = cluster.nodes.get(node_id)
+        if node is None:
+            return
+        self._broken_drives = {
+            (nid, path) for nid, path in self._broken_drives if nid != node_id
+        }
+        self._states[node_id] = {}
+        drives = cluster.client.read_drive_status(
+            node.host,
+            node.ic_port,
+        ).BlobStorageConfigResponse
+        for status in drives.Status:
+            for drive in status.DriveStatus:
+                self._states[node_id][drive.Path] = drive.Status
+                if drive.Status != EDriveStatus.ACTIVE:
+                    self._broken_drives.add((node_id, drive.Path))
 
     def _drive_states_for_node(self, cluster, node_id: int) -> dict[str, EDriveStatus]:
         node = cluster.nodes.get(node_id)
@@ -236,6 +258,36 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
 
     def inject_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            self._inject_local_fault(payload)
+        else:
+            self._inject_external_fault(payload)
+
+    def _inject_external_fault(self, payload: dict) -> None:
+        cluster = require_external_cluster()
+        if not self._state_ready(cluster):
+            return
+        target = target_from_payload(payload)
+        node_id_hint = target.node_id if target is not None else None
+        host = (target.host if target is not None else None) or _host_from_payload(payload)
+        node_id, _node = _resolve_node_id_and_node(cluster, host, node_id_hint)
+        if node_id is None:
+            self._logger.error(
+                "SafelyBreakDisk: unknown host %r / node_id %r (not in cluster.yaml nodes)",
+                host,
+                node_id_hint,
+            )
+            return
+        self.extract_fault(payload)
+        self._refresh_drive_states_for_node(cluster, node_id)
+        paths = self._states.get(node_id) or {}
+        if paths:
+            path = random.choice(list(paths.keys()))
+            if self._change_drive_status(cluster, node_id, path, EDriveStatus.BROKEN):
+                self.on_success_inject_fault()
+        self._refresh_drive_states_for_node(cluster, node_id)
+
+    def _inject_local_fault(self, payload: dict) -> None:
         cluster = require_cluster()
         if not self._state_ready(cluster):
             return
@@ -251,17 +303,15 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
             )
             return
         states = self._drive_states_for_node(cluster, node_id)
-        active_paths = [
-            path
-            for path, status in states.items()
-            if status == EDriveStatus.ACTIVE
-        ]
-        if local_harness_mode():
-            active_paths = self._local_spare_paths(
-                cluster,
-                node_id,
-                active_paths,
-            )
+        active_paths = self._local_spare_paths(
+            cluster,
+            node_id,
+            [
+                path
+                for path, status in states.items()
+                if status == EDriveStatus.ACTIVE
+            ],
+        )
         if not active_paths:
             raise RuntimeError(
                 f"SafelyBreakDisk: node_id={node_id} has no eligible ACTIVE drive"
@@ -306,6 +356,9 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
+        if not local_harness_mode():
+            self._extract_external_fault()
+            return
         cluster = require_cluster()
         target = target_from_payload(payload)
         identities = (
@@ -334,6 +387,13 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
             raise RuntimeError(
                 f"SafelyBreakDisk: failed to restore drives: {failures}"
             )
+        self.on_success_extract_fault()
+
+    def _extract_external_fault(self) -> None:
+        cluster = require_external_cluster()
+        for node_id, path in list(self._broken_drives):
+            self._change_drive_status(cluster, node_id, path, EDriveStatus.ACTIVE)
+        self._broken_drives.clear()
         self.on_success_extract_fault()
 
     def changed_drives(self) -> dict[str, tuple[tuple[int, str], ...]]:

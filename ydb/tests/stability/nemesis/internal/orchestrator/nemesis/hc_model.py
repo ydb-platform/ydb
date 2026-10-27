@@ -67,14 +67,6 @@ class HcSnapshot:
             return True
         return all(overall == GREEN for overall in self.storage_by_node.get(node_id, {}).values())
 
-    def all_storage_green(self) -> bool:
-        """True only when storage was observed and every pdisk/vdisk is GREEN."""
-        return bool(self.storage_by_node) and all(
-            overall == GREEN
-            for entities in self.storage_by_node.values()
-            for overall in entities.values()
-        )
-
     def host_clock_skew_green(self, host: str) -> bool:
         """Per-host clock skew.
 
@@ -211,10 +203,10 @@ def node_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
 
 
 def disk_predicate(target: ChaosTarget) -> Callable[[HcSnapshot], bool]:
-    """The target endpoint and all observed cluster storage must be GREEN."""
+    """Node-scoped: all of the node's disks are GREEN."""
 
     def recovered(snap: HcSnapshot) -> bool:
-        return target.host in snap.good and snap.all_storage_green()
+        return target.host in snap.good and snap.storage_green(target.node_id)
 
     return recovered
 

@@ -160,3 +160,52 @@ def test_local_disk_runner_compensates_for_partial_bsc_failure():
         ("/active", EDriveStatus.ACTIVE),
     ]
     assert runner.changed_drives() == {}
+
+
+def test_external_disk_runner_keeps_legacy_selection_and_restore(monkeypatch):
+    client = _Client()
+    cluster = SimpleNamespace(
+        client=client,
+        nodes={1: SimpleNamespace(host="node-1", ic_port=19001)},
+    )
+    monkeypatch.setattr(cluster_disk, "require_external_cluster", lambda: cluster)
+    monkeypatch.setattr(cluster_disk.random, "choice", lambda paths: "/active")
+    runner = ClusterSafelyBreakDiskNemesis()
+    runner._state_ready = lambda cluster: True
+    succeeded = []
+    runner.on_success_inject_fault = lambda: succeeded.append("inject")
+    runner.on_success_extract_fault = lambda: succeeded.append("extract")
+
+    runner.inject_fault({"host": "node-1"})
+    runner.extract_fault()
+
+    assert succeeded == ["extract", "inject", "extract"]
+    assert client.states == {
+        "/active": EDriveStatus.ACTIVE,
+        "/preexisting-broken": EDriveStatus.ACTIVE,
+    }
+    assert client.updates[0] == ("/active", EDriveStatus.BROKEN)
+    assert set(client.updates[1:]) == {
+        ("/active", EDriveStatus.ACTIVE),
+        ("/preexisting-broken", EDriveStatus.ACTIVE),
+    }
+
+
+def test_external_disk_runner_tolerates_rejected_status_change(monkeypatch):
+    client = _Client()
+    client.fail_break_after_mutation = True
+    cluster = SimpleNamespace(
+        client=client,
+        nodes={1: SimpleNamespace(host="node-1", ic_port=19001)},
+    )
+    monkeypatch.setattr(cluster_disk, "require_external_cluster", lambda: cluster)
+    monkeypatch.setattr(cluster_disk.random, "choice", lambda paths: "/active")
+    runner = ClusterSafelyBreakDiskNemesis()
+    runner._state_ready = lambda cluster: True
+    succeeded = []
+    runner.on_success_inject_fault = lambda: succeeded.append("inject")
+    runner.on_success_extract_fault = lambda: succeeded.append("extract")
+
+    runner.inject_fault({"host": "node-1"})
+
+    assert succeeded == ["extract"]

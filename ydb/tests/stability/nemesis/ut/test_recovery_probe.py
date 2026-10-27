@@ -191,7 +191,7 @@ class TestSnapshot:
             kind=TargetKind.DISK,
             scope=ImpactScope.DISK,
         )
-        globally_degraded = build_snapshot(
+        other_node_degraded = build_snapshot(
             {
                 "h1": _hc("h1", vdisks=[_vdisk("1-1-0")]),
                 "h2": _hc("h2", vdisks=[_vdisk("2-1-0", "BLUE")]),
@@ -200,23 +200,14 @@ class TestSnapshot:
             last_update=10.0,
             max_age_sec=180.0,
         )
-        assert not disk_recovered(globally_degraded)
-        assert disk_recovered(
-            build_snapshot(
-                _healthy_results(),
-                now=10.0,
-                last_update=10.0,
-                max_age_sec=180.0,
-            )
+        assert disk_recovered(other_node_degraded)
+        target_degraded = build_snapshot(
+            {"h1": _hc("h1", vdisks=[_vdisk("1-1-0", "BLUE")])},
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
         )
-        assert not disk_recovered(
-            build_snapshot(
-                {"h1": _hc("h1")},
-                now=10.0,
-                last_update=10.0,
-                max_age_sec=180.0,
-            )
-        )
+        assert not disk_recovered(target_degraded)
 
 
 class TestNodeAndSlotRecovery:

@@ -11,6 +11,7 @@ import pytest
 import yatest.common
 import ydb
 from google.protobuf.json_format import MessageToDict
+from ydb.core.protos import msgbus_pb2
 from ydb.public.api.protos import ydb_topic_pb2
 from ydb.public.api.protos.draft import ydb_replication_pb2
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -65,7 +66,9 @@ def data(client, query):
 
 
 def path_id(cluster, path):
-    description = cluster.client.describe(path, 'root@builtin')
+    request = msgbus_pb2.TSchemeDescribe(Path=path, SecurityToken='root@builtin')
+    request.Options.ShowPrivateTable = True  # CDC stream paths are private schema objects.
+    description = cluster.client.send(request, 'SchemeDescribe')
     assert description.HasField('PathDescription'), str(description)
     entry = description.PathDescription.Self
     assert entry.PathId and entry.SchemeshardId, str(description)
@@ -88,7 +91,8 @@ def describe_replication(cluster):
 
 def source_config(cluster, stream):
     with grpc.insecure_channel(f'localhost:{cluster.nodes[1].grpc_port}') as channel:
-        call = channel.unary_unary('/Ydb.Topic.V1.TopicService/DescribeTopic',
+        call = channel.unary_unary(
+            '/Ydb.Topic.V1.TopicService/DescribeTopic',
             request_serializer=ydb_topic_pb2.DescribeTopicRequest.SerializeToString,
             response_deserializer=ydb_topic_pb2.DescribeTopicResponse.FromString)
         response = call(ydb_topic_pb2.DescribeTopicRequest(path=stream),
@@ -108,7 +112,8 @@ def make_cluster(name, base, binary, force):
     os.makedirs(disks, exist_ok=True)
     # Distinct output paths also keep the generated configuration/disk paths
     # independent. A RAM PDisk would invalidate the restart assertion.
-    config = KikimrConfigGenerator(nodes=1, binary_paths=[binary], output_path=output,
+    config = KikimrConfigGenerator(
+        nodes=1, binary_paths=[binary], output_path=output, static_pdisk_size=8 * 1024**3,
         pdisk_store_path=disks, use_in_memory_pdisks=False, extra_grpc_services=['replication'],
         extra_feature_flags=['enable_async_replication_force_drop'] if force else [])
     return KiKiMR(config, cluster_name=name)
@@ -202,3 +207,9 @@ def test_force_drop_after_physical_source_outage(cascade):
             client.stop()
         destination.stop()
         source.stop()
+        # YA result accumulation expands sparse files. Test data is no longer
+        # needed after both processes stop; retain logs/config/evidence only.
+        for cluster_name in ('source', 'destination'):
+            for filename in os.listdir(os.path.join(base, cluster_name, 'disks')):
+                if filename.startswith('pdisk') and filename.endswith('.data'):
+                    os.unlink(os.path.join(base, cluster_name, 'disks', filename))

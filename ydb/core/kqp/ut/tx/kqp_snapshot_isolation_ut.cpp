@@ -59,6 +59,72 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.Execute();
     }
 
+    class TDeleteInsertSameKey : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto session = Kikimr->GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE `/Root/DeleteInsert` (
+                    id Int32 NOT NULL,
+                    k Int32,
+                    c Utf8,
+                    PRIMARY KEY (id)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const TVector<TString> prefixes = {
+                "SELECT c FROM `/Root/DeleteInsert` WHERE id = 7;",
+                "SELECT c FROM `/Root/DeleteInsert` WHERE id = 500;",
+                "SELECT c FROM `/Root/DeleteInsert` WHERE id BETWEEN 7 AND 500;",
+                "UPDATE `/Root/DeleteInsert` SET c = 'updated' WHERE id = 8;",
+            };
+            for (const auto& prefix : prefixes) {
+                result = session.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/DeleteInsert` (id, k, c)
+                    VALUES (7, 7, 'seven'), (8, 8, 'eight'), (500, 500, 'old');
+                )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = session.ExecuteQuery(prefix + R"(
+                    DELETE FROM `/Root/DeleteInsert` WHERE id = 500;
+                    INSERT INTO `/Root/DeleteInsert` (id, k, c) VALUES (500, 5000, 'new');
+                )", TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, prefix << ": " << result.GetIssues().ToString());
+
+                result = session.ExecuteQuery(R"(
+                    SELECT id, k, c FROM `/Root/DeleteInsert` WHERE id = 500;
+                )", TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[500;[5000];["new"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            result = session.ExecuteQuery(R"(
+                SELECT c FROM `/Root/DeleteInsert` WHERE id = 7;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+            result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/DeleteInsert` WHERE id = 500;
+                INSERT INTO `/Root/DeleteInsert` (id, k, c) VALUES (500, 6000, 'interactive');
+            )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session.ExecuteQuery(R"(
+                SELECT c FROM `/Root/DeleteInsert` WHERE id = 7;
+                INSERT INTO `/Root/DeleteInsert` (id, k, c) VALUES (500, 7000, 'duplicate');
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(DeleteInsertSameKeySnapshotRW) {
+        TDeleteInsertSameKey tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
     class TConflictWrite : public TTableDataModificationTester {
         std::string WriteOperation = "insert";
 

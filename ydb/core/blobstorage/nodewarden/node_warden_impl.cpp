@@ -207,6 +207,9 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenAcquireBlobDepotS3Router, Handle);
         hFunc(TEvNodeWardenReleaseBlobDepotS3Router, Handle);
 
+        hFunc(TEvInterpilePut, Handle);
+        hFunc(TEvBlobStorage::TEvPutResult, Handle);
+
         default:
             EnqueuePendingMessage(ev);
             break;

@@ -1232,6 +1232,7 @@ sftp_open(LIBSSH2_SFTP *sftp, const char *filename,
                                "got HANDLE FXOK!");
 
                 LIBSSH2_FREE(session, data);
+                data = NULL;
 
                 /* silly situation, but check for a HANDLE */
                 rc = sftp_packet_require(sftp, SSH_FXP_HANDLE,

@@ -81,6 +81,20 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         TVector<TKeyValue> Rows;
 
         void ApplyTo(const TTableId& tableId, NEvents::TDataEvents::TEvWrite* req) {
+            if (Type == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE) {
+                TVector<TCell> cells;
+                cells.reserve(Rows.size());
+                for (const auto& row : Rows) {
+                    cells.push_back(TCell::Make(row.Key));
+                }
+
+                TSerializedCellMatrix matrix(cells, Rows.size(), 1);
+                TString blobData = matrix.ReleaseBuffer();
+                ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*req).AddDataToPayload(std::move(blobData));
+                req->AddOperation(Type, tableId, { 1 }, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+                return;
+            }
+
             TVector<TCell> cells;
             cells.reserve(Rows.size() * 2);
             for (const auto& row : Rows) {
@@ -113,6 +127,17 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         static TOperation Insert(TVector<TKeyValue> rows) {
             return TOperation{
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                std::move(rows),
+            };
+        }
+
+        static TOperation Delete(i32 key) {
+            return Delete({ { key, 0 } });
+        }
+
+        static TOperation Delete(TVector<TKeyValue> rows) {
+            return TOperation{
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
                 std::move(rows),
             };
         }
@@ -1722,6 +1747,155 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         // Note: currently read iterator reports broken locks discovered in subsequent chunks
         UNIT_ASSERT_VALUES_EQUAL(tx2.Locks.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(tx2.Locks.back().GetCounter(), ui64(TSysTables::TLocksTable::TLock::ErrorBroken));
+    }
+
+    Y_UNIT_TEST_TWIN(DeleteInsertSameRowImmediateCommit, StandaloneDelete) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (1, 1001);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTransactionState tx1(runtime);
+
+        // establish the snapshot
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx1.ReadKey(tableId, shards.at(0), 2),
+            "");
+
+        if (StandaloneDelete) {
+            // delete the row with an immediate write
+            UNIT_ASSERT_VALUES_EQUAL(
+                tx1.Write(tableId, shards.at(0), TOperation::Delete(1)),
+                "OK");
+
+            // Try inserting a different value for the same key and committing in a single EvWrite
+            UNIT_ASSERT_VALUES_EQUAL(
+                tx1.WriteCommit(
+                    tableId, shards.at(0),
+                    TOperation::Insert(1, 1002)),
+                "OK");
+        } else {
+            // Try deleting the row, inserting it, and committing in a single EvWrite
+            UNIT_ASSERT_VALUES_EQUAL(
+                tx1.WriteCommit(
+                    tableId, shards.at(0),
+                    TOperation::Delete(1),
+                    TOperation::Insert(1, 1002)),
+                "OK");
+        }
+
+        // We should observe effects from tx1
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1002 } }");
+    }
+
+    Y_UNIT_TEST_TWIN(DeleteInsertSameRowDistributedCommit, StandaloneDelete) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10))
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (1, 1001);
+            UPSERT INTO `/Root/table` (key, value) VALUES (11, 1101);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        TTransactionState tx1(runtime);
+
+        // establish the snapshot
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx1.ReadKey(tableId, shards.at(0), 2),
+            "");
+
+
+        if (StandaloneDelete) {
+            // delete the rows with immediate writes
+            UNIT_ASSERT_VALUES_EQUAL(
+                tx1.Write(tableId, shards.at(0), TOperation::Delete(1)),
+                "OK");
+            UNIT_ASSERT_VALUES_EQUAL(
+                tx1.Write(tableId, shards.at(1), TOperation::Delete(11)),
+                "OK");
+
+            // Now insert new values for the same key and commit with a distributed commit
+            tx1.InitCommit(shards);
+            auto write1 = tx1.PrepareCommit(
+                    tableId, shards.at(0),
+                    TOperation::Insert(1, 1002));
+            auto write2 = tx1.PrepareCommit(
+                    tableId, shards.at(1),
+                    TOperation::Insert(11, 1102));
+            tx1.SendPlan();
+
+            UNIT_ASSERT_VALUES_EQUAL(write1.NextString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(write2.NextString(), "OK");
+        } else {
+            tx1.InitCommit(shards);
+            auto write1 = tx1.PrepareCommit(
+                    tableId, shards.at(0),
+                    TOperation::Delete(1),
+                    TOperation::Insert(1, 1002));
+            auto write2 = tx1.PrepareCommit(
+                    tableId, shards.at(1),
+                    TOperation::Delete(11),
+                    TOperation::Insert(11, 1102));
+            tx1.SendPlan();
+
+            UNIT_ASSERT_VALUES_EQUAL(write1.NextString(), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(write2.NextString(), "OK");
+        }
+
+        // We should observe effects from tx1
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1002 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1102 } }");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation)

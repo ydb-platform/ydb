@@ -59,8 +59,15 @@ void TImportActor::ScheduleTimeoutCheck() {
     Schedule(TimeoutCheckInterval, new NActors::TEvents::TEvWakeup());
 }
 
-void TImportActor::HandleWakeup() {
-    if (Stage == EStage::Finished || Stage == EStage::WaitSaveCursor) {
+void TImportActor::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+    if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished() || Stage == EStage::Finished ||
+        Stage == EStage::WaitSaveCursor) {
+        return;
+    }
+    if (ev->Get()->Tag == WriteRetryTag) {
+        if (Stage == EStage::WaitWriting) {
+            SendWriteRequest();
+        }
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
@@ -103,6 +110,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     ImportSession->Abort(errorMessage);
     PendingBlobs.clear();
     PendingPayloadSchema.clear();
+    WriteRetryState.reset();
     if (ImportActorId) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
@@ -110,7 +118,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     if (Stage == EStage::WaitData) {
         Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
     } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
+        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, false);
     }
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
@@ -191,12 +199,21 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
 }
 
 void TImportActor::SendNextBlob() {
+    static const auto retryPolicy = IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
+        return ERetryErrorClass::LongRetry;
+    }, TDuration::Seconds(1), TDuration::Seconds(1), TDuration::Seconds(30));
+    WriteRetryState = retryPolicy->CreateRetryState();
+    Counters.OnWriteStarted();
+    WriteStartTime = TInstant::Now();
+    SendWriteRequest();
+}
+
+void TImportActor::SendWriteRequest() {
     AFL_VERIFY(!PendingBlobs.empty());
     AFL_VERIFY(PendingPayloadSchema);
     auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
-    writer.AddDataToPayload(std::move(PendingBlobs.front()));
-    PendingBlobs.pop_front();
+    writer.AddDataToPayload(TString(PendingBlobs.front()));
 
     auto* operation = writeEvent->Record.AddOperations();
     operation->SetPayloadSchema(PendingPayloadSchema);
@@ -207,8 +224,6 @@ void TImportActor::SendNextBlob() {
     operation->MutableTableId()->SetSchemaVersion(ImportSession->GetTask().GetSchemaVersion().value_or(0));
     operation->SetIsBulk(true);
     Send(TabletActorId, writeEvent.Release());
-    Counters.OnWriteStarted();
-    WriteStartTime = TInstant::Now();
 }
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -217,8 +232,22 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
             "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
         return;
     }
-    Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    AFL_VERIFY(ev->Get()->IsComplete())("error", ev->Get()->GetError());
+    if (!ev->Get()->IsComplete()) {
+        Counters.OnError();
+        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            // Keep the cursor and the write timeout unchanged until this blob is written.
+            if (const auto delay = WriteRetryState->GetNextRetryDelay()) {
+                Schedule(*delay, new NActors::TEvents::TEvWakeup(WriteRetryTag));
+                return;
+            }
+        }
+        AbortImport(ev->Get()->GetError());
+        return;
+    }
+    Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, true);
+    AFL_VERIFY(!PendingBlobs.empty());
+    PendingBlobs.pop_front();
+    WriteRetryState.reset();
     if (!PendingBlobs.empty()) {
         SendNextBlob();
         StageStartTime = TInstant::Now();

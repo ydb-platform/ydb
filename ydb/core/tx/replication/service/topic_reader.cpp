@@ -88,15 +88,20 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Y_ABORT_UNLESS(!DecompressQueue.empty());
         auto& requestData = DecompressQueue.front();
         auto& readResult = requestData.DataEv->Get()->Result;
-        for (auto& msg : readResult.Messages) {
-            bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
-            if (compressed) {
-                if (!requestData.DecompressionDone && Settings.ReportStats_) {
-                    SendOperationChange(EWorkerOperation::DECOMPRESS);
+        try {
+            for (auto& msg : readResult.Messages) {
+                bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
+                if (compressed) {
+                    if (!requestData.DecompressionDone && Settings.ReportStats_) {
+                        SendOperationChange(EWorkerOperation::DECOMPRESS);
+                    }
+                    DecompressMessage(msg);
+                    requestData.DecompressionDone = true;
                 }
-                requestData.DecompressionDone = true;
-                DecompressMessage(msg);
             }
+        } catch(...) {
+            Leave(TEvWorker::TEvGone::UNAVAILABLE, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+            return;
         }
         ResponseQueue.emplace_back(std::move(requestData));
         DecompressQueue.pop_front();

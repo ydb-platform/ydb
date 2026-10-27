@@ -186,7 +186,7 @@ public:
                     if (std::exchange(pile.DrainRetry, false)) {
                         Self->StartPileDrain(pile);
                     }
-                } else if (!Skipped) { // a skipped drain moved nothing: restarting other piles could loop between skipped piles
+                } else if (!Skipped) { // avoid mutual retries between incomplete pile drains
                     Self->StartPileDrain(pile);
                 }
             }

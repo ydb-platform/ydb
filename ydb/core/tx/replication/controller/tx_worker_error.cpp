@@ -52,6 +52,15 @@ public:
             return true;
         }
 
+        if (replication->GetDropMode() == TReplication::EDropMode::ForceLocal
+            && replication->IsDropIntentSupported())
+        {
+            // Accepted desired-DONE FORCE preserves local DDL owners, but a
+            // stopped source worker cannot poison that continuation or reboot.
+            RemoveStoppedWorker = true;
+            return true;
+        }
+
         const auto build = Self->IndexBuilds.find({WorkerId.ReplicationId(), WorkerId.TargetId()});
         if (build != Self->IndexBuilds.end() && Self->IsCancelledIndexBuild(build->second)) {
             // Removal may not have reached RemoveQueue when this error was
@@ -99,8 +108,8 @@ public:
                 worker->second.ClearSession();
             }
 
-            // STATUS_STOPPED already confirms that the cancelled writer has
-            // exited; do not wait for another stop acknowledgement.
+            // STATUS_STOPPED already confirms that the writer has exited;
+            // cancellation/FORCE must not wait for another acknowledgement.
             Self->RemoveQueue.insert(WorkerId);
             Self->RemoveWorker(WorkerId, ctx);
         }

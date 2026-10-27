@@ -499,6 +499,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         case NKikimrScheme::StatusSuccess:
             break;
         case NKikimrScheme::StatusPathDoesNotExist:
+            if (DropMode == TReplication::EDropMode::ForceLocal) {
+                // DescribeDst always uses the validated nonzero immutable id.
+                // Its confirmed absence settles this saved local owner without
+                // inspecting or changing a same-name replacement.
+                return Success();
+            }
+            return Error(record.GetStatus(),
+                TStringBuilder() << "cannot describe destination table: " << record.GetReason());
         case NKikimrScheme::StatusSchemeError:
         case NKikimrScheme::StatusAccessDenied:
         case NKikimrScheme::StatusInvalidParameter:

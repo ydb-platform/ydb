@@ -51,8 +51,38 @@ public:
         return true;
     }
 
+    void ClearSchemaBarriers(NIceDb::TNiceDb& db) {
+        Self->DeferredAlters.erase(Replication->GetId());
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            if (it->first.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+            const auto key = it->first;
+            for (const auto& workerId : it->second.ExpectedWorkers) {
+                db.Table<Schema::SchemaBarrierWorkers>()
+                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+            }
+            Self->StopSchemaChangeTargetFlush(key);
+            if (Self->SchemaChangeDstAlterers.contains(key)) {
+                AlterersToStop.push_back(key);
+            }
+            if (Replication->FindTarget(key.second)) {
+                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
+            }
+            it = Self->SchemaBarriers.erase(it);
+        }
+    }
+
     void BeginForceRemoval(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Replication->GetState() == TReplication::EState::Done);
+        // Completed barriers outlive workers. Delete their membership in the
+        // same transaction before any target identity can disappear.
+        ClearSchemaBarriers(db);
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()));
@@ -187,30 +217,7 @@ public:
             return true;
         }
 
-        Self->DeferredAlters.erase(Replication->GetId());
-        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
-            if (it->first.first != Replication->GetId()) {
-                ++it;
-                continue;
-            }
-            const auto key = it->first;
-            for (const auto& workerId : it->second.ExpectedWorkers) {
-                db.Table<Schema::SchemaBarrierWorkers>()
-                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
-            }
-            Self->StopSchemaChangeTargetFlush(key);
-            if (Self->SchemaChangeDstAlterers.contains(key)) {
-                AlterersToStop.push_back(key);
-            }
-            if (Replication->FindTarget(key.second)) {
-                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
-                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
-                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
-                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
-                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
-            }
-            it = Self->SchemaBarriers.erase(it);
-        }
+        ClearSchemaBarriers(db);
 
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(

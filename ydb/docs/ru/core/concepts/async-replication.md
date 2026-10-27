@@ -202,6 +202,6 @@ $$
 
 {% endnote %}
 
-Для удаления после завершения без обращения к источнику используйте [`DROP ASYNC REPLICATION ... WITH (FORCE = TRUE)`](../yql/reference/syntax/drop-async-replication.md#force). Ресурсы источника остаются без изменений, а метаданные их очистки удаляются безвозвратно.
+После запроса принудительного завершения используйте [`DROP ASYNC REPLICATION ... WITH (FORCE = TRUE)`](../yql/reference/syntax/drop-async-replication.md#force). Команда дожидается оставшихся локальных операций без обращения к источнику. Ресурсы источника остаются без изменений, а метаданные их очистки удаляются безвозвратно.
 
 Для удаления асинхронной репликации используйте выражение [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md).

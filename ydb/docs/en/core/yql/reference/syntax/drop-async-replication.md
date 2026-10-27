@@ -20,14 +20,14 @@ DROP ASYNC REPLICATION <name> [CASCADE] [WITH (FORCE = TRUE | FALSE)]
 
 ## Deleting without source access {#force}
 
-Use `FORCE = TRUE` when the source is unavailable and its automatically created changefeeds must be abandoned. First request [forced completion](alter-async-replication.md) and wait until the replication's actual state is `DONE`. A successful `ALTER` response only confirms that the request was accepted; check the actual state with [`ydb scheme describe`](../../../reference/ydb-cli/commands/scheme-describe.md).
+Use `FORCE = TRUE` when the source is unavailable and its automatically created changefeeds must be abandoned. First request [forced completion](alter-async-replication.md). A successful `ALTER` response confirms that this request was accepted:
 
 ```yql
 ALTER ASYNC REPLICATION my_replication
 SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');
 ```
 
-After actual completion, delete the replication while retaining its tables and data:
+After the request is accepted, issue `FORCE DROP`. It waits for pending local completion before deleting the replication. To retain the destination tables and data:
 
 ```yql
 DROP ASYNC REPLICATION my_replication WITH (FORCE = TRUE);
@@ -38,6 +38,14 @@ The retained tables remain writable. To delete the destination tables owned by t
 ```yql
 DROP ASYNC REPLICATION my_replication CASCADE WITH (FORCE = TRUE);
 ```
+
+To inspect the actual completion state, use [`ydb scheme describe`](../../../reference/ydb-cli/commands/scheme-describe.md) with JSON output:
+
+```bash
+ydb scheme describe my_replication --format proto-json-base64
+```
+
+The `done` member in the response means that the replication has actually reached `DONE`. You can issue `FORCE DROP` while completion is pending; it finishes the remaining local work without waiting for source access.
 
 Local completion and deletion can take time and continue after a destination restart. A table created under the same name after the original destination was deleted is not owned by the replication and is retained.
 

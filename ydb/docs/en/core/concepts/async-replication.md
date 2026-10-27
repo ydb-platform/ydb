@@ -204,6 +204,6 @@ If asynchronous replication is dropped without prior [completion](#done) and rep
 
 {% endnote %}
 
-For deletion after completion without accessing the source, use [`DROP ASYNC REPLICATION ... WITH (FORCE = TRUE)`](../yql/reference/syntax/drop-async-replication.md#force). It leaves source resources unchanged and permanently discards their cleanup metadata.
+After requesting forced completion, use [`DROP ASYNC REPLICATION ... WITH (FORCE = TRUE)`](../yql/reference/syntax/drop-async-replication.md#force). It waits for remaining local completion without accessing the source, leaves source resources unchanged, and permanently discards their cleanup metadata.
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.

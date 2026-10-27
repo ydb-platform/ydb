@@ -3105,7 +3105,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TestNodesWhiteboardData(true);
     }
 
-    void CheckNodesStorageNodeFilter(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
+    void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
                                     const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
         vslotsResponses = 0;
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
@@ -3135,7 +3135,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
-    void TestNodesStorageNodeFilter(bool vslotsAvailable) {
+    void CheckNodesStorageFilter(bool vslotsAvailable) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort())
                 .SetNodeCount(3)
@@ -3192,31 +3192,31 @@ Y_UNIT_TEST_SUITE(Viewer) {
             {"&fields_required=NodeId,PDisks&storage=true", true},
         };
         for (const auto& [fields, expectVSlots] : fieldCases) {
-            CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable, fields, allNodeIds, expectVSlots);
-            CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable,
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable, fields, allNodeIds, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                 TStringBuilder() << fields << "&node_id=" << firstNodeId, {firstNodeId}, expectVSlots);
-            CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable,
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                 TStringBuilder() << fields << "&node_id=" << nodeWithoutVSlotsId, {nodeWithoutVSlotsId}, expectVSlots);
-            CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable,
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                 TStringBuilder() << fields << "&node_id=" << firstNodeId << ',' << secondNodeId,
                 selectedNodeIds, expectVSlots);
             for (const TString& filter : {TString("&group_id=10"), TString("&pool=test-pool")}) {
                 // Without VSlots, keep the explicit node filter even when group membership is unavailable.
-                CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable,
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                     fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true);
-                CheckNodesStorageNodeFilter(runtime, vslotsResponses, vslotsAvailable,
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                     TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
                     vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
             }
         }
     }
 
-    Y_UNIT_TEST(NodesPageStorageNodeFilter) {
-        TestNodesStorageNodeFilter(true);
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWithStorageDetails) {
+        CheckNodesStorageFilter(true);
     }
 
-    Y_UNIT_TEST(NodesPageStorageNodeFilterWithoutVSlots) {
-        TestNodesStorageNodeFilter(false);
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWhenVSlotsUnavailable) {
+        CheckNodesStorageFilter(false);
     }
 
     void TestNodesCpuSortWithMissingStats(bool offloadMerge) {

@@ -3565,12 +3565,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     if (!IsSupportive()) {
         Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
-<<<<<<< HEAD
-    TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-=======
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-    TotalPartitionWriteSpeedInMessages = Config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
->>>>>>> 932c62d9666 (Fix partition write-speed limits after config move (#56805))
 
     CreateCompacter();
     InitializeMLPConsumers();

@@ -438,8 +438,8 @@ Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
 
 Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
 
-    void FillRing(NKikimrConfig::TStateStorageConfig::TRing* ring, ui32 ringsCnt = 8) {
-        ring->SetNToSelect(5);
+    void FillRing(NKikimrConfig::TStateStorageConfig::TRing* ring, ui32 ringsCnt = 8, ui32 nToSelect = 5) {
+        ring->SetNToSelect(nToSelect);
         ui32 nodeId = 0;
         for(ui32 _ : xrange(ringsCnt)) {
             auto* r = ring->AddRing();
@@ -496,6 +496,50 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
         auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
         UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(DisabledQuorumInitial) {
+        for (ui32 nToSelect : xrange<ui32>(1, 7)) {
+            const ui32 maxDisabled = nToSelect > 1 ? (nToSelect - 2) / 2 : 0;
+
+            NKikimrConfig::TStateStorageConfig proposed;
+            FillRing(proposed.MutableRing(), nToSelect, nToSelect);
+            for (ui32 i : xrange(maxDisabled)) {
+                proposed.MutableRing()->MutableRing(i)->SetIsDisabled(true);
+            }
+            UNIT_ASSERT_C(
+                ValidateStateStorageConfig("StateStorage", {}, proposed).empty(),
+                "NToSelect# " << nToSelect << " disabled# " << maxDisabled);
+
+            proposed.MutableRing()->MutableRing(maxDisabled)->SetIsDisabled(true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                ValidateStateStorageConfig("StateStorage", {}, proposed),
+                "New StateStorage configuration disabled too many rings",
+                "NToSelect# " << nToSelect << " disabled# " << maxDisabled + 1);
+        }
+    }
+
+    Y_UNIT_TEST(DisabledQuorumUpdate) {
+        for (ui32 nToSelect : xrange<ui32>(1, 7)) {
+            const ui32 maxDisabled = (nToSelect - 1) / 2;
+
+            NKikimrConfig::TStateStorageConfig current;
+            FillRing(current.MutableRing(), nToSelect, nToSelect);
+            NKikimrConfig::TStateStorageConfig proposed;
+            FillRing(proposed.MutableRing(), nToSelect, nToSelect);
+            for (ui32 i : xrange(maxDisabled)) {
+                proposed.MutableRing()->MutableRing(i)->SetIsDisabled(true);
+            }
+            UNIT_ASSERT_C(
+                ValidateStateStorageConfig("StateStorage", current, proposed).empty(),
+                "NToSelect# " << nToSelect << " disabled# " << maxDisabled);
+
+            proposed.MutableRing()->MutableRing(maxDisabled)->SetIsDisabled(true);
+            UNIT_ASSERT_C(
+                ValidateStateStorageConfig("StateStorage", current, proposed).StartsWith(
+                    "StateStorage configuration disabled too many rings"),
+                "NToSelect# " << nToSelect << " disabled# " << maxDisabled + 1);
+        }
     }
 
     Y_UNIT_TEST(CanDisableAndChange) {

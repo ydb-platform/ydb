@@ -1019,6 +1019,123 @@ Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
 }
 
+Y_UNIT_TEST(TabletsAreAttributedNotBudgeted) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 100_MB;
+
+    fixture.Tick();
+    const i64 otherBefore = fixture.Counter("Stats/OtherConsumption");
+    UNIT_ASSERT_VALUES_EQUAL(otherBefore, 100_MB);
+
+    // The bytes a Local reports leave "other consumption" for a kind of their own
+    const TActorId local = fixture.Runtime.AllocateEdgeActor();
+    auto tablets = fixture.Register(local, EMemoryConsumerKind::Tablets);
+    tablets->SetConsumption(30_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/Tablets/Consumption"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), otherBefore - 30_MB);
+
+    // The kind carries no budget of its own
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/Tablets/LimitMin"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/Tablets/LimitMax"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/Tablets/Limit"), 0);
+}
+
+Y_UNIT_TEST(TabletsElasticBoundsFromRegistrants) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId first = fixture.Runtime.AllocateEdgeActor();
+    const TActorId second = fixture.Runtime.AllocateEdgeActor();
+    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::TabletsElastic);
+    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::TabletsElastic);
+
+    firstConsumer->SetReport({.Used = 10_MB, .Demand = 30_MB, .Reclaimable = 10_MB});
+    secondConsumer->SetReport({.Used = 5_MB, .Demand = 10_MB, .Reclaimable = 5_MB});
+    fixture.Tick();
+
+    // No config field sets these: Min is zero and Max is what the registrants asked for
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/LimitMin"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/LimitMax"), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/Consumption"), 15_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/Reclaimable"), 15_MB);
+
+    // Nothing else is allocated, so the whole elastic range fits
+    const ui64 limit = fixture.Counter("Consumer/TabletsElastic/Limit");
+    UNIT_ASSERT_DOUBLES_EQUAL(limit / double(1_MB), 40.0, 0.01);
+
+    // Past the equal bootstrap slice the shares follow the demand, three to one
+    const ui64 bootstrap = limit / 16;
+    const ui64 firstLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(first)->Get()->LimitBytes;
+    const ui64 secondLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(second)->Get()->LimitBytes;
+    UNIT_ASSERT(firstLimit > bootstrap && secondLimit > bootstrap);
+    UNIT_ASSERT_DOUBLES_EQUAL(double(firstLimit - bootstrap) / double(secondLimit - bootstrap), 3.0, 0.01);
+
+    // The bounds follow the reports: a registrant that stops asking for an elastic part shrinks Max
+    firstConsumer->SetReport({.Used = 0, .Demand = 0, .Reclaimable = 0});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/LimitMax"), 10_MB);
+}
+
+Y_UNIT_TEST(ConsumerZoneIncludesExternalPressure) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    TControllerFixture fixture(config);
+    auto& info = fixture.Provider->ProcessMemoryInfo;
+    info.MemTotal = 200_MB;
+    info.AnonRss = 30_MB;
+    info.AllocatedMemory = 30_MB;
+    const auto local = fixture.Runtime.AllocateEdgeActor();
+    fixture.Register(local, EMemoryConsumerKind::Tablets);
+    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+
+    const auto expect = [&](ui64 available, EMemoryZone zone) {
+        info.MemAvailable = available;
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ExternalConsumption"), 170_MB - available);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/TabletMemoryZone"), static_cast<i64>(zone));
+        bool delivered = false;
+        for (ui32 attempt = 0; attempt != 10 && !delivered; ++attempt) {
+            delivered = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(local)->Get()->Zone == zone;
+        }
+        UNIT_ASSERT(delivered);
+    };
+    expect(100_MB, EMemoryZone::Green);
+    expect(80_MB, EMemoryZone::Yellow);
+    expect(20_MB, EMemoryZone::Red);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+    expect(100_MB, EMemoryZone::Green);
+}
+
+Y_UNIT_TEST(ConsumerLimitCarriesTheNodeZone) {
+    // Hard limit 200 MB means a 100 MB target utilization and a 150 MB soft limit
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId local = fixture.Runtime.AllocateEdgeActor();
+    fixture.Register(local, EMemoryConsumerKind::Tablets);
+
+    // The limits queued by the earlier ticks still carry the old zone, so the drain must be bounded
+    auto expectZone = [&](ui64 allocated, EMemoryZone expected) {
+        fixture.Provider->ProcessMemoryInfo.AllocatedMemory = allocated;
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/TabletMemoryZone"), static_cast<i64>(expected));
+        bool seen = false;
+        for (int attempt = 0; attempt < 10 && !seen; ++attempt) {
+            seen = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(local)->Get()->Zone == expected;
+        }
+        UNIT_ASSERT_C(seen, "no TEvConsumerLimit carried the expected zone");
+    };
+
+    expectZone(10_MB, EMemoryZone::Green);
+    expectZone(120_MB, EMemoryZone::Yellow);
+    expectZone(180_MB, EMemoryZone::Red);
+    expectZone(10_MB, EMemoryZone::Green);
+}
+
 Y_UNIT_TEST(QueryExecutionConsumer) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);

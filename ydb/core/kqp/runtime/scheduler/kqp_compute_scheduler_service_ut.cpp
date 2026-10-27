@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         };
 
         auto recorder = MakeIntrusive<TRecorder>();
-        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerRegistered(recorder)));
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerRegistered(NMemory::EMemoryConsumerKind::QueryExecution, recorder)));
 
         NScheduler::TSchedulableMemory memory(scheduler->GetOrCreateMemoryPool("db", "pool"));
 
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         UNIT_ASSERT_LT(pool->GetCpuLimit(), NScheduler::NHdrf::Infinity());
         UNIT_ASSERT_VALUES_EQUAL(pool->GetReadLimit(), TDuration::MilliSeconds(500));
 
-        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(500_MB)));
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::QueryExecution, 500_MB)));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 500_MB);
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         UNIT_ASSERT_VALUES_EQUAL(pool->GetCpuLimit(), NScheduler::NHdrf::Infinity());
         UNIT_ASSERT_VALUES_EQUAL(pool->GetReadLimit(), TDuration::Seconds(1));
 
-        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(400_MB)));
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::QueryExecution, 400_MB)));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 400_MB);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), NScheduler::NHdrf::Infinity());

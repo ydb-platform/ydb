@@ -242,9 +242,9 @@ void WaitEvent(TMyEnvBase& env, ui32 eventType, ui32 requiredCount = 1) {
 
 void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
     env.SendSync(new TEvents::TEvPoison, false, true);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(memoryLimit));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, memoryLimit));
     WaitEvent(env, NMemory::EvConsumerLimit);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
@@ -263,7 +263,7 @@ void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit 
     WaitEvent(env, NConsole::TEvConsole::EvConfigNotificationRequest);
 
     if (resetMemoryLimit) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(Max<ui64>()));
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, Max<ui64>()));
         WaitEvent(env, NMemory::EvConsumerLimit);
     }
 }
@@ -332,7 +332,7 @@ Y_UNIT_TEST(Limits) {
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 0);
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(100_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 100_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -340,7 +340,7 @@ Y_UNIT_TEST(Limits) {
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 100_MB);
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(6_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 6_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(6_MB), static_cast<i64>(1_MB / 3));
@@ -348,14 +348,14 @@ Y_UNIT_TEST(Limits) {
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 6_MB);
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(3_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 3_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(3_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 3_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 3_MB);
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
@@ -414,7 +414,7 @@ Y_UNIT_TEST(Limits_Config) {
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(1_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 1_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1_MB);
@@ -1428,9 +1428,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
 
     // Making the main collection in-memory must restart the already completed alternate-room walk,
     // because its index pages now have to be reloaded into the in-memory tier.
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(12_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 12_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
     WakeupSharedCache(env);
@@ -1541,9 +1541,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnlyReenabling) {
     WaitInFlyDrain(env, counters);
     env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, false) });
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(10_MB));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 10_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
 
     env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });

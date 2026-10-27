@@ -513,6 +513,14 @@ namespace NFlatExecutorSetup {
         virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
         virtual bool ReassignChannelsEnabled() const;
+        // Declares exclusive executor ownership of a data channel, including when
+        // it has never stored executor blobs. Called before ActivateExecutor;
+        // the answer must not depend on activation or recovered tablet state.
+        // The tablet must not write or garbage-collect blobs independently on
+        // delegated channels. Channel 0 belongs to the system tablet's log GC.
+        // Without delegation, channels are initialized as executor GC deltas or
+        // recovered barriers provide ownership evidence.
+        virtual bool IsExecutorGCChannel(ui32 channel) const;
         virtual void OnYellowChannelsChanged();
         virtual void OnRejectProbabilityRelaxed();
 

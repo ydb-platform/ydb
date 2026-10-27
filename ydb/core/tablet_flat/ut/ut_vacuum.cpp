@@ -914,6 +914,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         const ui32 requestsBeforeRetry = ordinaryRequests + hardRequests;
 
         // All confirmations, acknowledgements and progress events have drained.
+        // Pause history-barrier retransmission so the pending GC retry remains empty.
+        env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
         // This retry sends no request, but must itself resume vacuum progress.
         env->Send(retry.Release(), 0, true);
         auto completed = env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(1));

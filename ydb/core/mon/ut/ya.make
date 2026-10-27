@@ -11,6 +11,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/monlib/consumers
+    ydb/core/client/server
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default

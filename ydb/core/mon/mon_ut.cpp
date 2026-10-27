@@ -2,6 +2,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/client/server/msgbus_http_server.h>
 #include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
@@ -14,6 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/is_in.h>
+#include <util/system/datetime.h>
 
 namespace NMonitoring::NTests {
 
@@ -567,6 +569,63 @@ Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
         // The series may be registered during the last poll scrape; it gets memOnly from the next scrape on.
         check(fromJson(fetch("json")), "json");
         check(fromSpack(fetch("spack")), "spack");
+    }
+}
+
+Y_UNIT_TEST_SUITE(MessageBusHttp) {
+    Y_UNIT_TEST(RejectsInvalidJsonAndKeepsServingRequests) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort();
+        TServerSettings settings(ports.GetPort());
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort);
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort());
+        TClient busClient(settings);
+        busClient.InitRootScheme();
+        NMsgBusProxy::IMessageBusHttpServer* httpServer = nullptr;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!httpServer && TInstant::Now() < deadline) {
+            httpServer = dynamic_cast<NMsgBusProxy::IMessageBusHttpServer*>(
+                server.GetRuntime()->GetAppData().Mon->FindPage("CLI_MB"));
+            if (!httpServer) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+        UNIT_ASSERT_C(httpServer, "MessageBus HTTP page was not registered within 30 seconds");
+        TKeepAliveHttpClient client("localhost", monPort);
+        const TKeepAliveHttpClient::THeaders headers{{"Content-Type", "application/json"}};
+
+        TStringStream invalidJsonResponse;
+        UNIT_ASSERT_VALUES_EQUAL(
+            client.DoPost("/CLI_MB/TypesRequest", "TypesRequest", &invalidJsonResponse, headers), HTTP_BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(invalidJsonResponse.Str(), "Invalid JSON request body");
+
+        TStringStream invalidProtoResponse;
+        UNIT_ASSERT_VALUES_EQUAL(
+            client.DoPost("/CLI_MB/TypesRequest", R"({"ETag":{}})", &invalidProtoResponse, headers), HTTP_BAD_REQUEST);
+
+        TStringStream validResponse;
+        UNIT_ASSERT_VALUES_EQUAL(client.DoPost("/CLI_MB/TypesRequest", "{}", &validResponse, headers), HTTP_OK);
+        UNIT_ASSERT_STRING_CONTAINS(validResponse.Str(), "TypeMetadata");
+
+        UNIT_ASSERT_VALUES_EQUAL(httpServer->RequestsActive->Val(), 0);
+        // LabelsMaintainer can reset derivative counters during startup; histograms retain their samples.
+        const auto sampleCount = [](const THistogramPtr& histogram) {
+            UNIT_ASSERT(histogram);
+            const auto snapshot = histogram->Snapshot();
+            ui64 count = 0;
+            for (ui32 i = 0; i < snapshot->Count(); ++i) {
+                count += snapshot->Value(i);
+            }
+            return count;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestTotalTimeHistogram), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sampleCount(httpServer->RequestPrepareTimeHistogram), 1);
     }
 }
 

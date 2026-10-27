@@ -6,6 +6,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <util/generic/yexception.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
@@ -189,10 +190,19 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
                 static NJson::TJsonReaderConfig readerConfig;
                 static NProtobufJson::TJson2ProtoConfig protoConfig;
 
-                TMemoryInput in(postContent);
-                NJson::TJsonValue jsonValue;
-                NJson::ReadJsonTree(&in, &readerConfig, &jsonValue, true);
-                NProtobufJson::Json2Proto(jsonValue, *message->GetRecord(), protoConfig);
+                try {
+                    TMemoryInput in(postContent);
+                    NJson::TJsonValue jsonValue;
+                    NJson::ReadJsonTree(&in, &readerConfig, &jsonValue, true);
+                    NProtobufJson::Json2Proto(jsonValue, *message->GetRecord(), protoConfig);
+                } catch (const yexception&) {
+                    request.Output() << "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n"
+                        << R"({"error":"Invalid JSON request body"})";
+                    Status400->Inc();
+                    RequestsActive->Dec();
+                    RequestTotalTimeHistogram->Collect(startTime.Passed() * 1000/*ms*/);
+                    return;
+                }
             }
             const ::google::protobuf::FieldDescriptor* fldDescriptor = msgDescriptor->FindFieldByName("SecurityToken");
             if (fldDescriptor != nullptr) {

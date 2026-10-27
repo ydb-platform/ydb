@@ -172,6 +172,13 @@ public:
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
         }
+        if (const auto* nodeId = std::get_if<TNodeId>(&Target); nodeId && Self->BridgeInfo) {
+            if (const auto* node = Self->FindNode(*nodeId)) {
+                if (auto it = Self->BridgePiles.find(node->BridgePileId); it != Self->BridgePiles.end()) {
+                    Self->StartPileDrain(it->second);
+                }
+            }
+        }
         if (const auto* pileId = std::get_if<TBridgePileId>(&Target); pileId && Self->BridgeInfo) {
             // the ended drain held its nodes and blocked restarts of its pile
             for (auto& [otherPileId, pile] : Self->BridgePiles) {

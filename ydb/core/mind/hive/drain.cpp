@@ -234,7 +234,7 @@ public:
     }
 
     THiveDrain(THive* hive, TDrainTarget target, TDrainSettings settings, std::unordered_set<TNodeId> nodes,
-            std::unordered_set<TNodeId> reservedNodes)
+            std::unordered_set<TNodeId> reservedNodes, bool skipped)
         : Hive(hive)
         , NextKick(Tablets.end())
         , KickInFlight(0)
@@ -243,6 +243,7 @@ public:
         , Nodes(std::move(nodes))
         , ReservedNodes(std::move(reservedNodes))
         , Settings(std::move(settings))
+        , Skipped(skipped)
     {}
 
     void Bootstrap() {
@@ -334,7 +335,7 @@ THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) 
         }
     }
     if (!reservedNodes.empty()) {
-        auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes), std::move(reservedNodes));
+        auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes), std::move(reservedNodes), getNodes.SkippedNodeDrain);
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
         return balancer;

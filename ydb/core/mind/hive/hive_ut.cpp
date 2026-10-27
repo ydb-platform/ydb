@@ -10641,8 +10641,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
             bridge.Promote(1);
             runtime.SimulateSleep(TDuration::MilliSeconds(100)); // the flag is set before the check below
-            UNIT_ASSERT_C(waitUntil([&] { return getDistribution()[2].empty() && !IsPileDrainPersisted(runtime, hiveTablet, senderA, 0); }),
-                "pile drain did not finish");
+            UNIT_ASSERT_C(waitUntil([&] { return getDistribution()[2].empty(); }), "pile drain did not empty node 2");
+            UNIT_ASSERT_C(IsPileDrainPersisted(runtime, hiveTablet, senderA, 0), "pile drain flag cleared while node 0 was owned by a node drain");
             const ui32 heldNode = GetHiveTabletInfo(runtime, hiveTablet, heldTablet, senderA).GetNodeID();
             UNIT_ASSERT_C(heldNode != 0 && (heldNode - nodeBase) % 2 == 1, "pile drain skipped the STARTING tablet");
             UNIT_ASSERT_C(waitUntil([&] { return blockRest.size() == 1; }), "node drain did not move its next tablet");
@@ -10653,7 +10653,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             blockHeld.clear(); // the restart's stop overtook this boot; delivering it would start a second instance
             blockRest.Stop().Unblock();
             UNIT_ASSERT_C(waitUntil([&] { return drainInfo().HasNotRunning(); }), "node drain did not finish");
-            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets stayed in pile 0");
+            UNIT_ASSERT_C(waitUntil([&] { return allInPile1() && !IsPileDrainPersisted(runtime, hiveTablet, senderA, 0); }),
+                "tablets stayed in pile 0 or the pending pile drain did not finish");
             UNIT_ASSERT_VALUES_EQUAL_C(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 1, "node 0 lost its node drain Down state");
             UNIT_ASSERT_VALUES_EQUAL(boots.size(), NUM_TABLETS);
             for (const auto& [tabletId, count] : boots) {
@@ -10817,6 +10818,125 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestBridgePileDrainSkipsNodeDrain) {
         TestBridgeDemotion(EBridgeHiveRestart::NodeDrainOverlap);
+    }
+
+    void TestBridgePileDrainRetriesSkippedNodeTablet(bool nodeDrainFinishesFirst) {
+        TTestBasicRuntime runtime(4, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetDrainInflight(2);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        const ui32 nodeBase = runtime.GetNodeId(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+
+        auto waitUntil = [&](auto&& condition) -> bool {
+            bool done = condition();
+            for (ui32 i = 0; i < 100 && !done; ++i) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                done = condition();
+            }
+            return done;
+        };
+        auto setDown = [&](ui32 nodeIdx, bool down) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvSetDown(nodeBase + nodeIdx, down));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        };
+        auto drainInfo = [&] {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestDrainInfo(nodeBase));
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseDrainInfo>(handle)->Record;
+        };
+
+        UNIT_ASSERT_C(waitUntil([&] {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveDomainStats());
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveDomainStats>(handle);
+            std::unordered_set<ui32> aliveNodes;
+            for (const auto& domain : response->Record.GetDomainStats()) {
+                aliveNodes.insert(domain.GetNodeIds().begin(), domain.GetNodeIds().end());
+            }
+            return aliveNodes.size() == runtime.GetNodeCount();
+        }), "Locals did not connect to Hive");
+
+        // Both tablets must start on node 0 before node 2 becomes a possible drain target.
+        setDown(2, true);
+        auto createA = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createA->Record.AddAllowedNodeIDs(runtime.GetNodeId(0));
+        createA->Record.AddAllowedNodeIDs(runtime.GetNodeId(1));
+        createA->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+        const ui64 tabletA = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createA), 0, true);
+        MakeSureTabletIsUp(runtime, tabletA, 0);
+        auto createB = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100501, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createB->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+        const ui64 tabletB = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createB), 0, true);
+        MakeSureTabletIsUp(runtime, tabletB, 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tabletA, sender).GetNodeID(), nodeBase);
+        UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tabletB, sender).GetNodeID(), nodeBase);
+        setDown(2, false);
+
+        // A has no allowed target in pile 0. Let B run on node 2, but keep the node drain active.
+        TActorId nodeDrainActor;
+        TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> blockNodeComplete(runtime, [&](auto&& ev) {
+            if (ev->Get()->TabletId.first != tabletB) {
+                return false;
+            }
+            if (!nodeDrainActor) {
+                nodeDrainActor = ev->GetRecipientRewrite();
+            }
+            return ev->GetRecipientRewrite() == nodeDrainActor;
+        });
+        auto drain = MakeHolder<TEvHive::TEvDrainNode>(nodeBase);
+        drain->Record.SetDrainInFlight(2); // scan past the skipped A even while B is in flight
+        runtime.SendToPipe(hiveTablet, sender, drain.Release());
+        UNIT_ASSERT_C(waitUntil([&] { return blockNodeComplete.size() == 1; }), "node drain did not move B");
+        const auto infoB = GetHiveTabletInfo(runtime, hiveTablet, tabletB, sender);
+        UNIT_ASSERT_VALUES_EQUAL(infoB.GetNodeID(), runtime.GetNodeId(2));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(infoB.GetVolatileState()), static_cast<ui32>(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING));
+        UNIT_ASSERT_C(GetCumulativeCounter(runtime, hiveTablet, NHive::COUNTER_DRAIN_FAILED) > 0, "node drain did not skip A");
+        UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tabletA, sender).GetNodeID(), nodeBase);
+
+        // The pile drain moves B again, while A remains owned by the node drain.
+        TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> blockPileComplete(runtime, [&](auto&& ev) {
+            return ev->Get()->TabletId.first == tabletB && ev->GetRecipientRewrite() != nodeDrainActor;
+        });
+        bridge.Promote(1);
+        UNIT_ASSERT_C(waitUntil([&] { return blockPileComplete.size() == 1; }), "pile drain did not move B");
+        UNIT_ASSERT_C(drainInfo().GetDrainInProgress().HasProgress(), "node drain finished before its held completion");
+        UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tabletA, sender).GetNodeID(), nodeBase);
+        UNIT_ASSERT_C(IsPileDrainPersisted(runtime, hiveTablet, sender, 0), "pile drain lost its pending flag");
+
+        if (nodeDrainFinishesFirst) {
+            // Resume is requested while the first pile drain actor is still waiting for B.
+            blockNodeComplete.Stop().Unblock();
+            UNIT_ASSERT_C(waitUntil([&] { return drainInfo().HasNotRunning(); }), "node drain did not finish");
+            blockPileComplete.Stop().Unblock();
+        } else {
+            blockPileComplete.Stop().Unblock();
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_C(IsPileDrainPersisted(runtime, hiveTablet, sender, 0), "pile drain flag cleared while A was still owned by a node drain");
+            UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tabletA, sender).GetNodeID(), nodeBase);
+            blockNodeComplete.Stop().Unblock();
+            UNIT_ASSERT_C(waitUntil([&] { return drainInfo().HasNotRunning(); }), "node drain did not finish");
+        }
+        UNIT_ASSERT_C(waitUntil([&] {
+            return GetHiveTabletInfo(runtime, hiveTablet, tabletA, sender).GetNodeID() == runtime.GetNodeId(1)
+                && !IsPileDrainPersisted(runtime, hiveTablet, sender, 0);
+        }), "pile drain did not resume for A after the node drain finished");
+    }
+
+    Y_UNIT_TEST(TestBridgePileDrainRetriesSkippedNodeTablet) {
+        TestBridgePileDrainRetriesSkippedNodeTablet(false);
+    }
+
+    Y_UNIT_TEST(TestBridgePileDrainRetriesSkippedNodeTabletWhileActive) {
+        TestBridgePileDrainRetriesSkippedNodeTablet(true);
     }
 
     Y_UNIT_TEST(TestBridgePileDrainSwitchOffRace) {

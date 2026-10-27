@@ -1,7 +1,5 @@
 name: Runner fleet check
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       apply:
@@ -74,7 +72,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GH_YDB_RUNNERS_PAT }}
         GH_RUNNER_RECONCILE_SSH_PUB: ${{ secrets.GH_RUNNER_RECONCILE_SSH_PUB }}
-        RECONCILE_APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
+        RECONCILE_APPLY: ${{ inputs.apply && 'true' || 'false' }}
       run: |
         if [ "$RECONCILE_APPLY" = "true" ]; then
           python3 ydb/ci/gh-runner-provision/provision.py reconcile --apply

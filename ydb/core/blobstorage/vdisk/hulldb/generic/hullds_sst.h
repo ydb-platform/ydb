@@ -9,7 +9,9 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include "hullds_sst_twolevel.h"
+#include "hullds_sst_packed.h"
 #include <util/generic/set.h>
+#include <variant>
 
 namespace NKikimr {
 
@@ -51,16 +53,18 @@ namespace NKikimr {
         class TIterator;
     };
 
-    // The LogoBlob index, in the two-level form.
+    // The LogoBlob index in the form VCtx->SstIndexFormPolicy selected when the SST was created.
     class TLogoBlobSstIndex {
     public:
         using TRec = TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TForms = std::variant<const TTwoLevelLogoBlobSstIndex, const TPackedLogoBlobSstIndex>;
 
         class TIterator;
 
         TLogoBlobSstIndex(TVDiskContextPtr vctx)
             : Consumer(vctx->SstIndex)
-            , Form(Consumer, TTrackableVector<TRec>(TMemoryConsumer(Consumer)))
+            , Policy(vctx->SstIndexFormPolicy)
+            , Form(std::in_place_type<const TTwoLevelLogoBlobSstIndex>, Consumer, TTrackableVector<TRec>(TMemoryConsumer(Consumer)))
         {}
 
         bool IsLoaded() const {
@@ -68,31 +72,39 @@ namespace NKikimr {
         }
 
         ui64 Elements() const {
-            return Form.Elements();
+            return std::visit([](const auto& form) { return form.Elements(); }, Form);
         }
 
         TKeyLogoBlob FirstKey() const {
-            return Form.FirstKey();
+            return std::visit([](const auto& form) { return form.FirstKey(); }, Form);
         }
 
         TKeyLogoBlob LastKey() const {
-            return Form.LastKey();
+            return std::visit([](const auto& form) { return form.LastKey(); }, Form);
         }
 
         // Called once, before any iterator is created:
-        // TIterator binds to the form, and a later Load would replace that form under it.
+        // TIterator binds to the form, and a later Load would destroy that form under it.
         void Load(TTrackableVector<TRec> linearIndex) {
             Y_ABORT_UNLESS(!IsLoaded(), "SST index is loaded twice");
-            Form = TTwoLevelLogoBlobSstIndex(Consumer, linearIndex);
+
+            // The packed form cannot be empty, so an empty index is two-level whatever the policy;
+            // SST is not expected to have no records anyway.
+            if (Policy == ESstIndexFormPolicy::Packed && !linearIndex.empty()) {
+                Form.emplace<const TPackedLogoBlobSstIndex>(Consumer, linearIndex);
+            } else {
+                Form.emplace<const TTwoLevelLogoBlobSstIndex>(Consumer, linearIndex);
+            }
         }
 
         void Save(TTrackableVector<TRec>* linearIndex) const {
-            Form.Save(linearIndex);
+            std::visit([&](const auto& form) { form.Save(linearIndex); }, Form);
         }
 
     private:
         const TMemoryConsumer Consumer;
-        TTwoLevelLogoBlobSstIndex Form;
+        const ESstIndexFormPolicy Policy;
+        TForms Form;
     };
 
     // Which index an SST of the given key type keeps in memory: the flat array for everything but LogoBlobs.

@@ -462,4 +462,6 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
     optional bool EnableCsPatternIndexHints = 374 [default = false];
+    // Selects the packed in-memory LogoBlob SST index at VDisk startup; the on-disk format is unchanged.
+    optional bool EnableVDiskPackedSstIndex = 375 [default = false, (RequireRestart) = true];
 }

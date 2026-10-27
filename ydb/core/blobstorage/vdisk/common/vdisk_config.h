@@ -14,6 +14,12 @@
 
 namespace NKikimr {
 
+    // Which in-memory form a LogoBlob SST index takes; see TVDiskContext::SstIndexFormPolicy
+    enum class ESstIndexFormPolicy : ui32 {
+        TwoLevel = 0,
+        Packed = 1,
+    };
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Every VDisk has a config, this is it
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +128,8 @@ namespace NKikimr {
         ui32 HeapAllocatorMaxSstInBytes;
         // Latched at VDisk start: the feature flag is set and orderNumber < N. A running VDisk does not re-read either.
         bool UseHeapAllocator = false;
+        // Latched at VDisk start from the feature flag; copied into TVDiskContext::SstIndexFormPolicy.
+        ESstIndexFormPolicy SstIndexFormPolicy = ESstIndexFormPolicy::TwoLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;

@@ -71,48 +71,75 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
-    // TLogoBlobSstIndex::TIterator
+    // TLogoBlobSstIndex::TIterator: the iterator of whichever form the index holds
     ////////////////////////////////////////////////////////////////////////////
     class TLogoBlobSstIndex::TIterator {
-        TTwoLevelLogoBlobSstIndex::TIterator It; // default: an iterator over no index, i.e. invalid
+        using TIterators = std::variant<
+            TTwoLevelLogoBlobSstIndex::TIterator,
+            TPackedLogoBlobSstIndex::TIterator>;
+
+        TIterators It; // default: an iterator over no index, i.e. invalid
+
+        // Not std::visit: libc++ dispatches through a function-pointer table that the compiler does not always fold
+        // away (4x slower scans in a benchmark). Not std::get either: the variant is never valueless (no iterator
+        // constructor throws), and with Y_ASSUME saying so the compiler tests the stored index once, with no throw path.
+        template <class TFunc>
+        decltype(auto) Visit(TFunc&& f) const {
+            static_assert(std::variant_size_v<TIterators> == 2);
+            Y_ASSUME(std::get_if<0>(&It) || std::get_if<1>(&It));
+            if (const auto* it = std::get_if<0>(&It)) {
+                return f(*it);
+            }
+            return f(*std::get_if<1>(&It));
+        }
+
+        template <class TFunc>
+        decltype(auto) Visit(TFunc&& f) {
+            static_assert(std::variant_size_v<TIterators> == 2);
+            Y_ASSUME(std::get_if<0>(&It) || std::get_if<1>(&It));
+            if (auto* it = std::get_if<0>(&It)) {
+                return f(*it);
+            }
+            return f(*std::get_if<1>(&It));
+        }
 
     public:
         TIterator() = default;
 
         TIterator(const TLogoBlobSstIndex* index)
-            : It(&index->Form)
+            : It(std::visit([](const auto& form) { return TIterators(&form); }, index->Form))
         {}
 
         bool Valid() const {
-            return It.Valid();
+            return Visit([](const auto& it) { return it.Valid(); });
         }
 
         void Next() {
-            It.Next();
+            Visit([](auto& it) { it.Next(); });
         }
 
         void Prev() {
-            It.Prev();
+            Visit([](auto& it) { it.Prev(); });
         }
 
         TKeyLogoBlob GetCurKey() const {
-            return It.GetCurKey();
+            return Visit([](const auto& it) { return it.GetCurKey(); });
         }
 
         TMemRecLogoBlob GetMemRec() const {
-            return It.GetMemRec();
+            return Visit([](const auto& it) { return it.GetMemRec(); });
         }
 
         void SeekToFirst() {
-            It.SeekToFirst();
+            Visit([](auto& it) { it.SeekToFirst(); });
         }
 
         void SeekToLast() {
-            It.SeekToLast();
+            Visit([](auto& it) { it.SeekToLast(); });
         }
 
         void Seek(const TKeyLogoBlob& key) {
-            It.Seek(key);
+            Visit([&](auto& it) { it.Seek(key); });
         }
 
         bool operator == (const TIterator& it) const {

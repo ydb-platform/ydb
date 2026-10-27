@@ -67,6 +67,7 @@ message TPDiskConfig {
 
 
     optional uint32 SectorSize = 6;
+    // With EnableVDiskPackedSstIndex, keep ChunkSize at most 928 MiB (see hullds_sst_packed.cpp).
     optional uint32 ChunkSize = 7;
 
 
@@ -110,5 +111,6 @@ message TPDiskConfig {
     // a misconfiguration and ChunkSize wins. Must be a multiple of ChunkSizeAlignment (2 MiB).
     // Takes effect only when the disk is formatted; the resulting size is persisted in the format
     // record, so changing or removing this option later has no effect on an already formatted disk.
+    // With EnableVDiskPackedSstIndex, keep it at most 928 MiB (see hullds_sst_packed.cpp).
     optional uint32 PhysicalChunkSize = 2013;
 };

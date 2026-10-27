@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
+    ydb/core/path_aliasing
     ydb/library/security
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/core/tx/schemeshard

@@ -270,7 +270,7 @@ bool TKqpQueryState::TryGetFromCache(
         DbCounters,
         sender,
         TlsActivationContext->AsActorContext(),
-        warmupAttribution, UserRequestContext->PathNormalizer);
+        warmupAttribution);
 
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
@@ -372,7 +372,6 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
             uid = GetPreparedQuery();
-            query = *CompileResult->Query;
             break;
 
         default:

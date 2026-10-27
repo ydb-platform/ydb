@@ -24,12 +24,4 @@ namespace NKikimr::NPathAliasing {
         std::shared_ptr<const TImpl> Impl;
     };
 
-    struct TPathNormalizerFunction {
-        std::shared_ptr<const TPathNormalizer> Normalizer;
-
-        TString operator()(TStringBuf path) const {
-            return Normalizer->NormalizePath(path);
-        }
-    };
-
 } // namespace NKikimr::NPathAliasing

@@ -12,7 +12,7 @@ namespace NKikimr::NKqp {
 
 TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
     const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
-    const TGUCSettings& gUCSettings, std::shared_ptr<const NPathAliasing::TPathNormalizer> pathNormalizer)
+    const TGUCSettings& gUCSettings)
     : Cluster(cluster)
     , Database(database)
     , DatabaseId(databaseId)
@@ -21,7 +21,6 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
     , Settings(settings)
     , QueryParameterTypes(queryParameterTypes)
     , GUCSettings(gUCSettings)
-    , PathNormalizer(std::move(pathNormalizer))
 {
     switch (Settings.QueryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_DML:
@@ -40,8 +39,8 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
 
 TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
     const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
-    const TGUCSettings& gUCSettings, std::shared_ptr<const NPathAliasing::TPathNormalizer> pathNormalizer)
-    : TKqpQueryId(cluster, database, databaseId, "", text, settings, queryParameterTypes, gUCSettings, std::move(pathNormalizer))
+    const TGUCSettings& gUCSettings)
+    : TKqpQueryId(cluster, database, databaseId, "", text, settings, queryParameterTypes, gUCSettings)
 {}
 
 bool TKqpQueryId::IsSql() const {
@@ -56,8 +55,7 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
         Text == other.Text &&
         Settings == other.Settings &&
         !QueryParameterTypes == !other.QueryParameterTypes &&
-        GUCSettings == other.GUCSettings &&
-        PathNormalizer == other.PathNormalizer)) {
+        GUCSettings == other.GUCSettings)) {
         return false;
     }
 

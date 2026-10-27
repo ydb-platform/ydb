@@ -313,7 +313,6 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        PathNormalizer = AppData(ctx)->PathNormalizer;
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         VectorIndexLevelsCache = MakeIntrusive<TVectorIndexLevelsCache>(
@@ -377,8 +376,7 @@ public:
         ui32 tliConfigKind = (ui32)NKikimrConsole::TConfigItem::TliConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind, queryServiceConfigKind, tliConfigKind,
-                    NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, queryServiceConfigKind, tliConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
@@ -662,9 +660,6 @@ public:
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
-        if (ev->Get()->PathNormalizer.has_value()) {
-            PathNormalizer = *ev->Get()->PathNormalizer;
-        }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         YDB_LOG_DEBUG("Updated table service config");
@@ -998,10 +993,6 @@ public:
                 span, SelfId().NodeId(), targetId.NodeId());
         }
         proxyRequest->QueryDispatched = true;
-        auto requestContext = ev->Get()->GetUserRequestContext();
-        if (targetId.NodeId() == SelfId().NodeId() && !requestContext->PathNormalizer.has_value()) {
-            requestContext->PathNormalizer = PathNormalizer;
-        }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -2374,7 +2365,6 @@ private:
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
-    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TTliConfig TliConfig;
     std::shared_ptr<const NKikimrConfig::TTableServiceConfig> SharedTableServiceConfig;

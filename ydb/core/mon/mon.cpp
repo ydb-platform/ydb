@@ -58,7 +58,7 @@ TPathNormalizer MakePathNormalizer(std::shared_ptr<const NPathAliasing::TPathNor
         return {};
     }
     return std::make_shared<const std::function<TString(TStringBuf)>>(
-        NPathAliasing::TPathNormalizerFunction{std::move(normalizer)});
+        [normalizer = std::move(normalizer)](TStringBuf path) { return normalizer->NormalizePath(path); });
 }
 
 struct TIssueInfo {

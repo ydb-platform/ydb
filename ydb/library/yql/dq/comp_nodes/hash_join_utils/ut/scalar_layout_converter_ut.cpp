@@ -603,6 +603,146 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestBatchPackMatchesSinglePack) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        constexpr ui32 numTuples = 17;
+        const ui32 numColumns = types.size();
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(numTuples * numColumns);
+        for (ui32 i = 0; i < numTuples; ++i) {
+            if (i % 3 == 0) {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod());
+            } else {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));
+            }
+
+            if (i % 4 == 0) {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod());
+            } else if (i % 4 == 1) {
+                testValues.push_back(MakeString(NUdf::TStringRef("", 0)));
+            } else if (i % 4 == 2) {
+                TString str = "row-";
+                str.push_back(static_cast<char>('a' + (i % 26)));
+                testValues.push_back(MakeString(NUdf::TStringRef(str)));
+            } else {
+                const TString str(300, static_cast<char>('a' + (i % 26)));
+                testValues.push_back(MakeString(NUdf::TStringRef(str)));
+            }
+        }
+
+        auto assertSamePack = [](const TPackResult& rowPack, const TPackResult& batchPack) {
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.NTuples, batchPack.NTuples);
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.PackedTuples.size(), batchPack.PackedTuples.size());
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.Overflow.size(), batchPack.Overflow.size());
+            UNIT_ASSERT(std::memcmp(rowPack.PackedTuples.data(), batchPack.PackedTuples.data(), rowPack.PackedTuples.size()) == 0);
+            if (!rowPack.Overflow.empty()) {
+                UNIT_ASSERT(std::memcmp(rowPack.Overflow.data(), batchPack.Overflow.data(), rowPack.Overflow.size()) == 0);
+            }
+        };
+
+        for (ui32 count : {ui32(1), ui32(7), ui32(8), ui32(9), numTuples}) {
+            TPackResult rowPack;
+            TPackResult batchPack;
+            for (ui32 i = 0; i < count; ++i) {
+                converter->Pack(testValues.data() + i * numColumns, rowPack);
+            }
+            converter->PackBatch(testValues.data(), count, batchPack);
+            assertSamePack(rowPack, batchPack);
+
+            for (ui32 i = 0; i < count; ++i) {
+                converter->Pack(testValues.data() + i * numColumns, rowPack);
+            }
+            converter->PackBatch(testValues.data(), count, batchPack);
+            assertSamePack(rowPack, batchPack);
+        }
+    }
+
+    Y_UNIT_TEST(TestUnpackBatchMatchesSingleUnpack) {
+        TScalarLayoutConverterTestData data;
+
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        const auto optInt32Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, true);
+        const auto optUint64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Uint64, true);
+        const auto optDoubleType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Double, true);
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{stringType, optInt32Type, optUint64Type, optDoubleType, int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        constexpr ui32 maxTuples = 17;
+        const ui32 numColumns = types.size();
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(maxTuples * numColumns);
+        for (ui32 i = 0; i < maxTuples; ++i) {
+            testValues.push_back(MakeString(NUdf::TStringRef(TString(i * 5, static_cast<char>('a' + i)))));
+            testValues.push_back(i % 3 == 0 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<i32>(i) - 8));
+            testValues.push_back(i % 4 == 1 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<ui64>(i) << 40));
+            testValues.push_back(i % 5 == 2 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<double>(i) / 4));
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i) * 7));
+        }
+
+        TVector<NYql::NUdf::TUnboxedValue> batchOut(maxTuples * numColumns);
+        for (ui32 round = 0; round < 2; ++round) {
+            for (ui32 count : {ui32(0), ui32(1), ui32(7), ui32(8), ui32(9), maxTuples}) {
+                TPackResult packed;
+                converter->PackBatch(testValues.data(), count, packed);
+                converter->UnpackBatch(packed, batchOut.data());
+
+                for (ui32 row = 0; row < count; ++row) {
+                    NYql::NUdf::TUnboxedValue single[5];
+                    converter->Unpack(packed, row, single);
+                    for (ui32 col = 0; col < numColumns; ++col) {
+                        const auto& actual = batchOut[row * numColumns + col];
+                        const auto& expected = testValues[row * numColumns + col];
+                        UNIT_ASSERT_VALUES_EQUAL(actual.HasValue(), expected.HasValue());
+                        UNIT_ASSERT_VALUES_EQUAL(actual.HasValue(), single[col].HasValue());
+                        if (!expected.HasValue()) {
+                            continue;
+                        }
+                        switch (col) {
+                            case 0:
+                                UNIT_ASSERT_VALUES_EQUAL(TString(actual.AsStringRef()), TString(expected.AsStringRef()));
+                                UNIT_ASSERT_VALUES_EQUAL(TString(actual.AsStringRef()), TString(single[col].AsStringRef()));
+                                break;
+                            case 1:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i32>(), expected.Get<i32>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i32>(), single[col].Get<i32>());
+                                break;
+                            case 2:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<ui64>(), expected.Get<ui64>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<ui64>(), single[col].Get<ui64>());
+                                break;
+                            case 3:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<double>(), expected.Get<double>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<double>(), single[col].Get<double>());
+                                break;
+                            default:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i64>(), expected.Get<i64>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i64>(), single[col].Get<i64>());
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestBucketPack) {
         TScalarLayoutConverterTestData data;
 

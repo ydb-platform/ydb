@@ -20,6 +20,7 @@
 #include <util/string/strip.h>
 #include <util/string/ascii.h>
 #include <util/charset/unidata.h>
+#include <util/generic/ylimits.h>
 
 using namespace NYql;
 using namespace NUdf;
@@ -784,8 +785,17 @@ SIMPLE_UDF(TToCodePointList, TListType<ui32>(TAutoMap<TUtf8>)) {
 }
 
 SIMPLE_UDF(TFromCodePointList, TUtf8(TAutoMap<TListType<ui32>>)) {
+    constexpr size_t maxUtf8BytesPerRune = WideToUTF8BufferSize(1);
+    const auto validateRune = [](wchar32 rune) {
+        if (rune > 0x10FFFFU || (rune >= 0xD800U && rune <= 0xDFFFU)) {
+            throw yexception()
+                << "Unicode::FromCodePointList: invalid Unicode scalar value "
+                << static_cast<ui32>(rune);
+        }
+    };
+
     auto input = args[0];
-    if (auto elems = input.GetElements()) {
+    if (auto elems = input.GetElements(); elems && input.GetListLength() <= Max<ui32>() / maxUtf8BytesPerRune) {
         const auto elemCount = input.GetListLength();
         auto bufferSize = WideToUTF8BufferSize(elemCount);
         TTempBuf buffer(bufferSize);
@@ -794,9 +804,10 @@ SIMPLE_UDF(TFromCodePointList, TUtf8(TAutoMap<TListType<ui32>>)) {
         for (ui64 i = 0; i != elemCount; ++i) {
             const auto& item = elems[i];
             const wchar32 rune = item.Get<ui32>();
+            validateRune(rune);
             size_t written = 0;
             WideToUTF8(&rune, 1, bufferPtr, written);
-            Y_ENSURE(written <= 4);
+            Y_ENSURE(written <= maxUtf8BytesPerRune);
             bufferPtr += written;
             Y_ENSURE(bufferPtr <= bufferEnd);
         }
@@ -807,12 +818,16 @@ SIMPLE_UDF(TFromCodePointList, TUtf8(TAutoMap<TListType<ui32>>)) {
     buffer.reserve(TUnboxedValuePod::InternalBufferSize);
 
     const auto& iter = input.GetListIterator();
-    std::array<char, 4> runeBuffer = {};
+    std::array<char, maxUtf8BytesPerRune> runeBuffer = {};
     for (NUdf::TUnboxedValue item; iter.Next(item);) {
         const wchar32 rune = item.Get<ui32>();
+        validateRune(rune);
         size_t written = 0;
         WideToUTF8(&rune, 1, runeBuffer.data(), written);
-        Y_ENSURE(written <= 4);
+        Y_ENSURE(written <= maxUtf8BytesPerRune);
+        if (buffer.size() > Max<ui32>() - written) {
+            throw yexception() << "Unicode::FromCodePointList: UTF-8 string is too long";
+        }
         buffer.insert(buffer.end(), runeBuffer.data(), runeBuffer.data() + written);
     }
 

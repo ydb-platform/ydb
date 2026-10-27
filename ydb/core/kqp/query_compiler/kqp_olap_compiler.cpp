@@ -1034,7 +1034,12 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
 
         auto opType = aggKqp.Type().StringValue();
         if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
-            colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
+            ui32 projectionId;
+            if (ctx.GetProjectionKernelIdForColumn(colInfo.BaseColName, projectionId)) {
+                colInfo.BaseColId = projectionId;
+            } else {
+                colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
+            }
         }
         aggColInfos.push_back(colInfo);
     }

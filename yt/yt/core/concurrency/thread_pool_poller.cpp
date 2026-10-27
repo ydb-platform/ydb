@@ -226,7 +226,7 @@ public:
         FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
-    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName) override
+    bool TryRegister(const IPollablePtr& pollable, std::string poolName) override
     {
         // FIXME(lukyan): Enqueueing in register queue may happen after stopping.
         // Create cookie when dequeueing from register queue?
@@ -237,9 +237,16 @@ public:
 
         auto cookie = New<TPollableCookie>(this);
         pollable->SetCookie(std::move(cookie));
-        SetPollableInvoker(pollable, poolName);
+        auto* usedPool = SetPollableInvoker(pollable, std::move(poolName));
 
         RegisterQueue_.Enqueue(pollable);
+
+        // NB(sabdenovch): While ABA on object addresses is technically possible
+        // it is also extremely unlikely due to static nature of thread pools,
+        // i.e. they usually sit in bootstrap/singleton and are created once per lifetime.
+        if (usedPool != WorkerFairShareThreadPool_.Acquire().Get()) {
+            ResetInvokers_ = true;
+        }
 
         YT_TLOG_DEBUG("Pollable registered")
             .With(pollable->GetLoggingTags());
@@ -247,9 +254,9 @@ public:
         return true;
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, std::string poolName) override
     {
-        SetPollableInvoker(pollable, poolName);
+        SetPollableInvoker(pollable, std::move(poolName));
     }
 
     // TODO(lukyan): Method OnShutdown in the interface and returned future are redundant.
@@ -290,12 +297,30 @@ public:
 
     IInvokerPtr GetInvoker() const override
     {
+        if (auto workerPool = WorkerFairShareThreadPool_.Acquire()) {
+            return workerPool->GetInvoker("$bus_xfer_fs_aux", "default");
+        }
+
         return AuxInvoker_;
     }
 
     ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
     {
+        if (auto workerPool = WorkerFairShareThreadPool_.Acquire()) {
+            return workerPool;
+        }
+
         return FairShareThreadPool_;
+    }
+
+    void SetWorkerPool(ITwoLevelFairShareThreadPoolPtr workerPool) override
+    {
+        auto* newWorkerPool = workerPool.Get();
+        auto* oldWorkerPool = WorkerFairShareThreadPool_.Exchange(std::move(workerPool)).Get();
+
+        if (oldWorkerPool != newWorkerPool) {
+            ResetInvokers_.store(true);
+        }
     }
 
     void Shutdown() override
@@ -370,6 +395,7 @@ private:
     const NLogging::TLogger Logger;
 
     ITwoLevelFairShareThreadPoolPtr FairShareThreadPool_;
+    TAtomicIntrusivePtr<ITwoLevelFairShareThreadPool> WorkerFairShareThreadPool_;
     IInvokerPtr AuxInvoker_;
 
     // Only makes sense for "select" backend.
@@ -387,6 +413,7 @@ private:
 
     // NB: Both THash and TEqualTo must be supplied here to enable heterogeneous lookup.
     absl::flat_hash_set<IPollablePtr, THash<IPollablePtr>, TEqualTo<IPollablePtr>> Pollables_;
+    std::atomic<bool> ResetInvokers_ = false;
 
     std::array<TPollerImpl::TEvent, MaxEventsPerPoll> PooledImplEvents_;
 
@@ -395,11 +422,23 @@ private:
         cookie->Invoker.Acquire()->Invoke(BIND(TRunEventGuard(pollable)));
     }
 
-    void SetPollableInvoker(const IPollablePtr& pollable, const std::string& poolName)
+    void* SetPollableInvoker(const IPollablePtr& pollable, std::string poolName)
     {
-        auto invoker = FairShareThreadPool_->GetInvoker(poolName, Format("%v", pollable.Get()));
+        IInvokerPtr invoker;
+        void* poolCookie = nullptr;
+
+        if (auto workerPool = WorkerFairShareThreadPool_.Acquire()) {
+            invoker = workerPool->GetInvoker("$bus_xfer_fs_" + std::move(poolName), Format("%v", pollable.Get()));
+            poolCookie = workerPool.Get();
+        } else {
+            invoker = FairShareThreadPool_->GetInvoker(poolName, Format("%v", pollable.Get()));
+            poolCookie = FairShareThreadPool_.Get();
+        }
+
         auto* cookie = TPollableCookie::FromPollable(pollable.Get());
         cookie->Invoker.Store(std::move(invoker));
+
+        return poolCookie;
     }
 
     // TODO(lukyan): Move static functions in Cookie?
@@ -494,6 +533,12 @@ private:
                     InsertOrCrash(Pollables_, std::move(pollable));
                 });
 
+                if (ResetInvokers_.exchange(false)) {
+                    for (const auto& pollable : Pollables_) {
+                        pollable->ResetInvoker();
+                    }
+                }
+
                 HandleEvents(eventCount);
 
                 for (const auto& pollable : unregisterItems) {
@@ -569,12 +614,12 @@ public:
         Poller_->Shutdown();
     }
 
-    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName = "default") override
+    bool TryRegister(const IPollablePtr& pollable, std::string poolName = "default") override
     {
-        return Poller_->TryRegister(pollable, poolName);
+        return Poller_->TryRegister(pollable, std::move(poolName));
     }
 
-    void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override
+    void SetExecutionPool(const IPollablePtr& pollable, std::string poolName) override
     {
         Poller_->SetExecutionPool(pollable, std::move(poolName));
     }
@@ -607,6 +652,11 @@ public:
     ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
     {
         return Poller_->GetFairShareThreadPool();
+    }
+
+    void SetWorkerPool(ITwoLevelFairShareThreadPoolPtr workerPool) override
+    {
+        Poller_->SetWorkerPool(std::move(workerPool));
     }
 
 private:

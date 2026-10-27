@@ -989,7 +989,7 @@ def main():
         
         for target_branch in valid_target_branches:
             try:
-                dev_branch_name = f"cherry-pick-{target_branch}-{dtm}"
+                dev_branch_name = f"robots/backport/cherry-pick-{target_branch}-{dtm}"
                 result = process_branch(
                     repo_dir, target_branch, dev_branch_name, all_commit_shas,
                     repo_name, repo, token, sources, workflow_triggerer, workflow_url, summary_path, logger

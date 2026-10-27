@@ -166,6 +166,27 @@ namespace NKikimr {
                 groupId));
         }
 
+        // Pile whose part of the bridged group is the only one sure to hold everything written to the group: the one
+        // designated in TGroupState.AuthorityPileId, or the one of the only part of the group. Invalid pile id means
+        // that parts in synchronized piles hold everything, as it is the case for the groups following pile states.
+        TBridgePileId GetAuthorityPileId(const NKikimrBridge::TGroupState& state);
+
+        // Pile of the operation changing the set of piles which is pending, or invalid pile id if there is none.
+        inline TBridgePileId GetPendingPileOperationPileId(const NKikimrBridge::TClusterStateDetails& details) {
+            return details.HasPendingPileOperation()
+                ? TBridgePileId::FromProto(&details.GetPendingPileOperation(),
+                    &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::GetBridgePileId)
+                : TBridgePileId();
+        }
+
+        // Make an entry for the part of the bridged group in the designated pile, which the group has no part in yet
+        // (filling the gap with absent entries); returns the entry to fill in.
+        NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);
+
+        // Drop the part of the bridged group in the designated pile (the pile is being removed); absent entries at the end
+        // are not stored.
+        void RemoveGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);
+
         // Pile implied for nodes without pile name and groups without pile id by the pile registry implied by bridge
         // config: single-pile cluster (this is the case of the cluster converted from non-bridged one) has them in its
         // only pile, multi-pile one has no implicit pile.
@@ -194,7 +215,8 @@ namespace NKikimr {
 
         // Pile registry for the new bridge config: piles remaining in the config keep their ids, slots of the dropped
         // ones get free, new piles take free slots in ascending order before the registry grows, free slots at the end
-        // are trimmed. Implicit pile setting is kept only while its pile remains in the config.
+        // are trimmed. Implicit pile setting is kept only while its pile remains in the config, other settings (like
+        // PileListChanged and RequiredFeatureLevel) are kept as they are.
         NKikimrBridge::TPileRegistry AssignPileIds(const NKikimrBridge::TPileRegistry& registry,
             const NKikimrConfig::TBridgeConfig& bridgeConfig);
 
@@ -218,8 +240,10 @@ namespace NKikimr {
 
         // Inline pile is the group serving as the only pile of its own (this is what groups of the cluster converted
         // from non-bridged one become): pile 0 of the group references the group itself with its current generation.
-        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation);
+        // Ordinary group of the multi-pile cluster becomes inline pile in the pile it resides in.
         TBridgePileId GetInlinePileId();
+        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation,
+            TBridgePileId bridgePileId = GetInlinePileId());
         // make the group (with its id and generation already filled in) an inline pile
         void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group);
 

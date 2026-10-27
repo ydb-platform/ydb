@@ -13,7 +13,7 @@ struct TClickHouseSettings {
     using TConstPtr = std::shared_ptr<const TClickHouseSettings>;
 };
 
-struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TSettingDispatcher {
+struct TClickHouseConfiguration : public NCommon::TDispatcherAndSettings<TClickHouseSettings> {
     using TPtr = TIntrusivePtr<TClickHouseConfiguration>;
 
     explicit TClickHouseConfiguration(bool strictConfigValidation = false);

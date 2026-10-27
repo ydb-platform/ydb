@@ -18,9 +18,9 @@ void HashCount(SHA256_CTX& sha, ui64 count) {
 }
 
 void HashHostSettings(SHA256_CTX& sha, const TRuntimeSettings& config) {
-    TRuntimeSettingsConfiguration configuration(config);
-    HashCount(sha, configuration.CountSerializableStaticSettings());
-    configuration.SerializeStaticSettings([&](const TString& name, const TString& value) {
+    const auto& dispatcher = TRuntimeSettingsConfiguration::Get();
+    HashCount(sha, dispatcher.CountSerializableStaticSettings(config));
+    dispatcher.SerializeStaticSettings(config, [&](const TString& name, const TString& value) {
         HashString(sha, name);
         HashString(sha, value);
     });

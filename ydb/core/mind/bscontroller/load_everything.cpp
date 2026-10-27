@@ -654,7 +654,7 @@ public:
             }
         }
 
-        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
@@ -675,10 +675,11 @@ public:
             group->CalculateGroupStatus();
 
             group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
-                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            Self->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     } else {
                         Y_DEBUG_ABORT();
                     }
@@ -734,9 +735,12 @@ public:
 
                 groupState = &jt->second->BridgeGroupInfo->GetBridgeGroupState();
             } else if (const auto it = Self->StaticGroups.find(targetGroupId); it != Self->StaticGroups.end()) {
-                if (!it->second.Info || !it->second.Info->Group || !it->second.Info->Group->HasBridgeProxyGroupId() ||
-                        !it->second.Info->Group->HasBridgePileId()) {
+                if (!it->second.Info || !it->second.Info->Group) {
                     Y_DEBUG_ABORT();
+                    return {};
+                } else if (!it->second.Info->Group->HasBridgeProxyGroupId() || !it->second.Info->Group->HasBridgePileId()) {
+                    // the inline pile has been removed along with its pile, the group is the bridge proxy one only now;
+                    // the entry could have been left if BSC has restarted before forgetting it
                     return {};
                 }
                 bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),

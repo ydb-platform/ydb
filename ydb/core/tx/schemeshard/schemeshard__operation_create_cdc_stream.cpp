@@ -870,7 +870,12 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TO
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore) {
+ISubOperation::TPtr RejectOnTablePathChecks(
+    const TOperationContext& context,
+    const TOperationId& opId,
+    const TPath& tablePath,
+    bool restore)
+{
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -892,9 +897,8 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
             checks.IsCommonSensePath();
         } else {
             const auto& parentPath = tablePath.Parent();
-            if (!parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
-                && !parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree))
-            {
+            const auto index = context.SS->Indexes.at(parentPath.Base()->PathId);
+            if (!NCdcStreamAtTable::IsIndexTypeSupportedForCdc(index->Type)) {
                 return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Cannot add changefeed to index table");
             }
@@ -951,7 +955,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     bool restore)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
+    if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, restore)) {
         return reject;
     }
 
@@ -1066,6 +1070,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        NCdcStreamAtTable::MaybeGuardIndexWithBaseCdcScanLock(outTx, workingDirPath, context);
 
         result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }

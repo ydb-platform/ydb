@@ -81,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.
@@ -172,6 +173,11 @@ message TEvNodeConfigGather {
         repeated uint32 CapableNodeIds = 1; // nodes running with BridgeConfig (static ones and their dynamic subscribers)
         repeated uint32 NotCapableNodeIds = 2; // nodes running without BridgeConfig
         repeated uint32 PileListChangeCapableNodeIds = 3; // nodes supporting changes of the list of piles
+        message TFeatureLevel {
+            uint32 NodeId = 1;
+            uint32 Level = 2;
+        }
+        repeated TFeatureLevel FeatureLevels = 4; // bridge feature levels reported by nodes (absent for older versions)
     }
 
     optional uint64 Cookie = 1;
@@ -357,11 +363,34 @@ message TEvNodeConfigInvokeOnRoot {
     // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and turn static
     // groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
     message TConvertToBridge {
+        // existing pools and groups managed by BSC are left non-bridged (they may be converted one by one later), and
+        // non-uniform storage gets activated along with the conversion; BridgeConfig must enable it then
+        bool SkipStoragePoolConversion = 1;
     }
 
     // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
     // converted yet); clears ClusterStateDetails.BscConversionPending flag.
     message TNotifyBscConversionFinished {
+    }
+
+    // Add INACTIVE pile to the cluster: allocate its parts of static groups and state storage, make it DISCONNECTED,
+    // then BSC adds its parts to the groups it manages; the pile may be rejoined when the operation is finished.
+    message TAddBridgePile {
+        string PileName = 1;
+    }
+
+    // Remove the DISCONNECTED pile from the cluster, deleting its parts of every storage group with the data; the pile
+    // becomes INACTIVE then.
+    message TRemoveBridgePile {
+        string PileName = 1;
+    }
+
+    // Sent by BSC when it has performed its part of pending pile operation, or has failed to do so (then it retries).
+    message TNotifyBridgePileOperation {
+        uint32 BridgePileId = 1;
+        optional string ErrorReason = 2; // set on failure
+        NKikimrBridge.TClusterStateDetails.TPendingPileOperation.EKind Kind = 3;
+        uint64 OperationId = 4; // the one of the pending operation BSC has performed its part of
     }
 
     oneof Request {
@@ -389,6 +418,9 @@ message TEvNodeConfigInvokeOnRoot {
         TConvertToBridge ConvertToBridge = 25;
         TNotifyBscConversionFinished NotifyBscConversionFinished = 26;
         TValidateTargetedProposition ValidateTargetedProposition = 27;
+        TAddBridgePile AddBridgePile = 28;
+        TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
+        TRemoveBridgePile RemoveBridgePile = 30;
     }
 }
 
@@ -451,6 +483,7 @@ message TEvNodeConfigInvokeOnRootResult {
 message TEvNodeWardenDynamicConfigSubscribe {
     bool BridgeCapable = 1; // dynamic node runs with BridgeConfig
     bool PileListChangeCapable = 2; // dynamic node supports changes of the list of piles
+    uint32 BridgeFeatureLevel = 3; // bridge features supported by the dynamic node (absent for older versions)
 }
 
 message TEvNodeWardenDynamicConfigPush {
@@ -464,4 +497,11 @@ message TConnectivityPayload {
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
     optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
+    bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
+    uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
+}
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
 }

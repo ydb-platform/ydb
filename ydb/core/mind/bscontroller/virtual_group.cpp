@@ -310,6 +310,13 @@ namespace NKikimr::NBsController {
                 if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
                     throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
                 }
+                // bridged group keeps its VDisks in its piles, and the one decommitted completely would get VDisks
+                // allocated outside of any pile
+                if (group->BridgeGroupInfo || (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE &&
+                        StoragePools.Get().at(group->StoragePoolId).BridgeMode)) {
+                    throw TExError() << "recommissioning of groups in bridge mode is not supported"
+                        << TErrorParams::GroupId(groupId);
+                }
 
                 switch (group->DecommitStatus) {
                     case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
@@ -397,7 +404,8 @@ namespace NKikimr::NBsController {
                     group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
                         const auto& pools = State->StoragePools.Get();
                         if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                            return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                            return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                                State->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                         }
                         Y_DEBUG_ABORT();
                         return TGroupGeometryInfo();

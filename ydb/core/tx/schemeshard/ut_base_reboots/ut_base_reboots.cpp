@@ -398,6 +398,96 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropNotNullWithIndexes, 2, 1, true) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const TVector<TString> tablePaths = {
+                "/MyRoot/Table",
+                "/MyRoot/Table/byValue/indexImplTable",
+                "/MyRoot/Table/byCovered/indexImplTable",
+            };
+            const TVector<TString> indexPaths = {
+                "/MyRoot/Table/byValue",
+                "/MyRoot/Table/byCovered",
+            };
+            TMap<TString, NKikimrSchemeOp::TTableDescription> originalTables;
+            TMap<TString, ui64> indexVersions;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "Key" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Value" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Covered" Type: "Uint64" NotNull: true }
+                        Columns { Name: "Other" Type: "Uint64" NotNull: true }
+                        KeyColumnNames: ["Key"]
+                        UniformPartitionsCount: 2
+                    }
+                    IndexDescription {
+                        Name: "byValue" KeyColumnNames: ["Value"] DataColumnNames: ["Covered", "Other"]
+                    }
+                    IndexDescription {
+                        Name: "byCovered" KeyColumnNames: ["Covered"] DataColumnNames: ["Other"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                for (const auto& path : tablePaths) {
+                    originalTables[path] = DescribePrivatePath(runtime, path).GetPathDescription().GetTable();
+                }
+                for (const auto& path : indexPaths) {
+                    indexVersions[path] = DescribePrivatePath(runtime, path)
+                        .GetPathDescription().GetTableIndex().GetSchemaVersion();
+                }
+            }
+
+            const TString alter = R"(
+                Name: "Table"
+                Columns { Name: "Key" NotNull: false }
+                Columns { Name: "Value" NotNull: false }
+                Columns { Name: "Covered" NotNull: false }
+            )";
+            t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot", alter),
+                {NKikimrScheme::StatusAccepted});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (const auto& [path, original] : originalTables) {
+                    const auto describe = DescribePrivatePath(runtime, path, true);
+                    TestDescribeResult(describe, {NLs::PathExist, NLs::CheckPathState()});
+                    const auto& table = describe.GetPathDescription().GetTable();
+                    UNIT_ASSERT_VALUES_EQUAL_C(table.GetTableSchemaVersion(), original.GetTableSchemaVersion() + 1, path);
+                    UNIT_ASSERT_VALUES_EQUAL_C(table.ColumnsSize(), original.ColumnsSize(), path);
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        TVector<TString>(table.GetKeyColumnNames().begin(), table.GetKeyColumnNames().end()),
+                        TVector<TString>(original.GetKeyColumnNames().begin(), original.GetKeyColumnNames().end()), path);
+                    for (const auto& column : table.GetColumns()) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(column.GetNotNull(), column.GetName() == "Other",
+                            path << ": " << column.GetName());
+                    }
+                    UNIT_ASSERT_C(describe.GetPathDescription().TablePartitionsSize() != 0, path);
+                    for (const auto& partition : describe.GetPathDescription().GetTablePartitions()) {
+                        const auto shardTable = GetDatashardSchema(runtime, partition.GetDatashardId(), describe.GetPathId());
+                        UNIT_ASSERT_VALUES_EQUAL_C(shardTable.ColumnsSize(), table.ColumnsSize(), path);
+                        for (const auto& column : shardTable.GetColumns()) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(column.GetNotNull(), column.GetName() == "Other",
+                                path << ": shard " << partition.GetDatashardId() << ", " << column.GetName());
+                        }
+                    }
+                }
+                for (const auto& [path, version] : indexVersions) {
+                    const auto describe = DescribePrivatePath(runtime, path);
+                    TestDescribeResult(describe, {NLs::PathExist, NLs::CheckPathState(),
+                        NLs::IndexState(NKikimrSchemeOp::EIndexStateReady), NLs::ChildrenCount(1)});
+                    UNIT_ASSERT_VALUES_EQUAL_C(describe.GetPathDescription().GetTableIndex().GetSchemaVersion(), version + 1, path);
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        describe.GetPathDescription().GetChildren(0).GetVersion().GetTableSchemaVersion(),
+                        originalTables.at(path + "/indexImplTable").GetTableSchemaVersion() + 1, path);
+                }
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaFreezeUnfreezeWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

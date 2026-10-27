@@ -81,8 +81,7 @@ private:
                 break;
                 case Ydb::Scheme::PermissionsAction::kRevoke: {
                     for (const auto& n : perm.revoke().permission_names()) {
-                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
-                        acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.revoke().subject(), aclAttrs.InheritanceType);
+                        RevokeYdbPermission(n, perm.revoke().subject(), acl);
                     }
                 }
                 break;

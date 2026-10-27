@@ -63,15 +63,10 @@ namespace {
         return env.Invoke(request); // channel profiles are generated from the group's own pool
     }
 
-    // wait until the condition holds, checking it every 10 seconds of simulated time
-    void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what) {
-        for (ui32 i = 0; i < 60; ++i) {
-            if (condition()) {
-                return;
-            }
-            env.Sim(TDuration::Seconds(10));
-        }
-        UNIT_FAIL(what << " not reached");
+    NKikimrBlobStorage::TConfigResponse RecommissionGroup(TEnvironmentSetup& env, ui32 groupId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableRecommissionGroups()->AddGroupIds(groupId);
+        return env.Invoke(request);
     }
 
     NKikimrBlobStorage::TGroupDecommitStatus::E GetDecommitStatus(TEnvironmentSetup& env, ui32 groupId) {
@@ -195,25 +190,6 @@ namespace {
             res.push_back(group.GetGroupId());
         }
         return res;
-    }
-
-    void SwitchPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
-        auto clusterState = QueryStorageConfig(env).GetClusterState();
-        clusterState.SetPerPileState(pileIndex, state);
-        clusterState.SetGeneration(clusterState.GetGeneration() + 1);
-        const auto res = InvokeDistconf(env, [&](auto& record) {
-            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
-        });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
-    }
-
-    NKikimrBridge::TClusterState::EPileState GetPileState(TEnvironmentSetup& env, ui32 pileIndex) {
-        return QueryStorageConfig(env).GetClusterState().GetPerPileState(pileIndex);
-    }
-
-    void WaitForPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
-        WaitUntil(env, [&] { return GetPileState(env, pileIndex) == state; },
-            TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
     }
 
     TEnvironmentSetup::TSettings MakeBridgedSettings() {
@@ -378,6 +354,22 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         UNIT_ASSERT_VALUES_EQUAL(vanished.size(), 2);
     }
 
+    // recommission is not supported in bridge mode: the group in progress keeps its VDisks in piles, and the decommitted
+    // one would get them outside of any pile
+    Y_UNIT_TEST(RecommissionRefused) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        auto expectRefused = [&] {
+            const auto response = RecommissionGroup(env, groupId);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "bridge mode");
+        };
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = expectRefused, .Done = expectRefused});
+    }
+
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks
     Y_UNIT_TEST(DecommitInlinePile) {
         TEnvironmentSetup env(MakeUnbridgedSettings(true));
@@ -391,6 +383,54 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TFilterChain chain(env);
         const auto vanished = RunDecommission(env, chain, checker, groupId, {5});
         UNIT_ASSERT(vanished.empty());
+    }
+
+    // service id of the inline pile being decommitted points to the BlobDepot agent, while requests with forced
+    // generation (like the ones of the syncer of another pile) are addressed to the physical group; the agent must not
+    // serve them by itself
+    Y_UNIT_TEST(ForcedGenerationReachesInlinePile) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 2);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        checker.CheckAll();
+
+        // the blob kept by the tablet; Keep flag is known to the physical group only
+        const auto [writtenGroupId, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroupId, groupId);
+        {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(), 0,
+                    id.Channel(), false, 0, 0, new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        }
+
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            auto res = QueryPileGroup<TEvBlobStorage::TEvGetResult>(env, groupId, 1,
+                new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Responses[0].Status, NKikimrProto::OK, res->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Buffer.ConvertToString(), data);
+            UNIT_ASSERT_C(res->Responses[0].Keep, res->ToString()); // the agent knows nothing of keep flags
+
+            // the generation fence of the physical group works as well
+            const ui32 generation = GetNodeGroupGeneration(env, groupId, 1);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                auto *request = new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+                request->ForceGroupGeneration = generation - 1;
+                SendToBSProxy(edge, groupId, request);
+            });
+            auto stale = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(stale->Get()->Status, NKikimrProto::RACE, stale->Get()->ToString());
+        }});
     }
 
     // piles don't know that their bridge proxy group is being decommitted, so writes not coming from the BlobDepot are

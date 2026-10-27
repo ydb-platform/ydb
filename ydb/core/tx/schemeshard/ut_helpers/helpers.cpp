@@ -3032,6 +3032,8 @@ namespace NSchemeShardUT_Private {
                 TablePartitioningInfo.Partitioning.back().Defined = true;
                 TablePartitioningInfo.Partitioning.back().Datashard = pi.GetDatashardId();
             }
+
+            TablePartitioningInfo.Version = pathDesc.GetSelf().GetVersion().GetTablePartitionVersion();
         };
 
         TestLs(Runtime, Table, true, fnFillInfo);
@@ -3048,7 +3050,7 @@ namespace NSchemeShardUT_Private {
         // send empty result to other tx participants etc.)
         if (range.IsEmptyRange(KeyColumnTypes)) {
             partitions.push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
-            return std::make_shared<TPartitioning>(std::move(partitions));
+            return std::make_shared<TPartitioning>(std::move(partitions), Version);
         }
 
         TVector<TBorder>::const_iterator low = LowerBound(Partitioning.begin(), Partitioning.end(), true,
@@ -3062,14 +3064,14 @@ namespace NSchemeShardUT_Private {
             partitions.push_back(TKeyDesc::TPartitionInfo(low->Datashard));
 
             if (range.Point)
-                return std::make_shared<TPartitioning>(std::move(partitions));
+                return std::make_shared<TPartitioning>(std::move(partitions), Version);
 
             int prevComp = CompareBorders<true, true>(low->KeyTuple.GetCells(), range.To, low->Point || low->Inclusive, range.InclusiveTo, KeyColumnTypes);
             if (prevComp >= 0)
-                return std::make_shared<TPartitioning>(std::move(partitions));
+                return std::make_shared<TPartitioning>(std::move(partitions), Version);
         } while (++low != Partitioning.end());
 
-        return std::make_shared<TPartitioning>(std::move(partitions));
+        return std::make_shared<TPartitioning>(std::move(partitions), Version);
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<TEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {

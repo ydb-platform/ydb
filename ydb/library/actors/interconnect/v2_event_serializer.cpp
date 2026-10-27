@@ -1,5 +1,7 @@
 #include "v2_event_serializer.h"
 
+#include "event_destructor.h"
+
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
@@ -186,15 +188,14 @@ namespace NActors {
         return totalBytesProduced;
     }
 
-    void TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
-            std::vector<ui64> *eventToWireTime,
-            std::vector<std::unique_ptr<IEventBase>> *events,
-            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+    size_t TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
+            std::vector<ui64> *eventToWireTime, IEventDestructor* eventDestructor) {
         CumulativeCommittedMain += numMainBytes;
         CumulativeCommittedXdc += numXdcBytes;
         Y_ABORT_UNLESS(CumulativeCommittedMain <= CumulativeProducedMain);
         Y_ABORT_UNLESS(CumulativeCommittedXdc <= CumulativeProducedXdc);
 
+        size_t bytes = 0;
         const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty()
                 && RefcountItems.front().MainEndOffset <= CumulativeCommittedMain
@@ -204,14 +205,18 @@ namespace NActors {
                 eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
             NumBytesInScratchBuffers -= front.ScratchBytesUsed;
-            if (events && front.Event) {
-                events->push_back(std::move(front.Event));
+            if (front.Event) {
+                bytes += front.Event->CalculateSerializedSizeCached();
             }
-            if (buffers && front.Buffer) {
-                buffers->push_back(std::move(front.Buffer));
+            if (front.Buffer) {
+                bytes += front.Buffer->GetSize();
+            }
+            if (eventDestructor && (front.Event || front.Buffer)) {
+                eventDestructor->DestroyEvent(std::move(front.Event), std::move(front.Buffer));
             }
             RefcountItems.pop_front();
         }
+        return bytes;
     }
 
     void TEventSerializer::IssueMainBytes(ui64 mainEndOffset) {

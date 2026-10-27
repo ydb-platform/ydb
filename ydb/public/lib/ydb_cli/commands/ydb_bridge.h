@@ -104,6 +104,32 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
+    bool SkipStoragePoolConversion = false;
+};
+
+class TCommandBridgeAddPile : public TYdbCommand {
+public:
+    TCommandBridgeAddPile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
+class TCommandBridgeRemovePile : public TYdbCommand {
+public:
+    TCommandBridgeRemovePile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
 };
 
 }

@@ -224,6 +224,15 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBscConversionFinished:
                         return NotifyBscConversionFinished(op.Command.GetNotifyBscConversionFinished());
 
+                    case TQuery::kAddBridgePile:
+                        return AddBridgePile(op.Command.GetAddBridgePile());
+
+                    case TQuery::kNotifyBridgePileOperation:
+                        return NotifyBridgePileOperation(op.Command.GetNotifyBridgePileOperation());
+
+                    case TQuery::kRemoveBridgePile:
+                        return RemoveBridgePile(op.Command.GetRemoveBridgePile());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 
@@ -257,7 +266,8 @@ namespace NKikimr::NStorage {
                         Self->ConfigRecoveryRequired = false;
                         Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
-                        StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
+                        RecoveryProposition = r.RequiresRecoveryProposition;
+                        StartProposition(&r.ConfigToPropose.value(), !r.RequiresRecoveryProposition,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -339,7 +349,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::QueryConfig(const TQuery::TQueryConfig& request) {
-        auto reply = [this, fresh = request.GetRequireFresh() && !Self->BridgeInfo] {
+        auto reply = [this, fresh = request.GetRequireFresh() && !Self->IsBridged()] {
             Finish(TResult::OK, std::nullopt, [&](auto *record) {
                 auto *response = record->MutableQueryConfig();
                 if (Self->StorageConfig) {
@@ -348,7 +358,7 @@ namespace NKikimr::NStorage {
                 response->SetFresh(fresh);
             });
         };
-        if (request.GetRequireFresh() && !Self->BridgeInfo) {
+        if (request.GetRequireFresh() && !Self->IsBridged()) {
             CollectConfig([reply = std::move(reply)](TProcessCollectConfigsResult&&) { reply(); });
         } else {
             reply();
@@ -376,12 +386,21 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
             if (!result.RequiresGenerationAdvance) {
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
             }
             callback(std::move(result));
         });
+    }
+
+    void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
+        Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
+        RecoveryProposition = true;
+        StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
     }
 
     void TInvokeRequestHandlerActor::CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config,
@@ -446,13 +465,28 @@ namespace NKikimr::NStorage {
             if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
             }
+            auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,
+                                                     &quorumConfig);
+            if (result.ErrorReason || !result.RecoveredConfig) {
+                throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable bridge configuration");
+            }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
+            if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
+                if (result.RecoveredConfig->GetGeneration() <= Self->StorageConfig->GetGeneration()) {
+                    throw TExNoQuorum() << "The current bridge configuration has not been recovered";
+                }
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                throw TExRace() << "Configuration was recovered; retry the configuration update";
+            }
             callback();
         });
     }
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
-        if ((Self->BridgeInfo || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
+        if ((Self->IsBridged() || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
             && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             const TStorageConfigMeta base(*Self->StorageConfig);
             auto savedBase = propositionBase ? std::make_optional(*propositionBase) : std::nullopt;
@@ -466,7 +500,7 @@ namespace NKikimr::NStorage {
                 AdvancesConflictingGeneration = advancesConflictingGeneration;
                 StartPropositionImpl(&config, mindPrev, savedBase ? &*savedBase : nullptr, fromBootstrap);
             };
-            if (Self->BridgeInfo && !mindPrev) {
+            if (Self->IsBridged() && !mindPrev) {
                 CollectBridgeConfig(*config, [start = std::move(start)]() mutable { start(false); });
             } else {
                 CollectConfig([start = std::move(start)](TProcessCollectConfigsResult&& result) mutable {
@@ -485,7 +519,7 @@ namespace NKikimr::NStorage {
             throw TExNoQuorum() << "No quorum to start propose/commit configuration";
         }
 
-        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
+        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && !RecoveryProposition) {
             if (const auto& record = op->Command; record.HasReplaceStorageConfig()) {
                 AUDIT_LOG(
                     const auto& replaceConfig = record.GetReplaceStorageConfig();
@@ -535,7 +569,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-                                      SelfId(), mindPrev, AdvancesConflictingGeneration);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -557,6 +591,8 @@ namespace NKikimr::NStorage {
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
+        } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+            Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
                    && Self->SelfManagementEnabled) {
@@ -774,7 +810,7 @@ namespace NKikimr::NStorage {
             const auto& request = ev->Get()->Record.GetValidateTargetedProposition();
             const ui32 nodeId = ev->Sender.NodeId();
             bool confirmed = false;
-            if (!BridgeInfo && Scepter && CurrentProposition && IsPropositionCurrent(*CurrentProposition)
+            if (!IsBridged() && Scepter && CurrentProposition && IsPropositionCurrent(*CurrentProposition)
                 && request.HasConfig()
                 && TStorageConfigMeta(request.GetConfig()) == TStorageConfigMeta(CurrentProposition->StorageConfig)) {
                 const auto it = ScatterTasks.find(request.GetScatterCookie());
@@ -844,7 +880,7 @@ namespace NKikimr::NStorage {
         const bool deferExecution = RootState == ERootState::ERROR_TIMEOUT;
         auto& queue = deferExecution ? InvokePending : InvokeQ;
         std::shared_ptr<TFreshConfigQueryGroup> group;
-        if (auto *op = std::get_if<TInvokeExternalOperation>(&query); op && !BridgeInfo
+        if (auto *op = std::get_if<TInvokeExternalOperation>(&query); op && !IsBridged()
             && op->Command.HasQueryConfig() && op->Command.GetQueryConfig().GetRequireFresh()) {
             const ui32 refillNodeId = op->Command.GetQueryConfig().GetRefillNodeId();
             if (refillNodeId) {

@@ -72,6 +72,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelStateStorageSelfHealRefresh();
         CancelConfigRefill();
         CancelBindingLiveness();
         for (const auto& item : InvokeQ) {
@@ -113,6 +114,13 @@ namespace NKikimr::NStorage {
 
             if (Cfg->BridgeConfig) {
                 BridgeInfo = GenerateBridgeInfo(config);
+                if (IsBridged()) {
+                    // recovery of applied configurations is not used in bridge mode, forget its state the cluster could
+                    // have had before being converted
+                    ConfigRecoveryRequired = false;
+                    KnownAppliedConfig.reset();
+                    KnownAppliedConfigConflicting = false;
+                }
             } else {
                 Y_ABORT_UNLESS(!BridgeInfo);
             }
@@ -143,6 +151,10 @@ namespace NKikimr::NStorage {
             }
 
             QuorumValid = false;
+
+            // A generation-zero root can learn its first managed configuration
+            // from quorum recovery after BecomeRoot has already run.
+            StartStateStorageSelfHealRefresh();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -214,7 +226,7 @@ namespace NKikimr::NStorage {
         // apply volatile config locally
         ApplyStorageConfig(msg.Config);
 
-        if (BridgeInfo && IsSelfStatic && Binding && Binding->SessionId && StorageConfig->GetGeneration()
+        if (IsBridged() && IsSelfStatic && Binding && Binding->SessionId && StorageConfig->GetGeneration()
             && (!LocalCommittedStorageConfig
                 || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())) {
             auto request = std::make_unique<TEvNodeConfigPush>();

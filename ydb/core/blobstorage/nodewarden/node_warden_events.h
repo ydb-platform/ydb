@@ -7,6 +7,11 @@
 
 namespace NKikimr::NStorage {
 
+    struct TEvNodeConfigGetSelfHealState
+        : TEventPB<TEvNodeConfigGetSelfHealState, NKikimrBlobStorage::TEvNodeConfigGetSelfHealState,
+            TEvBlobStorage::EvNodeConfigGetSelfHealState>
+    {};
+
     struct TEvNodeConfigPush
         : TEventPB<TEvNodeConfigPush, NKikimrBlobStorage::TEvNodeConfigPush, TEvBlobStorage::EvNodeConfigPush>
     {
@@ -25,6 +30,7 @@ namespace NKikimr::NStorage {
 
         TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
+            Record.SetSupportsDirectRootQueries(true);
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {
@@ -77,6 +83,7 @@ namespace NKikimr::NStorage {
         : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
     {
         NKikimrBlobStorage::TBaseConfig BaseConfig;
+        std::optional<TString> ErrorReason; // set when BSC hasn't provided base config, BaseConfig is empty then
     };
 
     struct TEvNodeWardenDynamicConfigSubscribe

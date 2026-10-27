@@ -522,6 +522,10 @@ ENDIF()
 
 END()
 
+RECURSE(
+    hnsw_index
+)
+
 RECURSE_FOR_TESTS(
     build_index/ut
     ut_bloom_filter
@@ -535,6 +539,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_import_s3_engine

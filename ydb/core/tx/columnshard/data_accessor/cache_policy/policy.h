@@ -52,6 +52,8 @@ public:
         return address.GetTabletActorId();
     }
 
+    static bool IsCacheEntryActual(const TAddress& address, const TObject& object);
+
     static EConsumer DefaultConsumer();
 
     class TSizeCalcer {

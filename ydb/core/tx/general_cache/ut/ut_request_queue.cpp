@@ -69,6 +69,10 @@ public:
         return NActors::TActorId(address.Owner, 1);
     }
 
+    static bool IsCacheEntryActual(const TAddress& /*address*/, const TObject& /*object*/) {
+        return true;
+    }
+
     static TString GetCacheName() {
         return "ut";
     }

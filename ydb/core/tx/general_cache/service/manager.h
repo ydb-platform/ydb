@@ -64,6 +64,11 @@ public:
                 auto it = cache.Find(addr);
                 if (it == cache.End()) {
                     counters.ObjectCacheMiss->Inc();
+                } else if (!TPolicy::IsCacheEntryActual(addr, it.Value())) {
+                    cache.Erase(it);
+                    counters.ObjectCacheMiss->Inc();
+                    counters.CacheSizeCount->Set(cache.Size());
+                    counters.CacheSizeBytes->Set(cache.TotalSize());
                 } else {
                     counters.ObjectCacheHit->Inc();
                     AFL_VERIFY(Result.emplace(addr, it.Value()).second);

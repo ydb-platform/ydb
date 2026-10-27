@@ -75,6 +75,10 @@ public:
         return address.GetTabletActorId();
     }
 
+    static bool IsCacheEntryActual(const TAddress& /*address*/, const TObject& /*object*/) {
+        return true;
+    }
+
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;
     }

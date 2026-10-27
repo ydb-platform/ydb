@@ -217,6 +217,11 @@ TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceI
     return address.GetTabletId();
 }
 
+bool TPortionsMetadataCachePolicy::IsCacheEntryActual(const TAddress& address, const TObject& object) {
+    AFL_VERIFY(object);
+    return address.GetContentStamp() == PortionContentStamp(object->GetPortionInfo());
+}
+
 TPortionsMetadataCachePolicy::EConsumer TPortionsMetadataCachePolicy::DefaultConsumer() {
     return EConsumer::UNDEFINED;
 }

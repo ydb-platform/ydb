@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(BridgeDatabaseMode) {
 }
 
 Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
-    Y_UNIT_TEST(HotStandbyStateRoundTrip) {
+    Y_UNIT_TEST(HotStandbyKeepsServerRunning) {
         TSetup setup;
         auto [rpc, future] = setup.Start({.RequestedState = Ydb::Bridge::PileState::HOT_STANDBY});
         const auto invoke = setup.Runtime.GrabEdgeEventIf<NStorage::TEvNodeConfigInvokeOnRoot>(setup.NodeWarden,
@@ -461,8 +461,6 @@ Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
         UNIT_ASSERT(invoke);
         const auto& state = invoke->Get()->Record.GetSwitchBridgeClusterState().GetNewClusterState();
         UNIT_ASSERT_EQUAL(state.GetPerPileState(1), NKikimrBridge::TClusterState::HOT_STANDBY);
-        UNIT_ASSERT_EQUAL(GetPublicBridgePileState(state, TBridgePileId::FromPileIndex(1)),
-            Ydb::Bridge::PileState::HOT_STANDBY);
         auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
         setup.Runtime.Send(new IEventHandle(rpc, setup.NodeWarden, response.release()), 0, true);

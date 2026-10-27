@@ -3,6 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -250,6 +251,38 @@ message TKqpTableMetadataProto {
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
     optional bool StatsLoaded = 15;
+}
+
+message TKqpAlterTableRequest {
+    optional string path = 1;
+    repeated TKqpColumnMetadataProto add_columns = 2;
+    repeated string drop_columns = 3;
+    repeated TKqpColumnMetadataProto alter_columns = 4;
+    oneof ttl_action {
+        Ydb.Table.TtlSettings set_ttl_settings = 5;
+        google.protobuf.Empty drop_ttl_settings = 6;
+    }
+    repeated Ydb.Table.TableIndex add_indexes = 7;
+    repeated string drop_indexes = 8;
+    optional Ydb.Table.StorageSettings alter_storage_settings = 9;
+    repeated Ydb.Table.ColumnFamily add_column_families = 10;
+    repeated Ydb.Table.ColumnFamily alter_column_families = 11;
+    map<string, string> alter_attributes = 12;
+    optional string set_compaction_policy = 13;
+    optional Ydb.Table.PartitioningSettings alter_partitioning_settings = 14;
+    optional Ydb.FeatureFlag.Status set_key_bloom_filter = 15;
+    optional Ydb.Table.ReadReplicasSettings set_read_replicas_settings = 16;
+    repeated Ydb.Table.Changefeed add_changefeeds = 17;
+    repeated string drop_changefeeds = 18;
+    repeated Ydb.Table.RenameIndexItem rename_indexes = 19;
+    optional Ydb.Table.CompactItem compact = 20;
+    oneof metrics_settings_action {
+        Ydb.Table.MetricsSettings set_metrics_settings = 21;
+        google.protobuf.Empty drop_metrics_settings = 22;
+    }
+    repeated Ydb.Table.SetNotNullItem set_not_null = 23;
+    repeated Ydb.Table.TableMultiColumnStatistics add_statistics = 24;
+    repeated string drop_statistics = 25;
 }
 
 message TRlPath {
@@ -953,6 +986,11 @@ message TKqpTableSinkIndexSettings {
 enum EInputRowFormat {
     INPUT_ROW_FORMAT_FLAT = 0;
     INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
+}
+
+// Unsafe truncate resolves the table and its synchronous indexes at execution time.
+message TKqpTableTruncateSettings {
+    optional string TablePath = 1;
 }
 
 message TKqpTableSinkSettings {

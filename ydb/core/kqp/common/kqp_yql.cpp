@@ -102,6 +102,21 @@ static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
     YQL_ENSURE(false, "Unexpected physical tx type: " << type);
 }
 
+TMaybeNode<TKqpTableTruncateSettings> GetTableTruncateSettings(const TKqpPhysicalTx& tx) {
+    for (const auto& stage : tx.Stages()) {
+        if (const auto outputs = stage.Outputs()) {
+            for (const auto& output : outputs.Cast()) {
+                if (const auto sink = output.Maybe<TDqSink>()) {
+                    if (const auto settings = sink.Cast().Settings().Maybe<TKqpTableTruncateSettings>()) {
+                        return settings;
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
 TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
     TKqpPhyTxSettings settings;
 

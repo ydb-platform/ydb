@@ -940,7 +940,7 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> AlterTable(const TString&, Ydb::Table::AlterTableRequest&&, const TMaybe<TString>&, ui64, NKikimrIndexBuilder::TIndexBuildSettings&&) override
+    TFuture<TGenericResult> AlterTable(const TString&, NKikimrKqp::TKqpAlterTableRequest&&, const TMaybe<TString>&, ui64, NKikimrIndexBuilder::TIndexBuildSettings&&) override
     {
         try {
             YQL_ENSURE(false, "gateway doesn't implement alter");
@@ -1141,7 +1141,7 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req) override {
         Y_UNUSED(cluster);
         Y_UNUSED(req);
         return NotImplemented<TGenericResult>();

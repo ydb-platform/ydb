@@ -270,6 +270,14 @@
             "Builder": {"Generate": "None"}
         },
         {
+            "Name": "TKqlUnsafeTruncate",
+            "Base": "TKqlEffectBase",
+            "Match": {"Type": "Callable", "Name": "KqlUnsafeTruncate"},
+            "Children": [
+                {"Index": 0, "Name": "TablePath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlReturningList",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqlReturningList"},
@@ -614,6 +622,14 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TKqpTableTruncateSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTableTruncateSettings"},
+            "Children": [
+                {"Index": 0, "Name": "TablePath", "Type": "TCoAtom"}
             ]
         },
         {

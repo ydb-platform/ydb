@@ -322,7 +322,10 @@ public:
             TDqPhyJoinDict::CallableName(),
         }, Hndl(&ConstraintDqJoin));
         AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&ConstraintDqPhyGraceJoin));
-        AddHandler({TDqPhyBlockHashJoin::CallableName()}, Hndl(&ConstraintDqBlockHashJoin));
+        AddHandler({
+            TDqPhyBlockHashJoin::CallableName(),
+            TDqPhyHashJoin::CallableName(),
+        }, Hndl(&ConstraintDqBlockHashJoin));
         AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&ConstraintDqBlockHashJoinCore));
         AddHandler({
             TDqPhyScalarHashJoin::CallableName(),

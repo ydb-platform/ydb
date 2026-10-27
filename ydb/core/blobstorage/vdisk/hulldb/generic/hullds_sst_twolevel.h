@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "hullds_sst_indexhigh.h"
 
 #include <ydb/core/blobstorage/vdisk/common/memusage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -12,197 +13,47 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TTwoLevelLogoBlobSstIndex -- the LogoBlob SST index in two uncoded levels
     //
-    // TRecHigh per group of records with the same TabletId, Channel, Generation and Step >> 8.
+    // TRecHigh per group of records with the same TabletId, Channel and Generation.
     // TRecLow per record with the rest of the key and the memrec.
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TTwoLevelLogoBlobSstIndex {
         using TRec = TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob>;
 
-#pragma pack(push, 4)
-        struct TLogoBlobIdHigh {
-            union {
-                struct {
-                    ui64 TabletId; // 8 bytes
-                    ui64 StepR1 : 24; // 8 bytes
-                    ui64 Generation : 32;
-                    ui64 Channel : 8;
-                } N;
+        using TRecHigh = TLogoBlobSstRecHigh;
 
-                ui64 X[2];
-            } Raw;
-
-            TLogoBlobIdHigh() {
-                Raw.X[0] = Raw.X[1] = 0;
-            }
-
-            explicit TLogoBlobIdHigh(const TLogoBlobID& id) {
-                Raw.X[0] = id.GetRaw()[0];
-                Raw.X[1] = id.GetRaw()[1];
-            }
-
-            TLogoBlobIdHigh(ui64 tabletId, ui32 generation, ui32 step, ui8 channel) {
-                Raw.N.TabletId = tabletId;
-                Raw.N.Channel = channel;
-                Raw.N.Generation = generation;
-                Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8;
-            }
-
-            bool operator == (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] == r.Raw.X[0] && Raw.X[1] == r.Raw.X[1];
-            }
-
-            bool operator != (const TLogoBlobIdHigh& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] != r.Raw.X[0] ? Raw.X[0] < r.Raw.X[0] : Raw.X[1] < r.Raw.X[1];
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdHigh) == 16, "expect sizeof(TLogoBlobIdHigh) == 16");
-
-        struct TLogoBlobIdLow {
-            union {
-                struct {
-                    ui64 PartId : 4; // 8 bytes
-                    ui64 BlobSize : 26;
-                    ui64 CrcMode : 2;
-                    ui64 Cookie : 24;
-                    ui64 StepR2 : 8;
-                } N;
-
-                ui64 X;
-            } Raw;
-
-            TLogoBlobIdLow() {
-                Raw.X = 0;
-            }
-
-            explicit TLogoBlobIdLow(const TLogoBlobID& id) {
-                Raw.X = id.GetRaw()[2];
-            }
-
-            TLogoBlobIdLow(ui32 step, ui32 cookie, ui32 crcMode, ui32 blobSize, ui32 partId) {
-                Raw.N.StepR2 = step & 0x000000FFull;
-                Raw.N.Cookie = cookie;
-                Raw.N.CrcMode = crcMode;
-                Raw.N.BlobSize = blobSize;
-                Raw.N.PartId = partId;
-            }
-
-            bool operator == (const TLogoBlobIdLow& r) const {
-                return Raw.X == r.Raw.X;
-            }
-
-            bool operator != (const TLogoBlobIdLow& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdLow& r) const {
-                return Raw.X < r.Raw.X;
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdLow) == 8, "expect sizeof(TLogoBlobIdLow) == 8");
-
-        struct TRecHigh {
-        private:
-            TLogoBlobIdHigh Key;
-            ui32 LowRangeEndIndex;
-
-        public:
-            TRecHigh(TLogoBlobIdHigh key)
-                : Key(key)
-            {}
-
-            TLogoBlobIdHigh GetKey() const {
-                return ReadUnaligned<TLogoBlobIdHigh>(&Key);
-            }
-
-            ui32 GetLowRangeEndIndex() const {
-                return LowRangeEndIndex;
-            }
-
-            void SetLowRangeEndIndex(ui32 i) {
-                LowRangeEndIndex = i;
-            }
-
-            bool operator < (const TLogoBlobIdHigh &key) const {
-                return GetKey() < key;
-            }
-        };
-
-        static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
-
-        struct TRecLow {
-        private:
-            TLogoBlobIdLow Key;
+        // Field order keeps every field naturally aligned;
+        // 32-byte alignment keeps every record within a cache line.
+        struct alignas(32) TRecLow {
+            ui64 Raw2; // TLogoBlobID::GetRaw()[2]: Step & 0xFF | Cookie | CrcMode | BlobSize | PartId
             TMemRecLogoBlob MemRec;
+            ui32 Step;
 
-        public:
-            TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
-                : Key(key)
+            explicit TRecLow(const TLogoBlobID& id, const TMemRecLogoBlob& memRec = {})
+                : Raw2(id.GetRaw()[2])
                 , MemRec(memRec)
+                , Step(id.Step())
             {}
 
-            TLogoBlobIdLow GetKey() const {
-                return ReadUnaligned<TLogoBlobIdLow>(&Key);
-            }
-
-            TMemRecLogoBlob GetMemRec() const {
-                return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
-            }
-
-            bool operator < (const TLogoBlobIdLow &key) const {
-                return GetKey() < key;
+            bool operator < (const TRecLow& r) const {
+                return Step != r.Step ? Step < r.Step : Raw2 < r.Raw2;
             }
         };
 
-        static_assert(sizeof(TRecLow) == 28, "expect sizeof(TRecLow) == 28");
-#pragma pack(pop)
+        static_assert(sizeof(TRecLow) == 32, "expect sizeof(TRecLow) == 32");
+        static_assert(alignof(TRecLow) == 32, "expect alignof(TRecLow) == 32");
+        static_assert(offsetof(TRecLow, MemRec) == 8, "expect offsetof(TRecLow, MemRec) == 8");
 
         TTrackableVector<TRecHigh> IndexHigh;
         TTrackableVector<TRecLow> IndexLow;
 
         TTwoLevelLogoBlobSstIndex(const TMemoryConsumer& consumer, const TTrackableVector<TRec>& linearIndex)
-            : IndexHigh(TMemoryConsumer(consumer))
+            : IndexHigh(BuildLogoBlobSstIndexHigh(consumer, linearIndex))
             , IndexLow(TMemoryConsumer(consumer))
         {
-            if (linearIndex.empty()) {
-                return;
-            }
-
-            IndexHigh.reserve(linearIndex.size());
             IndexLow.reserve(linearIndex.size());
-
-            const TRec* rec = linearIndex.begin();
-
-            auto blobId = rec->GetKey().LogoBlobID();
-            TLogoBlobIdHigh high(blobId);
-            TLogoBlobIdLow low(blobId);
-            TLogoBlobIdHigh highPrev = high;
-
-            IndexHigh.emplace_back(high);
-            IndexLow.emplace_back(low, rec->GetMemRec());
-            ++rec;
-
-            for (; rec != linearIndex.end(); ++rec) {
-                auto blobId = rec->GetKey().LogoBlobID();
-                TLogoBlobIdHigh high(blobId);
-                TLogoBlobIdLow low(blobId);
-
-                if (Y_UNLIKELY(high != highPrev)) {
-                    IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-                    IndexHigh.emplace_back(high);
-                    highPrev = high;
-                }
-
-                IndexLow.emplace_back(low, rec->GetMemRec());
+            for (const TRec& rec : linearIndex) {
+                IndexLow.emplace_back(rec.GetKey().LogoBlobID(), rec.GetMemRec());
             }
-
-            IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-            IndexHigh.shrink_to_fit();
         }
 
         ui64 Elements() const {
@@ -218,9 +69,7 @@ namespace NKikimr {
         }
 
         static TKeyLogoBlob MakeKey(const TRecHigh& high, const TRecLow& low) {
-            const auto highKey = high.GetKey();
-            const auto lowKey = low.GetKey();
-            return TKeyLogoBlob(TLogoBlobID(highKey.Raw.X[0], highKey.Raw.X[1], lowKey.Raw.X));
+            return TKeyLogoBlob(TLogoBlobID(high.TabletId, high.Raw1(low.Step), low.Raw2));
         }
 
         void Save(TTrackableVector<TRec>* linearIndex) const {
@@ -228,8 +77,8 @@ namespace NKikimr {
             linearIndex->reserve(IndexLow.size());
             ui64 i = 0;
             for (const TRecHigh& high : IndexHigh) {
-                for (; i < high.GetLowRangeEndIndex(); ++i) {
-                    linearIndex->emplace_back(MakeKey(high, IndexLow[i]), IndexLow[i].GetMemRec());
+                for (; i < high.LowRangeEndIndex; ++i) {
+                    linearIndex->emplace_back(MakeKey(high, IndexLow[i]), IndexLow[i].MemRec);
                 }
             }
         }
@@ -261,7 +110,7 @@ namespace NKikimr {
         void Next() {
             Y_DEBUG_ABORT_UNLESS(Valid());
             ++Low;
-            if (Y_UNLIKELY(Low == Index->IndexLow.begin() + High->GetLowRangeEndIndex())) {
+            if (Y_UNLIKELY(Low == Index->IndexLow.begin() + High->LowRangeEndIndex)) {
                 ++High;
                 LowRangeBegin = Low;
             }
@@ -274,7 +123,7 @@ namespace NKikimr {
             if (Y_UNLIKELY(Low == LowRangeBegin)) {
                 --High;
                 LowRangeBegin = Index->IndexLow.begin() +
-                        (High <= Index->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                        (High <= Index->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
             }
             --Low;
         }
@@ -286,7 +135,7 @@ namespace NKikimr {
 
         TMemRecLogoBlob GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return Low->GetMemRec();
+            return Low->MemRec;
         }
 
         void SeekToFirst() {
@@ -301,8 +150,8 @@ namespace NKikimr {
         }
 
         void Seek(const TKeyLogoBlob& key) {
-            const TLogoBlobIdHigh keyHigh(key.LogoBlobID());
-            const TLogoBlobIdLow keyLow(key.LogoBlobID());
+            const TRecHigh keyHigh(key.LogoBlobID());
+            const TRecLow keyLow(key.LogoBlobID());
 
             High = std::lower_bound(Index->IndexHigh.begin(), Index->IndexHigh.end(), keyHigh);
 
@@ -312,14 +161,14 @@ namespace NKikimr {
             }
 
             auto rangeBegin = Index->IndexLow.begin() +
-                    (High == Index->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                    (High == Index->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
 
-            if (High->GetKey() != keyHigh) {
+            if (!High->SameKey(keyHigh)) {
                 Low = LowRangeBegin = rangeBegin;
                 return;
             }
 
-            auto rangeEnd = Index->IndexLow.begin() + High->GetLowRangeEndIndex();
+            auto rangeEnd = Index->IndexLow.begin() + High->LowRangeEndIndex;
 
             Low = std::lower_bound(rangeBegin, rangeEnd, keyLow);
 

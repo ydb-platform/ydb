@@ -163,7 +163,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        // nothing
+        Self->AbortDirectImportsForSpace();
     }
 
 private:

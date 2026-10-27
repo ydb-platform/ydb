@@ -70,7 +70,6 @@ def parse_yaml(text):
     current_list = None
     for lineno, raw in enumerate(text.splitlines(), 1):
         if not raw.strip() or raw.lstrip().startswith("#"):
-            current_list = None
             continue
         if raw.startswith(" ") or raw.startswith("\t"):
             item = raw.strip()
@@ -84,6 +83,8 @@ def parse_yaml(text):
         key, value = raw.split(":", 1)
         key = key.strip()
         value = value.strip()
+        if key in root:
+            raise ConfigError(f"line {lineno}: duplicate key {key}")
         if value == "":
             root[key] = []
             current_list = root[key]
@@ -127,7 +128,7 @@ def load_config(path):
         if "names" in data:
             raise ConfigError("fleet file sets count, labels, and a name prefix, not a runner list")
         prefix = data.get("name")
-        if "name" not in (fleet_keys or set()) or not isinstance(prefix, str) or not NAME_RE.fullmatch(prefix):
+        if "name" not in fleet_keys or not isinstance(prefix, str) or not NAME_RE.fullmatch(prefix):
             raise ConfigError("fleet file must set name to a VM name prefix")
     elif "name" not in data and "names" not in data:
         raise ConfigError("set name or names")
@@ -532,14 +533,19 @@ def next_instance_name(prefix, taken):
 
 
 def poll_pools(pools, runners):
-    grouped = {tuple(sorted(pool["labels"])): [] for pool in pools}
+    grouped = {pool["_pool"]: [] for pool in pools}
+    workload = {tuple(sorted(pool["labels"])): pool["_pool"] for pool in pools}
     for runner in runners:
+        owner = runner_pool_name(runner.get("labels") or [])
+        if owner in grouped:
+            grouped[owner].append(runner)
+            continue
         key = workload_key(runner.get("labels") or [])
-        if key in grouped:
-            grouped[key].append(runner)
+        if not owner and key in workload:
+            grouped[workload[key]].append(runner)
     reports = []
     for pool in pools:
-        found = grouped[tuple(sorted(pool["labels"]))]
+        found = grouped[pool["_pool"]]
         online = [runner.get("name") for runner in found if runner.get("status") == "online"]
         offline = [runner.get("name") for runner in found if runner.get("status") != "online"]
         reports.append({
@@ -819,10 +825,18 @@ def start_vm(cfg, name, timeout):
 def runner_service_script():
     return """set -euo pipefail
 dir=/home/runner/actions_runner
-if [ ! -f "$dir/.runner" ]; then
+if [ ! -f "$dir/.runner" ] || [ ! -f "$dir/.service" ]; then
   exit 42
 fi
-systemctl restart "$(cat "$dir/.service")"
+svc=$(tr -d '[:space:]' < "$dir/.service")
+case "$svc" in
+  actions.runner.*.service) ;;
+  *) exit 42 ;;
+esac
+if ! systemctl cat "$svc" >/dev/null 2>&1; then
+  exit 42
+fi
+systemctl restart "$svc"
 """
 
 
@@ -848,11 +862,14 @@ def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
     info = yc_instance(cfg, name)
     if info is None:
         return "gone", taken
-    if info.get("status") != "RUNNING":
-        ip = start_vm(cfg, name, timeout)
+    if info.get("status") == "RUNNING":
+        ip = instance_ip(info)
+    elif info.get("status") in {"STARTING", "PROVISIONING", "CREATING"}:
+        ip = wait_running(cfg, name, timeout)
         vm_was_running = False
     else:
-        ip = instance_ip(info)
+        ip = start_vm(cfg, name, timeout)
+        vm_was_running = False
     boot_wait = REVIVE_WAIT if vm_was_running else REVIVE_BOOT_WAIT
     if not vm_was_running and wait_runner_online(cfg["repo"], name, boot_wait):
         return "online", taken
@@ -879,7 +896,6 @@ def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
     if runner_id:
         delete_github_runner(cfg["repo"], runner_id)
     delete_vm(cfg, name, timeout)
-    taken.discard(name)
     new_name = next_instance_name(cfg["name"], taken)
     taken.add(new_name)
     cmd_create(cfg, [new_name], False, timeout)
@@ -915,7 +931,13 @@ def cmd_reconcile(target, apply, timeout):
             if added or removed:
                 set_runner_labels(pool["repo"], action["id"], final)
         elif op == "sync":
-            set_runner_labels(pool["repo"], action["id"], action["labels"])
+            fresh = find_runner(pool["repo"], action.get("id"), action.get("name"))
+            if not fresh:
+                print(f"{action['name']}: runner gone, skip sync", flush=True)
+                continue
+            final, added, removed = label_plan(fresh.get("labels") or [], effective_labels(pool))
+            if added or removed:
+                set_runner_labels(pool["repo"], action["id"], final)
         elif op == "delete":
             fresh = find_runner(pool["repo"], action.get("id"), action.get("name"))
             if delete_blocked(fresh, action.get("vm")):
@@ -1257,6 +1279,36 @@ def self_test():
 
     taken = {"static-relwithdebinfo-d", "static-relwithdebinfo-d-01", "static-relwithdebinfo-d-2"}
     assert next_instance_name("static-relwithdebinfo-d", taken) == "static-relwithdebinfo-d-3"
+    taken.add("static-relwithdebinfo-d-3")
+    assert next_instance_name("static-relwithdebinfo-d", taken) == "static-relwithdebinfo-d-4"
+
+    spaced = parse_yaml("labels:\n  - tiny-worker\n\n  - auto-provisioned\nname: tiny\n")
+    assert spaced["labels"] == ["tiny-worker", "auto-provisioned"]
+    try:
+        parse_yaml("name: a\nname: b\n")
+    except ConfigError as exc:
+        if "duplicate" not in str(exc):
+            raise
+    else:
+        raise AssertionError("expected duplicate key error")
+
+    asan = {"_pool": "asan", "labels": ["auto-provisioned", "build-preset-release-asan"], "count": 9}
+    post = {
+        "_pool": "asan-postcommit",
+        "labels": ["auto-provisioned", "build-preset-release-asan", "postcommit"],
+        "count": 6,
+    }
+    gated = {
+        "name": "static-d-1", "status": "online",
+        "labels": [
+            {"name": "auto-provisioned"},
+            {"name": "build-preset-release-asan"},
+            {"name": "pool:asan-postcommit"},
+        ],
+    }
+    reports = {item["pool"]: item for item in poll_pools([asan, post], [gated])}
+    assert reports["asan-postcommit"]["online"] == 1
+    assert reports["asan"]["online"] == 0
 
     tiny_pool = {
         "_pool": "tiny", "_fleet": True, "count": 1, "name": "tiny-worker",
@@ -1329,8 +1381,10 @@ def self_test():
     print("self-test ok")
 
 def load_config_text(text):
-    path = Path(os.environ.get("TMPDIR", "/tmp")) / "gh-runner-provision-self-test.yaml"
-    path.write_text(text)
+    handle = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+    path = Path(handle.name)
+    handle.write(text)
+    handle.close()
     try:
         return load_config(path)
     finally:

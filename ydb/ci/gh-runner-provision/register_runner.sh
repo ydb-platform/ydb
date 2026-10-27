@@ -14,7 +14,10 @@ H=/home/$RUNNER_USERNAME
 PRESET_NAME="${PRESET_NAME:-}"
 
 instance_id=$(curl -sS --retry 8 -H Metadata-Flavor:Google \
-  169.254.169.254/computeMetadata/v1/instance/vendor/identity/document | jq -r '.instanceId')
+  169.254.169.254/computeMetadata/v1/instance/vendor/identity/document | jq -r '.instanceId // empty')
+if [ -z "$instance_id" ] || [ "$instance_id" = "null" ]; then
+  instance_id=""
+fi
 
 mkdir -p "$H/actions_runner"
 cd "$H/actions_runner"
@@ -58,19 +61,37 @@ if [ -f .runner ]; then
   stop_runner
 fi
 
+labels="$RUNNER_LABELS"
+if [ -n "$instance_id" ]; then
+  labels="${RUNNER_LABELS},instance:${instance_id}"
+fi
 sudo -u "$RUNNER_USERNAME" ./config.sh --unattended --disableupdate --replace \
   --url "$REPO_URL" \
   --token "$GITHUB_TOKEN" \
   --name "$RUNNER_NAME" \
-  --labels "${RUNNER_LABELS},instance:${instance_id}"
+  --labels "$labels"
 
-if [ -f .service ] && ! systemctl cat "$(cat .service)" >/dev/null 2>&1; then
-  rm -f .service
+if [ -f .service ]; then
+  svc=$(tr -d '[:space:]' < .service)
+  case "$svc" in
+    actions.runner.*.service)
+      if ! systemctl cat "$svc" >/dev/null 2>&1; then
+        rm -f .service
+      fi
+      ;;
+    *)
+      rm -f .service
+      ;;
+  esac
 fi
 if [ ! -f .service ]; then
   ./svc.sh install "$RUNNER_USERNAME"
 fi
-SVC_NAME=$(cat .service)
+SVC_NAME=$(tr -d '[:space:]' < .service)
+case "$SVC_NAME" in
+  actions.runner.*.service) ;;
+  *) echo "bad runner service name: $SVC_NAME" >&2; exit 1 ;;
+esac
 
 mkdir -p "/etc/systemd/system/${SVC_NAME}.d"
 cat > "/etc/systemd/system/${SVC_NAME}.d/restart.conf" <<EOF

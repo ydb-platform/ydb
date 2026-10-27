@@ -21,6 +21,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    mirror3dc
     mvp
     nbs
     query_cache

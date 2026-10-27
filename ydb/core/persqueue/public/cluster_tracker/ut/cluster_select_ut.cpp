@@ -274,6 +274,8 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(accountsQuery.Contains("A.readClusters"));
         UNIT_ASSERT(accountsQuery.Contains("A.writeClusters"));
         UNIT_ASSERT(accountsQuery.Contains("A.version"));
+        UNIT_ASSERT(accountsQuery.Contains("ORDER BY A.name"));
+        UNIT_ASSERT(accountsQuery.Contains("$from"));
         UNIT_ASSERT(!accountsQuery.Contains("Versions"));
         UNIT_ASSERT(!accountsQuery.Contains("name == 'Account'"));
         UNIT_ASSERT(IssuesLookLikeMissingAccountTable("Cannot find table `/Root/PQ/Config/V2/Account`"));

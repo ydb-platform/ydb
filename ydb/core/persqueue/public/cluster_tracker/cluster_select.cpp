@@ -128,11 +128,15 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
 }
 
 TString MakeListAccountsQuery(TStringBuf accountTablePath) {
-    // Version is per account row. It changes only when that account's cluster set changes.
+    // Version is per account row. Pages are ordered by name so a truncated result can continue
+    // from $from instead of being published as the full table.
     return Sprintf(
         R"(
                --!syntax_v1
-               SELECT A.name, A.readClusters, A.writeClusters, A.version FROM `%s` AS A;
+               DECLARE $from AS Utf8;
+               SELECT A.name, A.readClusters, A.writeClusters, A.version FROM `%s` AS A
+               WHERE A.name > $from
+               ORDER BY A.name;
             )", TString(accountTablePath).c_str());
 }
 

@@ -35,10 +35,16 @@ struct TFancyGRpcWrapper {
         Stub_ = Ydb::PersQueue::V1::ClusterDiscoveryService::NewStub(Channel_);
     }
 
-    auto PerformRpc(const DiscoverClustersRequest& request, DiscoverClustersResult& result, const TString& authority = {}) {
+    auto PerformRpc(
+            const DiscoverClustersRequest& request, DiscoverClustersResult& result,
+            const TString& authority = {}, const TString& database = {}
+    ) {
         grpc::ClientContext context;
         if (!authority.empty()) {
             context.set_authority(authority.c_str());
+        }
+        if (!database.empty()) {
+            context.AddMetadata("x-ydb-database", std::string(database));
         }
         DiscoverClustersResponse response;
 
@@ -1014,9 +1020,28 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         assertOrdinaryOnly("localhost");
         assertOrdinaryOnly("sas.logbroker.yandex.net");
         assertOrdinaryOnly({});
+        // Reads follow the account, not :authority. Without a database, FNX stays hidden.
+        assertOrdinaryOnly("logbroker-fnx.yandex.net");
+        assertOrdinaryOnly("LOGBROKER-FNX.YANDEX.NET:2135");
 
-        assertWithMyt("logbroker-fnx.yandex.net");
-        assertWithMyt("LOGBROKER-FNX.YANDEX.NET:2135");
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, version Int64, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
+            "VALUES (\"prod\", \"\", \"myt\", 1);");
+        wrapper.WaitForExactClustersDataVersion(4);
+        {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, "localhost", "/Root/prod"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, "logbroker-fnx.yandex.net"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+        }
 
         {
             DiscoverClustersRequest request;
@@ -1032,14 +1057,14 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "", 2);
-        wrapper.WaitForExactClustersDataVersion(4);
+        wrapper.WaitForExactClustersDataVersion(5);
         // Empty CSV: myt is no longer FNX and is visible for every host.
         assertWithMyt("logbroker-fnx.yandex.net");
         assertWithMyt({});
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt,missing", 3);
-        wrapper.WaitForExactClustersDataVersion(5);
-        assertWithMyt("logbroker-fnx.yandex.net");
+        wrapper.WaitForExactClustersDataVersion(6);
+        assertOrdinaryOnly("logbroker-fnx.yandex.net");
         assertOrdinaryOnly({});
     }
 

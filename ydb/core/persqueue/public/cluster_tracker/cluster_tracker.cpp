@@ -91,10 +91,13 @@ private:
         return AccountTablePathFromClusterTable(Cfg().GetClusterTablePath());
     }
 
-    void StartListAccounts() {
+    void StartListAccounts(bool nextPage = false) {
+        if (!nextPage) {
+            AccountPageFrom.clear();
+        }
         QueryInFlight = true;
         CurrentQuery = EQueryKind::ListAccounts;
-        SendDml(MakeListAccountsQuery(GetAccountTablePath()));
+        SendDml(MakeListAccountsQuery(GetAccountTablePath()), AccountPageFrom);
     }
 
     void ApplyCachedAccounts(TClustersList& clustersList) const {
@@ -187,7 +190,7 @@ private:
         Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
     }
 
-    void SendDml(const TString& query) {
+    void SendDml(const TString& query, TMaybe<TString> fromAccount = {}) {
         auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -197,6 +200,11 @@ private:
         req->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         req->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+        if (fromAccount.Defined()) {
+            auto& param = (*req->Record.MutableRequest()->MutableYdbParameters())["$from"];
+            param.mutable_type()->set_type_id(Ydb::Type::UTF8);
+            param.mutable_value()->set_text_value(std::string(*fromAccount));
+        }
         Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
     }
 
@@ -228,6 +236,7 @@ private:
         QueryInFlight = false;
         CurrentQuery = EQueryKind::None;
         FullSchemaChain = false;
+        AccountPageFrom.clear();
         PendingClustersList = nullptr;
         ClustersList = nullptr;
         Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
@@ -363,20 +372,26 @@ private:
                     return;
                 }
                 if (success) {
-                    if (record.GetResponse().YdbResultsSize() > 0) {
-                        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
-                        UpdateAccountsList(parser);
-                    } else {
-                        PendingClustersList->Accounts.clear();
-                        PendingClustersList->AccountVersion = 0;
+                    const bool hasResult = record.GetResponse().YdbResultsSize() > 0;
+                    const bool truncated = hasResult && record.GetResponse().GetYdbResults(0).truncated();
+                    if (!hasResult) {
+                        if (AccountPageFrom.empty()) {
+                            PendingClustersList->Accounts.clear();
+                            PendingClustersList->AccountVersion = 0;
+                        }
+                        AccountPageFrom.clear();
                         RememberAccounts(*PendingClustersList);
                         FinishClustersList(std::move(PendingClustersList));
+                    } else {
+                        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+                        UpdateAccountsList(parser, truncated);
                     }
                     return;
                 }
                 if (IssuesLookLikeMissingAccountTable(issues)) {
                     YDB_LOG_DEBUG_CTX(Ctx(), "Account table is absent, account cluster lists are empty",
                         {"record", record});
+                    AccountPageFrom.clear();
                     PendingClustersList->Accounts.clear();
                     PendingClustersList->AccountVersion = 0;
                     LastAccounts.clear();
@@ -384,6 +399,7 @@ private:
                     FinishClustersList(std::move(PendingClustersList));
                     return;
                 }
+                AccountPageFrom.clear();
                 YDB_LOG_ERROR_CTX(Ctx(), "Failed to list accounts, publish clusters with last account cache",
                     {"record", record});
                 ApplyCachedAccounts(*PendingClustersList);
@@ -473,7 +489,7 @@ private:
     }
 
     template<typename TProtoRecord>
-    void UpdateAccountsList(TProtoRecord& parser) {
+    void UpdateAccountsList(TProtoRecord& parser, bool truncated) {
         auto clustersList = PendingClustersList;
         PendingClustersList = nullptr;
         if (!clustersList) {
@@ -481,8 +497,13 @@ private:
             return;
         }
 
+        TString pageLastName;
         while (parser.TryNextRow()) {
-            TString name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            const TString rawName = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            if (!rawName.empty()) {
+                pageLastName = rawName;
+            }
+            TString name = rawName;
             name.to_lower();
             if (name.empty()) {
                 continue;
@@ -507,6 +528,24 @@ private:
             clustersList->Accounts[name] = std::move(spec);
         }
 
+        if (truncated) {
+            // A truncated page is not the account table. Keep the previous complete cache.
+            if (pageLastName.empty() || pageLastName <= AccountPageFrom) {
+                YDB_LOG_ERROR_CTX(Ctx(), "Account list page did not advance, keep the previous account cache",
+                    {"from", AccountPageFrom},
+                    {"pageLastName", pageLastName});
+                AccountPageFrom.clear();
+                ApplyCachedAccounts(*clustersList);
+                FinishClustersList(std::move(clustersList));
+                return;
+            }
+            AccountPageFrom = pageLastName;
+            PendingClustersList = std::move(clustersList);
+            StartListAccounts(true);
+            return;
+        }
+
+        AccountPageFrom.clear();
         clustersList->AccountVersion = clustersList->SumAccountVersions();
         RememberAccounts(*clustersList);
         FinishClustersList(std::move(clustersList));
@@ -538,6 +577,8 @@ private:
     absl::flat_hash_map<TString, TVector<TString>> LastBalancers;
     i64 LastAccountVersion = 0;
     absl::flat_hash_map<TString, TClustersList::TAccountClusters> LastAccounts;
+    // Exclusive lower bound of the account page being read. Empty starts from the first name.
+    TString AccountPageFrom;
 };
 
 NActors::IActor* CreateClusterTracker() {

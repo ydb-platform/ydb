@@ -9,6 +9,7 @@ struct TBridgePileInfo {
     bool IsPromoted = false;
     bool Drain = false;
     TVector<TActorId> DrainInitiators; // Currently always empty
+    THiveDrain* DrainActor = nullptr;
 
     TBridgePileInfo(const TBridgeInfo::TPile& wardenPileInfo)
         : Id(wardenPileInfo.BridgePileId)

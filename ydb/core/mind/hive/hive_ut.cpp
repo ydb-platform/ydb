@@ -10404,6 +10404,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         DisconnectWithDeadNodes,
     };
 
+    // Not runtime.WaitFor: it aborts the whole binary on timeout
+    bool WaitUntil(TTestBasicRuntime& runtime, const std::function<bool()>& condition) {
+        bool done = condition();
+        for (ui32 i = 0; i < 100 && !done; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            done = condition();
+        }
+        return done;
+    }
+
     void TestBridgeDemotion(EBridgeHiveRestart hiveRestart) {
         static constexpr ui32 NUM_NODES = 4;
         static constexpr ui32 NUM_TABLETS = 4;
@@ -10475,13 +10485,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return sum;
         };
 
-        auto waitUntil = [&](auto&& condition) -> bool {
-            bool done = condition();
-            for (ui32 i = 0; i < 100 && !done; ++i) {
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
-                done = condition();
-            }
-            return done;
+        auto waitUntil = [&](auto&& condition) {
+            return WaitUntil(runtime, condition);
         };
 
         auto restartHive = [&] {
@@ -10575,6 +10580,48 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestBridgeDisconnectWithDeadNodes) {
         TestBridgeDemotion(EBridgeHiveRestart::DisconnectWithDeadNodes);
+    }
+
+    // a storage config update during a pile drain does not start a second drain of the pile, even for a node that joined it
+    Y_UNIT_TEST(TestBridgePileDrainSingleActor) {
+        static constexpr ui32 NUM_NODES = 4;
+        static constexpr ui32 NUM_TABLETS = 4;
+        static constexpr ui32 DRAIN_INFLIGHT = 2;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, false, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetDrainInflight(DRAIN_INFLIGHT);
+        });
+        // node 2 of pile 0 joins only while the pile drain runs
+        for (ui32 nodeIndex : {0, 1, 3}) {
+            CreateLocal(runtime, nodeIndex);
+        }
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            MakeSureTabletIsUp(runtime, SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true), 0);
+        }
+
+        TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
+        bridge.Promote(1);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return blockBoot.size() >= DRAIN_INFLIGHT; }), "pile drain did not start");
+        UNIT_ASSERT_VALUES_EQUAL(blockBoot.size(), DRAIN_INFLIGHT);
+
+        bool node2Registered = false;
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([&](auto&& ev) {
+            node2Registered |= ev->Sender.NodeId() == runtime.GetNodeId(2);
+        });
+        CreateLocal(runtime, 2);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return node2Registered; }), "node 2 did not register");
+        observer.Remove();
+
+        bridge.Promote(1); // one more storage config update while the drain runs
+        runtime.SimulateSleep(TDuration::MilliSeconds(500));
+        UNIT_ASSERT_VALUES_EQUAL_C(blockBoot.size(), DRAIN_INFLIGHT, "a second drain of the pile started");
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

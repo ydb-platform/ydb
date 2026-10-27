@@ -19,7 +19,7 @@ public:
         return {nodeId};
     }
 
-    // Scans all nodes: called only while a pile drain is pending, so the overhead is negligible
+    // Scans all nodes: called only to start a pile drain, so the overhead is negligible
     std::unordered_set<TNodeId> operator()(TBridgePileId pileId) const {
         std::unordered_set<TNodeId> nodes;
         for (const auto& [nodeId, node] : Hive->Nodes) {

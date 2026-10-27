@@ -50,12 +50,6 @@ common:
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible
-    to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/ansible/initial-deployment
-    to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/deployment-options/ansible/initial-deployment
-    to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /troubleshooting/system_views_cluster.md
     to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
@@ -545,6 +539,12 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
+  - from: /getting_started/ansible
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/ansible/initial-deployment
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/deployment-options/ansible/initial-deployment
+    to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /db/terraform.md
     to: /dev/terraform.md
   - from: /maintenance/manual/replacing_nodes.md
@@ -581,6 +581,12 @@ ru:
     to: /integrations/sql-translation/sql-dialect-converter.md
 
 en:
+  - from: /getting_started/ansible
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/ansible/initial-deployment
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/deployment-options/ansible/initial-deployment
+    to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md
     to: /recipes/ydb-sdk/debug-jaeger.md
   - from: /reference/ydb-sdk/recipes/debug-logs.md

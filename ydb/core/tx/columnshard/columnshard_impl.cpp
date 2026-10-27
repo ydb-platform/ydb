@@ -1889,7 +1889,6 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
-    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},

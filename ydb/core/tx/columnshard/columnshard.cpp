@@ -120,7 +120,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
 }
 
 void TColumnShard::OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx) {
-    if (IsCutHistoryEnabledAndAllowedBySharing()) {
+    if (IsCutHistoryEnabled()) {
         FindEmptyHistoryIntervals = std::make_unique<TFindEmptyHistoryIntervals>();
         StartFindEmptyHistoryIntervals(completedBarrierGeneration, ctx);
     }

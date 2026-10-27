@@ -29,14 +29,11 @@ class TColumnEngineForLogs;
 class ISnapshotSchema;
 }   // namespace NKikimr::NOlap
 
-namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
-class TSubscriberCounters;
-class TTaskContext;
-}   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe
-
 namespace NKikimr::NColumnShard {
 
 inline constexpr ui64 CutHistoryJournalLimit = 10;
+
+bool IsCutHistoryEnabled();
 
 class TCSCounters;
 
@@ -57,9 +54,8 @@ struct TFindEmptyHistoryIntervalsContext {
 TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TTabletStorageInfo& storageInfo, ui32 generation,
     ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs* index, NActors::TActorId tabletActorId);
 
-NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context, NActors::TActorId resourceSubscriber,
-    const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config,
-    const TCSCounters& counters, TInstant started);
+NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context,
+    const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config, const TCSCounters& counters, TInstant started);
 
 struct TEmptyHistoryIntervalsScanResult {
     NFindEmptyHistoryIntervals::THistoryIntervals::TIntervals Intervals;
@@ -90,8 +86,6 @@ public:
         ui32 Generation;
         const NOlap::TColumnEngineForLogs* Index;
         NActors::TActorId TabletActorId;
-        NActors::TActorId ResourceSubscriber;
-        const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& SubscribeCounters;
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
         const TCSCounters& Counters;
     };

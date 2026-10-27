@@ -48,25 +48,6 @@ public:
     {
     }
 
-    // Visit blobs whose IDs belong to this tablet; false stops the traversal.
-    template <class TVisitor>
-    void VisitOwnBlobs(TVisitor&& visitor) const {
-        const auto visit = [&](const TUnifiedBlobId& blob) {
-            const auto& id = blob.GetLogoBlobId();
-            return id.TabletID() != static_cast<ui64>(SelfTabletId) || visitor(id);
-        };
-        for (const auto& [blob, _] : BorrowedBlobIds) {
-            if (!visit(blob)) {
-                return;
-            }
-        }
-        for (const auto& [blob, _] : SharedBlobIds) {
-            if (!visit(blob)) {
-                return;
-            }
-        }
-    }
-
     bool IsTrivialLinks() const {
         return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
     }

@@ -100,6 +100,8 @@ message TReplicationConfig {
             optional uint64 Id = 4;
             optional uint32 LagMilliSeconds = 5;
             optional float InitialScanProgress = 6; // pencentage
+            optional double WriteSpeedBytesPerSecond = 7;
+            optional google.protobuf.Duration InitialScanEta = 8;
         }
 
         repeated TTarget Targets = 1;
@@ -153,6 +155,8 @@ message TReplicationState {
     message TStandBy {
         optional uint32 LagMilliSeconds = 1;
         optional float InitialScanProgress = 2; // pencentage
+        optional double WriteSpeedBytesPerSecond = 3;
+        optional google.protobuf.Duration InitialScanEta = 4;
     }
 
     message TPaused {

@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     replication_ut.cpp
+    target_statistics_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

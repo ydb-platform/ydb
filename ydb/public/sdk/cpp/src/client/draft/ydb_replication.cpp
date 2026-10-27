@@ -68,6 +68,15 @@ static TDuration DurationToDuration(const google::protobuf::Duration& value) {
     return TDuration::MilliSeconds(google::protobuf::util::TimeUtil::DurationToMilliseconds(value));
 }
 
+static TDuration ScanEtaFromProto(const google::protobuf::Duration& value) {
+    auto micros = google::protobuf::util::TimeUtil::DurationToMicroseconds(value);
+    // Preserve the distinction between a positive estimate and confirmed zero.
+    if (value.nanos() % 1000 != 0) {
+        ++micros;
+    }
+    return TDuration::MicroSeconds(micros);
+}
+
 TGlobalConsistency::TGlobalConsistency(const Ydb::Replication::ConsistencyLevelGlobal& proto)
     : CommitInterval_(DurationToDuration(proto.commit_interval()))
 {
@@ -79,7 +88,12 @@ const TDuration& TGlobalConsistency::GetCommitInterval() const {
 
 TStats::TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats)
     : Lag_(stats.has_lag() ? std::make_optional(DurationToDuration(stats.lag())) : std::nullopt)
-    , InitialScanProgress_(stats.has_initial_scan_progress() ? std::make_optional(stats.initial_scan_progress()) : std::nullopt)
+    , InitialScanProgress_(stats.has_initial_scan_progress()
+        ? std::make_optional(stats.initial_scan_progress()) : std::nullopt)
+    , WriteSpeedBytesPerSecond_(stats.has_write_speed_bytes_per_second()
+        ? std::make_optional(stats.write_speed_bytes_per_second()) : std::nullopt)
+    , InitialScanEta_(stats.has_initial_scan_eta()
+        ? std::make_optional(ScanEtaFromProto(stats.initial_scan_eta())) : std::nullopt)
 {
 }
 
@@ -89,6 +103,14 @@ const std::optional<TDuration>& TStats::GetLag() const {
 
 const std::optional<float>& TStats::GetInitialScanProgress() const {
     return InitialScanProgress_;
+}
+
+const std::optional<double>& TStats::GetWriteSpeedBytesPerSecond() const {
+    return WriteSpeedBytesPerSecond_;
+}
+
+const std::optional<TDuration>& TStats::GetInitialScanEta() const {
+    return InitialScanEta_;
 }
 
 TRunningState::TRunningState(const TStats& stats)

@@ -172,6 +172,11 @@ protected:
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
+    bool IsCurrentSender(ui64 partitionId, const TActorId& actorId) const {
+        const auto it = Senders.find(partitionId);
+        return it != Senders.end() && it->second.ActorId == actorId;
+    }
+
     inline bool IsAllSendersReady() {
         return ReadySenders == Senders.size();
     }

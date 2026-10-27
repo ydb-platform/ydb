@@ -1,4 +1,5 @@
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
+* Added optional destination write speed and approximate initial scan ETA to replication statistics.
 
 ## v3.25.0
 

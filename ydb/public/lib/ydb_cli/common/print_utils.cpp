@@ -1,5 +1,7 @@
 #include "print_utils.h"
 
+#include <iterator>
+
 #include <google/protobuf/util/json_util.h>
 #include <google/protobuf/port_def.inc>
 
@@ -143,6 +145,16 @@ TString FormatBytes(ui64 bytes) {
 
 TString FormatSpeed(double bytesPerSecond) {
     return InsertSpaceBeforeUnit(ToString(HumanReadableSize(bytesPerSecond, SF_BYTES))) + "/s";
+}
+
+TString FormatDecimalSpeed(double bytesPerSecond) {
+    static constexpr const char* Units[] = {"B/s", "KB/s", "MB/s", "GB/s"};
+    size_t unit = 0;
+    while (bytesPerSecond >= 1000 && unit + 1 < std::size(Units)) {
+        bytesPerSecond /= 1000;
+        ++unit;
+    }
+    return Sprintf("%.2f %s", bytesPerSecond, Units[unit]);
 }
 
 TString FormatEta(TDuration duration) {

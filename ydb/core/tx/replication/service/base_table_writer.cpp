@@ -86,9 +86,12 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         tableId.SetSchemaVersion(TableId.SchemaVersion);
 
         TString source;
+        PreparedRecords.clear();
 
         for (auto record : ev->Get()->Records) {
-            Serializer->Serialize(record, *event->Record.AddChanges());
+            auto& change = *event->Record.AddChanges();
+            Serializer->Serialize(record, change);
+            PreparedRecords.emplace_back(record->GetOrder(), change.ByteSizeLong());
 
             if (!source) {
                 source = record->GetSourceId();
@@ -101,7 +104,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
             event->Record.SetSource(source);
         }
 
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, true, ++SubscribeCookie));
+        ++SubscribeCookie;
+        Send(LeaderPipeCache,
+            new TEvPipeCache::TEvForward(event.Release(), TabletId, true, SubscribeCookie), 0, SubscribeCookie);
         Become(&TThis::StateWaitingStatus);
     }
 
@@ -119,9 +124,14 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
+        if (ev->Cookie != SubscribeCookie) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
         case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
+            Send(Parent, new TEvWorker::TEvWriteAcknowledged(TabletId, std::move(PreparedRecords)));
             return Ready();
         default:
             YDB_LOG_ERROR("Apply result",
@@ -216,6 +226,7 @@ private:
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
+    TVector<std::pair<ui64, ui64>> PreparedRecords;
     THolder<IChangeRecordSerializer> Serializer;
 
 }; // TTablePartitionWriter
@@ -717,12 +728,32 @@ class TLocalTableWriter
         ProcessRecords(std::move(records));
     }
 
+    void Handle(TEvWorker::TEvWriteAcknowledged::TPtr& ev) {
+        if (!IsCurrentSender(ev->Get()->PartitionId, ev->Sender)) {
+            return;
+        }
+
+        ui64 acknowledgedBytes = 0;
+        for (const auto& [order, bytes] : ev->Get()->Records) {
+            const bool alreadyFinished = AcknowledgedThrough && order <= *AcknowledgedThrough;
+            if (!alreadyFinished && PendingRecords.contains(order) && AcknowledgedOrders.insert(order).second) {
+                acknowledgedBytes += bytes;
+                BatchAcknowledgedThrough = Max(BatchAcknowledgedThrough.value_or(order), order);
+            }
+        }
+
+        if (acknowledgedBytes) {
+            Send(Worker, TEvWorker::TEvStatus::FromAcknowledgedWriteBytes(acknowledgedBytes));
+        }
+    }
+
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
         for (const auto& record : ev->Get()->Records) {
             PendingRecords.erase(record);
+            AcknowledgedOrders.erase(record);
         }
 
         if (PendingRecords.empty() && PendingTxId.empty()) {
@@ -737,6 +768,14 @@ class TLocalTableWriter
     }
 
     void FinishBatch() {
+        // Each worker reads one source partition in offset order. Keep a compact
+        // watermark across batches; the set covers out-of-order destination acks
+        // within a batch and is bounded by the pending records.
+        if (BatchAcknowledgedThrough) {
+            AcknowledgedThrough = Max(AcknowledgedThrough.value_or(0), *BatchAcknowledgedThrough);
+            BatchAcknowledgedThrough.reset();
+        }
+
         if (IndexBuild) {
             PendingHeartbeat = TRowVersion::Min();
             auto progress = MakeHolder<TEvService::TEvIndexBuildProgress>();
@@ -872,6 +911,7 @@ public:
             hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
+            hFunc(TEvWorker::TEvWriteAcknowledged, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -903,6 +943,9 @@ private:
     bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    THashSet<ui64> AcknowledgedOrders;
+    std::optional<ui64> AcknowledgedThrough;
+    std::optional<ui64> BatchAcknowledgedThrough;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;

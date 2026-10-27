@@ -320,8 +320,10 @@ struct TEvPrivate {
         const TActorId Sender;
         const ui64 ReplicationId;
         TResult Result;
+        TInstant SampleTime;
 
-        explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
+        explicit TEvDescribeTargetsResult(
+            const TActorId& sender, ui64 rid, TResult&& result, TInstant sampleTime = TInstant::Zero());
         TString ToString() const override;
     };
 

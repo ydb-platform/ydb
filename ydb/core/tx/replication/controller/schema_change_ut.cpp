@@ -14,6 +14,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/replication/service/service.h>
+#include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -699,7 +700,9 @@ NYdb::NTable::TTableClient CreateTableClient(TTestEnv& env) {
     auto settings = NYdb::NTable::TClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase());
-    return NYdb::NTable::TTableClient(env.GetDriver(), settings);
+    // Default synchronous endpoint discovery needs the simulated runtime to
+    // dispatch the server's discovery request while the client is constructed.
+    return env.RunCall([&] { return NYdb::NTable::TTableClient(env.GetDriver(), settings); });
 }
 
 NKikimrMiniKQL::TResult ReadControllerQuery(
@@ -767,9 +770,7 @@ TReplicationTestInfo StartReplication(
         TMaybe<bool> initialScan = Nothing(),
         std::shared_ptr<std::atomic<ui32>> workerStarts = {})
 {
-    NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
-        .DiscoveryEndpoint(env.GetEndpoint())
-        .Database(env.GetDatabase()));
+    auto client = CreateTableClient(env);
     auto session = CreateTableSession(env, client);
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
@@ -1465,13 +1466,11 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
 }
 
 Y_UNIT_TEST_SUITE(StatsDescription) {
-    TReplicationTestInfo StartPausedReplicationWithSourceStreams(TTestEnv& env, ui32 targetCount = 1) {
+    TReplicationTestInfo StartReplicationWithSourceStreams(
+            TTestEnv& env, ui32 targetCount = 1, bool withIndex = false, bool mockService = true)
+    {
         auto& runtime = env.GetRuntime();
         UNIT_ASSERT(!runtime.IsRealThreads());
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        for (ui32 i = 1; i <= targetCount; ++i) {
-            CreateSourceTable(env, Sprintf("replica%u", i));
-        }
         THashSet<ui64> streams;
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
             if (ev->GetTypeRewrite() == TEvPrivate::EvCreateStreamResult && ev->HasEvent()) {
@@ -1482,9 +1481,29 @@ Y_UNIT_TEST_SUITE(StatsDescription) {
                 }
             }
         });
-        const auto info = StartReplication(env, targetCount);
-        runtime.WaitFor("source stream setup", [&] { return streams.size() == targetCount; }, TDuration::Seconds(60));
+        const auto info = StartReplication(env, targetCount, "root@builtin", false, withIndex,
+            NKikimrSchemeOp::EIndexTypeGlobal, mockService);
+        const auto expectedStreams = targetCount * (withIndex ? 2 : 1);
+        runtime.WaitFor("source stream setup", [&] { return streams.size() == expectedStreams; },
+            TDuration::Seconds(60));
         return info;
+    }
+
+    TReplicationTestInfo StartPausedReplicationWithSourceStreams(TTestEnv& env, ui32 targetCount = 1) {
+        env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
+        for (ui32 i = 1; i <= targetCount; ++i) {
+            CreateSourceTable(env, Sprintf("replica%u", i));
+        }
+        return StartReplicationWithSourceStreams(env, targetCount);
+    }
+
+    void ReplySourceTable(TTestActorRuntime& runtime,
+            TEvYdbProxy::TEvDescribeTableRequest::TPtr& request, Ydb::Table::DescribeTableResult&& table)
+    {
+        runtime.Send(new IEventHandle(request->Sender, request->GetRecipientRewrite(),
+            new TEvYdbProxy::TEvDescribeTableResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}),
+                std::move(table), NYdb::NTable::TDescribeTableSettings()), 0, request->Cookie));
+        request.Reset();
     }
 
     THolder<TEvController::TEvDescribeReplication> MakeStatsRequest(const TReplicationTestInfo& info) {
@@ -1510,6 +1529,201 @@ Y_UNIT_TEST_SUITE(StatsDescription) {
         UNIT_ASSERT_VALUES_EQUAL(target.GetSrcPath(), "/Root/table1");
         UNIT_ASSERT_VALUES_EQUAL(target.GetDstPath(), "/Root/replica1");
         return result;
+    }
+
+    Y_UNIT_TEST(ConcurrentSourceScansAndIndexStreamPath) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto info = StartReplicationWithSourceStreams(env, 1, true);
+        UNIT_ASSERT(SourceStreamsReady(env, info, 2));
+        const auto description = DescribeReplication(env, info);
+        THashMap<ui64, TString> streams;
+        for (const auto& target : description->Get()->Record.GetTargets()) {
+            streams[target.GetId()] = target.GetSrcStreamName();
+        }
+        ui32 sample = 0;
+        ui32 requests = 0;
+        bool missingIndex = false;
+        bool unknownState = false;
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableRequest>(
+            [&](TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
+                if (runtime.FindActor(ev->Sender)->GetActivityType()
+                    != NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DESCRIBER)
+                {
+                    return;
+                }
+                ++requests;
+                const bool index = std::get<0>(ev->Get()->GetArgs()).Contains("indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(ev->Get()->GetArgs()),
+                    index ? "/Root/table1/by_value/indexImplTable" : "/Root/table1");
+                Ydb::Table::DescribeTableResult table;
+                if (!(missingIndex && index)) {
+                    auto& stream = *table.add_changefeeds();
+                    stream.set_name(streams.at(ev->Cookie));
+                    const bool complete = sample >= (index ? 3 : 2);
+                    stream.set_state(complete ? Ydb::Table::ChangefeedDescription::STATE_ENABLED
+                        : Ydb::Table::ChangefeedDescription::STATE_INITIAL_SCAN);
+                    if (!complete || unknownState) {
+                        const ui32 total = index ? 40 : 100;
+                        stream.mutable_initial_scan_progress()->set_parts_total(total);
+                        stream.mutable_initial_scan_progress()->set_parts_completed(
+                            unknownState ? total : sample * (index ? 5 : 50));
+                    }
+                    if (unknownState) {
+                        stream.clear_state();
+                    }
+                }
+                ReplySourceTable(runtime, ev, std::move(table));
+            });
+        auto describe = [&] {
+            return env.Send<TEvController::TEvDescribeReplicationResult>(info.ControllerId, MakeStatsRequest(info));
+        };
+        const auto first = describe();
+        UNIT_ASSERT(!first->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(10));
+        ++sample;
+        const auto second = describe();
+        i64 maximum = 0;
+        for (const auto& target : second->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(target.HasInitialScanEta());
+            maximum = Max(maximum, target.GetInitialScanEta().seconds());
+        }
+        UNIT_ASSERT(maximum > 0);
+        UNIT_ASSERT_VALUES_EQUAL(second->Get()->Record.GetState().GetStandBy().GetInitialScanEta().seconds(), maximum);
+        RestartController(env, info.ControllerId);
+        const auto restarted = describe();
+        UNIT_ASSERT(!restarted->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        for (const auto& target : restarted->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(!target.HasInitialScanEta());
+        }
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(10));
+        ++sample;
+        const auto baseComplete = describe();
+        for (const auto& target : baseComplete->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(target.HasInitialScanEta());
+            UNIT_ASSERT_VALUES_EQUAL(target.GetInitialScanEta().seconds() == 0, target.GetSrcPath() == "/Root/table1");
+        }
+        UNIT_ASSERT(baseComplete->Get()->Record.GetState().GetStandBy().GetInitialScanEta().seconds() > 0);
+        missingIndex = true;
+        UNIT_ASSERT(!describe()->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        missingIndex = false;
+        ++sample;
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        const auto complete = describe();
+        UNIT_ASSERT(complete->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        UNIT_ASSERT_VALUES_EQUAL(complete->Get()->Record.GetState().GetStandBy().GetInitialScanEta().seconds(), 0);
+        // Unknown state cannot confirm completion, even with equal valid counts.
+        unknownState = true;
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        const auto unknown = describe();
+        UNIT_ASSERT(!unknown->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        for (const auto& target : unknown->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(!target.HasInitialScanEta());
+        }
+
+        const auto withoutStats = DescribeReplication(env, info);
+        UNIT_ASSERT(!withoutStats->Get()->Record.GetState().GetStandBy().HasInitialScanEta());
+        for (const auto& target : withoutStats->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(!target.HasInitialScanEta());
+            UNIT_ASSERT(!target.HasWriteSpeedBytesPerSecond());
+        }
+    }
+
+    Y_UNIT_TEST(DefaultMetricsWriteSpeedThroughService) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto info = StartReplicationWithSourceStreams(env, 1, false, false);
+        UNIT_ASSERT(SourceStreamsReady(env, info, 1));
+        const auto description = DescribeReplication(env, info);
+        const auto streamName = description->Get()->Record.GetTargets(0).GetSrcStreamName();
+        // The write/ack/statistics route is real. Reply locally to the unrelated
+        // source-scan query so collapsed timers cannot leave source RPCs in flight.
+        auto sourceStatsObserver = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableRequest>(
+            [&](TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
+                if (runtime.FindActor(ev->Sender)->GetActivityType()
+                    != NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DESCRIBER)
+                {
+                    return;
+                }
+                Ydb::Table::DescribeTableResult table;
+                auto* stream = table.add_changefeeds();
+                stream->set_name(streamName);
+                stream->set_state(Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+                ReplySourceTable(runtime, ev, std::move(table));
+            });
+        ui64 deliveredBytes = 0;
+        ui32 statsPackets = 0;
+        bool acknowledged = false;
+        bool workerStopped = false;
+        auto acknowledgementObserver = runtime.AddObserver<NService::TEvWorker::TEvStatus>(
+            [&](NService::TEvWorker::TEvStatus::TPtr& ev) {
+                const auto* recipient = runtime.FindActor(ev->GetRecipientRewrite());
+                if (recipient && recipient->GetActivityType() == NKikimrServices::TActivity::REPLICATION_SERVICE
+                    && ev->Get()->DetailedStats && ev->Get()->DetailedStats->AcknowledgedWriteBytes)
+                {
+                    acknowledged = true;
+                }
+            });
+        auto observer = runtime.AddObserver<TEvService::TEvWorkerStatus>(
+            [&](TEvService::TEvWorkerStatus::TPtr& ev) {
+                if (ev->Get()->Record.GetStatus() == NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED) {
+                    workerStopped = true;
+                }
+                if (ev->Get()->Record.GetReason() != NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
+                    return;
+                }
+                ++statsPackets;
+                for (const auto& value : ev->Get()->Record.GetStats().GetValues()) {
+                    if (value.GetKey() == NKikimrReplication::TWorkerStats::WRITE_BYTES) {
+                        deliveredBytes += value.GetValue();
+                    }
+                }
+            });
+        // Observe a zero packet before the write, so startup has a measured interval.
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        runtime.WaitFor("initial table statistics", [&] { return statsPackets > 0; }, TDuration::Seconds(30));
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+        auto client = CreateTableClient(env);
+        auto session = CreateTableSession(env, client);
+        const auto upsert = env.RunCall([&] {
+            return session.ExecuteDataQuery(
+                "UPSERT INTO `/Root/table1` (key, value) VALUES (1u, \"value\"u)",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        runtime.WaitFor("destination acknowledgement delivered to service", [&] { return acknowledged; },
+            TDuration::Seconds(30));
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        runtime.WaitFor("table write stats delivered with default metrics", [&] { return deliveredBytes > 0; },
+            TDuration::Seconds(30));
+        const auto result = DescribeStats(env, info, TDuration::Seconds(10));
+        const auto& target = result->Get()->Record.GetTargets(0);
+        UNIT_ASSERT(target.HasWriteSpeedBytesPerSecond());
+        UNIT_ASSERT(target.GetWriteSpeedBytesPerSecond() > 0);
+        UNIT_ASSERT_DOUBLES_EQUAL(target.GetWriteSpeedBytesPerSecond(),
+            result->Get()->Record.GetState().GetStandBy().GetWriteSpeedBytesPerSecond(), 1e-9);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(61));
+        const auto idle = DescribeStats(env, info, TDuration::Seconds(10));
+        UNIT_ASSERT(idle->Get()->Record.GetTargets(0).HasWriteSpeedBytesPerSecond());
+        UNIT_ASSERT_DOUBLES_EQUAL(idle->Get()->Record.GetTargets(0).GetWriteSpeedBytesPerSecond(), 0, 1e-9);
+
+        bool destinationPaused = false;
+        auto pauseObserver = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent()) {
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvAlterDstResult*>(ev->GetBase())) {
+                    UNIT_ASSERT(result->IsSuccess());
+                    destinationPaused = true;
+                }
+            }
+        });
+        RequestPause(env, info, 125);
+        runtime.WaitFor("replication worker stopped", [&] { return workerStopped; }, TDuration::Seconds(30));
+        runtime.WaitFor("destination pause completed", [&] { return destinationPaused; }, TDuration::Seconds(30));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasPaused());
+        const auto closed = env.RunCall([&] { return session.Close().GetValueSync(); });
+        UNIT_ASSERT_C(closed.IsSuccess(), closed.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DoneWithoutSourceAndAfterRestart) {

@@ -1,6 +1,7 @@
 * Added `--skip-storage-pool-conversion` option to `ydb admin bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
 * Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.
+* Added destination write speed (60s average) and approximate initial scan ETA to `ydb scheme describe --stats`, overall and for each replication target.
 * Added `ydb admin bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
 * Added `ydb admin bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin bridge list`.
 

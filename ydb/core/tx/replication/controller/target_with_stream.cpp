@@ -309,6 +309,16 @@ void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
 }
 
 bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
+    if (HasWorker(workerId) && GetKind() != ETargetKind::Transfer) {
+        ui64 bytes = 0;
+        for (const auto& item : newStats.GetValues()) {
+            if (item.GetKey() == NKikimrReplication::TWorkerStats::WRITE_BYTES && item.GetValue() > 0) {
+                bytes += item.GetValue();
+            }
+        }
+        GetReplicationStats().AddWriteBytes(TActivationContext::Now(), bytes);
+    }
+
     auto* stats = GetStatsImpl();
     auto* counters = GetCountersImpl();
     if (!stats && !counters) {

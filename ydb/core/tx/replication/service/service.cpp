@@ -241,7 +241,8 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation,
+        TMetricsConfig::EMetricsLevel metricsLevel, bool collectTableStats)
     {
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
@@ -249,7 +250,9 @@ public:
         });
 
         const auto& worker = res.first->second;
-        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
+        const bool detailedMetrics = metricsLevel == TMetricsConfig::LEVEL_DETAILED
+            && !worker.Location.GetPath().empty();
+        if (collectTableStats || detailedMetrics) {
             PendingStatsValues[id];
         }
 
@@ -270,6 +273,7 @@ public:
         auto it = Workers.find(id);
         Y_ABORT_UNLESS(it != Workers.end());
 
+        SendWorkerStats(ops, id);
         ops->Send(it->second, new TEvents::TEvPoison());
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
 
@@ -289,6 +293,8 @@ public:
     void StopWorker(IActorOps* ops, const TActorId& id, Args&&... args) {
         auto it = ActorIdToWorkerId.find(id);
         Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
+
+        SendWorkerStats(ops, it->second);
 
         // actor already stopped
         SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
@@ -314,6 +320,9 @@ public:
     void ApplyWorkerStats(const TWorkerId& id, const std::unique_ptr<TWorkerDetailedStats>& stats) {
         UpdateWorkerMetrics(id, *stats);
         auto& statsValues = PendingStatsValues[id];
+        if (stats->AcknowledgedWriteBytes) {
+            statsValues[NKikimrReplication::TWorkerStats::WRITE_BYTES] += stats->AcknowledgedWriteBytes;
+        }
         if (stats->ReaderStats) {
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_TIME)] += stats->ReaderStats->ReadTime.MilliSeconds();
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU)] += stats->ReaderStats->DecompressCpu.MicroSeconds();
@@ -343,16 +352,21 @@ public:
         }
     }
 
+    void SendWorkerStats(IActorOps* ops, const TWorkerId& id) {
+        auto worker = Workers.find(id);
+        auto pending = PendingStatsValues.find(id);
+        if (worker == Workers.end() || pending == PendingStatsValues.end()) {
+            return;
+        }
+        worker->second.ApplyStats({});
+        ops->Send(ActorId, new TEvService::TEvWorkerStatus(
+            id, worker->second.StartTime, std::move(pending->second)));
+        pending->second.clear();
+    }
+
     void SendWorkersStats(IActorOps* ops) {
-        for (auto& [id, values] : PendingStatsValues) {
-            auto workerIter = Workers.find(id);
-            if (workerIter.IsEnd()) {
-                continue;
-            }
-            workerIter->second.ApplyStats({}); // Update timestamps;
-            auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(values));
-            ops->Send(ActorId, ev);
-            values.clear();
+        for (const auto& [id, _] : PendingStatsValues) {
+            SendWorkerStats(ops, id);
         }
     }
 
@@ -814,7 +828,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 std::move(writerFn)),
             poolId,
             cmd.GetReplicationLocation(),
-            cmd.GetMetricsLevel()
+            cmd.GetMetricsLevel(),
+            cmd.HasLocalTableWriter()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
@@ -1011,14 +1026,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             StatsWakeupScheduled = true;
         }
 
-        if (!NextStatsUpdate || NextStatsUpdate <= Now()) {
+        const auto now = TActivationContext::Now();
+        if (!NextStatsUpdate || NextStatsUpdate <= now) {
             for (const auto& sessionId : SessionsToWake) {
                 auto sessionIter = Sessions.find(sessionId);
                 if (sessionIter != Sessions.end()) {
                     sessionIter->second.SendWorkersStats(this);
                 }
             }
-            NextStatsUpdate = Now() + StatsWakeupInterval;
+            NextStatsUpdate = now + StatsWakeupInterval;
         }
     }
 

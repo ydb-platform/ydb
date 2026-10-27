@@ -97,6 +97,12 @@ void ConvertItem(
     if (from.HasInitialScanProgress()) {
         to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
     }
+    if (from.HasWriteSpeedBytesPerSecond()) {
+        to.mutable_stats()->set_write_speed_bytes_per_second(from.GetWriteSpeedBytesPerSecond());
+    }
+    if (from.HasInitialScanEta()) {
+        *to.mutable_stats()->mutable_initial_scan_eta() = from.GetInitialScanEta();
+    }
 }
 
 void ConvertStats(
@@ -109,6 +115,13 @@ void ConvertStats(
     }
     if (from.GetStandBy().HasInitialScanProgress()) {
         to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
+    }
+    if (from.GetStandBy().HasWriteSpeedBytesPerSecond()) {
+        to.mutable_running()->mutable_stats()->set_write_speed_bytes_per_second(
+            from.GetStandBy().GetWriteSpeedBytesPerSecond());
+    }
+    if (from.GetStandBy().HasInitialScanEta()) {
+        *to.mutable_running()->mutable_stats()->mutable_initial_scan_eta() = from.GetStandBy().GetInitialScanEta();
     }
 }
 

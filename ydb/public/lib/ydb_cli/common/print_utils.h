@@ -11,6 +11,7 @@ TString FormatTime(TInstant time);
 TString FormatDuration(TDuration duration);
 TString FormatBytes(ui64 bytes);
 TString FormatSpeed(double bytesPerSecond);
+TString FormatDecimalSpeed(double bytesPerSecond);
 TString FormatEta(TDuration duration);
 TString PrettySize(ui64 size);
 TString PrettyNumber(ui64 number);

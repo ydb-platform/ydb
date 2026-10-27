@@ -194,10 +194,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
         EXPECTED: [[[6u]];[[9u]];[[11u]]]
         ------
+        STOP_PORTIONS_CLEANUP
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
         ------
         ONE_COMPACTION:
+        ------
+        ONE_PORTIONS_CLEANUP
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true

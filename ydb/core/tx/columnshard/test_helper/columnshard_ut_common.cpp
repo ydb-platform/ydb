@@ -594,6 +594,28 @@ void UpdateLocalDbTableRow(
     Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
 }
 
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('Id (Null) (Void))
+                '('SinceStep (Null) (Void))
+                '('SinceTxId (Null) (Void))
+            ))
+            (let fields '('InfoProto))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'SchemaPresetVersionInfo range fields '()))
+            ))
+        )
+    )");
+    const auto rows = NClient::TValue::Create(result)[0]["List"];
+    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> versions(rows.Size());
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        UNIT_ASSERT(versions[i].ParseFromString(TString(rows[i]["InfoProto"])));
+    }
+    return versions;
+}
+
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
     const auto result = LocalMiniKQL(runtime, tabletId, R"(
         (

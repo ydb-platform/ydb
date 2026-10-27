@@ -85,33 +85,6 @@ ui64 TSchemaDiffView::GetVersion() const {
     return Version;
 }
 
-void TSchemaDiffView::ApplyForColumns(const std::vector<ui32>& originalColumnIds,
-    const std::function<void(const ui32 originalIndex)>& addFromOriginal,
-    const std::function<void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff) const {
-    auto it = ModifiedColumns.begin();
-    ui32 i = 0;
-    while (i < originalColumnIds.size() || it != ModifiedColumns.end()) {
-        AFL_VERIFY(i != originalColumnIds.size());
-        const ui32 originalColId = originalColumnIds[i];
-
-        if (it == ModifiedColumns.end() || originalColId < it->first) {
-            addFromOriginal(i);
-            ++i;
-        } else if (it->first == originalColId) {
-            if (it->second) {
-                addFromDiff(*it->second, i);
-            }
-            ++it;
-            ++i;
-        } else if (it->first < originalColId) {
-            if (it->second) {
-                addFromDiff(*it->second, std::nullopt);
-            }
-            ++it;
-        }
-    }
-}
-
 const NKikimrSchemeOp::TColumnTableSchemeOptions& TSchemaDiffView::GetSchemaOptions() const {
     AFL_VERIFY(SchemaOptions);
     return *SchemaOptions;

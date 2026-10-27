@@ -165,6 +165,9 @@ private:
     void Validate() const;
     void BuildUsedStorageIds();
     void BuildColumnIndexByName();
+    TString BuildColumnFeaturesFingerprint(const NKikimrSchemeOp::TOlapColumnDescription& colProto) const;
+    TString BuildSystemColumnFeaturesFingerprint(const ui32 columnId) const;
+    void ApplyDefaultSerializer();
     void EraseColumn(const ui32 position);
     void InsertColumn(const NKikimrSchemeOp::TOlapColumnDescription& columnProto, const std::optional<ui32> keyOrder,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);

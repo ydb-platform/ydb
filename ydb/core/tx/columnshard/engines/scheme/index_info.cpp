@@ -289,7 +289,7 @@ bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::T
 TConclusion<std::shared_ptr<TColumnFeatures>> TIndexInfo::CreateColumnFeatures(const NTable::TColumn& col,
     const NKikimrSchemeOp::TOlapColumnDescription& colProto, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache) const {
-    const TString fingerprint = cache ? ("C:" + colProto.SerializeAsString()) : Default<TString>();
+    const TString fingerprint = BuildColumnFeaturesFingerprint(colProto);
     const auto createPred = [&]() -> TConclusion<std::shared_ptr<TColumnFeatures>> {
         auto f = BuildDefaultColumnFeatures(col, operators);
         auto parsed = f->DeserializeFromProto(colProto, operators);
@@ -357,7 +357,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             ColumnFeatures.emplace_back(fConclusion.DetachResult());
         }
         for (auto&& cId : GetSystemColumnIds()) {
-            const TString fingerprint = "SC:" + ::ToString(cId);
+            const TString fingerprint = BuildSystemColumnFeaturesFingerprint(cId);
             const auto createPred = [&]() -> TConclusion<std::shared_ptr<TColumnFeatures>> {
                 return BuildDefaultColumnFeatures(cId, {}, operators);
             };
@@ -638,7 +638,15 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     , SchemaColumnIdsWithSpecials(original.SchemaColumnIdsWithSpecials)
     , SchemaWithSpecials(original.SchemaWithSpecials)
     , PrimaryKey(original.PrimaryKey)
+    , DefaultSerializer(original.DefaultSerializer)
 {
+    // before the columns: a new column without a serializer of its own takes the default
+    if (diff.GetCompressionOptions()) {
+        DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
+    }
+    if (!DefaultSerializer.IsEqualTo(original.DefaultSerializer)) {
+        ApplyDefaultSerializer();
+    }
     for (const auto& [columnId, columnProto] : diff.GetModifiedColumns()) {
         std::optional<ui32> keyOrder;
         if (const auto position = GetColumnIndexOptional(columnId)) {
@@ -662,11 +670,30 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
-    if (diff.GetCompressionOptions()) {
-        DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
-    }
     BuildUsedStorageIds();
     Validate();
+}
+
+TString TIndexInfo::BuildColumnFeaturesFingerprint(const NKikimrSchemeOp::TOlapColumnDescription& colProto) const {
+    // a column without a serializer of its own is built with the table's default, so the default is a part of its key
+    if (TSimpleColumnInfo::HasOwnSerializer(colProto)) {
+        return "C:" + colProto.SerializeAsString();
+    }
+    const TString defaultSerializer = DefaultSerializer.SerializeToProto().SerializeAsString();
+    return TStringBuilder() << "CD:" << defaultSerializer.size() << ":" << defaultSerializer << colProto.SerializeAsString();
+}
+
+TString TIndexInfo::BuildSystemColumnFeaturesFingerprint(const ui32 columnId) const {
+    return TStringBuilder() << "SC:" << columnId << ":" << DefaultSerializer.SerializeToProto().SerializeAsString();
+}
+
+void TIndexInfo::ApplyDefaultSerializer() {
+    for (std::shared_ptr<TColumnFeatures>& features : ColumnFeatures) {
+        if (!features->HasOwnSerializer()) {
+            features = std::make_shared<TColumnFeatures>(*features);
+            features->SetDefaultSerializer(DefaultSerializer);
+        }
+    }
 }
 
 void TIndexInfo::EraseColumn(const ui32 position) {

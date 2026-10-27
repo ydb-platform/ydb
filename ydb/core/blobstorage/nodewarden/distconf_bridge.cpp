@@ -407,6 +407,7 @@ namespace NKikimr::NStorage {
                                 case NKikimrBridge::TClusterState::SUSPENDED:
                                     // A suspended pile has left the data quorum. Its metadata replicas must not
                                     // prevent CMS and the other tablets from booting to finish the takedown.
+                                case NKikimrBridge::TClusterState::HOT_STANDBY:
                                     state = T::DISCONNECTED;
                                     break;
 

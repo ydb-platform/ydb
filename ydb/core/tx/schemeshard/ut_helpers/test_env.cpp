@@ -632,7 +632,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , HiveState(new TFakeHiveState)
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
-    , FlatTxSchemeShardLogPriority(opts.FlatTxSchemeShardLogPriority_)
+    , SchemeShardLogPriority(opts.SchemeShardLogPriority_)
 {
     EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
@@ -869,7 +869,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_ERROR);
 
 
-    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, FlatTxSchemeShardLogPriority);
+    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, SchemeShardLogPriority);
     runtime.SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NActors::NLog::PRI_NOTICE);
     runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_NOTICE);
     if (ENABLE_SCHEMESHARD_LOG) {
@@ -1349,7 +1349,7 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
     return new TTestEnv(*Runtime, GetTestEnvOptions()
         .RunFakeConfigDispatcher(true)
-        .FlatTxSchemeShardLogPriority(NActors::NLog::PRI_NOTICE));
+        .SchemeShardLogPriority(NActors::NLog::PRI_NOTICE));
 }
 
 

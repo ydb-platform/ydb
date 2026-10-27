@@ -37,7 +37,7 @@ namespace NSchemeShardUT_Private {
             type name##_ = defaultValue
 
         OPTION(ui32, NChannels, 4);
-        OPTION(NActors::NLog::EPriority, FlatTxSchemeShardLogPriority, NActors::NLog::PRI_DEBUG);
+        OPTION(NActors::NLog::EPriority, SchemeShardLogPriority, NActors::NLog::PRI_DEBUG);
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
@@ -114,7 +114,7 @@ namespace NSchemeShardUT_Private {
         TMap<ui64, TActorId> TxNotificationSubscribers;
         TActorId TxReliablePropose;
         ui32 ChannelsCount;
-        const NActors::NLog::EPriority FlatTxSchemeShardLogPriority;
+        const NActors::NLog::EPriority SchemeShardLogPriority;
         TActorId MeteringFake;
         THolder<NYdb::TDriver> YdbDriver;
 

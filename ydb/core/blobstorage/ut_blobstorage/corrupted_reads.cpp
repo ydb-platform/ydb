@@ -43,14 +43,16 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
         }
         UNIT_ASSERT_VALUES_EQUAL(corruptedParts, 1);
 
-        // The suppression flag is local, so keep the queue on the target VDisk's node.
-        const auto queueId = env.CreateQueueActor(vdiskId, NKikimrBlobStorage::GetFastRead, 0, actorId.NodeId());
         auto read = [&](bool suppressRestoration, NKikimrProto::EReplyStatus status) {
             const auto edge = env.Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
             auto get = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, TInstant::Max(),
                 NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {partId});
+            get->IsInternal = true;
             get->SuppressCorruptedBlobRestoration = suppressRestoration;
-            env.Runtime->Send(new IEventHandle(queueId, edge, get.release()), edge.NodeId());
+            // Bypass the queue, which clones TEvVGet without its local flags.
+            auto ev = std::make_unique<IEventHandle>(actorId, edge, get.release());
+            ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
+            env.Runtime->Send(ev.release(), edge.NodeId());
             const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
             const auto& record = result->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);

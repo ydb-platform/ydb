@@ -220,7 +220,8 @@ public:
 
         MaxSizeBytes->Set((i64)MaxCacheDataSize);
 
-        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache, static_cast<ui64>(MaxCacheDataSize)));
+        Send(NMemory::MakeMemoryControllerId(),
+            new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache, static_cast<ui64>(MaxCacheDataSize)));
 
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();

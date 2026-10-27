@@ -87,7 +87,7 @@ jobs:
             runner: ubuntu-latest
             suffix: ''
           - platform: linux-aarch64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm
             suffix: ''
           - platform: darwin-arm64
             runner: macos-latest
@@ -106,6 +106,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Install libidn
+        run: |
+          set -euo pipefail
+
+          case "$PLATFORM" in
+            linux-*)
+              sudo apt-get update
+              sudo apt-get install -y libidn12
+              ;;
+            darwin-*) brew install libidn ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
       - name: Build
         run: |
           set -euo pipefail
@@ -113,16 +126,44 @@ jobs:
           output="$RUNNER_TEMP/yql-language-server-$PLATFORM"
           mkdir -p "$output"
 
+          case "$PLATFORM" in
+            linux-*) idn_library="$(dpkg-query -L libidn12 | grep -E '/libidn\.so\.12$')" ;;
+            darwin-*) idn_library="$(brew --prefix libidn)/lib/libidn.dylib" ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+          idn_include="$GITHUB_WORKSPACE/contrib/libs/libidn/include"
+
           ./ya make \
             --build=release \
             --target-platform="default-$PLATFORM" \
-            -DUSE_IDN=static \
-            -DUSE_ICONV=static \
+            -DUSE_IDN=local \
+            -DUSE_ICONV=local \
+            "-DUSE_LOCAL_IDN_CFLAGS=-I$idn_include" \
+            "-DUSE_LOCAL_IDN_LDFLAGS=$idn_library" \
             -DYQL_LANGUAGE_SERVER_VERSION="$VERSION" \
             --output="$output" \
             --stat \
             --ignore-recurses \
             yql/essentials/tools/yql_language_server
+
+      - name: Show Dynamic Libraries
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          cd yql/essentials/tools/yql_language_server
+          case "$PLATFORM" in
+            linux-*) ldd ./yql_language_server ;;
+            darwin-*) otool -L ./yql_language_server ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          cd yql/essentials/tools/yql_language_server
+          ./yql_language_server --help
 
       - name: Package
         run: |

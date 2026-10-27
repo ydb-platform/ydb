@@ -106,6 +106,10 @@ message KMeansTreeSettings {
     optional double overlap_ratio = 5;
 
     optional bool adaptive_clusters = 6;
+
+    // Maintain the index on table writes. Enabled when omitted.
+    // When false, changes are reflected only after rebuilding the index.
+    optional bool autoupdate = 7;
 }
 
 message GlobalIndex {

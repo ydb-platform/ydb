@@ -11,9 +11,9 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion>
-struct LastLevel: ICompactionUnit<TKey, TPortion> {
-    using TBase = ICompactionUnit<TKey, TPortion>;
+template <typename TPortion>
+struct LastLevel: ICompactionUnit<TPortion> {
+    using TBase = ICompactionUnit<TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TLastLevelSettings Settings;
 
@@ -24,7 +24,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 
     /// Right-border-sorted views — used by Borders()/Measure() and the candidate scan.
-    using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator<TKey, TPortion>>;
+    using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator<TPortion>>;
     PortionsEndSorted Portions;
     PortionsEndSorted Candidates;
     THashSet<ui64> PortionIds;
@@ -40,7 +40,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         if (measure == 0) {
             AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
             p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
-            Portions.insert(p);
+            Portions.insert(Portions.end(), p);   // on startup the portions come sorted by end key
         } else {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
@@ -91,7 +91,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
 
     std::optional<typename TPortion::TConstPtr> NearestNeighbour(
         typename TPortion::TConstPtr candidate, TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
-        const auto cmp = TPortionByIndexKeyEndComparator<TKey, TPortion>();
+        const auto cmp = TPortionByIndexKeyEndComparator<TPortion>();
 
         typename TPortion::TConstPtr succ = nullptr;
         if (auto sIt = Portions.upper_bound(candidate); sIt != Portions.end()) {
@@ -123,8 +123,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         return std::nullopt;
     }
 
-    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
-        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+    std::optional<CompactionTask<TPortion>> DoGetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         ui64 locked = 0;
         for (auto candidate : Candidates) {
             if (isLocked(candidate)) {
@@ -159,7 +158,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                     continue;
                 }
             }
-            return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
+            return CompactionTask<TPortion>{ result, 1, BuildPriority(locked) };
         }
         return std::nullopt;
     }
@@ -169,9 +168,13 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 
     std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const {
-        auto begin = Portions.lower_bound(p->IndexKeyStart());
-        auto end = Portions.upper_bound(p->IndexKeyEnd());
-        if (end != Portions.end() && (*end)->IndexKeyStart() <= p->IndexKeyEnd()) {
+        // on startup the portions come sorted by end key, so a new one starts after every settled one
+        if (Portions.empty() || (*Portions.rbegin())->IndexKeyEndRef() < p->IndexKeyStartRef()) {
+            return std::make_pair(Portions.end(), Portions.end());
+        }
+        auto begin = Portions.lower_bound(p->IndexKeyStartRef());
+        auto end = Portions.upper_bound(p->IndexKeyEndRef());
+        if (end != Portions.end() && (*end)->IndexKeyStartRef() <= p->IndexKeyEndRef()) {
             ++end;
         }
         return std::make_pair(begin, end);
@@ -190,9 +193,9 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
     }
 };
 
-template <std::totally_ordered TKey, typename TPortion>
-struct Accumulator: ICompactionUnit<TKey, TPortion> {
-    using TBase = ICompactionUnit<TKey, TPortion>;
+template <typename TPortion>
+struct Accumulator: ICompactionUnit<TPortion> {
+    using TBase = ICompactionUnit<TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TAccumulatorSettings Settings;
     TSet<typename TPortion::TConstPtr, TPortionByIdComparator<TPortion>> Portions;
@@ -223,9 +226,8 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return Portions.size() < Settings.Trigger.Portions;
     }
 
-    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
-        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        CompactionTask<TKey, TPortion> result;
+    std::optional<CompactionTask<TPortion>> DoGetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        CompactionTask<TPortion> result;
         result.TargetLevel = 0;
         ui64 currentBlobBytes = 0;
         ui64 locked = 0;
@@ -259,10 +261,11 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     }
 };
 
-template <std::totally_ordered TKey, typename TPortion>
-struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
-    using TBase = ICompactionUnit<TKey, TPortion>;
+template <typename TPortion>
+struct MiddleLevel: ICompactionUnit<TPortion> {
+    using TBase = ICompactionUnit<TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
+    using TKey = typename TPortion::TKey;
     TMiddleLevelSettings Settings;
     ui32 LevelIdx;
 
@@ -311,9 +314,8 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         return TOptimizationPriority::Normalize(Settings.TriggerHeight, Settings.OverloadHeight, Intersections.GetMaxCount());
     }
 
-    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
-        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        CompactionTask<TKey, TPortion> result;
+    std::optional<CompactionTask<TPortion>> DoGetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        CompactionTask<TPortion> result;
         auto range = Intersections.GetMaxRange();
         range.ForEachValue([&](const ui64 id) {
             auto it = PortionById.find(id);

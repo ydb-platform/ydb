@@ -19,7 +19,7 @@ Read the guide's invariants, then only the topic pages needed for the change:
 
 ## Apply the Contract
 
-Trace the changed event from sender through the handler to its reply and cleanup. Identify who owns each event, buffer, coroutine frame, child actor, and subscription. Treat every suspension as a point at which actor state can change. Distinguish a delivery notification from application completion.
+Trace the changed event from sender through the handler to its reply and cleanup. For each event, buffer, coroutine frame, child actor, and subscription, identify its owner at each step and the code that releases or ends it. Treat every suspension as a point at which actor state can change. Distinguish a delivery notification from application completion.
 
 For lifetime changes, account for late events while cancellation is pending and for cleanup during forced teardown. For a tablet, identify which state is durable and which state must be reconstructed after restart; actor serialization does not itself provide persistence.
 

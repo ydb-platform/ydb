@@ -1,7 +1,7 @@
 #include "checker_secret.h"
 
-#include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/snapshot.h>
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -44,8 +44,7 @@ void TSecretPreparationActor::Handle(NProvider::TEvRefreshSubscriberData::TPtr& 
 
 void TSecretPreparationActor::Bootstrap() {
     Become(&TThis::StateMain);
-    Send(NProvider::MakeServiceId(SelfId().NodeId()),
-        new NProvider::TEvAskSnapshot(std::make_shared<TSnapshotsFetcher>()));
+    Send(NProvider::MakeServiceId(SelfId().NodeId()), new NProvider::TEvAskSnapshot(std::make_shared<TSnapshotsFetcher>()));
 }
 
 TSecretPreparationActor::TSecretPreparationActor(std::vector<TSecret>&& objects,
@@ -55,7 +54,6 @@ TSecretPreparationActor::TSecretPreparationActor(std::vector<TSecret>&& objects,
     , Controller(controller)
     , Context(context)
 {
-
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

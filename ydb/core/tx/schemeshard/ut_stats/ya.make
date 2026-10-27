@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/datashard/ut_common
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
+    ydb/public/lib/value
 )
 
 SRCS(

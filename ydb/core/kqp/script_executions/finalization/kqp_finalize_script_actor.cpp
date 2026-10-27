@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/datashard/const.h>
+
 #include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
@@ -21,12 +22,10 @@ namespace {
 // Actor for performing finalization of script execution external effects (for example commit / roll back S3 uploads).
 // NOTE: if S3 become unavailable and/or secrets unavailable script execution will be never finalized and therefore cannot be removed.
 
-class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
+class TScriptFinalizerActor: public TActorBootstrapped<TScriptFinalizerActor> {
 public:
-    TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactor)
+    TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactor)
         : ReplyActor(request->Sender)
         , ExecutionId(request->Get()->Description.ExecutionId)
         , Database(request->Get()->Description.Database)
@@ -37,7 +36,8 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
         , S3ActorsFactor(std::move(s3ActorsFactor))
-    {}
+    {
+    }
 
     void Bootstrap() {
         auto& description = Request->Get()->Description;
@@ -114,7 +114,8 @@ private:
             const auto& sinkName = sink.GetSinkName();
 
             if (sinkName) {
-                const auto& structuredToken = NYql::CreateStructuredTokenParser(sink.GetAuthInfo()).ToBuilder().ReplaceReferences(secretsMap).ToJson();
+                const auto& structuredToken =
+                    NYql::CreateStructuredTokenParser(sink.GetAuthInfo()).ToBuilder().ReplaceReferences(secretsMap).ToJson();
                 SecureParams.emplace(sinkName, structuredToken);
             }
         }
@@ -159,22 +160,18 @@ private:
             return;
         }
 
-        Register(S3ActorsFactor->CreateS3ApplicatorActor(
-            SelfId(),
-            FederatedQuerySetup->HttpGateway,
-            CreateGuidAsString(),
-            CustomerSuppliedId,
-            std::nullopt,
-            FinalizationStatus == EFinalizationStatus::FS_COMMIT,
-            THashMap<TString, TString>(SecureParams.begin(), SecureParams.end()),
-            FederatedQuerySetup->CredentialsFactory,
-            externalEffect
-        ).Release());
+        Register(
+            S3ActorsFactor
+                ->CreateS3ApplicatorActor(SelfId(), FederatedQuerySetup->HttpGateway, CreateGuidAsString(), CustomerSuppliedId, std::nullopt,
+                    FinalizationStatus == EFinalizationStatus::FS_COMMIT, THashMap<TString, TString>(SecureParams.begin(), SecureParams.end()),
+                    FederatedQuerySetup->CredentialsFactory, externalEffect)
+                .Release());
     }
 
     void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
         if (ev->Get()->FatalError) {
-            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, AddRootIssue("Failed to commit/abort s3 multipart uploads", ev->Get()->Issues));
+            FinishScriptFinalization(
+                Ydb::StatusIds::BAD_REQUEST, AddRootIssue("Failed to commit/abort s3 multipart uploads", ev->Get()->Issues));
         } else {
             FinishScriptFinalization();
         }
@@ -207,10 +204,11 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, bool executionEntryExists, bool alreadyStopped, NYql::TIssues&& issues) {
-        Send(ReplyActor, new TEvScriptExecutionFinished(status, {
-            .ExecutionEntryExists = executionEntryExists,
-            .AlreadyStopped = alreadyStopped,
-        }, std::move(issues)));
+        Send(ReplyActor, new TEvScriptExecutionFinished(status,
+                             {
+                                 .ExecutionEntryExists = executionEntryExists,
+                                 .AlreadyStopped = alreadyStopped,
+                             }, std::move(issues)));
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
         PassAway();
     }
@@ -236,14 +234,11 @@ private:
     std::unordered_map<TString, TString> SecureParams;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
-    ) {
+IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
     return new TScriptFinalizerActor(std::move(request), queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

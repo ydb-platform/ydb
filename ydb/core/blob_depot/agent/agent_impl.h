@@ -341,6 +341,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
+            bool done = false;
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
@@ -350,14 +351,18 @@ namespace NKikimr::NBlobDepot {
                         ConnectToBlobDepot();
                     }
                 }
-                if (!info->GetTotalVDisksNum()) {
-                    // proxy finishes serving user requests
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
-                    ProxyId = {};
-                }
+                // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
+                // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends
+                done = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
             }
             if (ProxyId) {
+                // the proxy gets the configuration even when it is going to be stopped, to pass us requests it has queued
+                // while being unconfigured
                 TActivationContext::Send(ev->Forward(ProxyId));
+                if (done) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(ProxyId, {}), {},
+                        nullptr, 0));
+                }
             }
         }
 
@@ -517,6 +522,7 @@ namespace NKikimr::NBlobDepot {
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);

@@ -1,16 +1,15 @@
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
-#include <ydb/library/services/services.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/schema.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/str.h>
@@ -24,7 +23,7 @@ using namespace NActors;
 using namespace NKikimr::NMiniKQL;
 
 // Serve the file through the same ranged HTTP interface as the production reader.
-class TParquetGateway : public IHTTPGateway {
+class TParquetGateway: public IHTTPGateway {
 public:
     TString Body;
     bool HoldChunks = false;
@@ -39,7 +38,8 @@ public:
         UNIT_FAIL("unexpected delete");
     }
 
-    void Download(TString, THeaders, size_t offset, size_t size, TOnResult callback, TString, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
+    void Download(
+        TString, THeaders, size_t offset, size_t size, TOnResult callback, TString, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
         ++RangeCalls;
         UNIT_ASSERT_C(offset <= Body.size() && size <= Body.size() - offset, "invalid HTTP range " << offset << "+" << size);
         auto reply = [this, offset, size, callback = std::move(callback)] {
@@ -63,7 +63,8 @@ public:
         return 0;
     }
 
-    void UpdatePoolCaps(THashMap<TWorkScope, size_t>) override {}
+    void UpdatePoolCaps(THashMap<TWorkScope, size_t>) override {
+    }
 
     void ReleaseChunks() {
         HoldChunks = false;
@@ -84,7 +85,7 @@ NS3::TSource ParquetSource(ui64 parallelRowGroups = 0, bool selectColumn = true)
 }
 
 std::shared_ptr<arrow::Schema> ParquetSchema() {
-    return arrow::schema({arrow::field("ts", arrow::timestamp(arrow::TimeUnit::MICRO), false)});
+    return arrow::schema({ arrow::field("ts", arrow::timestamp(arrow::TimeUnit::MICRO), false) });
 }
 
 // Valid control: one timestamp and one row per row group.
@@ -95,7 +96,7 @@ TString MakeParquet(int rows) {
     }
     std::shared_ptr<arrow::Array> array;
     UNIT_ASSERT(builder.Finish(&array).ok());
-    auto table = arrow::Table::Make(ParquetSchema(), {array});
+    auto table = arrow::Table::Make(ParquetSchema(), { array });
     auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
     UNIT_ASSERT(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink, 1).ok());
     auto buffer = sink->Finish().ValueOrDie();
@@ -141,11 +142,11 @@ public:
     TReadResult Result;
 
     TParquetReader() {
-        Runtime.AddLocalService(FakeActorId, TActorSetupCmd(new TFakeActor(
-            std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()), TMailboxType::Simple, 0));
+        Runtime.AddLocalService(FakeActorId, TActorSetupCmd(new TFakeActor(std::make_shared<TAsyncInputPromises>(),
+                                                                std::make_shared<TAsyncOutputPromises>()), TMailboxType::Simple, 0));
         Runtime.Initialize();
-        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+        Runtime.GetLogSettings(0)->Append(
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == IDqComputeActorAsyncInput::TEvAsyncInputError::EventType) {
                 auto* error = ev->Get<IDqComputeActorAsyncInput::TEvAsyncInputError>();
@@ -166,7 +167,9 @@ public:
     }
 
     ~TParquetReader() {
-        Execute([](TFakeActor& actor) { actor.Terminate(); });
+        Execute([](TFakeActor& actor) {
+            actor.Terminate();
+        });
     }
 
     void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB) {
@@ -180,11 +183,11 @@ public:
         Execute([&](TFakeActor& actor) {
             TS3ReadActorFactoryConfig config;
             config.DataInflight = dataInflight;
-            auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
-                std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}), gateway, std::move(source),
-                0, TCollectStatsLevel::None, TTxId{}, {}, {}, {encodedRange.Str()}, FakeActorId,
-                CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(), config, nullptr, nullptr,
-                std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
+            auto [input, inputActor] =
+                CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
+                }), gateway, std::move(source), 0, TCollectStatsLevel::None,
+                    TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
+                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
             actor.InitAsyncInput(input, inputActor);
         });
     }
@@ -211,7 +214,9 @@ private:
         auto promise = NThreading::NewPromise();
         Runtime.Send(new IEventHandle(FakeActorId, Runtime.AllocateEdgeActor(), new TEvPrivate::TEvExecute(promise, callback, exception)));
         TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return promise.HasValue(); };
+        options.CustomFinalCondition = [&] {
+            return promise.HasValue();
+        };
         Runtime.DispatchEvents(options, TDuration::Seconds(10));
         UNIT_ASSERT_C(promise.HasValue(), "compute actor callback did not complete");
         if (exception) {
@@ -219,8 +224,8 @@ private:
         }
     }
 
-    TTestActorRuntimeBase Runtime{1};
-    const TActorId FakeActorId{0, "FakeActor"};
+    TTestActorRuntimeBase Runtime{ 1 };
+    const TActorId FakeActorId{ 0, "FakeActor" };
 };
 
 TReadResult ReadFooter(const std::vector<i64>& sizes, ui64 parallelRowGroups = 0, bool selectColumn = true) {
@@ -260,12 +265,12 @@ void CheckReaderCount(ui64 parallelRowGroups, ui64 expectedCount, ui64 dataInfli
     UNIT_ASSERT_VALUES_EQUAL(reader.Result.Values, expected);
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     Y_UNIT_TEST(ZeroCompressedSize) {
-        for (ui64 parallel : {0, 1, 2}) {
-            auto result = ReadFooter({0}, parallel);
+        for (ui64 parallel : { 0, 1, 2 }) {
+            auto result = ReadFooter({ 0 }, parallel);
             UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
             UNIT_ASSERT(result.Finished);
             UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
@@ -273,33 +278,33 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     }
 
     Y_UNIT_TEST(NegativeCompressedSize) {
-        for (ui64 parallel : {0, 1, 2}) {
-            AssertBadRequest(ReadFooter({-1}, parallel));
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ -1 }, parallel));
         }
     }
 
     Y_UNIT_TEST(DoubledCompressedSizeOverflow) {
-        for (ui64 parallel : {0, 1, 2}) {
-            AssertBadRequest(ReadFooter({i64(1) << 62, i64(1) << 62}, parallel));
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ i64(1) << 62, i64(1) << 62 }, parallel));
         }
     }
 
     Y_UNIT_TEST(CompressedSizeSumOverflow) {
-        for (ui64 parallel : {0, 1, 2}) {
-            const auto result = ReadFooter({Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4}, parallel);
+        for (ui64 parallel : { 0, 1, 2 }) {
+            const auto result = ReadFooter({ Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4 }, parallel);
             AssertBadRequest(result);
             UNIT_ASSERT_STRING_CONTAINS(result.Issues, "total_compressed_size sum overflow");
         }
     }
 
     Y_UNIT_TEST(LargeCompressedSize) {
-        for (ui64 parallel : {0, 1, 2}) {
-            AssertBadRequest(ReadFooter({Max<i64>() - 4}, parallel));
+        for (ui64 parallel : { 0, 1, 2 }) {
+            AssertBadRequest(ReadFooter({ Max<i64>() - 4 }, parallel));
         }
     }
 
     Y_UNIT_TEST(EmptyFile) {
-        for (ui64 parallel : {0, 1, 2}) {
+        for (ui64 parallel : { 0, 1, 2 }) {
             auto result = ReadFooter({}, parallel);
             UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
             UNIT_ASSERT(result.Finished);
@@ -308,7 +313,7 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     }
 
     Y_UNIT_TEST(NoSelectedColumns) {
-        for (ui64 parallel : {0, 1, 2}) {
+        for (ui64 parallel : { 0, 1, 2 }) {
             TParquetReader reader;
             auto gateway = std::make_shared<TParquetGateway>();
             gateway->Body = MakeParquet(10);
@@ -326,7 +331,7 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     }
 
     Y_UNIT_TEST(ExplicitReaderCount) {
-        for (ui64 parallel : {1, 2, 5, 20}) {
+        for (ui64 parallel : { 1, 2, 5, 20 }) {
             CheckReaderCount(parallel, std::min(parallel, ui64(10)));
         }
     }
@@ -336,4 +341,4 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

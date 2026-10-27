@@ -52,6 +52,9 @@ dstool
 │  ├─ list                              List pools
 │  ├─ set                               Set storage pool settings that are not 
 │  │                                    part of the pool definition
+│  ├─ set-bridge-mode                   Make storage pool of bridged cluster 
+│  │                                    bridged or ordinary one; its groups keep
+│  │                                     their ids and data
 │  └─ create
 │     └─ virtual                        Create pool suitable for virtual groups
 ├─ box

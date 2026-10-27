@@ -2,11 +2,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 using namespace NWorkloadManager;
-
 
 namespace {
 
@@ -16,11 +14,9 @@ TString GetPostPoolId(const IQueryClassifier::TPostCompileClassifyResult& result
     return std::get<IQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierHasStream) {
-
     Y_UNIT_TEST(ShouldTriggerPendingCompilation) {
         TClassifyTestCase tc;
         tc.ClassifierHasStream = true;
@@ -58,9 +54,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasStream) {
     }
 }
 
-
 Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
-
     Y_UNIT_TEST(NonStreamingResolvesStaticInPreCompile) {
         TClassifyTestCase tc;
         tc.ClassifierHasAppName = "app";
@@ -101,9 +95,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
 
     Y_UNIT_TEST(StreamingFallsToDefaultWithoutClassifiers) {
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         });
-        TClassifyContext ctx{.PoolId = "", .AppName = "", .UserToken = nullptr};
+        TClassifyContext ctx{ .PoolId = "", .AppName = "", .UserToken = nullptr };
         auto classifier = CreateQueryClassifier(poolSnap, TClassifierConfigsView{}, TEST_DB, std::move(ctx), std::nullopt);
 
         NKqp::TUserRequestContext userRequestContext{};
@@ -114,19 +108,17 @@ Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
 
     Y_UNIT_TEST(StreamingHonorsExplicitPoolId) {
         auto classifierSnap = MakeClassifierSnapshot({
-            MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target",
-                /*memberName=*/std::nullopt, /*hasAppName=*/std::nullopt,
-                /*hasFullScan=*/std::nullopt, /*hasPath=*/std::nullopt,
-                /*hasStream=*/true),
+            MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target", /*memberName=*/std::nullopt, /*hasAppName=*/std::nullopt,
+                /*hasFullScan=*/std::nullopt, /*hasPath=*/std::nullopt, /*hasStream=*/true),
         });
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "explicit_pool"), MakePoolEntry(10)},
-            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "explicit_pool"), MakePoolEntry(10) },
+            { _JoinPath(TEST_DB, "default"), MakePoolEntry(10) },
         });
-        TClassifyContext ctx{.PoolId = "explicit_pool", .AppName = "", .UserToken = nullptr};
-        auto classifier = CreateQueryClassifier(
-            poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx), std::nullopt);
+        TClassifyContext ctx{ .PoolId = "explicit_pool", .AppName = "", .UserToken = nullptr };
+        auto classifier =
+            CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx), std::nullopt);
 
         NKqp::TUserRequestContext userRequestContext;
         userRequestContext.IsStreamingQuery = true;
@@ -154,4 +146,4 @@ Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

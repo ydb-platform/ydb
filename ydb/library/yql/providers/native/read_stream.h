@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/library/yql/providers/native/operation_context.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <library/cpp/threading/future/future.h>
+#include <ydb/library/yql/providers/native/operation_context.h>
+
 #include <arrow/record_batch.h>
+#include <library/cpp/threading/future/future.h>
 
 #include <functional>
 #include <memory>
@@ -19,7 +20,7 @@ struct TReadResult {
     ui64 Bytes = 0;
 };
 
-struct TReadContext : TOperationContext {
+struct TReadContext: TOperationContext {
     // Desired output block size; a stream may have a separate input-part limit.
     ui64 MaxBatchBytes = 0;
 };
@@ -45,8 +46,6 @@ struct TReadActorSettings {
 };
 
 std::pair<NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateNativeReadActor(
-    TReadStreamFactory factory,
-    TReadActorSettings settings,
-    NDq::IDqAsyncIoFactory::TSourceArguments&& args);
+    TReadStreamFactory factory, TReadActorSettings settings, NDq::IDqAsyncIoFactory::TSourceArguments&& args);
 
-} // namespace NYql::NNative
+}   // namespace NYql::NNative

@@ -51,7 +51,7 @@ public:
 // YDB: topic data/control-plane APIs. QYT: queue pulls plus table/queue metadata.
 // Kafka: consumer plus Admin/metadata APIs; no requirement to share one native
 // client object between them. See backend documentation linked in message_stream_defs.h.
-class IMessageStreamClient : public IMessageStreamDataClient {
+class IMessageStreamClient: public IMessageStreamDataClient {
 public:
     // YDB: DescribeTopic. QYT: resolve queue path/cluster.
     // Kafka: describeTopics plus optional group discovery;
@@ -72,4 +72,4 @@ public:
         TMessageStreamPartitionId partitionId) = 0;
 };
 
-} // namespace NFq
+}   // namespace NFq

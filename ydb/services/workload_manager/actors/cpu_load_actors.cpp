@@ -1,15 +1,13 @@
 #include "actors.h"
 
-#include <ydb/services/workload_manager/common/events.h>
-
 #include <ydb/library/query_actor/query_actor.h>
-
+#include <ydb/services/workload_manager/common/events.h>
 
 namespace NKikimr::NWorkloadManager {
 
 namespace {
 
-class TCpuLoadFetcherActor : public NKikimr::TQueryBase {
+class TCpuLoadFetcherActor: public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
 public:
@@ -68,10 +66,10 @@ private:
     ui64 ThreadsCount = 0;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateCpuLoadFetcherActor(const TActorId& replyActorId) {
     return new TQueryRetryActor<TCpuLoadFetcherActor, TEvPrivate::TEvCpuLoadResponse>(replyActorId);
 }
 
-}  // NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

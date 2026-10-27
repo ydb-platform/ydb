@@ -3,11 +3,10 @@
 #include "udf_version.h"
 #include "udf_types.h"
 #include "udf_ptr.h"
+#include "udf_static_library.h"
 #include "udf_string.h"
 #include "udf_type_size_check.h"
 #include "udf_value.h"
-
-#include <functional>
 
 #include <stdarg.h>
 
@@ -169,12 +168,8 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
 
-using TBackTraceCallback = void (*)();
-
-using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
 using TAbiVersionFunctionPtr = ui32 (*)();
 using TBindSymbolsFunctionPtr = void (*)(const TStaticSymbols& symbols);
-using TSetBackTraceCallbackPtr = void (*)(TBackTraceCallback callback);
 
 template <typename TModule>
 static inline void RegisterHelper(IRegistrator& registrator) {
@@ -191,23 +186,19 @@ static inline void RegisterHelper(IRegistrator& registrator) {
 
 void SetBackTraceCallbackImpl(TBackTraceCallback callback);
 
-using TUdfModuleWrapper = std::function<std::pair<TStringRef, TUniquePtr<IUdfModule>>()>;
+void AddToStaticUdfRegistry(const TYqlUdfStaticLibrary* library);
 
-void AddToStaticUdfRegistry(TUdfModuleWrapper&&);
-
-template <typename TModule>
+template <typename... TModules>
 static inline void AddToStaticUdfRegistry() {
-    AddToStaticUdfRegistry([]() {
-        TUniquePtr<TModule> ptr(new TModule());
-        auto name = ptr->Name();
-        return TUdfModuleWrapper::result_type(name, ptr.Release());
-    });
-}
-
-template <typename THead1, typename THead2, typename... TTail>
-static inline void AddToStaticUdfRegistry() {
-    AddToStaticUdfRegistry<THead1>();
-    AddToStaticUdfRegistry<THead2, TTail...>();
+    static constexpr TYqlUdfStaticLibrary Library{
+        .StructSize = sizeof(TYqlUdfStaticLibrary),
+        .AbiVersion = CurrentAbiVersion(),
+        .Register = [](IRegistrator& registrator, ui32 flags) {
+            Y_UNUSED(flags);
+            RegisterHelper<TModules...>(registrator);
+        },
+    };
+    AddToStaticUdfRegistry(&Library);
 }
 
 } // namespace NYql::NUdf

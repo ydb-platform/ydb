@@ -10,12 +10,37 @@ message TClusterState {
         NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
         SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
         SUSPENDED = 4; // gracefully taken down; treat like disconnected for data quorum; config quorum allowed; connections allowed
+        // listed in BridgeConfig, but has no resources in the cluster (not added yet, or already removed); takes no part in
+        // any quorum, connections not allowed
+        INACTIVE = 5;
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
     uint32 PromotedPile = 3; // realm we are going to promote (must also be SYNCHRONIZED), or primary one
     uint64 Generation = 4; // cluster state generation (which must be increasing strictly by one)
     fixed64 Guid = 5; // guid of this state change
+}
+
+// Persistent mapping of pile names to pile ids. Pile id is the slot of the pile in Piles: a pile keeps its slot while it
+// stays in BridgeConfig, wherever it is listed there. The slot of a pile dropped from BridgeConfig gets free and is taken
+// by the next pile added; free slots at the end are trimmed, so the list never gets longer than the maximum number of
+// piles configured at once. Piles appear in the registry INACTIVE and may be dropped only being INACTIVE; free slots
+// are INACTIVE too.
+message TPileRegistry {
+    message TPile {
+        optional string Name = 1; // as written in BridgeConfig and node locations, may be empty; unset for a free slot
+        // cluster state generation the pile was last added to the cluster in (by add-pile); unset for the piles the
+        // cluster got bridged with; nodes having older cluster state belong to the pile removed since then
+        optional uint64 AddedGeneration = 2;
+    }
+    repeated TPile Piles = 1; // pile with BridgePileId = i + 1 is Piles[i], in sync with TClusterState.PerPileState
+    uint32 ImplicitPileId = 2; // pile of nodes without pile name and of groups without pile id; 0 if there is none
+    // set once the list of piles has been changed (piles added, dropped or reordered in BridgeConfig); nodes of older
+    // versions take pile ids from positions in their BridgeConfig, so they can't get the configuration since then
+    bool PileListChanged = 3;
+    // nodes supporting lower level of bridge features can't get the configuration (PileListChanged implies level 1); set
+    // when some feature they don't support is used, e.g. a pile is removed
+    uint32 RequiredFeatureLevel = 4;
 }
 
 message TClusterStateDetails {
@@ -31,6 +56,39 @@ message TClusterStateDetails {
         bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
+
+    // set when the cluster has just been converted from ordinary one and BSC has not yet converted its groups; no more
+    // piles can be added while it is set
+    bool BscConversionPending = 3;
+
+    // absent only in configs of clusters bridged before the registry was introduced; such registry is implied by
+    // BridgeConfig (piles in config order, the only pile being the implicit one) and gets persisted by the next update
+    TPileRegistry PileRegistry = 4;
+
+    // operation changing the set of piles of the cluster, which is not finished yet; set by distconf along with its part
+    // of the operation, cleared when BSC reports that it has performed its part; only one operation may be pending
+    message TPendingPileOperation {
+        enum EKind {
+            ADD = 0; // pile went from INACTIVE to DISCONNECTED, BSC has to add parts in this pile to its bridged groups
+            // DISCONNECTED pile is being removed: BSC has to delete parts in this pile of its bridged groups, then
+            // distconf deletes the static ones and makes the pile INACTIVE
+            REMOVE = 1;
+        }
+        uint32 BridgePileId = 1;
+        EKind Kind = 2;
+        optional string ErrorReason = 3; // why BSC has failed to perform its part last time (it retries meanwhile)
+        // unique for every operation (the generation of the config it was started with), so that a notification of BSC
+        // delivered late can't finish another operation on the same pile; 0 for operations started by older versions
+        uint64 OperationId = 4;
+    }
+    TPendingPileOperation PendingPileOperation = 5;
+
+    // static group ids are never reused, as nodes ignore group info with generation lower than the one they know; this is
+    // the lowest id for the parts of static groups allocated when piles are added, set once some of them are removed
+    uint32 NextStaticGroupId = 6;
+
+    // Persisted opt-in; requires nodes supporting mixed ordinary/bridged storage pools.
+    bool NonUniformStorageEnabled = 7;
 }
 
 message TGroupState {
@@ -47,7 +105,20 @@ message TGroupState {
         uint32 GroupGeneration = 2; // for race-checking in syncer and proxy proxy
         EStage Stage = 3; // synchronization stage
         uint64 BecameUnsyncedGeneration = 4; // cluster state generation from TPileSyncState.BecameUnsyncedGeneration
+        bool Absent = 5; // the group has no part in this pile (the pile is INACTIVE); other fields are not filled in
     }
 
-    repeated TPile Pile = 1; // for every pile, synced or unsynced
+    // for every pile, synced or unsynced, indexed by pile id; the group has no parts in the piles beyond the end of the
+    // list, which is the case for INACTIVE piles at the end of pile registry
+    repeated TPile Pile = 1;
+
+    // generation of the cluster state this group state was made for; pile states the cluster state implies are the ones
+    // stages of piles are valid with, so the group can't be served with the cluster state older than that (requests are
+    // routed by both); 0 when not known
+    uint64 ClusterStateGeneration = 2;
+
+    // pile whose part is the only one sure to hold everything written to the group, while the group is being made fully
+    // bridged one (its other parts are synced from this one) or ordinary one (it loses its other parts); nothing is
+    // written to the group without this part, which is never reset; the only part of the group is such one implicitly
+    uint32 AuthorityPileId = 3;
 }

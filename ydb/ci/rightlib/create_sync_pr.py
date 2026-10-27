@@ -147,7 +147,7 @@ class PrSyncCreator:
             self.git_run("add", path)
 
     def create_new_pr(self):
-        dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"
+        dev_branch_name = f"robots/branch-sync/merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
         pr_title = f"Sync branches {self.dtm}: {self.head_branch} to {self.base_branch}"
 

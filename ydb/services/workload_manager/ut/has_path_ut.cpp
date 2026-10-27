@@ -1,14 +1,13 @@
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 using namespace NWorkloadManager;
-
 
 namespace {
 
@@ -18,11 +17,9 @@ TString GetPostPoolId(const IQueryClassifier::TPostCompileClassifyResult& result
     return std::get<IQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierHasPath) {
-
     Y_UNIT_TEST(ShouldTriggerPendingCompilation) {
         TClassifyTestCase tc;
         tc.ClassifierHasPath = "/Root/testdb/my_table";
@@ -61,4 +58,4 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasPath) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

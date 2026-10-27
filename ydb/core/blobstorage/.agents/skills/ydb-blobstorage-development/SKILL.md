@@ -23,7 +23,7 @@ Load a component skill only when that component is involved. A DDisk/PB protocol
 
 ## Trace Cross-Component Changes
 
-1. Identify the request producer, schema/event definition, consumer, response, and durable state. Check generation/owner fencing and failure responses at the boundary.
+1. Identify the request producer, schema/event definition, consumer, response, and durable state. Check how the boundary rejects requests from an older generation or owner, and which failure response it returns.
 2. For layout or lifecycle changes, trace BSC configuration through NodeWarden to the actor and service mapping. Separate allocation claims from physical chunk ownership.
 3. Test the changed boundary using focused component tests and, where needed, `ydb/core/blobstorage/ut_blobstorage`. Inspect that target's `ya.make` and relevant test suite before choosing filters.
 

@@ -21,6 +21,8 @@ namespace NActorsInterconnect {
 
 namespace NActors {
 
+    class IEventDestructor;
+
     struct TExEventFormatError : std::exception {
         const char* what() const noexcept override {
             return "interconnect v2 event format error";
@@ -263,10 +265,11 @@ namespace NActors {
 
         // Notification issued when produced bytes have been sent. Pass XDC bytes as the second argument
         // when that socket completed a write; existing single-stream callers can omit it (defaults to 0).
-        void CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
+        // Transfers completed events/buffers to the destructor, or destroys them if omitted.
+        // Returns their total serialized size for output queue accounting.
+        size_t CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
             std::vector<ui64> *eventToWireTime = nullptr,
-            std::vector<std::unique_ptr<IEventBase>> *events = nullptr,
-            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers = nullptr);
+            IEventDestructor* eventDestructor = nullptr);
 
         void ResetCounters() {
             SerializeEventTime = 0;

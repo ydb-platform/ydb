@@ -785,6 +785,8 @@ namespace NKikimr::NStorage {
         ui64 InvokePipelineGeneration = 1;
 
         void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId);
+        void FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record);
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 

@@ -393,6 +393,9 @@ message TEvNodeConfigInvokeOnRoot {
         uint64 OperationId = 4; // the one of the pending operation BSC has performed its part of
     }
 
+    // Read the static-node connectivity of the top of this binding component, even without global quorum.
+    message TQueryPileConnectivity {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -421,6 +424,7 @@ message TEvNodeConfigInvokeOnRoot {
         TAddBridgePile AddBridgePile = 28;
         TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
         TRemoveBridgePile RemoveBridgePile = 30;
+        TQueryPileConnectivity QueryPileConnectivity = 31;
     }
 }
 
@@ -464,6 +468,23 @@ message TEvNodeConfigInvokeOnRootResult {
         bool Confirmed = 1;
     }
 
+    message TPileConnectivity {
+        message TPile {
+            uint32 BridgePileId = 1; // encoded TBridgePileId
+            uint32 NumStaticNodes = 2;
+            uint32 NumConnectedStaticNodes = 3;
+            bool HasNodeQuorum = 4;
+            bool RequiresConfigQuorum = 5;
+            bool RequiresDataQuorum = 6;
+            string PileName = 7; // name in the reporter's registry snapshot
+        }
+        uint32 ReporterNodeId = 1;
+        bool HasScepter = 2;
+        bool BindingInProgress = 3;
+        uint64 ClusterStateGeneration = 4;
+        repeated TPile Piles = 5; // free registry slots are omitted
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -477,6 +498,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TStateStorageConfig StateStorageConfig = 12;
         TReassignGroupDisk ReassignGroupDisk = 13;
         TValidateTargetedProposition ValidateTargetedProposition = 14;
+        TPileConnectivity PileConnectivity = 15;
     }
 }
 

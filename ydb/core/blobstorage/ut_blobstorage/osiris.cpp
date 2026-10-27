@@ -270,12 +270,16 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
         }
         bool doNotNeedToRestore;
         switch (erasure) {
-            case TBlobStorageGroupType::ErasureMirror3dc:
+            case TBlobStorageGroupType::ErasureMirror3dc: {
+                const bool hasPart0 = layout.GetDisksWithPart(0) != 0;
+                const bool hasPart1 = layout.GetDisksWithPart(1) != 0;
+                const bool hasPart2 = layout.GetDisksWithPart(2) != 0;
                 // In the normal state D=1+1+1, even though W also accepts 2+2.
-                doNotNeedToRestore = (layout.GetDisksWithPart(0) && layout.GetDisksWithPart(1)
-                    && layout.GetDisksWithPart(2))
-                    || (!layout.GetDisksWithPart(0) && !layout.GetDisksWithPart(1) && !layout.GetDisksWithPart(2));
+                const bool durabilitySatisfied = hasPart0 && hasPart1 && hasPart2;
+                const bool hasRestoreSource = hasPart0 || hasPart1 || hasPart2;
+                doNotNeedToRestore = durabilitySatisfied || !hasRestoreSource;
                 break;
+            }
 
             case TBlobStorageGroupType::ErasureMirror3of4: {
                 auto [data, any] = layout.GetMirror3of4State();

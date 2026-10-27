@@ -142,7 +142,6 @@ public:
 
     static bool CheckQuorumForFullSync(const TBlobStorageGroupInfo& info,
             const TBlobStorageGroupInfo::TGroupVDisks& syncedDisks) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const auto& topology = info.GetTopology();
         if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
                 || topology.GetTotalFailRealmsNum() != 3 || syncedDisks.GetTopology() != &topology) {
@@ -159,8 +158,7 @@ public:
         // E=0 cannot prove completeness by intersection. Collect every surviving normal source.
         bool hasNormalSource = false;
         for (ui32 realm = 0; realm < 3; ++realm) {
-            const auto realmState = info.GetFailRealmState(realm);
-            if (realmState == TFailRealm::F || realmState == TFailRealm::R) {
+            if (info.IsFailedFailRealm(realm) || info.IsRecoveringFailRealm(realm)) {
                 continue;
             }
             hasNormalSource = true;

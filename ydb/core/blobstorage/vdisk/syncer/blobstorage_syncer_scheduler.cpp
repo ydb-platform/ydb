@@ -268,14 +268,13 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
             const ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
-            const bool localRealmRecovering = GInfo->GetFailRealmState(localRealm) == TFailRealm::R;
+            const bool localRealmRecovering = GInfo->IsRecoveringFailRealm(localRealm);
             // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
             if (localRealmRecovering) {
                 for (const auto& peer : *SyncerData->Neighbors) {
                     const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                    if (!peer.Myself && GInfo->GetFailRealmState(realm) != TFailRealm::F) {
+                    if (!peer.Myself && !GInfo->IsFailedFailRealm(realm)) {
                         FullSyncRequested.insert(peer.OrderNumber);
                     }
                 }
@@ -506,15 +505,14 @@ namespace NKikimr {
             if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
                 return;
             }
-            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
             const auto returned = [&](ui32 realm) {
-                return GInfo->GetFailRealmState(realm) == TFailRealm::F
-                    && msg->NewInfo->GetFailRealmState(realm) == TFailRealm::R;
+                return GInfo->IsFailedFailRealm(realm)
+                    && msg->NewInfo->IsRecoveringFailRealm(realm);
             };
             const bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
             for (const auto& peer : *SyncerData->Neighbors) {
                 const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                const bool peerAvailable = msg->NewInfo->GetFailRealmState(realm) != TFailRealm::F;
+                const bool peerAvailable = !msg->NewInfo->IsFailedFailRealm(realm);
                 if (!peer.Myself && peerAvailable && (localRealmReturned || returned(realm))) {
                     FullSyncRequested.insert(peer.OrderNumber);
                 }

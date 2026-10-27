@@ -188,6 +188,7 @@ jobs:
           retention-days: 1
 
   build-windows:
+    if: false
     needs:
       - prepare
     strategy:
@@ -290,7 +291,7 @@ jobs:
     needs:
       - prepare
       - build-unix
-      - build-windows
+      # - build-windows  # Re-enable after switching libidn and libiconv to dynamic linkage.
     name: Release
     runs-on: ubuntu-latest
     timeout-minutes: 30

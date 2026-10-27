@@ -12,6 +12,7 @@
 
 #include <util/random/shuffle.h>
 
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -3482,16 +3483,37 @@ public:
                 }
                 return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
+            auto isDataQuorumPile = [&](const TGroupState* group) {
+                if (!group->BridgePileId) {
+                    return true;
+                }
+                const auto state = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State;
+                return NBridge::PileStateTraits(state).RequiresDataQuorum;
+            };
             if (std::ranges::none_of(parts, isSyncPile)) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles", ETags::GroupState);
                 storageGroupStatus.set_overall(context.GetOverallStatus());
                 return;
             }
-            auto [minStatus, maxStatus] = std::ranges::minmax(parts | std::views::filter(isSyncPile) | std::views::transform(getStatus));
-            Ydb::Monitoring::StatusFlag::Status status = maxStatus;
-            if (maxStatus == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
-                status = MaxStatus(minStatus, Ydb::Monitoring::StatusFlag::ORANGE);
+            std::vector<std::pair<const TGroupState*, Ydb::Monitoring::StatusFlag::Status>> evaluated;
+            for (const TGroupState* part : parts | std::views::filter(isDataQuorumPile)) {
+                evaluated.emplace_back(part, getStatus(part));
             }
+            auto isAvailabilityPart = [&](const auto& item) {
+                return isSyncPile(item.first);
+            };
+            auto [syncMin, syncMax] = std::ranges::minmax(evaluated | std::views::filter(isAvailabilityPart) | std::views::values);
+            Ydb::Monitoring::StatusFlag::Status status = syncMax;
+            if (syncMax == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
+                status = MaxStatus(syncMin, Ydb::Monitoring::StatusFlag::ORANGE);
+            }
+            for (const auto& [part, partStatus] : evaluated) {
+                if (!isSyncPile(part)) {
+                    // An unsynchronized part holds no usable copy, but requests routed to it wait for it.
+                    status = MaxStatus(status, MinStatus(partStatus, Ydb::Monitoring::StatusFlag::ORANGE));
+                }
+            }
+            auto [minStatus, maxStatus] = std::ranges::minmax(evaluated | std::views::values);
             context.OverallStatus = status;
             if (status != Ydb::Monitoring::StatusFlag::GREEN) {
                 TStringBuilder issue;

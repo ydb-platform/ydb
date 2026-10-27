@@ -167,7 +167,6 @@ public:
     }
 
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
-        YQL_ENSURE(ev->Get()->PathNormalizer.has_value(), "Query must capture path aliases at local admission");
         ui64 proxyRequestId = ev->Cookie;
         if (!CheckRequest(ev->Get()->GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
@@ -197,8 +196,7 @@ public:
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
-            !Settings.LongSession, QueryState->RequestEv->IsInternalCall(), nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext(),
-            false, QueryState->RequestEv->PathNormalizer);
+            !Settings.LongSession, QueryState->RequestEv->IsInternalCall(), nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;

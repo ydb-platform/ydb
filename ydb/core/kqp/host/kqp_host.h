@@ -7,10 +7,6 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <memory>
-#include <optional>
-
-namespace NKikimr::NPathAliasing { class TPathNormalizer; }
 
 namespace NActors {
 class TActorSystem;
@@ -138,8 +134,7 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
     NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-    bool usePessimisticLocks = false,
-    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt);
+    bool usePessimisticLocks = false);
 
 } // namespace NKqp
 } // namespace NKikimr

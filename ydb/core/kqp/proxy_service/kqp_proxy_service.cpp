@@ -998,8 +998,9 @@ public:
                 span, SelfId().NodeId(), targetId.NodeId());
         }
         proxyRequest->QueryDispatched = true;
-        if (targetId.NodeId() == SelfId().NodeId() && !ev->Get()->PathNormalizer.has_value()) {
-            ev->Get()->PathNormalizer = PathNormalizer;
+        auto requestContext = ev->Get()->GetUserRequestContext();
+        if (targetId.NodeId() == SelfId().NodeId() && !requestContext->PathNormalizer.has_value()) {
+            requestContext->PathNormalizer = PathNormalizer;
         }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }

@@ -385,7 +385,7 @@ private:
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks, QueryId.PathNormalizer);
+            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;

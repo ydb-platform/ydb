@@ -1042,6 +1042,48 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
     }
 
+    Y_UNIT_TEST_TWIN(QueryKeepsHttpAliasSnapshot, Enabled) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134)).SetUseRealThreads(false)
+            .SetDomainName("Root").SetUseSectorMap(true).InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto proxy = runtime.AllocateEdgeActor();
+        const auto service = NKqp::MakeKqpProxyID(runtime.GetNodeId());
+        const auto previous = runtime.RegisterService(service, proxy);
+        NKikimrConfig::TPathRewriteConfig mapping;
+        auto* rule = mapping.AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/Root");
+        const auto snapshot = Enabled ? std::make_shared<const NPathAliasing::TPathNormalizer>(mapping) : nullptr;
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        const TString url = Enabled ? "/alias" : "/Root";
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/query?database=" << url
+                << "&action=execute-query&query=SELECT%201&direct=true HTTP/1.1\r\n\r\n", endpoint, {});
+        auto incoming = MakeHolder<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
+        incoming->PathNormalizer = Enabled
+            ? std::make_shared<const std::function<TString(TStringBuf)>>(NPathAliasing::TPathNormalizerFunction{snapshot})
+            : nullptr;
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, incoming.Release()));
+        auto session = runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionRequest>(proxy, TDuration::Seconds(30));
+        UNIT_ASSERT(session);
+        rule->SetDst("/Changed");
+        runtime.GetAppData().PathNormalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(mapping);
+        auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+        response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+        response->Record.MutableResponse()->SetSessionId("snapshot-session");
+        runtime.Send(new IEventHandle(session->Sender, proxy, response.Release(), 0, session->Cookie));
+        auto query = runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvQueryRequest>(proxy, TDuration::Seconds(30));
+        UNIT_ASSERT(query);
+        const auto context = query->Get()->GetUserRequestContext();
+        UNIT_ASSERT(context && context->PathNormalizer.has_value());
+        UNIT_ASSERT(*context->PathNormalizer == snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(query->Get()->GetDatabase(), "/Root");
+        runtime.RegisterService(service, previous);
+    }
+
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

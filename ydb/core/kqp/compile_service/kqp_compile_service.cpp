@@ -115,12 +115,14 @@ struct TKqpCompileRequest {
     bool CollectDiagnostics = false;
 
     bool FindInCache = true;
+    ui64 CacheGeneration = 0;
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
     }
+
 };
 
 class TKqpRequestsQueue {
@@ -482,15 +484,18 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
+        const bool aliasesChanged = ev->Get()->PathNormalizer.has_value()
+            && *ev->Get()->PathNormalizer != PathNormalizer;
         if (ev->Get()->PathNormalizer.has_value()) {
             PathNormalizer = *ev->Get()->PathNormalizer;
         }
 
         auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
-        if (diff.has_value()) {
+        if (aliasesChanged || diff.has_value()) {
             YDB_LOG_NOTICE("Query cache was invalidated due to config change, config change differencer",
-                {"output", diff.value()});
+                {"output", diff.value_or("path aliases changed")});
 
+            ++CacheGeneration;
             QueryCache->Clear();
         }
 
@@ -535,19 +540,14 @@ private:
 
     template<class TRequest>
     void BindPathNormalizer(TRequest& request) {
-        const auto querySnapshot = request.Query ? request.Query->PathNormalizer : nullptr;
-        YQL_ENSURE(!request.PathNormalizer.has_value() || !request.Query ||
-            (!querySnapshot && !request.QueryAst && !request.SplitExpr) || *request.PathNormalizer == querySnapshot,
-            "Conflicting query path alias snapshots");
-        YQL_ENSURE((!request.QueryAst && !request.SplitExpr) || request.PathNormalizer.has_value() || request.Query,
-            "Parsed query must carry its path alias snapshot");
-        if (!request.PathNormalizer.has_value()) {
-            // A parsed query's owning key is authoritative, including captured-null.
-            request.PathNormalizer = request.Query && (querySnapshot || request.QueryAst || request.SplitExpr)
-                ? querySnapshot : PathNormalizer;
+        if (!request.UserRequestContext) {
+            request.UserRequestContext = MakeIntrusive<TUserRequestContext>();
+        }
+        if (!request.UserRequestContext->PathNormalizer.has_value()) {
+            request.UserRequestContext->PathNormalizer = PathNormalizer;
         }
         if (request.Query) {
-            request.Query->PathNormalizer = *request.PathNormalizer;
+            request.Query->PathNormalizer = *request.UserRequestContext->PathNormalizer;
         }
     }
 
@@ -570,7 +570,6 @@ private:
 
         auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
-
         auto compileResult = QueryCache->Find(
             request.Uid,
             request.Query,
@@ -581,7 +580,7 @@ private:
             dbCounters,
             ev->Sender,
             ctx,
-            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client, request.PathNormalizer);
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client, request.UserRequestContext->PathNormalizer);
 
         if (request.Uid) {
             if (compileResult) {
@@ -642,6 +641,7 @@ private:
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics);
+        compileRequest.CacheGeneration = CacheGeneration;
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -678,12 +678,14 @@ private:
         Counters->ReportRecompileRequestGet(dbCounters);
 
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
-        const bool snapshotMismatch = compileResult && compileResult->Query->PathNormalizer != *request.PathNormalizer;
+        if (compileResult && compileResult->Query->PathNormalizer != *request.UserRequestContext->PathNormalizer) {
+            compileResult = nullptr;
+        }
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
 
-        if (!snapshotMismatch && (compileResult || request.Query)) {
+        if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
@@ -715,6 +717,7 @@ private:
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr,
                 request.UsePessimisticLocks, request.CollectDiagnostics);
             compileRequest.FindInCache = false;
+            compileRequest.CacheGeneration = CacheGeneration;
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
                 return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -747,14 +750,8 @@ private:
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
-        const auto cached = QueryCache->FindByUid(compileResult->Uid, false);
-        if (cached && cached->Query->PathNormalizer != compileRequest.Query.PathNormalizer) {
-            ReplyError(compileRequest.Sender, compileRequest.Uid, Ydb::StatusIds::NOT_FOUND,
-                {NYql::TIssue("Query path alias snapshot changed")}, ctx, compileRequest.Cookie,
-                std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
-            ProcessQueue(ctx);
-            return;
-        }
+        const bool currentGeneration = compileRequest.CacheGeneration == CacheGeneration
+            && *compileRequest.UserRequestContext->PathNormalizer == PathNormalizer;
 
         YDB_LOG_DEBUG_CTX(ctx, "Received response",
             {"sender", compileRequest.Sender},
@@ -775,13 +772,15 @@ private:
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
-                if (!hasTempTablesNameClashes) {
+                if (currentGeneration && !hasTempTablesNameClashes) {
                     UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    if (currentGeneration) {
+                        QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    }
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
@@ -792,7 +791,7 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
-                if (!hasTempTablesNameClashes) {
+                if (currentGeneration && !hasTempTablesNameClashes) {
                     if (QueryCache->FindByUid(compileResult->Uid, false)) {
                         QueryCache->EraseByUid(compileResult->Uid);
                     }
@@ -902,7 +901,8 @@ private:
             {"ast", queryAst.Ast->Root->ToString()});
 
         TKqpCompileResult::TConstPtr compileResult;
-        if (compileRequest.FindInCache) {
+        if (compileRequest.FindInCache && compileRequest.CacheGeneration == CacheGeneration
+            && *compileRequest.UserRequestContext->PathNormalizer == PathNormalizer) {
             compileResult = QueryCache->FindByAst(
                 compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
                 compileRequest.CompileSettings.IsWarmupCompilation
@@ -1136,6 +1136,7 @@ private:
 private:
     TKqpQueryCachePtr QueryCache;
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+    ui64 CacheGeneration = 0;
     EDatabaseType DatabaseType = EDatabaseType::Unknown;
     bool DatabaseTypeCheckScheduled = false;
     TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
@@ -1466,6 +1467,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     }
 
     Y_ENSURE(query);
+
+    if (pathNormalizer.has_value()) {
+        query->PathNormalizer = *pathNormalizer;
+    }
 
     if (query->UserSid.empty()) {
         query->UserSid = userSid;

@@ -17,9 +17,6 @@
 #include <ydb/library/actors/core/event_local.h>
 
 #include <memory>
-#include <optional>
-
-namespace NKikimr::NPathAliasing { class TPathNormalizer; }
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
@@ -476,7 +473,6 @@ public:
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
-    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
 
 private:
     void PrepareRemote() const;

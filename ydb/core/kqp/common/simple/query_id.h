@@ -8,7 +8,9 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NPathAliasing { class TPathNormalizer; }
+namespace NKikimr::NPathAliasing {
+    class TPathNormalizer;
+}
 
 namespace NKikimr::NKqp {
 

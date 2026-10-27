@@ -12,7 +12,6 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <optional>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -23,8 +22,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool isWarmupCompilation = false, bool usePessimisticLocks = false,
-        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt)
+        bool isWarmupCompilation = false, bool usePessimisticLocks = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -47,7 +45,6 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , SplitExpr(std::move(splitExpr))
         , IsWarmupCompilation(isWarmupCompilation)
         , UsePessimisticLocks(usePessimisticLocks)
-        , PathNormalizer(std::move(pathNormalizer))
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -82,7 +79,6 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 
     bool IsWarmupCompilation = false;
     bool UsePessimisticLocks = false;
-    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -92,8 +88,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false, bool collectDiagnostics = false,
-        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt)
+        bool usePessimisticLocks = false, bool collectDiagnostics = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -113,7 +108,6 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
         , CollectDiagnostics(collectDiagnostics)
-        , PathNormalizer(std::move(pathNormalizer))
     {
     }
 
@@ -141,7 +135,6 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     NYql::TExprNode::TPtr SplitExpr = nullptr;
     bool UsePessimisticLocks = false;
     bool CollectDiagnostics = false;
-    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

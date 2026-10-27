@@ -235,12 +235,12 @@ bool TKqpQueryState::TryGetFromCache(
     bool keepInCache = false;
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = query->IsSql();
             break;
 
@@ -250,7 +250,7 @@ bool TKqpQueryState::TryGetFromCache(
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = false;
             break;
 
@@ -270,7 +270,7 @@ bool TKqpQueryState::TryGetFromCache(
         DbCounters,
         sender,
         TlsActivationContext->AsActorContext(),
-        warmupAttribution, PathNormalizer);
+        warmupAttribution, UserRequestContext->PathNormalizer);
 
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
@@ -301,12 +301,12 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = query->IsSql();
             break;
 
@@ -316,7 +316,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             keepInCache = false;
             break;
 
@@ -340,7 +340,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks, PathNormalizer);
+        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks);
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
@@ -363,15 +363,16 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
             uid = GetPreparedQuery();
+            query = *CompileResult->Query;
             break;
 
         default:
@@ -386,7 +387,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics(), PathNormalizer);
+        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics());
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -413,7 +414,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings, PathNormalizer);
+            query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, UserToken->GetUserSID(), GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:
             YQL_ENSURE(false);
@@ -451,7 +452,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks, PathNormalizer);
+        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks);
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {

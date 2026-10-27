@@ -14,6 +14,8 @@ class StreamingDisposition;
 
 } // namespace NYql::NPq::NProto
 
+namespace NKikimr::NPathAliasing { class TPathNormalizer; }
+
 namespace NKikimr::NKqp {
 
 struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
@@ -23,6 +25,7 @@ struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
     TString SessionId;
     TDuration CurrentQueryStatsInterval = TDuration::Zero();
     bool UseBatchPool = false;
+    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> PathNormalizer;
 
     // Workload manager info
     TString PoolId;

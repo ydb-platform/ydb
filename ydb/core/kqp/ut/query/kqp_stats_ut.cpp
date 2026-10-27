@@ -1,4 +1,5 @@
 #include <ydb/core/base/hive.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -100,14 +101,17 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 // the text lookup without the AST cache, the AST lookup after parsing with it. Recompile and SPLIT
 // requests are not lookups. The miss is reported before the request is queued.
 Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableAstCache(AstCache);
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
+    auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+    rule->SetSrc("/Alias");
+    rule->SetDst("/Root");
     TKikimrRunner kikimr(settings);
     // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
-    UNIT_ASSERT(kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess());
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
     UNIT_ASSERT(counters);
@@ -183,6 +187,25 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
     send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, Nothing(), false, TInstant::MicroSeconds(1));
     receive(Ydb::StatusIds::TIMEOUT);
     check(0, !AstCache);
+
+    auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *notification->Record.MutableConfig()->MutableTableServiceConfig() = *config;
+    notification->PathNormalizer = nullptr;
+    runtime.Send(new IEventHandle(service, edge, notification.Release()));
+    UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+
+    // The admitted snapshot stays usable without repopulating the cleared cache.
+    send(text);
+    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
+    check(0, 1);
+    context = MakeIntrusive<TUserRequestContext>("current", "/Root", "current");
+    send(text);
+    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
+    check(0, 1);
+    send(text);
+    UNIT_ASSERT(receive()->Get()->Stats.FromCache);
+    check(1, 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->FindNamedCounter("name", "table.query.compilation.cached_query_count")->Val(), 1);
 }
 
 auto GetYqlStreamIterator(

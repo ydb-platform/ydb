@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
@@ -665,6 +666,19 @@ public:
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         if (Forget && !QueryRequestStartTime) {
             QueryRequestStartTime = TActivationContext::Now();
+        }
+        if constexpr (requires { event->SetUserRequestContext(nullptr); }) {
+            const auto& normalizer = Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer;
+            if (normalizer.has_value()) {
+                auto context = MakeIntrusive<NKqp::TUserRequestContext>(event->Record.GetTraceId(), Database, SessionId);
+                context->PathNormalizer = nullptr;
+                if (*normalizer) {
+                    const auto* snapshot = (**normalizer).target<NPathAliasing::TPathNormalizerFunction>();
+                    Y_ENSURE(snapshot, "HTTP path normalizer must carry its alias snapshot");
+                    context->PathNormalizer = snapshot->Normalizer;
+                }
+                event->SetUserRequestContext(std::move(context));
+            }
         }
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }

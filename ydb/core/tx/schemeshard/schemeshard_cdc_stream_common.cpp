@@ -10,7 +10,8 @@ namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
     return type == NKikimrSchemeOp::EIndexTypeGlobal
         || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
-        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        || type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
 }
 
 void MaybeGuardIndexWithBaseCdcScanLock(

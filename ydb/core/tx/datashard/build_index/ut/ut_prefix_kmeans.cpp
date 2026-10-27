@@ -226,10 +226,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.SetK(0);
-        }, "{ <main>: Error: Should be requested partition on at least two rows }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.SetK(1);
-        }, "{ <main>: Error: Should be requested partition on at least two rows }");
+        }, "{ <main>: Error: Should be requested at least one cluster }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.ClearLevelName();
@@ -256,9 +253,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         // test multiple issues:
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.SetK(1);
+            request.SetK(0);
             request.SetEmbeddingColumn("some");
-        }, "[ { <main>: Error: Should be requested partition on at least two rows } { <main>: Error: Unknown embedding column: some } ]");
+        }, "[ { <main>: Error: Should be requested at least one cluster } { <main>: Error: Unknown embedding column: some } ]");
     }
 
     Y_UNIT_TEST (BuildToPosting) {

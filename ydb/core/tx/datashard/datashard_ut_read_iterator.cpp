@@ -7261,13 +7261,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             return settings;
         }
 
-        explicit THnswLifecycleFixture(bool follower = false, ui32 indexCount = 1, bool sameColumn = true)
+        explicit THnswLifecycleFixture(bool follower = false, ui32 indexCount = 1, bool sameColumn = true, bool annotate = true)
             : Helper(Configure(Ports), 1, follower)
         {
             TVector<TShardedTableOptions::TColumn> columns = {{"key", "Uint32", true, false}, {"label", "Uint32", false, false},
                                                              {"emb", "String", false, false}};
             if (indexCount > 1 && !sameColumn) { columns.push_back({"emb2", "String", false, false}); }
-            Helper.CreateCustomTable("hnsw-lifecycle", columns, true, {}, [&](auto& table) {
+            Helper.CreateCustomTable("hnsw-lifecycle", columns, annotate, {}, [&](auto& table) {
                 auto first = table.GetTableIndexes(0);
                 table.ClearTableIndexes();
                 for (ui32 i = 0; i < indexCount; ++i) {
@@ -8259,6 +8259,55 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(graph->CanRead(TRowVersion::Max()), !Reboot);
         fixture.Warm();
         UNIT_ASSERT_VALUES_EQUAL(fixture.Index() == graph, !Reboot);
+    }
+
+
+    Y_UNIT_TEST_TWIN(HnswSchemaFinalizationWaitsForBuild, BelowMinRows) {
+        THnswLifecycleFixture fixture(false, 1, true, false);
+        UNIT_ASSERT(!fixture.Index());
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        ui32 annotations = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        auto* alter = tx.MutableAlterTable();
+                        alter->MutablePartitionConfig()->SetShadowData(false);
+                        auto* index = alter->AddTableIndexes();
+                        index->SetName("hnsw0");
+                        index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                        index->SetPathOwnerId(alter->GetPathId().GetOwnerId());
+                        index->SetLocalPathId(Max<ui64>() - 1);
+                        index->MutableHnswIndexDescription()->SetEmbeddingColumnId(3);
+                        auto settings = fixture.Settings();
+                        if (BelowMinRows) {
+                            settings.set_min_rows(100);
+                        }
+                        *index->MutableHnswIndexDescription()->MutableSettings()->mutable_settings() = settings;
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        ++annotations;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.SetObserverFunc(observer);
+        UNIT_ASSERT(annotations);
+        if (BelowMinRows) {
+            UNIT_ASSERT(!fixture.Index());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        } else {
+            // No read or warmup has triggered lazy construction: the schema reply
+            // itself guarantees that eager construction has already completed.
+            UNIT_ASSERT(fixture.Index());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
+        }
     }
 
     Y_UNIT_TEST(HnswExplicitMetadataDisableSurvivesRestart) {

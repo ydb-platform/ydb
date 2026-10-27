@@ -108,6 +108,7 @@ def create_ydb_configurator(
     enable_tablet_dev_ui_secure_path=None,
     binary_paths=None,
     extra_feature_flags=None,
+    empty_administration_allowed_sids=False,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -136,6 +137,13 @@ def create_ydb_configurator(
     assert (
         'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
     ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
+
+    # default_clusteradmin gives root@builtin two things: a place in administration_allowed_sids
+    # and FULL ACL grants on the cluster root. Only the first one is dropped here: without the second
+    # one root@builtin could not even create a database. An empty administration_allowed_sids
+    # is what makes every token an administrator.
+    if empty_administration_allowed_sids:
+        security_config['administration_allowed_sids'] = []
 
     if enforce_user_token_requirement:
         config_generator.yaml_config.setdefault('auth_config', {})

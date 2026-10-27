@@ -2,6 +2,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_flow_proposals.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -24,7 +25,7 @@ namespace {
 
 struct TExportEnv {
     TTestBasicRuntime Runtime;
-    TTestEnv Env{Runtime};
+    TTestEnv Env;
     TTempDir Directory;
     TPortManager Ports;
     const ui16 Port = Ports.GetPort();
@@ -32,8 +33,9 @@ struct TExportEnv {
     const bool IsFs;
     ui64 TxId = 100;
 
-    explicit TExportEnv(bool isFs)
-        : IsFs(isFs)
+    explicit TExportEnv(bool isFs, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard)
+        : Env(Runtime, 4, true, std::move(ssFactory))
+        , IsFs(isFs)
     {
         Runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
         if (IsFs) {
@@ -198,18 +200,30 @@ struct TDelayedCopy {
         })
     {}
 
-    void WaitForCopy() {
+    void WaitForCopy(bool captureTableSchemeSnapshot = true) {
         Test.Runtime.WaitFor("consistent copy proposal", [&] { return !Proposal.empty(); });
         CopyTxId = Proposal.front()->Get()->Record.GetTxId();
+        if (!captureTableSchemeSnapshot) {
+            // An old SchemeShard does not request scheme capture.
+            auto& copies = *Proposal.front()->Get()->Record.MutableTransaction(0)
+                ->MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
+            for (auto& copy : copies) {
+                copy.ClearCaptureTableSchemeSnapshot();
+            }
+        }
         Proposal.Stop().Unblock();
         Test.Runtime.WaitFor("consistent copy completion", [&] { return !Completion.empty(); });
     }
 
+    void Reboot() {
+        Completion.clear();
+        RebootTablet(Test.Runtime, TTestTxConfig::SchemeShard, Test.Runtime.AllocateEdgeActor());
+        Test.Runtime.WaitFor("consistent copy completion after reboot", [&] { return !Completion.empty(); });
+    }
+
     void Resume(bool reboot) {
         if (reboot) {
-            Completion.clear();
-            RebootTablet(Test.Runtime, TTestTxConfig::SchemeShard, Test.Runtime.AllocateEdgeActor());
-            Test.Runtime.WaitFor("consistent copy completion after reboot", [&] { return !Completion.empty(); });
+            Reboot();
         }
         Completion.Stop().Unblock();
     }
@@ -264,6 +278,60 @@ void SchemeMatchesDataSnapshot(bool isFs, bool reboot, bool isColumn, bool dropS
     t.Forget(exportId);
     RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
     UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 0);
+}
+
+enum class ESchemeShardVersionSwitch {
+    None,
+    Upgrade,
+    Downgrade,
+};
+
+void SchemeAttributeAfterVersionSwitch(bool isFs, ESchemeShardVersionSwitch versionSwitch, const char* expectedAttribute) {
+    NSchemeShard::TSchemeShard* schemeShard = nullptr;
+    TExportEnv t(isFs, [&](const TActorId& tablet, TTabletStorageInfo* info) {
+        schemeShard = static_cast<NSchemeShard::TSchemeShard*>(CreateFlatTxSchemeShard(tablet, info));
+        return schemeShard;
+    });
+    t.CreateTable();
+
+    auto setAttribute = [&](const TString& value) {
+        TestUserAttrs(t.Runtime, ++t.TxId, "/MyRoot", "Table", AlterUserAttrs({{"version_switch", value}}));
+        t.Env.TestWaitNotification(t.Runtime, t.TxId);
+    };
+    setAttribute("before");
+
+    TDelayedCopy copy(t);
+    const ui64 exportId = t.Export();
+    copy.WaitForCopy(versionSwitch != ESchemeShardVersionSwitch::Upgrade);
+    const ui64 snapshotCount = versionSwitch == ESchemeShardVersionSwitch::Upgrade ? 0 : 1;
+    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
+
+    setAttribute("after");
+    TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Table"),
+        {NLs::UserAttrsEqual({{"version_switch", "after"}})});
+
+    // Switch while the consistent copy is complete and no backup has been proposed.
+    copy.Reboot();
+    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
+    if (versionSwitch == ESchemeShardVersionSwitch::Downgrade) {
+        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+        // Model an old SchemeShard ignoring the additive snapshot table on startup.
+        // Leave the persisted row intact; only discard the snapshot loaded in memory.
+        schemeShard->Tables.at(TPathId(TTestTxConfig::SchemeShard, pathId))->BackupSettings.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+    }
+    copy.Resume(false);
+    t.Env.TestWaitNotification(t.Runtime, exportId);
+
+    TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    Ydb::Table::CreateTableRequest scheme;
+    const TString schemeText = t.ReadFile("scheme.pb");
+    UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeText, &scheme), schemeText);
+    UNIT_ASSERT_C(scheme.attributes().contains("version_switch"), schemeText);
+    UNIT_ASSERT_VALUES_EQUAL(scheme.attributes().at("version_switch"), expectedAttribute);
+    UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
+    UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), snapshotCount);
+    t.Forget(exportId);
 }
 
 } // namespace
@@ -341,30 +409,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         SchemeMatchesDataSnapshot(false, Reboot, true, true);
     }
 
-    Y_UNIT_TEST_TWIN(LegacyExportWithoutTableSchemeSnapshot, IsFs) {
-        TExportEnv t(IsFs);
-        t.CreateTable();
-        TDelayedCopy copy(t);
-        const ui64 exportId = t.Export();
-        copy.WaitForCopy();
+    Y_UNIT_TEST_TWIN(SchemeAttributesUseTableSchemeSnapshot, IsFs) {
+        SchemeAttributeAfterVersionSwitch(IsFs, ESchemeShardVersionSwitch::None, "before");
+    }
 
-        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
-        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
-            (
-                (let key '(
-                    '('OwnerPathId (Uint64 '%lu))
-                    '('LocalPathId (Uint64 '%lu))
-                ))
-                (return (AsList (EraseRow 'TableSchemeSnapshots key)))
-            )
-        )", TTestTxConfig::SchemeShard, pathId));
-        copy.Resume(true);
-        t.Env.TestWaitNotification(t.Runtime, exportId);
+    Y_UNIT_TEST_TWIN(UpgradeBeforeBackupUsesLiveScheme, IsFs) {
+        SchemeAttributeAfterVersionSwitch(IsFs, ESchemeShardVersionSwitch::Upgrade, "after");
+    }
 
-        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(t.ReadFile("data_00.csv"), "1,\"before\"\n");
-        UNIT_ASSERT(!t.ReadFile("scheme.pb").empty());
-        t.Forget(exportId);
+    Y_UNIT_TEST_TWIN(DowngradeBeforeBackupIgnoresTableSchemeSnapshot, IsFs) {
+        SchemeAttributeAfterVersionSwitch(IsFs, ESchemeShardVersionSwitch::Downgrade, "after");
     }
 
     Y_UNIT_TEST_TWIN(InvalidTableSchemeSnapshotCancelsWholeExport, IsFs) {

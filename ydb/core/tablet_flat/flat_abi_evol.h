@@ -105,7 +105,8 @@ namespace NTable {
             such redo chunks require at least this evolution to read.
      ---------------------------------------------------------------------
        31   Parts with a separate descriptor page collection, data pages
-            and indexes of each group in its own page collection
+            of each group in its own page collection, indexes in the
+            descriptor or with data of their group
      */
 
 }

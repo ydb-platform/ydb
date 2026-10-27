@@ -840,8 +840,8 @@ namespace NTable {
         {
             NSan::CheckMemIsInitialized(page.data(), page.size());
 
-            // Main page collection edge limits descriptor pages, data and indexes of the main group,
-            // regardless of how many page collections they are split into
+            // Main page collection edge counts written descriptor pages and data of the main group, even in separate
+            // page collections; NeedFlush adds estimated sizes of indexes of all groups wherever they are written
             if (slot == Slots.DescriptorSlot() || slot == Slots.DataSlot({ })) {
                 Current.MainWritten += page.size();
             }

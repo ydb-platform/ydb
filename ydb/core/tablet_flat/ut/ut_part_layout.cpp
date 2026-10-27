@@ -10,6 +10,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -297,7 +299,47 @@ namespace {
         TVector<TRow> Rows; // newest versions of keys, in key order
     };
 
-    TBundlePart WriteBundlePart(const TPartLayout& layout, EIndex index) {
+    // Forwards pages to the bundle and patches the root of the part, to get parts the writer refuses to write
+    class TRootPatcher : public IPageWriter {
+    public:
+        TRootPatcher(IPageWriter& pager, std::function<void(NProto::TRoot&)> patch)
+            : Pager(pager)
+            , Patch(std::move(patch))
+        { }
+
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override {
+            return Pager.Write(std::move(page), type, group);
+        }
+
+        TPageId WriteOuter(TSharedData page) override {
+            return Pager.WriteOuter(std::move(page));
+        }
+
+        void WriteInplace(TPageId page, TArrayRef<const char> body) override {
+            NProto::TRoot root;
+            Y_ENSURE(root.ParseFromArray(body.data(), body.size()));
+            Patch(root);
+            Pager.WriteInplace(page, root.SerializeAsString());
+        }
+
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override {
+            return Pager.WriteLarge(std::move(blob), ref);
+        }
+
+        void Finish(TString overlay) override {
+            Pager.Finish(std::move(overlay));
+        }
+
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override {
+            return Pager.GetLastWrittenPageId(group);
+        }
+
+    private:
+        IPageWriter& Pager;
+        const std::function<void(NProto::TRoot&)> Patch;
+    };
+
+    TBundlePart WriteBundlePart(const TPartLayout& layout, EIndex index, std::function<void(NProto::TRoot&)> patchRoot = { }) {
         const auto& lay = HistoryLayout();
 
         NPage::TConf conf;
@@ -306,6 +348,9 @@ namespace {
             conf.Group(group).PageRows = 2;
             conf.Group(group).BTreeIndexNodeKeysMin = conf.Group(group).BTreeIndexNodeKeysMax = 2;
         }
+        // Values of keys 10..99 are packed to the outer page collection, values of keys 100..199 are external blobs
+        conf.SmallEdge = 5;
+        conf.LargeEdge = 6;
         conf.Layout = layout;
         SetIndex(conf, index);
 
@@ -332,7 +377,12 @@ namespace {
         result.Scheme = lay.RowScheme();
 
         const auto tags = result.Scheme->Tags();
-        TPartWriter writer(new TPartScheme(result.Scheme->Cols), tags, bundle, conf, TEpoch::Zero());
+        std::optional<TRootPatcher> patcher;
+        if (patchRoot) {
+            patcher.emplace(bundle, std::move(patchRoot));
+        }
+        TPartWriter writer(new TPartScheme(result.Scheme->Cols), tags,
+            patcher ? static_cast<IPageWriter&>(*patcher) : static_cast<IPageWriter&>(bundle), conf, TEpoch::Zero());
 
         auto toState = [&](const TRow& row) {
             TRowState state(tags.size());
@@ -423,8 +473,12 @@ namespace {
         UNIT_ASSERT_C(part->Slots.GetLayout() == layout, message);
         UNIT_ASSERT_VALUES_EQUAL_C(part->GroupsCount, 3u, message);
         UNIT_ASSERT_VALUES_EQUAL_C(part->HistoricGroupsCount, 3u, message);
-        UNIT_ASSERT_VALUES_EQUAL_C(part->PageCollections.size(), part->Slots.SlotsCount(), message);
         UNIT_ASSERT_VALUES_EQUAL_C(part->Stat.Rows, HistoryKeys, message);
+
+        // Outer values are in the last page collection, frames and globs of large values are in the descriptor
+        UNIT_ASSERT_VALUES_EQUAL_C(part->PageCollections.size(), part->Slots.SlotsCount() + 1, message);
+        UNIT_ASSERT_VALUES_EQUAL_C(part->OuterSlot(), part->Slots.SlotsCount(), message);
+        UNIT_ASSERT_C(part->Small && part->Large && part->Blobs && part->Pseudo, message);
 
         // Slices are built from the first and the last keys of data pages
         UNIT_ASSERT_C(partView.Slices && partView.Slices->size() == 1, message);
@@ -453,7 +507,7 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
 
                 const auto bundlePart = WriteBundlePart(layout, index);
                 const TPartSlots slots(3, layout);
-                UNIT_ASSERT_VALUES_EQUAL_C(bundlePart.Result.PageCollections.size(), slots.SlotsCount(), message);
+                UNIT_ASSERT_VALUES_EQUAL_C(bundlePart.Result.PageCollections.size(), slots.OuterSlot() + 1, message);
 
                 // Descriptor and data pages are written to their channels
                 for (ui32 slot : xrange(slots.SlotsCount())) {
@@ -467,11 +521,29 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                         auto partView = LoadBundlePart(bundlePart, withSlices, preloadData, stats);
                         CheckLoadedPart(bundlePart, partView, layout, message);
 
-                        // Descriptor pages are always loaded
-                        UNIT_ASSERT_C(stats.FetchedSlots.contains(slots.DescriptorSlot()), message);
-                        if (!withSlices || preloadData) {
-                            // Keys of slices and preloaded data are read from data pages of the main group
-                            UNIT_ASSERT_C(stats.FetchedSlots.contains(slots.DataSlot({ })), message);
+                        // Only descriptor pages and roots of b-tree indexes are loaded, data and outer pages are not
+                        TSet<ui32> expected{ slots.DescriptorSlot() };
+                        const auto& indexPages = partView->IndexPages;
+                        for (bool historic : { false, true }) {
+                            const auto& metas = historic ? indexPages.BTreeHistoric : indexPages.BTreeGroups;
+                            for (ui32 group : xrange(metas.size())) {
+                                if (metas[group].LevelCount()) {
+                                    expected.insert(slots.IndexSlot(NPage::TGroupId(group, historic)));
+                                }
+                            }
+                        }
+                        const auto loadMessage = TStringBuilder() << message << (withSlices ? " with slices" : "")
+                            << (preloadData ? " preload data" : "") << ", fetched " << JoinSeq(",", stats.FetchedSlots);
+                        if (withSlices && !preloadData) {
+                            UNIT_ASSERT_C(stats.FetchedSlots == expected, loadMessage);
+                        } else {
+                            // Keys of slices and preloaded data are read from data pages of the main group and its index
+                            UNIT_ASSERT_C(stats.FetchedSlots.contains(slots.DataSlot({ })), loadMessage);
+                            expected.insert(slots.DataSlot({ }));
+                            expected.insert(slots.IndexSlot({ }));
+                            for (ui32 slot : stats.FetchedSlots) {
+                                UNIT_ASSERT_C(expected.contains(slot), loadMessage);
+                            }
                         }
                     }
                 }
@@ -520,6 +592,89 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
         TLoadStats stats;
         UNIT_ASSERT_EXCEPTION_CONTAINS(LoadBundlePart(bundlePart, true, false, stats, /* dropSlots */ 1),
             yexception, "invalid layout");
+    }
+
+    Y_UNIT_TEST(IndexesOutOfDescriptorRequireSeparateDescriptor) {
+        const std::function<void(NProto::TRoot&)> patches[] = {
+            [](NProto::TRoot& root) { root.MutableLayout()->SetKeyIndexInDescriptor(false); },
+            [](NProto::TRoot& root) { root.MutableLayout()->SetGroupIndexesInDescriptor(false); },
+        };
+        for (const auto& patch : patches) {
+            const auto bundlePart = WriteBundlePart({ }, EIndex::V2, patch);
+
+            TLoadStats stats;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(LoadBundlePart(bundlePart, true, false, stats),
+                yexception, "invalid layout");
+        }
+    }
+}
+
+namespace {
+    NWriter::TConf DescriptorChannelWriterConf(ui8 mainChannel) {
+        NWriter::TConf conf;
+        conf.Groups.resize(2);
+        conf.Groups[0].Channel = mainChannel;
+        conf.Groups[0].Cache = NPage::ECache::Ever;
+        conf.Groups[0].CacheMode = NPage::ECacheMode::TryKeepInMemory;
+        conf.Groups[0].MaxBlobSize = 1234;
+        conf.Groups[1].Channel = 5;
+        return conf;
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDescriptorChannel) {
+
+    Y_UNIT_TEST(SameChannel) {
+        NPage::TConf layout;
+        auto writer = DescriptorChannelWriterConf(1);
+
+        UNIT_ASSERT(!NWriter::ApplyDescriptorChannel(layout, writer, 1));
+        UNIT_ASSERT(layout.Layout == TPartLayout{ });
+        UNIT_ASSERT(layout.WriteFlatIndex);
+        UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 1u);
+    }
+
+    Y_UNIT_TEST(NoBTreeIndex) {
+        NPage::TConf layout;
+        layout.WriteBTreeIndexV1 = false;
+        layout.WriteBTreeIndexV2 = false;
+        auto writer = DescriptorChannelWriterConf(2);
+
+        // Flat index pages are sticky, so they would be loaded from the other channel on every part load
+        UNIT_ASSERT(!NWriter::ApplyDescriptorChannel(layout, writer, 1));
+        UNIT_ASSERT(layout.Layout == TPartLayout{ });
+        UNIT_ASSERT(layout.WriteFlatIndex);
+        UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 2u);
+    }
+
+    Y_UNIT_TEST(OtherChannel) {
+        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
+            NPage::TConf layout;
+            layout.WriteBTreeIndexV1 = index != EIndex::V2;
+            layout.WriteBTreeIndexV2 = index != EIndex::V1;
+            layout.WriteFlatIndex = index == EIndex::V1;
+            layout.Layout.GroupIndexesInDescriptor = false;
+            auto writer = DescriptorChannelWriterConf(2);
+
+            UNIT_ASSERT(NWriter::ApplyDescriptorChannel(layout, writer, 1));
+
+            // Index placement flags are kept as configured
+            UNIT_ASSERT(layout.Layout == (TPartLayout{ .SeparateDescriptorCollection = true, .GroupIndexesInDescriptor = false }));
+            UNIT_ASSERT(!layout.WriteFlatIndex);
+            UNIT_ASSERT_VALUES_EQUAL(layout.WriteBTreeIndexV1, index != EIndex::V2);
+            UNIT_ASSERT_VALUES_EQUAL(layout.WriteBTreeIndexV2, index != EIndex::V1);
+
+            // The descriptor page collection goes first, with settings of the main group in the descriptor channel
+            UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 1u);
+            UNIT_ASSERT(writer.Groups[0].Cache == NPage::ECache::Ever);
+            UNIT_ASSERT(writer.Groups[0].CacheMode == NPage::ECacheMode::TryKeepInMemory);
+            UNIT_ASSERT_VALUES_EQUAL(writer.Groups[0].MaxBlobSize, 1234u);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[1].Channel), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[2].Channel), 5u);
+        }
     }
 }
 

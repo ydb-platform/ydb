@@ -769,26 +769,6 @@ bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<
     return stickyGroups[SlotLeaderGroup(partStore, slot)];
 }
 
-// Descriptor pages of a part are written to the main channel of the leader family room. When data
-// of the main group goes to another channel, the part gets a separate descriptor page collection,
-// which needs b-tree index only. Returns true if it does.
-bool ApplyDescriptorChannel(NTable::NPage::TConf& layout, NWriter::TConf& writer, ui8 descriptorChannel) {
-    Y_ENSURE(!writer.Groups.empty());
-
-    const bool writeBTreeIndex = layout.WriteBTreeIndexV1 || layout.WriteBTreeIndexV2;
-    if (descriptorChannel == writer.Groups[0].Channel || !writeBTreeIndex) {
-        return false;
-    }
-
-    layout.Layout.SeparateDescriptorCollection = true;
-    layout.WriteFlatIndex = false;
-
-    auto descriptor = writer.Groups[0];
-    descriptor.Channel = descriptorChannel;
-    writer.Groups.insert(writer.Groups.begin(), descriptor);
-    return true;
-}
-
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
 TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartStore& partStore,
     size_t groupIndex, const TVector<bool>& stickyGroups)
@@ -1709,9 +1689,18 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
 
         if (stickyGroups[groupIndex]) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(groupId)),
+                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(partStore->DataSlot(groupId), groupId)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
+    }
+
+    // A separate descriptor page collection has no data pages and is sticky with the main group, as page
+    // collection 0 of the old layout, so V1 indexes kept in it stay in memory
+    if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && IsStickySlot(*partStore, slot, stickyGroups)) {
+        auto* pageCollection = partStore->PageCollections[slot].Get();
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(slot, { })),
+            0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -5324,7 +5313,7 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
-    if (ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
+    if (NWriter::ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
         addChannel(descriptorChannel);
     }
 
@@ -5472,7 +5461,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     // Data of the main group is written to the leader family channel too until tier compaction,
     // so parts keep descriptor pages and main group data in a single page collection
-    if (ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+    if (NWriter::ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
         addChannel(descriptorChannel);
     }
 

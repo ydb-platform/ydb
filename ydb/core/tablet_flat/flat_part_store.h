@@ -143,11 +143,11 @@ public:
     }
 
     /**
-     * Returns all live pages of the page collection with data pages of the group
+     * Returns all live pages of the page collection, except pages superseded by the V2 b-tree of the group,
+     * which the shared cache walks by itself
      */
-    TVector<TPageLocation> GetPages(NPage::TGroupId groupId) const
+    TVector<TPageLocation> GetPages(ui32 slot, NPage::TGroupId groupId) const
     {
-        const ui32 slot = DataSlot(groupId);
         Y_ENSURE(slot < PageCollections.size());
 
         auto& pageCollection = *PageCollections[slot]->PageCollection;

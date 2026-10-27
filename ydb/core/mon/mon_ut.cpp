@@ -514,6 +514,9 @@ Y_UNIT_TEST_SUITE(MessageBusHttp) {
             .SetUseSectorMap(true)
             .SetMonitoringPortOffset(monPort);
         TServer server(settings);
+        server.EnableGRpc(ports.GetPort());
+        TClient busClient(settings);
+        busClient.InitRootScheme();
         NMsgBusProxy::IMessageBusHttpServer* httpServer = nullptr;
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         while (!httpServer && TInstant::Now() < deadline) {

@@ -25,6 +25,7 @@ SRCS(
     tabbed_table_ut.cpp
     tx_mode_utils_ut.cpp
     utf8_utils_ut.cpp
+    yt_ut.cpp
 )
 
 END()

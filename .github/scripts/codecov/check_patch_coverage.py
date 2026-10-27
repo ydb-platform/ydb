@@ -31,6 +31,7 @@ MAX_FILES = 1000
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 4096
 MAX_LCOV_BYTES = 64 * 1024 * 1024
+MAX_POLICY_BYTES = 128 * 1024
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 EXCLUDE_RE = re.compile(COVERAGE_EXCLUDE_REGEXP)
@@ -61,6 +62,60 @@ def percentage(value: str) -> Decimal:
     if not result.is_finite() or not 0 <= result <= 100:
         raise argparse.ArgumentTypeError("expected a percentage between 0 and 100")
     return result
+
+
+@dataclass(frozen=True)
+class PatchPolicy:
+    target: Decimal
+    tolerance: Decimal
+
+    @property
+    def minimum(self) -> Decimal:
+        return max(Decimal(0), self.target - self.tolerance)
+
+    def description(self) -> str:
+        return (
+            f"Policy from .github/codecov.yml: target {self.target}%, "
+            f"tolerance {self.tolerance} percentage points; minimum {self.minimum}%"
+        )
+
+
+def load_patch_policy(path: Path, flag: str) -> PatchPolicy:
+    """Read the trusted Codecov YAML's JSON form, never a second threshold.
+
+    The workflow uses Ruby's safe YAML loader (already used by helper CI) so
+    this offline checker needs no additional Python packages. Missing, auto or
+    ambiguous patch targets are errors, not a fallback to a hardcoded value.
+    """
+    try:
+        with path.open("rb") as source:
+            raw = source.read(MAX_POLICY_BYTES + 1)
+        if len(raw) > MAX_POLICY_BYTES:
+            raise CoverageError("patch coverage policy exceeds the safety limit")
+        config = json.loads(raw)
+        flags = config["flag_management"]["individual_flags"]
+        if not isinstance(flags, list) or any(not isinstance(item, dict) for item in flags):
+            raise ValueError("invalid flags")
+        matches = [item for item in flags if item.get("name") == flag]
+        if len(matches) != 1:
+            raise ValueError("missing or duplicate flag")
+        statuses = matches[0]["statuses"]
+        if not isinstance(statuses, list) or any(not isinstance(item, dict) for item in statuses):
+            raise ValueError("invalid statuses")
+        patches = [item for item in statuses if item.get("type") == "patch"]
+        if len(patches) != 1:
+            raise ValueError("missing or duplicate patch status")
+
+        def configured_percentage(name: str) -> Decimal:
+            value = patches[0][name]
+            if type(value) not in (str, int, float):
+                raise ValueError("invalid percentage type")
+            text = str(value).strip()
+            return percentage(text[:-1] if text.endswith("%") else text)
+
+        return PatchPolicy(configured_percentage("target"), configured_percentage("threshold"))
+    except (OSError, ValueError, KeyError, TypeError, argparse.ArgumentTypeError) as exc:
+        raise CoverageError(f"could not read an unambiguous numeric patch policy for {flag}") from exc
 
 
 def owned_path(path: str, flag: str | None = None) -> bool:
@@ -373,6 +428,7 @@ class Totals:
 
 
 def check(args: argparse.Namespace) -> int:
+    policy = load_patch_policy(args.policy_file, args.flag)
     files = load_changed_lines(args.changed_lines_file, args.base_sha, args.head_sha, args.flag)
     receipt = load_upload_receipt(args.upload_receipt, args.head_sha, args.flag, args.run_id)
     reports = load_lcov(args.coverage_report, receipt, args.flag)
@@ -381,8 +437,9 @@ def check(args: argparse.Namespace) -> int:
     for path in sorted(files):
         if not totals.add_file(files[path], reports.get(path, {"totals": None, "coverage": []})):
             absent.append(path)
-    description = totals.description(args.flag, args.threshold)
+    description = totals.description(args.flag, policy.minimum)
     print(description)
+    print(policy.description())
     print(f"Measured HEAD {args.head_sha}; original PR base {args.base_sha}; upload {receipt.name}")
     print(f"Exact uploaded LCOV SHA-256: {receipt.report_sha256}")
     if absent:
@@ -393,6 +450,7 @@ def check(args: argparse.Namespace) -> int:
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
             output.write(f"### Patch coverage: {args.flag}\n\n{description}\n\n")
+            output.write(policy.description() + "\n\n")
             output.write(f"Base `{args.base_sha}` → HEAD `{args.head_sha}`.\n\n")
             output.write(f"Upload `{receipt.name}`; LCOV SHA-256 `{receipt.report_sha256}`.\n\n")
             output.write("Uses the exact uploaded LCOV and Codecov's branch/partial semantics for the original PR diff; partial lines are not hits.\n\n")
@@ -402,7 +460,7 @@ def check(args: argparse.Namespace) -> int:
                 for path in absent:
                     output.write(f"- {json.dumps(path).replace('<', '&lt;').replace('>', '&gt;')}\n")
                 output.write("\n")
-    return 0 if totals.passes(args.threshold) else 1
+    return 0 if totals.passes(policy.minimum) else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -420,7 +478,7 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--coverage-report", type=Path, required=True, help="exact uploaded LCOV bound to the receipt digest")
     check_parser.add_argument("--run-id", type=positive, required=True, help="expected workflow run ID")
     check_parser.add_argument("--changed-lines-file", type=Path, required=True)
-    check_parser.add_argument("--threshold", type=percentage, default=Decimal(80))
+    check_parser.add_argument("--policy-file", type=Path, required=True, help="trusted .github/codecov.yml converted to JSON")
     args = parser.parse_args(argv)
     try:
         if args.command == "collect":

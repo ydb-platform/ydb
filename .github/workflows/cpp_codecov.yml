@@ -374,7 +374,7 @@ jobs:
         run: rm -f -- /tmp/ydb_service_account.json
 
   patch:
-    name: Patch coverage (80%)
+    name: Check if patch coverage is sufficient
     needs: [detect, coverage]
     if: >-
       github.event_name == 'pull_request_target' &&
@@ -382,7 +382,7 @@ jobs:
       needs.detect.outputs.should_run == 'true' &&
       needs.coverage.result == 'success'
     # Deliberately non-required: this workflow does not change merge rules or
-    # checks_integrated. The upload/HTML jobs remain successful below 80%.
+    # checks_integrated. The upload/HTML jobs remain successful below the target.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -391,7 +391,10 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.workflow_sha }}
-          sparse-checkout: .github/scripts/codecov
+          sparse-checkout: |
+            .github/scripts/codecov
+            .github/codecov.yml
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - name: Download pinned PR patch
@@ -414,7 +417,12 @@ jobs:
           PR_HEAD_SHA: ${{ needs.detect.outputs.report_sha }}
         run: |
           set -euo pipefail
-          # The trusted LCOV and PR diff are sufficient for the 80% verdict.
+          # Read the same policy as Codecov from this workflow's trusted tree.
+          # Ruby/Psych is already available on this GitHub-hosted runner.
+          ruby -rjson -ryaml -e \
+            'puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))' \
+            .github/codecov.yml > "$RUNNER_TEMP/codecov-policy.json"
+          # The trusted LCOV and PR diff are sufficient for the verdict.
           # Never wait for Codecov processing, notification statuses or main.
           mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
           if [ "${#suites[@]}" -eq 0 ]; then
@@ -433,7 +441,7 @@ jobs:
               --upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json" \
               --coverage-report "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.lcov" \
               --changed-lines-file "$RUNNER_TEMP/codecov-patch/codecov-patch.json" \
-              --threshold 80; then
+              --policy-file "$RUNNER_TEMP/codecov-policy.json"; then
               failed=1
             fi
           done
@@ -441,7 +449,7 @@ jobs:
 
       - name: Explain main baseline availability
         # Project comparisons are informational context, not a prerequisite for
-        # measuring HEAD or applying the local patch threshold. Run even below 80%.
+        # measuring HEAD or applying the local patch threshold. Run even below target.
         if: ${{ !cancelled() }}
         continue-on-error: true
         timeout-minutes: 1
@@ -489,7 +497,7 @@ jobs:
             core.summary
               .addHeading('Main baseline (informational)', 3)
               .addRaw(message + '\n\n')
-              .addRaw('The local 80% verdict uses only this PR diff and its exact LCOV. ' +
+              .addRaw('The local patch verdict uses the configured policy, this PR diff and its exact LCOV. ' +
                 'No wait, retry or rebuild of the PR is needed for a main baseline. ' +
                 "Codecov's own project comparison and its choice of base are separate; " +
                 'availability here is not a guarantee of a processed Codecov baseline.\n\n');

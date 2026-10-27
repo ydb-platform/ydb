@@ -51,6 +51,92 @@ def report(kinds):
     return {"totals": {"lineCount": len(kinds)}, "coverage": [{"line": number, "coverage": kind} for number, kind in enumerate(kinds, 1)]}
 
 
+def policy_config(target="80%", tolerance="0%"):
+    return {"flag_management": {"individual_flags": [
+        {"name": flag, "statuses": [{"type": "patch", "target": target, "threshold": tolerance}]}
+        for flag in gate.SUITES
+    ]}}
+
+
+class PatchPolicyTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "policy.json"
+
+    def read(self, data, flag="cli"):
+        self.path.write_text(json.dumps(data))
+        return gate.load_patch_policy(self.path, flag)
+
+    def test_numeric_percentages_and_tolerance_come_from_policy(self):
+        for target in (85, 85.0, "85", "85%", "85.0%"):
+            with self.subTest(target=target):
+                policy = self.read(policy_config(target, "2.5%"))
+                self.assertEqual(policy.minimum, Decimal("82.5"))
+                self.assertIn("tolerance 2.5 percentage points", policy.description())
+        self.assertEqual(self.read(policy_config("5%", "10%")).minimum, Decimal(0))
+
+    def test_each_flag_uses_its_own_resolved_policy(self):
+        config = policy_config()
+        for index, item in enumerate(config["flag_management"]["individual_flags"]):
+            item["statuses"][0]["target"] = 70 + index
+        for index, flag in enumerate(gate.SUITES):
+            self.assertEqual(self.read(config, flag).minimum, Decimal(70 + index))
+
+    def test_unknown_or_ambiguous_policies_fail_without_default(self):
+        config = policy_config()
+        flag = next(item for item in config["flag_management"]["individual_flags"] if item["name"] == "cli")
+        for data in (None, [], {}, {"flag_management": None},
+                     {"flag_management": {"individual_flags": {}}},
+                     {"flag_management": {"individual_flags": []}},
+                     {"flag_management": {"individual_flags": [None]}},
+                     {"flag_management": {"individual_flags": [flag, flag]}}):
+            with self.subTest(data=data), self.assertRaises(gate.CoverageError):
+                self.read(data)
+        for statuses in (None, {}, [], [None], [{"type": "project", "target": 80}],
+                         [flag["statuses"][0]] * 2):
+            with self.subTest(statuses=statuses), self.assertRaises(gate.CoverageError):
+                self.read({"flag_management": {"individual_flags": [{"name": "cli", "statuses": statuses}]}})
+
+    def test_missing_or_invalid_percentages_fail_without_default(self):
+        for field in ("target", "threshold"):
+            for value in (None, True, False, [], {}, "auto", "NaN", "Infinity", "-1%", "101%", "80%%"):
+                config = policy_config()
+                for item in config["flag_management"]["individual_flags"]:
+                    item["statuses"][0][field] = value
+                with self.subTest(field=field, value=value), self.assertRaises(gate.CoverageError):
+                    self.read(config)
+            config = policy_config()
+            for item in config["flag_management"]["individual_flags"]:
+                del item["statuses"][0][field]
+            with self.subTest(field=field), self.assertRaises(gate.CoverageError):
+                self.read(config)
+
+    def test_missing_malformed_or_oversized_policy_fails(self):
+        with self.assertRaises(gate.CoverageError):
+            gate.load_patch_policy(self.path, "cli")
+        self.path.write_text("not JSON")
+        with self.assertRaises(gate.CoverageError):
+            gate.load_patch_policy(self.path, "cli")
+        with mock.patch.object(gate, "MAX_POLICY_BYTES", 10), self.assertRaises(gate.CoverageError):
+            self.read(policy_config())
+
+    def test_editing_one_yaml_target_updates_all_flags_and_the_gate(self):
+        source = Path(__file__).resolve().parents[3] / "codecov.yml"
+        yaml = source.read_text()
+        self.assertEqual(yaml.count("target: 80%"), 1)
+        for text, expected in ((yaml, Decimal(80)), (yaml.replace("target: 80%", "target: 90%"), Decimal(90))):
+            parsed = subprocess.run(
+                ["ruby", "-rjson", "-ryaml", "-e",
+                 "puts JSON.generate(YAML.safe_load(STDIN.read, aliases: true))"],
+                input=text, check=True, capture_output=True, text=True,
+            )
+            for flag in gate.SUITES:
+                policy = self.read(json.loads(parsed.stdout), flag)
+                self.assertEqual(policy.minimum, expected)
+                self.assertEqual(gate.Totals(8, 2, 0).passes(policy.minimum), expected == 80)
+
+
 class PatchTotalsTest(unittest.TestCase):
     def test_exactly_eighty_passes_and_partial_lines_do_not_count_as_hits(self):
         totals = gate.Totals()
@@ -315,6 +401,8 @@ class CliTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.manifest = self.root / "patch.json"
+        self.policy = self.root / "policy.json"
+        self.policy.write_text(json.dumps(policy_config()))
         self.summary = self.root / "summary.md"
         self.manifest.write_text(json.dumps({
             "version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]},
@@ -327,6 +415,7 @@ class CliTest(unittest.TestCase):
             "--flag", "cli", "--run-id", "123",
             "--upload-receipt", str(receipt), "--coverage-report", str(coverage),
             "--changed-lines-file", str(self.manifest),
+            "--policy-file", str(self.policy),
         ]
 
     def invoke(self, args):
@@ -353,6 +442,29 @@ class CliTest(unittest.TestCase):
         self.assertIn("not applicable", summary)
         self.assertIn("not assumed covered", summary)
         self.assertIn("Calculated offline", summary)
+
+    def test_policy_edit_alone_changes_cli_verdict_and_summary(self):
+        args = self.args("HHHHHHHHMP")
+        self.assertEqual(self.invoke(args), 0)
+        self.policy.write_text(json.dumps(policy_config("81%")))
+        self.assertEqual(self.invoke(args), 1)
+        self.assertIn("minimum 81%", self.summary.read_text())
+        self.policy.write_text(json.dumps(policy_config("85%", "5%")))
+        self.assertEqual(self.invoke(args), 0)
+        self.assertIn("target 85%, tolerance 5 percentage points; minimum 80%", self.summary.read_text())
+
+    def test_missing_policy_is_error_even_with_no_measured_changes(self):
+        args = self.args("H", path=CLI.replace("main", "other"))
+        self.policy.unlink()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(args), 2)
+        self.assertIn("Measurement error", self.summary.read_text())
+
+    def test_command_line_cannot_override_policy(self):
+        args = self.args("M")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as result:
+            gate.main(args + ["--threshold", "0"])
+        self.assertEqual(result.exception.code, 2)
 
     def test_missing_report_is_measurement_error_not_a_fake_pass(self):
         args = self.args("H")

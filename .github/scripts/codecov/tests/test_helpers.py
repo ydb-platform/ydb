@@ -656,7 +656,7 @@ class WorkflowContractTest(unittest.TestCase):
                 "-rjson",
                 "-ryaml",
                 "-e",
-                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))",
                 str(path),
             ],
             check=True,
@@ -918,7 +918,7 @@ new AsyncFunction('github', 'context', 'core', input.script)(
                 result = json.loads(execution.stdout)
                 self.assertTrue(result["summary"]["written"])
                 self.assertIn(expected, result["summary"]["text"])
-                self.assertIn("local 80% verdict", result["summary"]["text"])
+                self.assertIn("local patch verdict uses the configured policy", result["summary"]["text"])
                 self.assertEqual(len(result["calls"]), 1)
                 self.assertEqual(result["calls"][0]["head_sha"], base)
                 self.assertEqual(result["calls"][0]["request"]["timeout"], 10000)
@@ -932,6 +932,7 @@ new AsyncFunction('github', 'context', 'core', input.script)(
         )
         jobs = json.loads(proc.stdout)["jobs"]
         patch = jobs["patch"]
+        self.assertEqual(patch["name"], "Check if patch coverage is sufficient")
         self.assertEqual(patch["needs"], ["detect", "coverage"])
         self.assertIn("github.event_name == 'pull_request_target'", patch["if"])
         self.assertIn("needs.coverage.result == 'success'", patch["if"])
@@ -941,8 +942,14 @@ new AsyncFunction('github', 'context', 'core', input.script)(
         checkout = patch["steps"][0]["with"]
         self.assertEqual(checkout["ref"], "${{ github.workflow_sha }}")
         self.assertIs(checkout["persist-credentials"], False)
+        self.assertIn(".github/codecov.yml", checkout["sparse-checkout"])
+        self.assertIs(checkout["sparse-checkout-cone-mode"], False)
         check = next(step for step in patch["steps"] if "run" in step)
-        self.assertIn("--threshold 80", check["run"])
+        self.assertNotIn("--threshold", check["run"])
+        self.assertNotIn("80", check["run"])
+        self.assertIn('YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true)', check["run"])
+        self.assertIn('.github/codecov.yml > "$RUNNER_TEMP/codecov-policy.json"', check["run"])
+        self.assertIn('--policy-file "$RUNNER_TEMP/codecov-policy.json"', check["run"])
         self.assertIn('--run-id "$GITHUB_RUN_ID"', check["run"])
         self.assertIn('--upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json"',
                       check["run"])
@@ -969,13 +976,50 @@ new AsyncFunction('github', 'context', 'core', input.script)(
         self.assertIn("_trusted_coverage_ci/.github/config/muted_ya.txt",
                       run_suite["with"]["muted_tests_file"])
 
+    def test_actual_workflow_reads_the_single_shared_policy(self) -> None:
+        workflow = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(GITHUB_DIR / "workflows" / "cpp_codecov.yml")],
+            check=True, text=True, capture_output=True,
+        )
+        check = next(step for step in json.loads(workflow.stdout)["jobs"]["patch"]["steps"]
+                     if step.get("name") == "Check every affected component")
+        # Execute the actual YAML loader. The remaining Bash loop needs Bash 4+
+        # on Linux, while helper tests also run on macOS with Bash 3.
+        loader = check["run"].split("mapfile -t suites", 1)[0]
+        source = (GITHUB_DIR / "codecov.yml").read_text()
+        for text, expected in ((source, "80%"), (source.replace("target: 80%", "target: 90%"), "90%")):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / ".github").mkdir()
+                (root / ".github/codecov.yml").write_text(text)
+                subprocess.run(["bash", "-c", loader], cwd=root,
+                               env={**os.environ, "RUNNER_TEMP": directory},
+                               check=True, capture_output=True, text=True)
+                policy = json.loads((root / "codecov-policy.json").read_text())
+                targets = [status["target"]
+                           for flag in policy["flag_management"]["individual_flags"]
+                           for status in flag["statuses"] if status["type"] == "patch"]
+                self.assertEqual(targets, [expected] * len(SUITES))
+        # Allowing aliases must not enable construction of Ruby objects.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github").mkdir()
+            (root / ".github/codecov.yml").write_text("--- !ruby/object:Object {}\n")
+            result = subprocess.run(["bash", "-c", loader], cwd=root,
+                                    env={**os.environ, "RUNNER_TEMP": directory},
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("DisallowedClass", result.stderr)
+
     def test_untrusted_yaml_is_loaded_safely(self) -> None:
         checks = (
             GITHUB_DIR / "workflows" / "cpp_codecov_checks.yml"
         ).read_text(encoding="utf-8")
         tests = Path(__file__).read_text(encoding="utf-8")
         self.assertIn(
-            'YAML.safe_load(File.read(path), aliases: false)',
+            'YAML.safe_load(File.read(path), aliases: path == ".github/codecov.yml")',
             checks,
         )
         self.assertIn(

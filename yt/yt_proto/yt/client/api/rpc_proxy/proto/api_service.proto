@@ -857,6 +857,7 @@ message TRspPullQueue
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 message TReqPullQueueConsumer
@@ -874,6 +875,7 @@ message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

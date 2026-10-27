@@ -813,6 +813,79 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
+    Y_UNIT_TEST_QUAD(UpdateAndUnsafeTruncateInOneQuery, UseQueryService, UseBatch) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+        TKikimrRunner kikimr(settings);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = ExecuteQuery(session, Sprintf(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+            %sUPDATE `%s` SET Value = "updated";
+            TRUNCATE TABLE `%s` WITH (unsafe = true);
+        )", UseBatch ? "BATCH " : "", TablePath, TablePath),
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        if constexpr (UseBatch) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "BATCH can't be used with multiple writes or reads.");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), UseBatch ? 3u : 0u);
+        auto updated = ExecuteQuery(session, Sprintf(
+            "SELECT COUNT(*) AS cnt FROM `%s` WHERE Value = \"updated\";", TablePath),
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(updated.GetStatus(), EStatus::SUCCESS, updated.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadCount(updated), 0u);
+    }
+
+    Y_UNIT_TEST_QUAD(UpdateAfterUnsafeTruncateInTransaction, UseQueryService, UseBatch) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
+        auto tx = trunc.GetTransaction();
+        UNIT_ASSERT(tx);
+
+        // Make the subsequent UPDATE observable even though the truncate emptied the table.
+        auto insert = ExecuteQuery(session, Sprintf(
+            "UPSERT INTO `%s` (Key, Value) VALUES (10u, \"before update\");", TablePath),
+            TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+
+        auto update = ExecuteQuery(session, Sprintf(
+            "%sUPDATE `%s` SET Value = \"updated\";", UseBatch ? "BATCH " : "", TablePath),
+            TTxControl::Tx(*tx)).ExtractValueSync();
+        if constexpr (UseBatch) {
+            UNIT_ASSERT_VALUES_EQUAL_C(update.GetStatus(), EStatus::PRECONDITION_FAILED, update.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(update.GetIssues().ToString(),
+                "BATCH operation can be executed only in the implicit transaction mode.");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(update.GetStatus(), EStatus::SUCCESS, update.GetIssues().ToString());
+            auto commit = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+        }
+
+        // Rejecting BATCH rolls back the user write, but cannot undo the already executed truncate.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), UseBatch ? 0u : 1u);
+        auto updated = ExecuteQuery(session, Sprintf(
+            "SELECT COUNT(*) AS cnt FROM `%s` WHERE Value = \"updated\";", TablePath),
+            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(updated.GetStatus(), EStatus::SUCCESS, updated.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadCount(updated), UseBatch ? 0u : 1u);
+    }
+
     // Anomaly (c), the other side: everyone else's locks are broken.
     Y_UNIT_TEST_TWIN(CompetingTransactionAborted, UseQueryService) {
         using TTxControl = TTxControlFor<UseQueryService>;

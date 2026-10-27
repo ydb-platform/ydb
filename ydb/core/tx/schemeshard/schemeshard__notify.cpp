@@ -24,6 +24,14 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
         Y_UNUSED(ctx);
         auto rawTxId = Ev->Get()->Record.GetTxId();
 
+        if (const auto it = Self->HnswReplicaFailures.find(rawTxId); it != Self->HnswReplicaFailures.end()) {
+            auto result = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(rawTxId);
+            result->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+            result->Record.SetError(it->second);
+            Result = result.Release();
+            return;
+        }
+
         if (Self->Operations.contains(TTxId(rawTxId))) {
             auto txId = TTxId(rawTxId);
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion: operation in-flight",

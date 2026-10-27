@@ -1,10 +1,12 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "hnsw_replica_probe.h"
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -12,6 +14,16 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+TString SerializeReplicaSettings(const NKikimrSchemeOp::TPartitionConfig& config) {
+    NKikimrSchemeOp::TPartitionConfig replicas;
+    replicas.SetFollowerCount(config.GetFollowerCount());
+    replicas.SetCrossDataCenterFollowerCount(config.GetCrossDataCenterFollowerCount());
+    replicas.SetAllowFollowerPromotion(config.GetAllowFollowerPromotion());
+    for (const auto& group : config.GetFollowerGroups())
+        replicas.AddFollowerGroups()->CopyFrom(group);
+    return replicas.SerializeAsString();
+}
 
 bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter) {
     if (!alter.HasPartitionConfig())
@@ -460,7 +472,35 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        bool hnswPosting = false;
+        if (AppData()->FeatureFlags.GetEnableHnswIndex() && path->Name == NTableIndex::NKMeans::PostingTable) {
+            const auto index = context.SS->Indexes.find(path->ParentPathId);
+            const auto* vector = index != context.SS->Indexes.end()
+                ? std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                    &index->second->SpecializedIndexDescription) : nullptr;
+            hnswPosting = index != context.SS->Indexes.end()
+                && index->second->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                && vector && vector->GetSettings().settings().vector_type()
+                    == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        }
+        const auto previousReplicas = hnswPosting ? SerializeReplicaSettings(table->PartitionConfig()) : TString{};
         table->FinishAlter();
+        if (hnswPosting) {
+            const auto& config = table->PartitionConfig();
+            bool hasFollowers = config.GetFollowerCount() || config.GetCrossDataCenterFollowerCount();
+            for (const auto& group : config.GetFollowerGroups()) {
+                hasFollowers |= group.GetFollowerCount() != 0;
+            }
+            txState->HnswWaitRequired = hasFollowers && previousReplicas != SerializeReplicaSettings(config);
+            if (txState->HnswWaitRequired) {
+                txState->HnswSchemaVersion = table->AlterVersion;
+                txState->HnswWaitStartedAt = context.Ctx.Now();
+                db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
+                    NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitRequired>(true),
+                    NIceDb::TUpdate<Schema::TxInFlightV2::HnswSchemaVersion>(txState->HnswSchemaVersion),
+                    NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitStartedAt>(txState->HnswWaitStartedAt.MicroSeconds()));
+            }
+        }
 
         path->SetAsyncReplica(table->IsAsyncReplica());
 
@@ -521,11 +561,146 @@ public:
     }
 };
 
+void ReleaseHnswAlterSchema(TOperationId operationId, TOperationContext& context) {
+    auto* state = context.SS->FindTx(operationId);
+    if (!state->HnswWaitRequired)
+        return;
+
+    auto path = context.SS->PathsById.at(state->TargetPathId);
+    if (path->LastTxId == operationId.GetTxId()
+            && path->PathState == TPathElement::EPathState::EPathStateAlter) {
+        path->PathState = TPathElement::EPathState::EPathStateNoChanges;
+        context.SS->ClearDescribePathCaches(path);
+    }
+    // ReleasePathState defers release until the entire operation finishes.
+    // This phase observes the table without retaining schema/shard ownership.
+    auto operation = context.SS->Operations.at(operationId.GetTxId());
+    operation->ReleasePathAtDone.erase(path->PathId);
+    NIceDb::TNiceDb db(context.GetDB());
+    for (const auto& shard : state->Shards) {
+        auto info = context.SS->ShardInfos.find(shard.Idx);
+        if (info != context.SS->ShardInfos.end() && info->second.CurrentTxId == operationId.GetTxId()) {
+            info->second.CurrentTxId = InvalidTxId;
+            context.SS->PersistShardTx(db, shard.Idx, InvalidTxId);
+        }
+        // A split may delete these shards while readiness is still pending.
+        context.SS->PersistRemoveTxShard(db, operationId, shard.Idx);
+    }
+    state->Shards.clear();
+    state->ClearShardsInProgress();
+}
+
+class TWaitHnswReplicas : public TSubOperationState {
+public:
+    explicit TWaitHnswReplicas(TOperationId id) : OperationId(id) {
+        IgnoreMessages({TEvDataShard::TEvSchemaChanged::EventType});
+    }
+    const char* Name() const override { return "TWaitHnswReplicas"; }
+
+    bool Finish(TOperationContext& context, TString error = {}) {
+        NIceDb::TNiceDb db(context.GetDB());
+        if (!error.empty()) {
+            const ui64 txId = ui64(OperationId.GetTxId());
+            context.SS->HnswReplicaFailures[txId] = error;
+            db.Table<Schema::HnswReplicaFailures>().Key(txId).Update(
+                NIceDb::TUpdate<Schema::HnswReplicaFailures::Error>(error));
+        }
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        auto* state = context.SS->FindTx(OperationId);
+        if (!state->HnswWaitRequired)
+            return Finish(context);
+        auto path = context.SS->PathsById.at(state->TargetPathId);
+        ReleaseHnswAlterSchema(OperationId, context);
+        if (context.Ctx.Now() >= state->HnswWaitStartedAt + context.SS->HnswIndexBuildWaitTimeout)
+            return Finish(context, "Read replica settings were applied, but HNSW replicas did not become ready before the deadline");
+        const auto table = context.SS->Tables.find(state->TargetPathId);
+        if (path->Dropped() || table == context.SS->Tables.end()
+                || table->second->AlterVersion != state->HnswSchemaVersion)
+            return Finish(context, "Read replica settings were applied, but the table configuration changed during HNSW readiness");
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex())
+            return Finish(context, "Read replica settings were applied, but HNSW acceleration is disabled");
+        if (state->HnswProbeInFlight)
+            return false;
+        TVector<std::pair<ui64, ui64>> tablets;
+        for (const auto* partition : table->second->GetPartitions())
+            tablets.emplace_back(ui64(context.SS->ShardInfos.at(partition->ShardIdx).TabletID),
+                ui64(context.SS->ResolveHive(partition->ShardIdx)));
+        state->HnswProbeInFlight = true;
+        NIceDb::TNiceDb db(context.GetDB());
+        db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
+            NIceDb::TUpdate<Schema::TxInFlightV2::HnswProbeRound>(state->HnswProbeRound + 1));
+        state->HnswProbeActor = context.Ctx.Register(CreateHnswReplicaProbe(context.SS->SelfId(), OperationId,
+            ++state->HnswProbeRound, state->TargetPathId, state->HnswSchemaVersion,
+            table->second->PartitionConfig(), std::move(tablets), state->HnswCheckpoints));
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvHnswReplicaStatus::TPtr& ev, TOperationContext& context) override {
+        auto* state = context.SS->FindTx(OperationId);
+        const auto& result = ev->Get()->Record;
+        if (ev->Sender != state->HnswProbeActor || result.GetRound() != state->HnswProbeRound)
+            return false;
+        state->HnswProbeInFlight = false;
+        state->HnswCheckpoints.assign(result.GetCheckpoints().begin(), result.GetCheckpoints().end());
+        const auto table = context.SS->Tables.find(state->TargetPathId);
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()
+                || context.Ctx.Now() >= state->HnswWaitStartedAt + context.SS->HnswIndexBuildWaitTimeout) {
+            return ProgressState(context);
+        }
+        if (result.GetReady() && table != context.SS->Tables.end()
+                && table->second->AlterVersion == state->HnswSchemaVersion
+                && table->second->GetSplitOpsInFlight().empty()) {
+            THashSet<ui64> current;
+            for (const auto* partition : table->second->GetPartitions())
+                current.insert(ui64(context.SS->ShardInfos.at(partition->ShardIdx).TabletID));
+            const THashSet<ui64> probed(result.GetTablets().begin(), result.GetTablets().end());
+            if (current == probed)
+                return Finish(context);
+        }
+        context.OnComplete.ActivateTx(OperationId);
+        return false;
+    }
+
+private:
+    TOperationId OperationId;
+};
+
+class TAlterTableDone : public TDone {
+public:
+    explicit TAlterTableDone(TOperationId id) : TDone(id) {}
+    bool ProgressState(TOperationContext& context) override {
+        if (context.SS->FindTx(OperationId)->HnswWaitRequired) {
+            context.OnComplete.DoneOperation(OperationId);
+            return true;
+        }
+        return TDone::ProgressState(context);
+    }
+};
+
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
 
 public:
     virtual const char* Name() const override final { return "TAlterTable"; }
+
+    void StateDone(TOperationContext& context) override {
+        if (GetState() == TTxState::ProposedWaitParts && context.SS->FindTx(OperationId)->HnswWaitRequired) {
+            // CollectSchemaChanged persists Done regardless of the wait state's
+            // next state. Persist our readiness phase in the same transaction
+            // as the last schema acknowledgement, including its early release.
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, OperationId, TTxState::WaitHnswReplicas);
+            ReleaseHnswAlterSchema(OperationId, context);
+            SetState(TTxState::WaitHnswReplicas);
+            context.OnComplete.ActivateTx(OperationId);
+            return;
+        }
+        TSubOperation::StateDone(context);
+    }
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -541,6 +716,8 @@ public:
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
+            return TTxState::Done;
+        case TTxState::WaitHnswReplicas:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -558,8 +735,10 @@ public:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+        case TTxState::WaitHnswReplicas:
+            return MakeHolder<TWaitHnswReplicas>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TAlterTableDone>(OperationId);
         default:
             return nullptr;
         }

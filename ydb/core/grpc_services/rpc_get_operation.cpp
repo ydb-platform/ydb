@@ -276,8 +276,15 @@ private:
         ReplyGetOperationResponse(false, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
-        ReplyGetOperationResponse(true, ctx);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+        TEvGetOperationRequest::TResponse response;
+        auto* operation = response.mutable_operation();
+        operation->set_id(GetProtoRequest()->id());
+        operation->set_ready(true);
+        operation->set_status(ev->Get()->Record.GetStatus());
+        if (!ev->Get()->Record.GetError().empty())
+            operation->add_issues()->set_message(ev->Get()->Record.GetError());
+        Reply(response, ctx);
     }
 
     void Handle(NConsole::TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) {

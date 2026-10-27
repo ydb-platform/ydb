@@ -467,6 +467,7 @@ public:
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
     ui32 MaxStoredIndexBuilds = 0;
+    TDuration HnswIndexBuildWaitTimeout = TDuration::Hours(2);
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -1593,6 +1594,9 @@ public:
     void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    THashMap<ui64, TString> HnswReplicaFailures;
+    void Handle(TEvPrivate::TEvHnswReplicaStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);

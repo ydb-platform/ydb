@@ -461,6 +461,104 @@ void TDataShard::TryInstallFollowerHnswIndex(ui32 localTid) {
         entry.GraphKey = key;
 }
 
+class TDataShard::TTxHnswReplicaStatus : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHnswReplicaStatus(TDataShard* self, TEvHnswCache::TEvStatusRequest::TPtr request)
+        : TBase(self), Request(std::move(request)) {}
+    TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Result = MakeHolder<TEvHnswCache::TEvStatusResponse>();
+        auto& result = Result->Record;
+        const auto& request = Request->Get()->Record;
+        result.SetTabletId(Self->TabletID());
+        result.SetFollowerId(Self->FollowerId());
+        result.SetLeaderGeneration(Self->Executor()->Generation());
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || Self->IsStopping()
+                || (!Self->IsFollower() && Self->State != TShardState::Ready)) {
+            return true;
+        }
+        if (Self->IsFollower()) {
+            Self->ScheduleHnswFollowerSync();
+            NKikimrTxDataShard::TError::EKind status;
+            TString error;
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, error))
+                return false;
+            if (status != NKikimrTxDataShard::TError::OK)
+                return true;
+        }
+        auto tableIt = Self->TableInfos.find(request.GetTablePathId());
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || Self->PathOwnerId != request.GetTableOwnerId()
+                || tableIt == Self->TableInfos.end() || !tableIt->second->HnswSettings
+                || tableIt->second->GetTableSchemaVersion() != request.GetSchemaVersion())
+            return true;
+        const auto& table = *tableIt->second;
+        if (table.HnswSettings->vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+            return true;
+        }
+        result.SetSchemaVersion(table.GetTableSchemaVersion());
+        if (!Self->IsFollower()) {
+            const auto cache = Self->HnswIndexCache.find(table.LocalTid);
+            if (cache != Self->HnswIndexCache.end() && cache->second.Index) {
+                const auto base = cache->second.Index->GetBaseVersion();
+                if (base < Self->Pipeline.GetUnreadableEdge()
+                        && !Self->VolatileTxManager.HasVolatileTxsAtSnapshot(base)) {
+                    Self->PromoteImmediatePostExecuteEdges(base, EPromotePostExecuteEdges::RepeatableRead, txc);
+                    Self->SnapshotManager.PromoteCompleteEdge(base, txc);
+                }
+            } else {
+                if (cache == Self->HnswIndexCache.end()) {
+                    // Schema changes can erase the entry before a first read.
+                    // ScheduleHnswRebuild expects an initialized cache entry.
+                    Self->HnswIndexCache[table.LocalTid].InitialBuildAttemptsLeft = 30;
+                }
+                Self->ScheduleHnswRebuild(table.LocalTid);
+            }
+            Self->PromoteFollowerReadEdge(txc);
+        }
+        const auto [edge, repeatable] = Self->SnapshotManager.GetFollowerReadEdge();
+        result.SetReadStep(edge.Step);
+        result.SetReadTxId(edge.TxId);
+        result.SetRepeatable(repeatable);
+        if (!repeatable || edge < TRowVersion(request.GetTargetStep(), request.GetTargetTxId()))
+            return true;
+        if (Self->IsFollower())
+            Self->PrepareFollowerHnswIndex(table.LocalTid, txc.DB, edge);
+        const auto cache = Self->HnswIndexCache.find(table.LocalTid);
+        if (cache == Self->HnswIndexCache.end())
+            return true;
+        const auto& entry = cache->second;
+        const bool notRequired = Self->IsFollower()
+            ? entry.FollowerNotRequired && entry.FollowerJournalTracking && entry.Changes->Valid
+                && entry.FollowerLeaderGeneration == result.GetLeaderGeneration()
+                && entry.FollowerSnapshot.GetLeaderGeneration() == result.GetLeaderGeneration()
+                && Self->Executor()->Step() >= entry.FollowerSnapshot.GetCheckpointStep()
+            : !entry.Index && !entry.Building && entry.NextScanAttemptAt == TInstant::Max();
+        result.SetNotRequired(notRequired);
+        result.SetReady(notRequired);
+        if (!notRequired) {
+            if (auto graph = Self->GetHnswIndex(table.LocalTid, table.HnswVectorColumnTag,
+                    *table.HnswSettings, false, edge)) {
+                // Loading a graph is insufficient if its first search cannot
+                // obtain workspace under the current node-wide memory grant.
+                const auto workspace = Self->TryReserveHnswCacheMemory(graph->EstimatedSearchMemoryBytes());
+                result.SetReady(bool(workspace));
+            }
+        }
+        result.SetGraphKey(entry.GraphKey);
+        return true;
+    }
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Request->Sender, Result.Release(), 0, Request->Cookie);
+    }
+private:
+    TEvHnswCache::TEvStatusRequest::TPtr Request;
+    THolder<TEvHnswCache::TEvStatusResponse> Result;
+};
+
+void TDataShard::Handle(TEvHnswCache::TEvStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxHnswReplicaStatus(this, ev), ctx);
+}
+
 NTable::IRedoObserver* TDataShard::GetFollowerRedoObserver() {
     // Keep existing journals complete across feature-flag changes, even when
     // no read observes the temporarily disabled feature.

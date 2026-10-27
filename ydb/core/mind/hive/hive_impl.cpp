@@ -2421,6 +2421,28 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
             }
         }
         if (req.GetReturnFollowers()) {
+            if (AppData()->FeatureFlags.GetEnableHnswIndex()) {
+                ui32 desiredFollowers = 0;
+                for (const auto& group : info->FollowerGroups) {
+                    auto* config = tabletInfo.AddFollowerGroups();
+                    config->SetAllowLeaderPromotion(group.AllowLeaderPromotion);
+                    config->SetAllowClientRead(group.AllowClientRead);
+                    config->SetFollowerCount(group.GetRawFollowerCount());
+                    config->SetFollowerCountPerDataCenter(group.FollowerCountPerDataCenter);
+                    config->SetRequireAllDataCenters(group.RequireAllDataCenters);
+                    config->SetLocalNodeOnly(group.LocalNodeOnly);
+                    config->SetRequireDifferentNodes(group.RequireDifferentNodes);
+                    if (group.FollowerCountPerDataCenter) {
+                        for (const auto& [dcId, dc] : DataCenters) {
+                            if (dc.IsRegistered())
+                                desiredFollowers += group.GetFollowerCountForDataCenter(dcId);
+                        }
+                    } else {
+                        desiredFollowers += group.GetRawFollowerCount();
+                    }
+                }
+                tabletInfo.SetDesiredFollowers(desiredFollowers);
+            }
             for (const auto& follower : info->Followers) {
                 if (req.HasFollowerID() && req.GetFollowerID() != follower.Id)
                     continue;

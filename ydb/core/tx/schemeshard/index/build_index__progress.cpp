@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
+#include <ydb/core/tx/schemeshard/hnsw_replica_probe.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
@@ -1156,6 +1157,88 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    bool StartHnswProbe = false;
+    bool ScheduleHnswProgress = false;
+    TVector<std::pair<ui64, ui64>> HnswTabletsAndHives;
+
+    bool WaitForHnswReplicas(TIndexBuildInfo& build, TTransactionContext& txc, const TActorContext& ctx) {
+        if (build.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return false;
+        }
+        const auto posting = TPath::Init(build.TablePathId, Self)
+            .Child(build.IndexName).Child(NTableIndex::NKMeans::PostingTable);
+        if (!posting.IsResolved() || posting.IsDeleted() || !Self->Tables.contains(posting->PathId)) {
+            return false;
+        }
+        const auto table = Self->Tables.at(posting->PathId);
+        const auto indexIt = Self->Indexes.find(posting.Base()->ParentPathId);
+        if (indexIt == Self->Indexes.end()) {
+            return false;
+        }
+        const auto& index = indexIt->second;
+        const auto* vector = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            &index->SpecializedIndexDescription);
+        if (!vector || vector->GetSettings().settings().vector_type()
+                != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+            return false;
+        }
+        const auto& config = table->PartitionConfig();
+        bool hasFollowers = config.GetFollowerCount() || config.GetCrossDataCenterFollowerCount();
+        for (const auto& group : config.GetFollowerGroups()) {
+            hasFollowers |= group.GetFollowerCount() != 0;
+        }
+        // Step 5 already waits for the eager leader build. Only configured
+        // followers need an additional bootstrap barrier here.
+        if (!hasFollowers) {
+            return false;
+        }
+        if (!build.HnswWaitStartedAt) {
+            build.HnswWaitStartedAt = ctx.Now();
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(build.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswWaitStartedAt>(build.HnswWaitStartedAt.MicroSeconds()));
+        }
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()
+                || ctx.Now() >= build.HnswWaitStartedAt + Self->HnswIndexBuildWaitTimeout) {
+            // Graphs are optional acceleration; published data remains usable
+            // through exact reads when a node cannot finish bootstrap.
+            return false;
+        }
+        THashSet<ui64> tablets;
+        for (const auto* partition : table->GetPartitions()) {
+            const auto& shard = Self->ShardInfos.at(partition->ShardIdx);
+            tablets.insert(ui64(shard.TabletID));
+            HnswTabletsAndHives.emplace_back(ui64(shard.TabletID), ui64(Self->ResolveHive(partition->ShardIdx)));
+        }
+        const bool sameTopology = build.HnswPostingPathId == posting->PathId
+            && build.HnswSchemaVersion == table->AlterVersion && build.HnswProbeTablets == tablets;
+        if (sameTopology && build.HnswReplicasReady && !tablets.empty()
+                && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation()) {
+            return false;
+        }
+        if (!sameTopology) {
+            build.HnswReplicasReady = false;
+            build.HnswProbeInFlight = false;
+            build.HnswCheckpoints.clear();
+        }
+        build.HnswPostingPathId = posting->PathId;
+        build.HnswSchemaVersion = table->AlterVersion;
+        build.HnswProbeTablets = std::move(tablets);
+        if (!build.HnswProbeInFlight && !build.HnswProgressScheduled) {
+            build.HnswProbeInFlight = true;
+            ++build.HnswProbeRound;
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(build.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswProbeRound>(build.HnswProbeRound));
+            StartHnswProbe = true;
+        }
+        if (!build.HnswProgressScheduled) {
+            build.HnswProgressScheduled = true;
+            ScheduleHnswProgress = true;
+        }
+        return true;
+    }
+
 
     template <bool WithSnapshot = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -3704,6 +3787,9 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
+                    if (WaitForHnswReplicas(buildInfo, txc, ctx)) {
+                        break;
+                    }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
                 }
                 Progress(BuildId);
@@ -3921,6 +4007,17 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
+        if (StartHnswProbe) {
+            auto& build = *Self->IndexBuilds.at(BuildId);
+            const auto table = Self->Tables.at(build.HnswPostingPathId);
+            build.HnswProbeActor = ctx.Register(CreateHnswReplicaProbe(Self->SelfId(),
+                TOperationId(TTxId(ui64(BuildId)), TSubTxId(0)), build.HnswProbeRound,
+                build.HnswPostingPathId, build.HnswSchemaVersion, table->PartitionConfig(),
+                std::move(HnswTabletsAndHives), build.HnswCheckpoints, true));
+        }
+        if (ScheduleHnswProgress) {
+            ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvProgressHnswIndexBuild(ui64(BuildId)));
+        }
         for (auto& [shardId, ev]: ToTabletSend) {
             Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }

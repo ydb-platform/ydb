@@ -43,12 +43,21 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
     }
     const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
     const auto& record = state.Request->Record;
-    if (!table->HnswSettings || !table->HnswVectorColumnTag || !record.HasVectorTopK()
+    if (!table->HnswSettings || !table->HnswVectorColumnTag
+            || table->HnswSettings->vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+            || !record.HasVectorTopK()
             || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
             || table->HnswVectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
         return false;
     }
-    return !shard.IsFollower() && !state.ReadVersion.IsMax();
+    if (state.ReadVersion.IsMax()) {
+        return false;
+    }
+    if (!shard.IsFollower()) {
+        return true;
+    }
+    const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
+    return repeatable && state.ReadVersion <= edge;
 }
 
 } // namespace
@@ -2908,9 +2917,8 @@ public:
 
             if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswSettings) {
                 if (Self->IsFollower()) {
-                    // Bootstrap the cache, but keep follower SQL on exact reads
-                    // until readiness coordination is added in step 9.
                     Self->ScheduleHnswFollowerSync();
+                    Self->PrepareFollowerHnswIndex(TableInfo.LocalTid, txc.DB, state.ReadVersion);
                 }
                 // Reconstruct a missing graph asynchronously. The triggering read
                 // continues through the exact table scan.
@@ -2942,7 +2950,7 @@ public:
                         Self->RegisterHnswCacheLookup(localTid, false);
                     }
                 }
-                if (canUseHnsw && !topState->HnswIndex) {
+                if (!Self->IsFollower() && canUseHnsw && !topState->HnswIndex) {
                     const auto buildVersion = Self->GetHnswBuildVersion();
                     if (!Self->GetHnswIndex(localTid, vectorColumnTag, hnswSettings, useCachedHnswParameters) && buildVersion < Self->Pipeline.GetUnreadableEdge() && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT && Self->GetHnswCacheMemoryLimit() != 0 && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag, hnswSettings, buildVersion)) {
                         Self->TrackHnswOpenTransactions(localTid, txc.DB);

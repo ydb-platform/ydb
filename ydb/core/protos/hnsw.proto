@@ -55,3 +55,42 @@ message TGraphAnnouncement {
     optional uint64 BaseStep = 5;
     optional uint64 BaseTxId = 6;
 }
+
+
+message TStatusRequest {
+    optional uint64 TableOwnerId = 1;
+    optional uint64 TablePathId = 2;
+    optional uint64 SchemaVersion = 3;
+    optional uint64 TargetStep = 4;
+    optional uint64 TargetTxId = 5;
+}
+
+
+message TStatusResponse {
+    optional uint64 TabletId = 1;
+    optional uint32 FollowerId = 2;
+    optional uint32 LeaderGeneration = 3;
+    optional uint64 SchemaVersion = 4;
+    optional uint64 ReadStep = 5;
+    optional uint64 ReadTxId = 6;
+    optional bool Ready = 7;
+    optional bool Repeatable = 8;
+    optional bool NotRequired = 9;
+    optional string GraphKey = 10;
+}
+
+
+message TReplicaProbeResult {
+    message TCheckpoint {
+        optional uint64 TabletId = 1;
+        optional uint32 LeaderGeneration = 2;
+        optional uint64 Step = 3;
+        optional uint64 TxId = 4;
+    }
+    optional uint64 OperationTxId = 1;
+    optional uint32 OperationPartId = 2;
+    optional uint64 Round = 3;
+    optional bool Ready = 4;
+    repeated uint64 Tablets = 5;
+    repeated TCheckpoint Checkpoints = 6;
+}

@@ -1279,7 +1279,10 @@ public:
         ForwardToSchemeShard(std::move(request));
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        if (ev->Get()->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return ReplyErrorAndDie(ev->Get()->Record.GetStatus(), NYql::TIssue(ev->Get()->Record.GetError()));
+        }
         const auto& schemeOp = PhyTx->GetSchemeOperation();
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {

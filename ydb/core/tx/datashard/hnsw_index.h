@@ -14,6 +14,8 @@
 
 namespace NKikimr::NDataShard {
 
+    class THnswCacheMemoryTracker;
+
     // Omitted proto3 parameters use the documented server-side default.
     ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
 
@@ -151,7 +153,8 @@ namespace NKikimr::NDataShard {
         bool SharesGraphWith(const THnswIndex& other) const;
         bool HasGraphReservation() const;
         size_t GraphUseCount() const;
-        void SetGraphReservation(std::shared_ptr<void> reservation);
+        void SetGraphReservation(std::shared_ptr<void> reservation,
+            std::shared_ptr<THnswCacheMemoryTracker> tracker = {});
 
         // Portable graph-only snapshot. Journals and transaction-local changes
         // are separate. Loading restores topology without running construction.
@@ -193,6 +196,10 @@ namespace NKikimr::NDataShard {
         // Estimated resident memory of this index, in bytes, using the same
         // formula as the build-time budget check.
         size_t EstimatedMemoryBytes() const;
+
+        // Headroom for a search's queues, result merging and one visited list.
+        // Used by readiness admission; it does not allocate or retain storage.
+        size_t EstimatedSearchMemoryBytes(size_t k = 1, ui32 efSearch = 15) const;
 
         // Estimates the memory required to hold an HNSW index over `rowCount`
         // vectors of `dimension` float elements, without building anything.

@@ -3950,6 +3950,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read in-flight txid
         {
+            {
+                auto failures = db.Table<Schema::HnswReplicaFailures>().Range().Select();
+                if (!failures.IsReady())
+                    return false;
+                while (!failures.EndOfSet()) {
+                    Self->HnswReplicaFailures[failures.GetValue<Schema::HnswReplicaFailures::TxId>()] =
+                        failures.GetValue<Schema::HnswReplicaFailures::Error>();
+                    if (!failures.Next())
+                        return false;
+                }
+            }
             auto txInFlightRowset = db.Table<Schema::TxInFlightV2>().Range().Select();
             if (!txInFlightRowset.IsReady())
                 return false;
@@ -3982,6 +3993,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
+                txState.HnswWaitRequired = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswWaitRequired>(false);
+                txState.HnswSchemaVersion = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswSchemaVersion>(0);
+                txState.HnswWaitStartedAt = TInstant::MicroSeconds(
+                    txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswWaitStartedAt>(0));
+                txState.HnswProbeRound = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::HnswProbeRound>(0);
                 txState.LoadSplitLineage = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::LoadSplitLineage>(false);
 
                 if (Self->TolerateOrphanedPaths) {
@@ -4149,18 +4165,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                << ", pathId: " << txState.TargetPathId);
                 TPathElement::TPtr path = Self->PathsById.at(txState.TargetPathId);
                 Y_VERIFY_S(path, "No path element for Tx: " <<  operationId.GetTxId() << ", pathId: " << txState.TargetPathId);
-                path->PathState = CalcPathState(txState.TxType, path->PathState);
+                const bool hnswReadiness = txState.HnswWaitRequired
+                    && (txState.State == TTxState::WaitHnswReplicas || txState.State == TTxState::Done);
+                if (!hnswReadiness)
+                    path->PathState = CalcPathState(txState.TxType, path->PathState);
 
-                if (path->PathState == TPathElement::EPathState::EPathStateDrop) {
+                if (!hnswReadiness && path->PathState == TPathElement::EPathState::EPathStateDrop) {
                     path->DropTxId = operationId.GetTxId();
                 }
 
-                if (txState.TxType != TTxState::TxSplitTablePartition && txState.TxType != TTxState::TxMergeTablePartition) {
+                if (!hnswReadiness && txState.TxType != TTxState::TxSplitTablePartition && txState.TxType != TTxState::TxMergeTablePartition) {
                     path->LastTxId = operationId.GetTxId();
                 }
 
-                // Remember which paths are still under operation
-                pathsUnderOperation.insert(txState.TargetPathId);
+                // Readiness no longer owns an exclusive schema operation.
+                if (!hnswReadiness)
+                    pathsUnderOperation.insert(txState.TargetPathId);
 
                 if (CdcStreamScansToResume.contains(txState.TargetPathId)) {
                     CdcStreamScansToResume.erase(txState.TargetPathId);

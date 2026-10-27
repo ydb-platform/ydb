@@ -5,6 +5,30 @@
 
 namespace NKikimr::NDataShard {
 
+    bool TDataShard::CanReuseHnswGraph(const TUserTable& previous, const TUserTable& next) const {
+        if (previous.GetSchema() == next.GetSchema()) {
+            return true;
+        }
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || !previous.HnswSettings || !next.HnswSettings) {
+            return false;
+        }
+        NKikimrSchemeOp::TTableDescription before, after;
+        previous.GetSchema(before);
+        next.GetSchema(after);
+        // Only replica placement may change while retaining this generation.
+        // Other schema/storage changes still invalidate it as before.
+        for (auto* schema : {&before, &after}) {
+            auto* config = schema->MutablePartitionConfig();
+            config->ClearFollowerCount();
+            config->ClearCrossDataCenterFollowerCount();
+            config->ClearAllowFollowerPromotion();
+            config->ClearFollowerGroups();
+            schema->ClearTableSchemaVersion();
+            schema->ClearCoordinatedSchemaVersion();
+        }
+        return before.SerializeAsString() == after.SerializeAsString();
+    }
+
     namespace {
 
         constexpr ui64 ScanMetadataBytes = 256;
@@ -486,7 +510,7 @@ namespace NKikimr::NDataShard {
             IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
         Y_ENSURE(memoryReservation || index->HasGraphReservation(), "HNSW index installed without a memory reservation");
         if (memoryReservation) {
-            index->SetGraphReservation(std::move(memoryReservation));
+            index->SetGraphReservation(std::move(memoryReservation), HnswCacheMemoryTracker);
         }
         entry.Generations.push_back(index);
         if (entry.Index && entry.Index->GetBaseVersion() > baseVersion) {

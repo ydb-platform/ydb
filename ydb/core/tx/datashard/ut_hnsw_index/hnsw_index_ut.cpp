@@ -742,6 +742,57 @@ namespace NKikimr::NDataShard {
         UNIT_ASSERT_EXCEPTION(THnswJournalSnapshot::Load(tooSmall, 1), yexception);
     }
 
+    Y_UNIT_TEST(SharedGraphViewsRespectSearchMemoryAdmission) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        const auto target = SerializeFloatVector({0, 0});
+        TString error;
+        auto graph = THnswIndex::Build(settings, {{"a", SerializeFloatVector({1, 0})},
+            {"b", SerializeFloatVector({2, 0})}}, 1_MB, error);
+        UNIT_ASSERT_C(graph, error);
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        tracker->SetLimit(1_MB);
+        const auto base = graph->EstimatedMemoryBytes();
+        graph->SetGraphReservation(TryReserveHnswMemory(tracker, base), tracker);
+        tracker->SetLimit(base);
+        UNIT_ASSERT(!graph->Search(target, 1).Covered);
+        const auto limit = base + 4 * graph->EstimatedSearchMemoryBytes();
+        tracker->SetLimit(limit);
+        UNIT_ASSERT(graph->Search(target, 1).Covered);
+        std::atomic<bool> correct{true};
+        std::atomic<ui32> successes{0};
+        std::barrier start(8);
+        std::vector<std::thread> readers;
+        for (ui32 i = 0; i < 8; ++i) {
+            auto view = graph->CreateView({10, 0}, std::make_shared<THnswIndexChanges>());
+            const auto key = KeyFor(i);
+            view->Upsert(key, target, {15, 0});
+            readers.emplace_back([&, view = std::move(view), key] {
+                start.arrive_and_wait();
+                for (ui32 iteration = 0; iteration < 100; ++iteration) {
+                    const auto result = view->Search(target, 1, {20, 0});
+                    if (result.Covered) {
+                        ++successes;
+                        if (result.Results.size() != 1 || result.Results.front().first != key) {
+                            correct = false;
+                        }
+                    }
+                    if (tracker->GetUsed() > limit) {
+                        correct = false;
+                    }
+                }
+            });
+        }
+        for (auto& reader : readers) {
+            reader.join();
+        }
+        UNIT_ASSERT(correct.load());
+        UNIT_ASSERT_GT(successes.load(), 0u);
+        // Retained library buffers stay charged until the last shared view dies.
+        graph.reset();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0u);
+    }
+
     Y_UNIT_TEST(SharedGraphViewsKeepIndependentSnapshotsAndOwnership) {
         auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);

@@ -227,6 +227,14 @@ public:
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request",
             {"txId", response.GetTxId()});
 
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            const auto code = response.GetStatus() == Ydb::StatusIds::UNAVAILABLE
+                ? NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE : NYql::TIssuesIds::DEFAULT_ERROR;
+            Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(code, response.GetError(), {}));
+            NTabletPipe::CloseClient(ctx, ShemePipeActorId);
+            this->Die(ctx);
+            return;
+        }
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request",
             {"txId", response.GetTxId()});
 

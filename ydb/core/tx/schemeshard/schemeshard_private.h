@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/hnsw.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -60,6 +61,8 @@ namespace TEvPrivate {
         EvPeriodicTableStatsParsed,
         EvRevisitSplitMerge,
         EvExportCompletionUploadResult,
+        EvHnswReplicaStatus,
+        EvProgressHnswIndexBuild,
         EvEnd
     };
 
@@ -106,6 +109,16 @@ namespace TEvPrivate {
         explicit TEvFlushConditionalEraseBatch(const TInstant& batchStartTime)
             : BatchStartTime(batchStartTime)
         { }
+    };
+
+    struct TEvHnswReplicaStatus : TEventLocal<TEvHnswReplicaStatus, EvHnswReplicaStatus> {
+        NKikimrHnsw::TReplicaProbeResult Record;
+        bool IndexBuild = false;
+    };
+
+    struct TEvProgressHnswIndexBuild : TEventLocal<TEvProgressHnswIndexBuild, EvProgressHnswIndexBuild> {
+        explicit TEvProgressHnswIndexBuild(ui64 buildId) : BuildId(buildId) {}
+        const ui64 BuildId;
     };
 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {

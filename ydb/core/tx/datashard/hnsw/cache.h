@@ -43,6 +43,8 @@ struct TEvHnswCache {
         EvFileReady,
         EvLoaded,
         EvGraphAnnouncement,
+        EvStatusRequest,
+        EvStatusResponse,
         EvEnd,
     };
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_HNSW_CACHE));
@@ -86,6 +88,8 @@ struct TEvHnswCache {
     };
     struct TEvSnapshotRequest : NActors::TEventPB<TEvSnapshotRequest, NKikimrHnsw::TSnapshotRequest, EvSnapshotRequest> {};
     struct TEvSnapshotResponse : NActors::TEventPB<TEvSnapshotResponse, NKikimrHnsw::TSnapshotResponse, EvSnapshotResponse> {};
+    struct TEvStatusRequest : NActors::TEventPB<TEvStatusRequest, NKikimrHnsw::TStatusRequest, EvStatusRequest> {};
+    struct TEvStatusResponse : NActors::TEventPB<TEvStatusResponse, NKikimrHnsw::TStatusResponse, EvStatusResponse> {};
     struct TEvGraphAnnouncement : NActors::TEventPB<TEvGraphAnnouncement, NKikimrHnsw::TGraphAnnouncement, EvGraphAnnouncement> {};
 
 };

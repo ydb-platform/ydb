@@ -6,6 +6,8 @@
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/schemeshard/hnsw_replica_probe.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -7471,11 +7473,41 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), 1u);
             const TVector<TCell> key{TCell::Make(expected)};
             UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, TSerializedCellVec::Serialize(key));
-            // Step 9 will enable serving after readiness coordination. Step 8
-            // verifies the prepared cache while SQL stays on the exact path.
+            // A prepared graph covers this finite repeatable read edge.
             auto query = Helper.SendRead("hnsw-lifecycle", Request().release());
             Check(*query, expected);
-            UNIT_ASSERT_VALUES_EQUAL(query->Record.GetStats().GetRows(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(query->Record.GetStats().GetRows(), 1u);
+        }
+
+        auto Status(TRowVersion target = TRowVersion::Min(), bool wrongSchema = false, bool wrongOwner = false) {
+            auto* replica = Follower();
+            auto& runtime = *Helper.Server->GetRuntime();
+            const auto node = ReplicaActor.NodeId() - runtime.GetNodeId(0);
+            const auto client = runtime.AllocateEdgeActor(node);
+            auto request = MakeHolder<TEvHnswCache::TEvStatusRequest>();
+            const auto& table = Helper.Tables.at("hnsw-lifecycle");
+            request->Record.SetTableOwnerId(replica->GetPathOwnerId() + wrongOwner);
+            request->Record.SetTablePathId(table.TableId.PathId.LocalPathId);
+            request->Record.SetSchemaVersion(replica->GetUserTables().at(table.TableId.PathId.LocalPathId)
+                ->GetTableSchemaVersion() + wrongSchema);
+            request->Record.SetTargetStep(target.Step);
+            request->Record.SetTargetTxId(target.TxId);
+            runtime.Send(new IEventHandle(ReplicaActor, client, request.Release(), 0, 789), node);
+            return runtime.GrabEdgeEvent<TEvHnswCache::TEvStatusResponse>(client);
+        }
+
+        auto Probe(TVector<NKikimrHnsw::TReplicaProbeResult::TCheckpoint> checkpoints = {}) {
+            auto& runtime = *Helper.Server->GetRuntime();
+            auto* leader = Shard();
+            const auto& table = Helper.Tables.at("hnsw-lifecycle");
+            const auto client = runtime.AllocateEdgeActor();
+            NKikimrSchemeOp::TTableDescription description;
+            leader->GetUserTables().at(table.TableId.PathId.LocalPathId)->GetSchema(description);
+            const auto probe = runtime.Register(CreateHnswReplicaProbe(client, TOperationId(TTxId(123), TSubTxId(4)),
+                56, table.TableId.PathId, leader->GetUserTables().at(table.TableId.PathId.LocalPathId)->GetTableSchemaVersion(), description.GetPartitionConfig(),
+                {{table.TabletId, Tests::Hive}}, std::move(checkpoints)));
+            runtime.EnableScheduleForActor(probe);
+            return runtime.GrabEdgeEvent<NSchemeShard::TEvPrivate::TEvHnswReplicaStatus>(client);
         }
 
         void SwapVectors() {
@@ -7487,7 +7519,114 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
     };
 
-    Y_UNIT_TEST(HnswFollowerBootstrapsSharedGraphWithoutEnablingServing) {
+    Y_UNIT_TEST(HnswFollowerStatusValidatesSchemaOwnerAndReadCheckpoint) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto ready = fixture.Status();
+        UNIT_ASSERT_VALUES_EQUAL(ready->Cookie, 789u);
+        UNIT_ASSERT(ready->Get()->Record.GetReady());
+        UNIT_ASSERT(ready->Get()->Record.GetRepeatable());
+        UNIT_ASSERT(!ready->Get()->Record.GetGraphKey().empty());
+        UNIT_ASSERT(!fixture.Status(TRowVersion::Max())->Get()->Record.GetReady());
+        UNIT_ASSERT(!fixture.Status(TRowVersion::Min(), true)->Get()->Record.GetReady());
+        UNIT_ASSERT(!fixture.Status(TRowVersion::Min(), false, true)->Get()->Record.GetReady());
+        fixture.CheckPrepared(1);
+    }
+
+    Y_UNIT_TEST(HnswFollowerStatusRequiresSearchMemoryAndFeatureFlag) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        fixture.Follower();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto node = fixture.ReplicaActor.NodeId() - runtime.GetNodeId(0);
+        const auto client = runtime.AllocateEdgeActor(node);
+        runtime.Send(new IEventHandle(MakeHnswCacheId(), client, new TEvHnswCache::TEvRegister()), node);
+        auto tracker = runtime.GrabEdgeEvent<TEvHnswCache::TEvRegistered>(client)->Get()->Tracker;
+        const auto limit = tracker->GetLimit();
+        tracker->SetLimit(tracker->GetUsed());
+        UNIT_ASSERT(!fixture.Status()->Get()->Record.GetReady());
+        tracker->SetLimit(limit);
+        UNIT_ASSERT(fixture.Status()->Get()->Record.GetReady());
+        runtime.GetAppData(fixture.ReplicaActor.NodeId() - runtime.GetNodeId(0)).FeatureFlags.SetEnableHnswIndex(false);
+        UNIT_ASSERT(!fixture.Status()->Get()->Record.GetReady());
+    }
+
+    Y_UNIT_TEST(HnswReplicaProbeRecoversAfterSourceSchemaChangeWithoutUserRead) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        bool ready = false;
+        for (ui32 attempt = 0; attempt < 20 && !ready; ++attempt) {
+            ready = fixture.Probe()->Get()->Record.GetReady();
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(ready);
+        fixture.CheckPrepared(1);
+    }
+
+    Y_UNIT_TEST(HnswReplicaProbeRequiresEveryLiveConfiguredFollower) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto hide = runtime.AddObserver<TEvStateStorage::TEvInfo>([&](auto& event) {
+            if (event->Get()->TabletID == fixture.Helper.Tables.at("hnsw-lifecycle").TabletId) {
+                event->Get()->Followers.clear();
+            }
+        });
+        UNIT_ASSERT(!fixture.Probe()->Get()->Record.GetReady());
+        hide.Remove();
+        const auto ready = fixture.Probe();
+        UNIT_ASSERT(ready->Get()->Record.GetReady());
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Record.GetRound(), 56u);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Record.CheckpointsSize(), 1);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswReplicaProbeRejectsUnreadyOrMismatchedGeneration, Generation) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto corrupt = runtime.AddObserver<TEvHnswCache::TEvStatusResponse>([&](auto& event) {
+            auto& status = event->Get()->Record;
+            if (status.GetFollowerId()) {
+                if (Generation) {
+                    status.SetLeaderGeneration(status.GetLeaderGeneration() + 1);
+                } else {
+                    status.SetReady(false);
+                }
+            }
+        });
+        UNIT_ASSERT(!fixture.Probe()->Get()->Record.GetReady());
+        corrupt.Remove();
+        UNIT_ASSERT(fixture.Probe()->Get()->Record.GetReady());
+    }
+
+    Y_UNIT_TEST(HnswReplicaProbeChecksReportedReadEdgeAndRefreshesOldIncarnation) {
+        THnswReplicaFixture fixture;
+        fixture.WarmReplica();
+        auto ready = fixture.Probe();
+        UNIT_ASSERT_C(ready->Get()->Record.GetReady(), ready->Get()->Record.DebugString());
+        auto checkpoint = ready->Get()->Record.GetCheckpoints(0);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        auto stale = runtime.AddObserver<TEvHnswCache::TEvStatusResponse>([&](auto& event) {
+            if (event->Get()->Record.GetFollowerId()) {
+                event->Get()->Record.SetReadStep(0);
+                event->Get()->Record.SetReadTxId(0);
+                event->Get()->Record.SetReady(true);
+            }
+        });
+        UNIT_ASSERT(!fixture.Probe({checkpoint})->Get()->Record.GetReady());
+        stale.Remove();
+        checkpoint.SetLeaderGeneration(0);
+        checkpoint.SetStep(Max<ui64>());
+        checkpoint.SetTxId(Max<ui64>());
+        auto result = fixture.Probe({checkpoint});
+        UNIT_ASSERT(result->Get()->Record.GetReady());
+        UNIT_ASSERT_VALUES_UNEQUAL(result->Get()->Record.GetCheckpoints(0).GetLeaderGeneration(), 0u);
+    }
+
+    Y_UNIT_TEST(HnswFollowerBootstrapsSharedGraphAndServesCoveredReads) {
         THnswReplicaFixture fixture;
         fixture.WarmReplica();
         fixture.CheckPrepared(1);
@@ -7906,7 +8045,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
     }
 
-    Y_UNIT_TEST(HnswFollowersKeepExactScan) {
+    Y_UNIT_TEST(HnswFollowersReadHistoricalSnapshotsSafely) {
         THnswLifecycleFixture fixture(true);
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         const auto snapshot = CreateVolatileSnapshot(fixture.Helper.Server,
@@ -7928,7 +8067,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         for (ui32 attempt = 0; attempt < 5; ++attempt) {
             auto result = fixture.Helper.SendRead("hnsw-lifecycle", fixture.Request(snapshot).release());
             fixture.Check(*result, 1);
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2u);
+            UNIT_ASSERT_GE(result->Record.GetStats().GetRows(), 1u);
+            UNIT_ASSERT_LE(result->Record.GetStats().GetRows(), 2u);
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
         UNIT_ASSERT(follower);

@@ -75,6 +75,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     virtual ~TIndexBuildInfo() = default;
 
+    TInstant HnswWaitStartedAt;
+    ui64 HnswProbeRound = 0;
+    bool HnswProbeInFlight = false;
+    bool HnswReplicasReady = false;
+    bool HnswProgressScheduled = false;
+    TActorId HnswProbeActor;
+    TPathId HnswPostingPathId;
+    ui64 HnswSchemaVersion = 0;
+    THashSet<ui64> HnswProbeTablets;
+    TVector<NKikimrHnsw::TReplicaProbeResult::TCheckpoint> HnswCheckpoints;
+
     enum class EState: ui32 {
         Invalid = 0,
         AlterMainTable = 5,
@@ -642,6 +653,9 @@ public:
         indexInfo->ApplyTxStatus =
             row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxStatus>(
                 indexInfo->ApplyTxStatus);
+        indexInfo->HnswWaitStartedAt = TInstant::MicroSeconds(
+            row.template GetValueOrDefault<Schema::IndexBuild::HnswWaitStartedAt>(0));
+        indexInfo->HnswProbeRound = row.template GetValueOrDefault<Schema::IndexBuild::HnswProbeRound>(0);
         indexInfo->ApplyTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxDone>(
                 indexInfo->ApplyTxDone);

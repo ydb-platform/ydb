@@ -505,7 +505,7 @@ private:
         entry.Loading = true;
         StartWorker([replyTo = SelfId(), key = it->first, transferId = entry.TransferId,
                 file = entry.File, reservation = entry.Reservation, isJournal = entry.IsJournal,
-                settings = entry.Settings, budget = entry.MemoryBytes] {
+                settings = entry.Settings, budget = entry.MemoryBytes, tracker = Tracker] {
             auto result = MakeHolder<TEvLoaded>();
             result->Key = key;
             result->TransferId = transferId;
@@ -518,7 +518,7 @@ private:
                 } else {
                     result->Graph = THnswIndex::LoadGraph(input, settings, budget, result->Error);
                     if (result->Graph)
-                        result->Graph->SetGraphReservation(reservation);
+                        result->Graph->SetGraphReservation(reservation, tracker);
                 }
                 if (result->Error.empty() && input.peek() != std::char_traits<char>::eof())
                     result->Error = "Trailing data in HNSW snapshot";

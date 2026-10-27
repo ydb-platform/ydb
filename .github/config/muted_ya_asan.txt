@@ -135,6 +135,7 @@ ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappy
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/keyvalue/ut unittest.sole chunk
+ydb/services/metadata/secret/ut Secret.SimpleQueryService
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerDoesNotAlterClusterSchema
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerRecreatesDroppedBalancerTable

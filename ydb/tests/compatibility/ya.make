@@ -3,6 +3,7 @@ RECURSE(
     workloads
     indexes
     topics
+    replication
     sqs
     stress
     rolling

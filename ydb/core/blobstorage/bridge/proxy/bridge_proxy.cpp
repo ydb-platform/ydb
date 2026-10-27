@@ -1308,6 +1308,14 @@ namespace NKikimr {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
             }
 
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (background) {
+                    // Compaction/import writers release their relevance token after foreground completion. Their
+                    // standby copies must still reach storage after the caller has finished.
+                    res->ExternalRelevanceWatcher.reset();
+                }
+            }
+
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
                 if (Info->DecommitBlocksWrites()) {
                     // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes

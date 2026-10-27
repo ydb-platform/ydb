@@ -97,21 +97,21 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             std::array<TFailRealm::EState, 3> states{TFailRealm::F, TFailRealm::F, TFailRealm::F};
             states[sourceRealm] = TFailRealm::N1;
             states[(sourceRealm + 1) % 3] = TFailRealm::R;
-            const auto info = MakeInfo(states);
-            const auto& topology = info.GetTopology();
+            const TBlobStorageGroupInfo info = MakeInfo(states);
+            const TBlobStorageGroupInfo::TTopology& topology = info.GetTopology();
             TGroupVDisks synced(&topology);
             UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
             // Replies from R and F cannot replace the surviving normal source.
             for (ui32 disk = 0; disk < info.GetTotalVDisksNum(); ++disk) {
-                const auto vdiskId = info.GetVDiskId(disk);
+                const TVDiskID vdiskId = info.GetVDiskId(disk);
                 if (vdiskId.FailRealm != sourceRealm) {
                     synced |= TGroupVDisks(&topology, vdiskId);
                 }
             }
             UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
-            const auto& domains = topology.FailRealms[sourceRealm].FailDomains;
+            const TVector<TBlobStorageGroupInfo::TFailDomain>& domains = topology.FailRealms[sourceRealm].FailDomains;
             for (ui32 domain = 0; domain < domains.size(); ++domain) {
-                for (const auto& disk : domains[domain].VDisks) {
+                for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domains[domain].VDisks) {
                     synced |= TGroupVDisks(&topology, info.GetVDiskId(disk.OrderNumber));
                 }
                 UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced),
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(OsirisRestoresDurabilityInsteadOfWriteQuorum) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
-        auto checker = TMirror3dcWriteQuorumChecker::TryCreate(
+        std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
             {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
             EMirror3dcLayout::LAYOUT_111_22, EMirror3dcLayout::LAYOUT_111_22);
         UNIT_ASSERT(checker);
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(OsirisRequiresAnActiveSourceAndUsesRecoveringRealmWhenNeeded) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
-        const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(
+        const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
             {TFailRealm::N0, TFailRealm::R, TFailRealm::F},
             EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_0);
         UNIT_ASSERT(checker);

@@ -142,12 +142,12 @@ public:
 
     static bool CheckQuorumForFullSync(const TBlobStorageGroupInfo& info,
             const TBlobStorageGroupInfo::TGroupVDisks& syncedDisks) {
-        const auto& topology = info.GetTopology();
+        const TBlobStorageGroupInfo::TTopology& topology = info.GetTopology();
         if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
                 || topology.GetTotalFailRealmsNum() != 3 || syncedDisks.GetTopology() != &topology) {
             return false;
         }
-        const auto state = GetMirror3dcGroupState(info.GetFailRealmState(0),
+        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(info.GetFailRealmState(0),
             info.GetFailRealmState(1), info.GetFailRealmState(2));
         if (!state) {
             return false;
@@ -162,8 +162,8 @@ public:
                 continue;
             }
             hasNormalSource = true;
-            for (const auto& domain : topology.FailRealms[realm].FailDomains) {
-                for (const auto& disk : domain.VDisks) {
+            for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
+                for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domain.VDisks) {
                     if (!syncedDisks[disk.OrderNumber]) {
                         return false;
                     }
@@ -230,10 +230,10 @@ public:
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         Y_ABORT_UNLESS(idxInSubgroup < 9);
-        const auto state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
+        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
         Y_ABORT_UNLESS(state);
-        const auto durability = GetMirror3dcGroupLayouts(*state)->Durability;
-        const auto copies = CountParts(parts);
+        const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
+        const std::array<ui32, 3> copies = CountParts(parts);
         const ui32 localRealm = idxInSubgroup % 3;
         const bool localRealmIsFailed = Realms[localRealm] == TFailRealm::F;
         const bool durabilitySatisfied = CheckCounts(copies, durability);

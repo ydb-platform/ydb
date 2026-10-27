@@ -272,7 +272,7 @@ namespace NKikimr {
             const bool localRealmRecovering = GInfo->IsRecoveringFailRealm(localRealm);
             // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
             if (localRealmRecovering) {
-                for (const auto& peer : *SyncerData->Neighbors) {
+                for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
                     const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
                     if (!peer.Myself && !GInfo->IsFailedFailRealm(realm)) {
                         FullSyncRequested.insert(peer.OrderNumber);
@@ -324,7 +324,7 @@ namespace NKikimr {
 
             const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber);
-            auto interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
+            TDuration interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
@@ -409,7 +409,7 @@ namespace NKikimr {
 
         void StartSyncJob(const TActorContext& ctx, const TVDiskInfoPtr& info) {
             auto vDiskId = GInfo->GetVDiskId(info->OrderNumber);
-            const auto jobType = FullSyncRequested.erase(info->OrderNumber)
+            const TSyncerJobTask::EJobType jobType = FullSyncRequested.erase(info->OrderNumber)
                 ? TSyncerJobTask::EFullRecover : TSyncerJobTask::EJustSync;
             auto task = std::make_unique<TSyncerJobTask>(
                     jobType,
@@ -501,16 +501,16 @@ namespace NKikimr {
 
         // BlobStorage Group reconfiguration
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            const auto* msg = ev->Get();
+            const TEvVGenerationChange* msg = ev->Get();
             if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
                 return;
             }
-            const auto returned = [&](ui32 realm) {
+            const std::function<bool(ui32)> returned = [&](ui32 realm) {
                 return GInfo->IsFailedFailRealm(realm)
                     && msg->NewInfo->IsRecoveringFailRealm(realm);
             };
             const bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
-            for (const auto& peer : *SyncerData->Neighbors) {
+            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
                 const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
                 const bool peerAvailable = !msg->NewInfo->IsFailedFailRealm(realm);
                 if (!peer.Myself && peerAvailable && (localRealmReturned || returned(realm))) {
@@ -526,10 +526,10 @@ namespace NKikimr {
                 queued.push_back(SchedulerQueue.top());
                 SchedulerQueue.pop();
             }
-            const auto now = TAppData::TimeProvider->Now();
-            for (auto* peer : queued) {
+            const TInstant now = TAppData::TimeProvider->Now();
+            for (TVDiskInfoPtr peer : queued) {
                 if (FullSyncRequested.contains(peer->OrderNumber)) {
-                    auto& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
+                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
                     peerState.SchTime = now;
                 }
                 SchedulerQueue.push(peer);

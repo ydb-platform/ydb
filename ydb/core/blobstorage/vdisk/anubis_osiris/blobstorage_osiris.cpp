@@ -104,7 +104,7 @@ namespace NKikimr {
             const ui32 idxInSubgroup = topology.GetIdxInSubgroup(self, CurKey.Hash());
             ui32 partsMask;
             if (GroupInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
-                const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(*GroupInfo, CurKey.Hash());
+                const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(*GroupInfo, CurKey.Hash());
                 Y_VERIFY_S(checker, HullCtx->VCtx->VDiskLogPrefix << "Unsupported mirror-3-dc realm states");
                 partsMask = checker->GetPartsToResurrect(layout, idxInSubgroup);
             } else {

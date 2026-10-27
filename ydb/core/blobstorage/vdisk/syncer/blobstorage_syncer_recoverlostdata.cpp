@@ -95,7 +95,7 @@ namespace NKikimr {
         void ResetSynced(const TBlobStorageGroupInfo& info) {
             SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology());
             QuorumTracker.Clear();
-            for (auto& peer : Neighbors) {
+            for (TVDiskInfo<TPeerState>& peer : Neighbors) {
                 peer.Get().ProxyId = {};
             }
         }

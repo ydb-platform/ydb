@@ -385,6 +385,8 @@ message TKqpVectorResolveSettings {
     optional uint64 QuerySpanId = 20;
 
     optional string PoolId = 21;
+    // Preserve inserts into an inline unprefixed HNSW index with an empty level table.
+    optional bool HnswAllowEmptyRouting = 22 [default = false];
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.
@@ -450,6 +452,10 @@ message TKqpVectorSearchSettings {
 
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
+
+    // Search all posting partitions without k-means cluster-range pruning.
+    optional bool FullRangeHnsw = 29;
+    optional uint32 HnswEfSearch = 30 [default = 15];
 }
 
 message TKqpTaskInfo {

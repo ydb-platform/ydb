@@ -8,6 +8,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_indexes_vector_ut.cpp
+    kqp_indexes_hnsw_ut.cpp
 )
 
 PEERDIR(

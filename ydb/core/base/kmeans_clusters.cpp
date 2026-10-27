@@ -96,6 +96,16 @@ namespace {
         return result;
     }
 
+    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui64 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
     double ParseDouble(const TString& name, const TString& value, TString& error) {
         double result = 0;
         if (!TryFromString(value, result)) {
@@ -922,6 +932,28 @@ bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataS
         settings.set_clusters(clusters);
     }
     return ValidateHnswSettingsPartial(settings, error);
+}
+
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower,
+        const TString& value, TString& error) {
+    if (nameLower == "clusters") {
+        error = "";
+        settings.set_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
+        return error.empty();
+    }
+    error.clear();
+    if (nameLower == "min_rows") {
+        settings.mutable_settings()->set_min_rows(ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+    } else if (nameLower == "m") {
+        settings.mutable_settings()->set_m(ParseUInt32(nameLower, value, 1, MaxHnswM, error));
+    } else if (nameLower == "ef_construction") {
+        settings.mutable_settings()->set_ef_construction(ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
+    } else if (nameLower == "delta_rows") {
+        settings.mutable_settings()->set_delta_rows(ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+    } else {
+        return FillSetting(settings, nameLower, value, error);
+    }
+    return error.empty();
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

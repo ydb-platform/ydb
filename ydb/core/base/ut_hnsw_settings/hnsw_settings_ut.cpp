@@ -99,6 +99,54 @@ namespace NKikimr::NKMeans {
             UNIT_ASSERT(!ValidateHnswSettingsPartial(settings, error));
             UNIT_ASSERT_STRING_CONTAINS(error, "M");
         }
+    Y_UNIT_TEST(FillSettingHnsw) {
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+
+        UNIT_ASSERT(FillHnswSetting(settings, "min_rows", "10000", error));
+        UNIT_ASSERT(FillHnswSetting(settings, "m", "24", error));
+        UNIT_ASSERT(FillHnswSetting(settings, "ef_construction", "200", error));
+        UNIT_ASSERT(FillHnswSetting(settings, "delta_rows", "5", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), 10000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().m(), 24);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().ef_construction(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 5);
+        UNIT_ASSERT(FillHnswSetting(settings, "delta_rows", "0", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 0);
+        UNIT_ASSERT(FillHnswSetting(settings, "delta_rows", "4294967296", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 4294967296ULL);
+        UNIT_ASSERT(FillHnswSetting(settings, "delta_rows", "18446744073709551615", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), Max<ui64>());
+        UNIT_ASSERT(!FillHnswSetting(settings, "delta_rows", "18446744073709551616", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "delta_rows", "-1", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "delta_rows", "bad", error));
+        for (const TString& oldName : {"hnsw_min_rows", "hnsw_connectivity", "hnsw_construction_candidates",
+                                     "hnsw_rebuild_threshold_percent", "hnsw_search_candidates"}) {
+            UNIT_ASSERT(!FillHnswSetting(settings, oldName, "15", error));
+        }
+
+        UNIT_ASSERT(FillHnswSetting(settings, "min_rows", "4294967296", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), 4294967296ULL);
+        UNIT_ASSERT(FillHnswSetting(settings, "min_rows", "18446744073709551615", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), Max<ui64>());
+        UNIT_ASSERT(!FillHnswSetting(settings, "min_rows", "18446744073709551616", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "min_rows", "-1", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "min_rows", "not-a-number", error));
+
+        UNIT_ASSERT(!FillHnswSetting(settings, "m", "0", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "ef_construction", "0", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "m", ToString(MaxHnswM + 1), error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "ef_construction", ToString(MaxHnswEfConstruction + 1), error));
+    }
+
+    Y_UNIT_TEST(KMeansDoesNotAcceptHnswConstructionSettings) {
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        for (const TString name : {"min_rows", "m", "ef_construction", "delta_rows"}) {
+            UNIT_ASSERT(!FillSetting(settings, name, "1", error));
+        }
+    }
+
     } // Y_UNIT_TEST_SUITE(HnswSettings)
 
 } // namespace NKikimr::NKMeans

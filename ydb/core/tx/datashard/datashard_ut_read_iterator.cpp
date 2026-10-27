@@ -7076,6 +7076,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     }
 
 
+    Y_UNIT_TEST_TWIN(HnswRejectsInvalidEfSearch, Zero) {
+        THnswLifecycleFixture fixture;
+        auto request = fixture.Request();
+        request->Record.MutableVectorTopK()->SetHnswEfSearch(Zero ? 0 : 1001);
+        const auto result = fixture.Helper.SendRead("hnsw-lifecycle", request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(result->Record.DebugString(), "HNSWEfSearch must be in 1..1000");
+    }
+
     Y_UNIT_TEST_TWIN(HnswSchemaFinalizationWaitsForBuild, BelowMinRows) {
         THnswLifecycleFixture fixture(false, false);
         UNIT_ASSERT(!fixture.Index());

@@ -15,6 +15,7 @@ namespace NKikimr::NKMeans {
 
 inline constexpr ui32 MaxHnswM = 100;
 inline constexpr ui32 MaxHnswEfConstruction = 1000;
+inline constexpr ui32 MaxHnswEfSearch = 1000;
 
 class IClusters {
 public:
@@ -75,6 +76,7 @@ bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TStrin
 bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 
 bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error);
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);

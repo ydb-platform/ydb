@@ -670,8 +670,11 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         // the group has gone (e.g. it was deleted while being synced), so this syncer is useless now
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS16, "TEvUndelivered", (LogId, LogId), (SourceType, ev->Get()->SourceType),
-            (Reason, ev->Get()->Reason));
+        YDB_LOG_DEBUG("TEvUndelivered",
+            {"marker", "BRSS16"},
+            {"logId", LogId},
+            {"sourceType", ev->Get()->SourceType},
+            {"reason", ev->Get()->Reason});
         Terminate(TStringBuilder() << "request undelivered SourceType# " << ev->Get()->SourceType);
     }
 

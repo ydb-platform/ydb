@@ -828,8 +828,9 @@ namespace NKikimr {
                 // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
                 // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
                 // restarted with BridgeConfig
-                STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
-                    "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
+                YDB_LOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, "Bridged group request on node running without BridgeConfig",
+                    {"marker", "BPB04"},
+                    {"groupId", GroupId});
                 NotCapableReported = true;
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
                     "node runs without BridgeConfig and can't serve bridged group");
@@ -850,9 +851,13 @@ namespace NKikimr {
             const auto& state = Info->Group->GetBridgeGroupState();
             if (const ui64 generation = StorageConfig->GetClusterState().GetGeneration();
                     generation < state.GetClusterStateGeneration()) {
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
-                    (BridgeGroupState, state));
+
+                YDB_LOG_DEBUG("Request waits for newer cluster state",
+                    {"marker", "BPB05"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"clusterStateGeneration", generation},
+                    {"bridgeGroupState", state});
                 PendingForClusterState.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }
@@ -887,8 +892,11 @@ namespace NKikimr {
             if (subrequests.empty()) {
                 // no pile is able to take this request with the group state we have; it is older than the cluster state
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for newer group state",
+                    {"marker", "BPB06"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }
@@ -896,8 +904,11 @@ namespace NKikimr {
                     return std::get<0>(item) == authorityPileId;
                 })) {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
-                    (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for the pile of the authority part",
+                    {"marker", "BPB07"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }

@@ -70,6 +70,7 @@ public:
     NCommon::TConfSetting<bool, Static> EnableNewRBOPhysicalStagePeephole;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
+    NCommon::TConfSetting<bool, Static> UseScalarHashJoin;
     NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
     NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
@@ -273,6 +274,7 @@ struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSett
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;
     bool GetEnableBlockHashJoinEqualNulls() const;
+    bool GetUseScalarHashJoin() const;
     bool GetUseScalarHashJoinForMap() const;
     bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;

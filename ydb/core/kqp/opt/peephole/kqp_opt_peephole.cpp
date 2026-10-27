@@ -107,6 +107,7 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, &TDqPhyHashJoin::Match, HNDL(ChooseHashJoin));
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, &TDqPhyScalarHashJoin::Match, HNDL(RewriteScalarHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
@@ -168,6 +169,12 @@ protected:
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ChooseHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeChooseHashJoin(node, ctx);
+        DumpAppliedRule("ChooseHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

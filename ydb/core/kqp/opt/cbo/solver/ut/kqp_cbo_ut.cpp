@@ -369,6 +369,54 @@ Y_UNIT_TEST(DqPhyMapJoinStatsUsesMapJoinAlgo) {
     UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(TKqpJoinAlgoType::Undefined), 0);
 }
 
+Y_UNIT_TEST(DqPhyHashJoinStatsMatchesBlockHashJoin) {
+    for (const bool buildSideLeft : {false, true}) {
+        TMockProviderContextYT24403 pctx;
+        NYql::TExprContext ctx;
+        auto pos = ctx.AppendPosition({});
+        auto leftInput = Build<TCoAtomList>(ctx, pos).Done();
+        auto rightInput = Build<TCoAtomList>(ctx, pos).Done();
+        auto join = Build<TDqPhyHashJoin>(ctx, pos)
+            .LeftInput(leftInput)
+            .RightInput(rightInput)
+            .LeftLabel<TCoAtom>().Build("left")
+            .RightLabel<TCoAtom>().Build("right")
+            .JoinType().Build("Inner")
+            .JoinKeys()
+                .Add<TDqJoinKeyTuple>()
+                    .LeftLabel().Build("left")
+                    .LeftColumn().Build("k")
+                    .RightLabel().Build("right")
+                    .RightColumn().Build("k")
+                    .Build()
+                .Build()
+            .LeftJoinKeyNames().Add().Build("left.k").Build()
+            .RightJoinKeyNames().Add().Build("right.k").Build()
+            .Settings()
+                .Add<TCoNameValueTuple>()
+                    .Name().Build("BuildSide")
+                    .Value<TCoAtom>().Build(buildSideLeft ? "Left" : "Right")
+                    .Build()
+                .Build()
+            .Done();
+
+        TKqpStatsStore kqpStats;
+        kqpStats.SetStats(leftInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 100, 1, 1));
+        kqpStats.SetStats(rightInput.Raw(), std::make_shared<TKqpOptimizerStatistics>(KqpBaseTable, 10, 1, 1));
+        auto blockJoin = ctx.RenameNode(join.Ref(), TDqPhyBlockHashJoin::CallableName());
+
+        InferStatisticsForDqJoinBase(blockJoin, &kqpStats, pctx);
+        InferStatisticsForDqJoinBase(join.Ptr(), &kqpStats, pctx);
+
+        const auto expectedAlgo = buildSideLeft ? TKqpJoinAlgoType::ReverseBlockJoin : TKqpJoinAlgoType::GraceJoin;
+        UNIT_ASSERT(kqpStats.GetStats(join.Raw()));
+        UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.size(), 1);
+        UNIT_ASSERT(pctx.CalledComputeJoinStats.contains(expectedAlgo));
+        UNIT_ASSERT_VALUES_EQUAL(kqpStats.GetStats(join.Raw())->Nrows, kqpStats.GetStats(blockJoin.Get())->Nrows);
+        UNIT_ASSERT_VALUES_EQUAL(kqpStats.GetStats(join.Raw())->Cost, kqpStats.GetStats(blockJoin.Get())->Cost);
+    }
+}
+
 Y_UNIT_TEST(RelCollector) {
     NYql::TExprContext ctx;
     auto pos = ctx.AppendPosition({});

@@ -373,6 +373,39 @@ const TString KID = "test-key-1";
 
 Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
+    Y_UNIT_TEST_F(ExpiredCacheDoesNotKeepResettingBackoff, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("2h");
+        config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("1s");
+        for (auto* settings : {config.MutableDiscoveryPeriodicSettings(), config.MutableJwksPeriodicSettings()}) {
+            settings->SetMinErrorRefreshPeriod("1h");
+            settings->SetMaxErrorRefreshPeriod("1h");
+        }
+        std::ignore = RegProvider(config);
+        DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
+        const auto populatedAt = Rt->GetClock();
+
+        auto renewal = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, renewal, "Connection refused");
+
+        // Cache expiry permits an early recovery request to both endpoints.
+        auto recovery = WaitHttp();
+        const auto recoveryAt = Rt->GetClock();
+        UNIT_ASSERT_C(recoveryAt - populatedAt < TDuration::Seconds(10),
+            "Cache expiry must still permit an early recovery attempt");
+        ReplyHttpError(Rt.get(), Node, Proxy, recovery, "Connection refused");
+        recovery = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, recovery, "Connection refused");
+
+        const auto retry = WaitHttp();
+        const auto elapsed = Rt->GetClock() - recoveryAt;
+        // Downward jitter permits [50%, 100%] of the configured hour.
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "An empty expired cache must not reset backoff on every tick; retry after " << elapsed);
+    }
+
     Y_UNIT_TEST_F(DiscoveryFetchOnBootstrap, TSetup) {
         std::ignore = RegProvider(MakeConfig(ISS));
         const auto req = WaitHttp();

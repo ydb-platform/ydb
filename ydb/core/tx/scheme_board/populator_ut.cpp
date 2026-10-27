@@ -451,6 +451,97 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             "replay of the latest description must use that description's current path for routing");
     }
 
+    Y_UNIT_TEST(PathAndPathIdSelectionsRequireSeparateQuorums) {
+        TTestBasicRuntime runtime;
+        TStateStorageInfo::TRingGroup group;
+        group.NToSelect = 3;
+        constexpr size_t replicaCount = 7;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
+
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto info = GetStateStorageInfo(runtime);
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+
+        THashMap<TActorId, TActorId> actorToService;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                actorToService[runtime.GetLocalServiceId(replica)] = replica;
+            }
+        }
+        THashMap<TActorId, TActorId> childToService;
+        auto handshakes = runtime.AddObserver<NInternalEvents::TEvHandshakeResponse>([&](auto& ev) {
+            childToService[ev->Recipient] = actorToService.at(ev->Sender);
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(childToService.size(), replicaCount);
+
+        auto select = [&](ui64 hash) {
+            TStateStorageInfo::TSelection selection;
+            info->SelectReplicas(hash, &selection, 0);
+            return THashSet<TActorId>(selection.begin(), selection.end());
+        };
+        const auto idSelection = select(pathId.Hash());
+        TString path;
+        THashSet<TActorId> pathSelection;
+        for (size_t i = 0; i != 1000; ++i) {
+            path = TStringBuilder() << "/Root/TestPath" << i;
+            pathSelection = select(CityHash64(path));
+            size_t pathOnly = 0;
+            for (const auto& replica : pathSelection) {
+                pathOnly += !idSelection.contains(replica);
+            }
+            if (pathOnly >= 2) {
+                break;
+            }
+        }
+        size_t pathOnly = 0;
+        for (const auto& replica : pathSelection) {
+            pathOnly += !idSelection.contains(replica);
+        }
+        UNIT_ASSERT_C(pathOnly >= 2, "test path must select a sufficiently different replica set");
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<TUpdateAck> ackBlocker(runtime, [&](const TUpdateAck::TPtr& ev) {
+            return ev->Recipient == populator && ev->Cookie == cookie;
+        });
+        auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        desc->Record = CreateSamplePathDescription(owner, pathId, path);
+        runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        size_t overlap = 0;
+        for (const auto& replica : pathSelection) {
+            overlap += idSelection.contains(replica);
+        }
+        const size_t expectedAcks = pathSelection.size() + idSelection.size() - overlap;
+        runtime.WaitFor("ACKs from both selections", [&] { return ackBlocker.size() == expectedAcks; }, TDuration::Seconds(10));
+
+        TVector<TUpdateAck::TPtr> pathOnlyAcks;
+        TVector<TUpdateAck::TPtr> idAcks;
+        for (const auto& ack : ackBlocker) {
+            const auto& replica = childToService.at(ack->Sender);
+            if (pathSelection.contains(replica) && !idSelection.contains(replica)) {
+                pathOnlyAcks.emplace_back(ack);
+            }
+            if (idSelection.contains(replica)) {
+                idAcks.emplace_back(ack);
+            }
+        }
+        UNIT_ASSERT(pathOnlyAcks.size() >= 2);
+        UNIT_ASSERT(idAcks.size() >= 2);
+        runtime.Send(pathOnlyAcks[0].Release());
+        runtime.Send(pathOnlyAcks[1].Release());
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 0,
+            "a majority of the path selection must not substitute for the PathId selection quorum");
+
+        runtime.Send(idAcks[0].Release());
+        runtime.Send(idAcks[1].Release());
+        auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Get()->GetPathId(), pathId);
+    }
+
     Y_UNIT_TEST(OneRingGroup) {
         TestPopulatorQuorum({ {} });
     }

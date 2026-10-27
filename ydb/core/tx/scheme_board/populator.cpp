@@ -751,20 +751,25 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    bool CheckQuorum(const THashSet<TActorId>& ackedPopulators) const {
-        for (const auto& ringGroup : GroupInfo->RingGroups) {
+    bool CheckQuorum(TPathId pathId, TStringBuf path, const THashSet<TActorId>& ackedPopulators) const {
+        const std::array hashes = {CityHash64(path), pathId.Hash()};
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
             if (ShouldIgnoreInQuorum(ringGroup)) {
                 continue;
             }
-            ui32 acks = 0;
-            for (const auto& ring : ringGroup.Rings) {
-                for (const auto& replica : ring.Replicas) {
+
+            for (ui64 hash : hashes) {
+                TStateStorageInfo::TSelection selection;
+                GroupInfo->SelectReplicas(hash, &selection, ringGroupIndex);
+                ui32 acks = 0;
+                for (const auto& replica : selection) {
                     const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);
                     acks += populator && ackedPopulators.contains(*populator);
                 }
-            }
-            if (!IsMajorityReached(ringGroup, acks)) {
-                return false;
+                if (!IsMajorityReached(ringGroup, acks)) {
+                    return false;
+                }
             }
         }
         return true;
@@ -805,7 +810,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             pathIt->second.insert(ev->Sender);
-            if (CheckQuorum(pathIt->second)) {
+            if (CheckQuorum(pathId, it->second.Paths.at(pathId), pathIt->second)) {
                 YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},

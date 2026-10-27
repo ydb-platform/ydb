@@ -13,7 +13,7 @@
 #define NAVIGATION_TAB_CONTENT_PART(id) WITH_SCOPED(__navigationContent, ::NKikimr::NPQ::NApp::TNavigationBarContentPart(__stream, TStringBuilder() << id))
 
 #define PROPERTIES(caption) WITH_SCOPED(__properties, ::NKikimr::NPQ::NApp::TProperties(__stream, caption))
-#define PROPERTY(caption, value) __properties.Add(caption, TStringBuilder() << value)
+#define PROPERTY(caption, value) __properties.Add(caption, TStringBuilder() << (value))
 
 #define LAYOUT() DIV()
 #define LAYOUT_ROW() DIV_CLASS("row")

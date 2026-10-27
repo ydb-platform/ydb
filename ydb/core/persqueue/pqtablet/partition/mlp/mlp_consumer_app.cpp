@@ -33,6 +33,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                     LAYOUT_COLUMN() {
                         PROPERTIES("Generic") {
                             PROPERTY("First offset", Storage->GetFirstOffset());
+                            PROPERTY("Pending read requests", PendingReadQueue.size());
                             PROPERTY("Last offset", Storage->GetLastOffset());
                             PROPERTY("Message counts", Storage->GetMessageCount());
                             PROPERTY("Keep message order", Storage->GetKeepMessageOrder() ? "Yes" : "No");

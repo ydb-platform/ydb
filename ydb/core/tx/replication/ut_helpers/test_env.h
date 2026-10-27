@@ -22,6 +22,39 @@ enum class ERuntimeMode {
     Simulated,
 };
 
+// Fail the first server-side CreateSession RPC while exercising the real SDK
+// GetSession path. Install before using a fresh proxy so its pool is empty.
+class TSessionCreationFault {
+public:
+    TSessionCreationFault(TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode status)
+        : Observer(runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+            [this, status](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                const auto method = ev->Get()->GetRpcMethodName();
+                if (method.EndsWith("/CreateSession")) {
+                    ++SessionRequests;
+                    if (SessionRequests == 1) {
+                        auto* request = dynamic_cast<NGRpcService::IRequestCtx*>(ev->Get());
+                        UNIT_ASSERT(request);
+                        request->RaiseIssue(NYql::TIssue("injected GetSession failure"));
+                        request->ReplyWithYdbStatus(status);
+                        ev.Reset();
+                    }
+                } else if (method.EndsWith("/CreateTable") || method.EndsWith("/DropTable") || method.EndsWith("/AlterTable")
+                    || method.EndsWith("/CopyTable") || method.EndsWith("/CopyTables") || method.EndsWith("/RenameTables")
+                    || method.EndsWith("/DescribeTable"))
+                {
+                    ++TableRequests;
+                }
+            }))
+    {}
+
+    ui64 SessionRequests = 0;
+    ui64 TableRequests = 0;
+
+private:
+    TTestActorRuntime::TEventObserverHolder Observer;
+};
+
 template <bool UseDatabase = true>
 class TEnv {
     static constexpr char DomainName[] = "Root";

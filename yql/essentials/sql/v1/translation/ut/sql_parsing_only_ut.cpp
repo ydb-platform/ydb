@@ -6234,6 +6234,44 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(DropAsyncReplicationForce) {
+    for (const auto* query : {
+            "USE plato; DROP ASYNC REPLICATION MyReplication FORCE;",
+            "USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;",
+            "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(DropAsyncReplicationForceRejectsUnsupportedForms) {
+    for (const auto* query : {
+            "USE plato; DROP ASYNC REPLICATION MyReplication FORCE CASCADE;",
+            "USE plato; DROP ASYNC REPLICATION MyReplication FORCE FORCE;",
+            "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = TRUE);",
+            "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = FALSE);",
+            "USE plato; DROP TRANSFER MyTransfer FORCE;",
+            "USE plato; DROP TABLE MyTable FORCE;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
+Y_UNIT_TEST(ForceRemainsAnUnquotedIdentifier) {
+    for (const auto* query : {
+            "SELECT fOrCe FROM plato.Input;",
+            "SELECT value AS fOrCe FROM plato.Input;",
+            "SELECT * FROM plato.fOrCe AS fOrCe;",
+            "USE ydb; CREATE TABLE fOrCe (fOrCe Uint64, PRIMARY KEY (fOrCe));",
+            "USE plato; DROP ASYNC REPLICATION fOrCe;",
+            "USE plato; CREATE TOPIC fOrCe (CONSUMER fOrCe);",
+            "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;",
+            "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS fOrCe);"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+    }
+}
+
 Y_UNIT_TEST(PragmaCompactGroupBy) {
     auto req = "PRAGMA CompactGroupBy; SELECT key, COUNT(*) FROM plato.Input GROUP BY key;";
     auto res = SqlToYql(req);

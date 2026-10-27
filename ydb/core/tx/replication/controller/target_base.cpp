@@ -190,6 +190,24 @@ bool TTargetBase::CompleteWorkerSet(const TActorId& registrar, THashSet<ui64> wo
     return true;
 }
 
+bool TTargetBase::IsWorkerSetEnumerated() const {
+    if (!WorkerSetEnumerated) {
+        return false;
+    }
+    // RunWorker registers its worker in transaction Complete. Its Execute may
+    // page-fault, so CompleteWorkerSet can arrive before every worker is present.
+    if (ExpectedWorkers) {
+        for (const auto id : *ExpectedWorkers) {
+            if (!Workers.contains(id)) {
+                return false;
+            }
+        }
+    }
+    // Topology invalidation is checked separately by IsWorkerSetComplete;
+    // ordinary replication keeps using its existing dynamic heartbeat quorum.
+    return true;
+}
+
 bool TTargetBase::IsWorkerSetComplete() const {
     if (!ExpectedWorkers || ExpectedWorkers->empty() || ExpectedWorkers->size() != Workers.size()) {
         return false;

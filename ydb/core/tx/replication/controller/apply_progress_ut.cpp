@@ -137,6 +137,31 @@ Y_UNIT_TEST_SUITE(ReplicationApplyProgress) {
         }
     };
 
+    Y_UNIT_TEST(EnumerationWaitsForWorkerRegistration) {
+        NKikimrReplication::TReplicationConfig config;
+        TReplication replication(1, TPathId(1, 1), config, "/Root");
+        TTargetTable target(&replication, 0,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/source", "/Root/replica"));
+        target.SetDstState(TReplication::EDstState::Ready);
+        target.SetStreamState(TReplication::EStreamState::Ready);
+        target.AddWorker(0);
+
+        // CompleteWorkerSet may finish while another RunWorker transaction is
+        // waiting for a page fault. A partial registered set is not a quorum.
+        UNIT_ASSERT(target.CompleteWorkerSet(TActorId(), THashSet<ui64>{0, 1}, false));
+        UNIT_ASSERT(!target.IsWorkerSetEnumerated());
+        UNIT_ASSERT(!target.IsWorkerSetComplete());
+        target.AddWorker(1);
+        UNIT_ASSERT(target.IsWorkerSetEnumerated());
+        UNIT_ASSERT(target.IsWorkerSetComplete());
+
+        // Later topology changes invalidate APPLIED, while ordinary replication
+        // continues to use its existing dynamic worker/heartbeat quorum.
+        target.AddWorker(2);
+        UNIT_ASSERT(target.IsWorkerSetEnumerated());
+        UNIT_ASSERT(!target.IsWorkerSetComplete());
+    }
+
     Y_UNIT_TEST(EmptyIntervalNeedsEveryHeartbeatAndNoWriteTransaction) {
         TApplyEnv env;
         UNIT_ASSERT(!env.Describe({}).HasApplyProgress());

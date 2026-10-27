@@ -85,7 +85,7 @@ public:
 
     bool CompleteWorkerSet(const TActorId& registrar, THashSet<ui64> workers, bool hasPartitionGraph) override;
     bool IsWorkerSetComplete() const override;
-    bool IsWorkerSetEnumerated() const override { return WorkerSetEnumerated; }
+    bool IsWorkerSetEnumerated() const override;
     bool HasPartitionGraph() const override { return PartitionGraph; }
     void InvalidateWorkerSet() override { ExpectedWorkers.reset(); }
     void AddWorker(ui64 id) override;

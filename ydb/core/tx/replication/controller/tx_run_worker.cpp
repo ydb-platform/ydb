@@ -189,7 +189,8 @@ public:
                 std::move(Event->Get()->Workers), Event->Get()->HasPartitionGraph)
             && !Self->AssignedTxIds.empty())
         {
-            // Registration and its durable worker rows precede this completion.
+            // Individual RunWorker transactions may still be pending. The
+            // quorum gate checks their presence before selecting a commit.
             // Heartbeats may already be present, so recheck the commit quorum.
             Self->RunTxHeartbeat(ctx);
         }

@@ -549,6 +549,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             if (expected) {
                 expected.ToProto(tx.MutableExpectedReplicationOwner());
                 tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_NONE);
+                tx.MutableAlterTable()->MutableReplicationConfig()->ClearConsistencyLevel();
             }
             if (drop) {
                 tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);

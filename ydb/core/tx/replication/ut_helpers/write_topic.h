@@ -6,7 +6,7 @@ namespace NKikimr::NReplication::NTestHelpers {
 
 namespace NImpl {
 template <typename Env, typename Message>
-bool WriteTopic(const Env& env, const TString& topicPath, Message&& data) {
+bool WriteTopic(const Env& env, const TString& topicPath, Message&& data, NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::GZIP) {
     NYdb::NTopic::TTopicClient client(env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase())
@@ -16,6 +16,7 @@ bool WriteTopic(const Env& env, const TString& topicPath, Message&& data) {
         .Path(topicPath)
         .ProducerId("producer")
         .MessageGroupId("producer")
+        .Codec(codec)
     );
 
     const auto result = session->Write(std::move(data));
@@ -26,12 +27,12 @@ bool WriteTopic(const Env& env, const TString& topicPath, Message&& data) {
 } // namespace NImpl {
 
 template <typename Env>
-bool WriteTopic(const Env& env, const TString& topicPath, const std::string_view& data) {
-    return NImpl::WriteTopic(env, topicPath, data);
+bool WriteTopic(const Env& env, const TString& topicPath, const std::string_view& data, NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::GZIP) {
+    return NImpl::WriteTopic(env, topicPath, data, codec);
 }
 
 template <typename Env>
-bool WriteTopic(const Env& env, const TString& topicPath, NYdb::NTopic::TWriteMessage&& data) {
-    return NImpl::WriteTopic(env, topicPath, std::move(data));
+bool WriteTopic(const Env& env, const TString& topicPath, NYdb::NTopic::TWriteMessage&& data, NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::GZIP) {
+    return NImpl::WriteTopic(env, topicPath, std::move(data), codec);
 }
 }

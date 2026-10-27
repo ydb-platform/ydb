@@ -87,6 +87,7 @@ public:
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
+    FEATURE_FLAG_SETTER(TransferInternalDataDecompression)
     #undef FEATURE_FLAG_SETTER
 };
 

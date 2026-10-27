@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/hnsw/cache.h>
 #include "helpers.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage_impl.h>
@@ -95,6 +96,8 @@ namespace NKikimr {
 
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& config)
     {
+        runtime.AddLocalService(NDataShard::MakeHnswCacheId(),
+            TActorSetupCmd(NDataShard::CreateHnswCache(), TMailboxType::ReadAsFilled, 0), nodeIndex);
         runtime.AddLocalService(NSharedCache::MakeSharedPageCacheId(0),
             TActorSetupCmd(
                 NSharedCache::CreateSharedPageCache(config, runtime.GetDynamicCounters(nodeIndex)),

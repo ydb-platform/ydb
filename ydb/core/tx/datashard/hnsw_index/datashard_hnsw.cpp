@@ -524,7 +524,6 @@ namespace NKikimr::NDataShard {
         entry.BuildToken = ++NextHnswBuildToken;
         entry.CancelBuild = std::make_shared<std::atomic<bool>>(false);
         entry.EvictedMemoryBytes = 0;
-        HnswRetiringMemoryOwners.erase(entry.MemoryOwner);
         HnswBuildsInFlight.insert(entry.BuildToken);
         return true;
     }
@@ -601,7 +600,6 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry) {
-        HnswRetiringMemoryOwners.insert(entry.MemoryOwner);
         if (entry.CancelBuild) {
             entry.CancelBuild->store(true, std::memory_order_relaxed);
         }
@@ -618,7 +616,12 @@ namespace NKikimr::NDataShard {
         entry.SnapshotReadPins.clear();
         entry.OpenTransactionsTracked = false;
         if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->Retire(entry.MemoryOwner);
             HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+        }
+        entry.MemoryOwner = THnswCacheMemoryTracker::AllocateOwner();
+        if (!entry.GraphKey.empty()) {
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvForget(std::exchange(entry.GraphKey, TString{})));
         }
         // Readers may still own a graph. They must stop using it if its journal
         // no longer receives every write (including eviction on memory pressure).
@@ -637,42 +640,18 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::InvalidateHnswIndexes() {
-        if (HnswCacheMemoryTracker) {
-            HnswCacheMemoryTracker->ResetAllDemand();
-        }
         HnswBuildQueue.clear();
         ForEachHnswIndexEntry([&](ui32, const TPathId&, auto& entry) { InvalidateHnswIndexEntry(entry); });
     }
 
-    void TDataShard::EvictHnswIndexesToLimit(ui64 limit) {
-        const auto usage = HnswCacheMemoryTracker->GetUsageByOwner();
-        for (auto it = HnswRetiringMemoryOwners.begin(); it != HnswRetiringMemoryOwners.end();) {
-            const auto* bytes = usage.FindPtr(*it);
-            if (!bytes || !*bytes) {
-                HnswRetiringMemoryOwners.erase(it++);
-            } else {
-                ++it;
-            }
-        }
-        ui64 projectedUsed = 0;
-        for (const auto& [owner, bytes] : usage) {
-            if (!HnswRetiringMemoryOwners.contains(owner)) {
-                projectedUsed += bytes;
-            }
-        }
+    void TDataShard::EvictHnswIndexesToLimit() {
         ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
-            if (projectedUsed <= limit || HnswRetiringMemoryOwners.contains(entry.MemoryOwner)) {
+            const ui64 bytes = HnswCacheMemoryTracker->RetireIfOverLimit(entry.MemoryOwner);
+            if (!bytes) {
                 return;
             }
-            const auto* bytes = usage.FindPtr(entry.MemoryOwner);
-            if (!bytes || !*bytes) {
-                return;
-            }
-            // Count the entire retired reservation now, while keeping the real
-            // memory charged until every reader and background worker releases it.
-            projectedUsed -= *bytes;
             InvalidateHnswIndex(localTid, indexId);
-            entry.EvictedMemoryBytes = *bytes;
+            entry.EvictedMemoryBytes = bytes;
             entry.InitialBuildAttemptsLeft = 30;
             entry.NextScanAttemptAt = AppData()->TimeProvider->Now() + TDuration::Seconds(1);
         });
@@ -706,12 +685,9 @@ namespace NKikimr::NDataShard {
         }
         index->SetSnapshot(baseVersion, entry.Changes);
         Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
-        struct TOwnedIndex {
-            std::shared_ptr<void> Reservation;
-            std::shared_ptr<THnswIndex> Index;
-        };
-        auto owned = std::make_shared<TOwnedIndex>(TOwnedIndex{std::move(memoryReservation), std::move(index)});
-        index = std::shared_ptr<THnswIndex>(owned, owned->Index.get());
+        if (!index->HasGraphReservation()) {
+            index->SetGraphReservation(std::move(memoryReservation));
+        }
         entry.Generations.push_back(index);
         if (entry.Index && entry.Index->GetBaseVersion() != baseVersion) {
             entry.Retained.push_back(std::move(entry.Index));
@@ -729,8 +705,22 @@ namespace NKikimr::NDataShard {
         entry.BuildReadPin.reset();
         entry.NextScanAttemptAt = TInstant::Zero();
         HnswCacheMemoryTracker->ResetDemand(entry.MemoryOwner);
+        PublishHnswGraph(localTid, indexId);
         PruneHnswIndexes();
         ScheduleHnswRebuild(localTid, indexId);
+    }
+
+    void TDataShard::PublishHnswGraph(ui32 localTid, const TPathId& indexId) {
+        auto& entry = *FindHnswIndexEntry(localTid, indexId);
+        if (!entry.GraphKey.empty()) {
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvForget(std::move(entry.GraphKey)));
+        }
+        entry.GraphKey = TStringBuilder() << SelfId() << ':' << localTid << ':' << ++NextHnswGraphId;
+        auto event = MakeHolder<TEvHnswCache::TEvPublish>();
+        event->Key = entry.GraphKey;
+        event->Graph = entry.Index->CreateView(entry.Index->GetBaseVersion(), std::make_shared<THnswIndexChanges>());
+        event->Settings = entry.Settings;
+        Send(MakeHnswCacheId(), event.Release());
     }
 
     void TDataShard::RefreshHnswSnapshotPins(THnswIndexCacheEntry& entry) {

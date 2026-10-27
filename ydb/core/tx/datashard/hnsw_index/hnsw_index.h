@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 
+#include <iosfwd>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -113,6 +114,23 @@ namespace NKikimr::NDataShard {
             TString& error, bool allowEmpty = false,
             const std::atomic<bool>* cancelled = nullptr);
 
+        // MVCC state is private to each tablet view; immutable graph storage
+        // and its memory reservation live until the last view is released.
+        std::unique_ptr<THnswIndex> CreateView(TRowVersion base,
+            std::shared_ptr<THnswIndexChanges> changes,
+            TRowVersion upper = TRowVersion::Max()) const;
+        bool SharesGraphWith(const THnswIndex& other) const;
+        bool HasGraphReservation() const;
+        size_t GraphUseCount() const;
+        void SetGraphReservation(std::shared_ptr<void> reservation, bool deferDeletion = false);
+
+        // Portable graph-only snapshot. Journals and transaction-local changes
+        // are separate. Loading restores topology without running construction.
+        void SaveGraph(std::ostream& output) const;
+        static std::unique_ptr<THnswIndex> LoadGraph(std::istream& input,
+            const Ydb::Table::VectorIndexSettings& settings,
+            ui64 maxMemoryBytes, TString& error);
+
         // Returns up to k nearest neighbors of targetVector (same wire format as
         // build-time vectors), ordered from closest to farthest.
         THnswSearchResult Search(TStringBuf targetVector, size_t k,
@@ -155,6 +173,7 @@ namespace NKikimr::NDataShard {
                                           size_t serializedKeyBytes = 0);
 
     private:
+        class TGraph;
         class TImpl;
 
         explicit THnswIndex(std::unique_ptr<TImpl> impl);

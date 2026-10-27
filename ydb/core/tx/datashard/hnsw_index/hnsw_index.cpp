@@ -1,4 +1,5 @@
 #include "hnsw_index.h"
+#include <ydb/core/tx/datashard/hnsw/serialization.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
@@ -20,11 +21,14 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/thread/pool.h>
 
 #include <cmath>
 #include <tuple>
 #include <queue>
 #include <cstring>
+#include <istream>
+#include <ostream>
 
 namespace NKikimr::NDataShard {
 
@@ -32,8 +36,9 @@ namespace NKikimr::NDataShard {
 
         using Ydb::Table::VectorIndexSettings;
 
-        // Rough fixed per-node overhead, excluding level-zero neighbor storage.
-        constexpr size_t EstimatedBytesPerNodeOverhead = 256;
+        // Fixed per-row allocation slack for both NMSLIB layouts, key maps,
+        // vector containers and the initial visited list. Links are separate.
+        constexpr size_t EstimatedBytesPerNodeOverhead = 384;
         // Construct synchronously with one NMSLIB worker; the caller controls scheduling.
         constexpr unsigned BuildThreadsPerIndex = 1;
         constexpr ui32 DefaultHnswEfConstruction = 200;
@@ -108,6 +113,27 @@ namespace NKikimr::NDataShard {
                 return Data != nullptr && Dimension > 0;
             }
         };
+
+        using NHnswSerialization::TSnapshotStreamBuf;
+
+        template <class T>
+        void WriteSnapshotWord(std::ostream& out, T value) {
+            char bytes[sizeof(T)];
+            for (size_t i = 0; i < sizeof(T); ++i)
+                bytes[i] = static_cast<char>(value >> (8 * i));
+            out.write(bytes, sizeof(bytes));
+        }
+
+        template <class T>
+        T ReadSnapshotWord(std::istream& in) {
+            unsigned char bytes[sizeof(T)];
+            if (!in.read(reinterpret_cast<char*>(bytes), sizeof(bytes)))
+                ythrow yexception() << "Truncated HNSW snapshot";
+            T result = 0;
+            for (size_t i = 0; i < sizeof(T); ++i)
+                result |= T(bytes[i]) << (8 * i);
+            return result;
+        }
 
     } // namespace
 
@@ -323,15 +349,35 @@ namespace NKikimr::NDataShard {
                              2 * sizeof(TVersion) + 128);
     }
 
-    class THnswIndex::TImpl {
+    class THnswIndex::TGraph {
     public:
-        TImpl(std::unique_ptr<similarity::Space<float>> space, size_t dimension)
+        static std::shared_ptr<TGraph> Create(std::unique_ptr<similarity::Space<float>> space, size_t dimension) {
+            return std::shared_ptr<TGraph>(new TGraph(std::move(space), dimension), [](TGraph* graph) noexcept {
+                try {
+                    if (!graph->DeferDeletion) {
+                        delete graph;
+                        return;
+                    }
+                    static TThreadPool pool(TThreadPoolParams().SetThreadName("HnswDelete"));
+                    static const bool started = [&] { pool.Start(1); return true; }();
+                    Y_UNUSED(started);
+                    if (pool.AddFunc([graph] { delete graph; })) {
+                        return;
+                    }
+                } catch (...) {
+                    // Release the reservation even if scheduling fails.
+                }
+                delete graph;
+            });
+        }
+
+        TGraph(std::unique_ptr<similarity::Space<float>> space, size_t dimension)
             : Space(std::move(space))
             , Dimension(dimension)
         {
         }
 
-        ~TImpl() {
+        ~TGraph() {
             // Hnsw keeps pointers to Objects, so destroy it before their owners.
             Index.reset();
         }
@@ -342,25 +388,30 @@ namespace NKikimr::NDataShard {
             auto obj = std::make_unique<similarity::Object>(
                 id, /* label */ -1, Dimension * sizeof(float), data);
             KeyBytes += key.size();
+            KeyToIndex.emplace(key, id);
             Keys.push_back(std::move(key));
             Objects.push_back(obj.get());
             OwnedObjects.push_back(std::move(obj));
         }
 
-        bool Build(const VectorIndexSettings& settings, const std::atomic<bool>* cancelled) {
-            ScopedLoggingDisabled quietBuild;
+        void SetSettings(const VectorIndexSettings& settings) {
+            Settings = settings;
+            Settings.set_vector_dimension(Dimension);
+            Connectivity = settings.has_m() ? settings.m() : DefaultHnswM;
             SquaredGraphDistances = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN;
             CosineDistances = settings.metric() == VectorIndexSettings::DISTANCE_COSINE
                 || settings.metric() == VectorIndexSettings::SIMILARITY_COSINE;
+        }
+
+        bool Build(const VectorIndexSettings& settings, const std::atomic<bool>* cancelled) {
+            ScopedLoggingDisabled quietBuild;
+            SetSettings(settings);
             if (Objects.empty()) {
                 return true; // Empty rebuilt generations still have a searchable journal.
             }
 
             Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
-            Connectivity = settings.has_m()
-                               ? settings.m()
-                               : DefaultHnswM;
             similarity::AnyParams buildParams(std::vector<std::string>{
                 "M=" + std::to_string(Connectivity),
                 "efConstruction=" + std::to_string(settings.has_ef_construction()
@@ -381,6 +432,29 @@ namespace NKikimr::NDataShard {
             return true;
         }
 
+        std::shared_ptr<void> Reservation;
+        bool DeferDeletion = false;
+        VectorIndexSettings Settings;
+        std::unique_ptr<similarity::Space<float>> Space;
+        size_t Dimension = 0;
+        ui32 Connectivity = DefaultHnswM;
+        bool SquaredGraphDistances = false;
+        bool CosineDistances = false;
+        bool HasZeroVector = false;
+        size_t KeyBytes = 0;
+        std::vector<const similarity::Object*> Objects;
+        std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
+        std::vector<TString> Keys; // Object::id() -> serialized primary key
+        THashMap<TString, size_t> KeyToIndex;
+        std::unique_ptr<similarity::Hnsw<float>> Index;
+    };
+
+    class THnswIndex::TImpl {
+    public:
+        explicit TImpl(std::shared_ptr<TGraph> graph)
+            : Graph(std::move(graph))
+        {}
+
         THnswSearchResult Search(TStringBuf targetVector, size_t k, TRowVersion readVersion, ui32 efSearch) const {
             THnswSearchResult result;
             if (!CanRead(readVersion)) {
@@ -392,25 +466,25 @@ namespace NKikimr::NDataShard {
             }
 
             auto view = TFloatVectorView::FromSerialized(targetVector);
-            if (!view.IsValid() || view.Dimension != Dimension) {
+            if (!view.IsValid() || view.Dimension != Graph->Dimension) {
                 return result;
             }
 
-            if (CosineDistances && (view.AllZero || HasZeroVector)) {
+            if (Graph->CosineDistances && (view.AllZero || Graph->HasZeroVector)) {
                 result.Covered = false;
                 return result;
             }
 
             std::unique_ptr<const similarity::Object> queryObj(
-                new similarity::Object(-1, -1, Dimension * sizeof(float), view.Data));
+                new similarity::Object(-1, -1, Graph->Dimension * sizeof(float), view.Data));
 
             // Dirty base nodes may hide live candidates, but a large journal
             // must never turn ANN into an ef ~= journal-size traversal.
-            const size_t baseK = Min(k, Keys.size());
-            const size_t graphK = baseK + Min(Min(ChangeCount(), Keys.size() - baseK), Max<size_t>(k, efSearch));
-            similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
-            if (Index) {
-                Index->SearchWithEf(&query, efSearch);
+            const size_t baseK = Min(k, Graph->Keys.size());
+            const size_t graphK = baseK + Min(Min(ChangeCount(), Graph->Keys.size() - baseK), Max<size_t>(k, efSearch));
+            similarity::KNNQuery<float> query(*Graph->Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
+            if (Graph->Index) {
+                Graph->Index->SearchWithEf(&query, efSearch);
             }
 
             const similarity::KNNQueue<float>* queue = query.Result();
@@ -422,12 +496,12 @@ namespace NKikimr::NDataShard {
             while (!mutableQueue->Empty()) {
                 const float graphDistance = mutableQueue->TopDistance();
                 // CreateIndex uses optimized squared L2 for SpaceLp(2), while
-                // journal scoring through Space returns ordinary L2.
-                const float distance = SquaredGraphDistances ? std::sqrt(graphDistance) : graphDistance;
+                // journal scoring through Graph->Space returns ordinary L2.
+                const float distance = Graph->SquaredGraphDistances ? std::sqrt(graphDistance) : graphDistance;
                 const similarity::Object* obj = mutableQueue->Pop();
                 const size_t idx = static_cast<size_t>(obj->id());
-                if (idx < Keys.size()) {
-                    reversed.emplace_back(Keys[idx], distance);
+                if (idx < Graph->Keys.size()) {
+                    reversed.emplace_back(Graph->Keys[idx], distance);
                 }
             }
 
@@ -450,16 +524,16 @@ namespace NKikimr::NDataShard {
                     add(candidate.first, candidate.second);
                 }
             }
-            if (graphK < Keys.size() && cleanGraphCandidates < k) {
+            if (graphK < Graph->Keys.size() && cleanGraphCandidates < k) {
                 result.Covered = false; // The bounded overfetch could have hidden live rows.
             }
             for (const auto& [key, history] : Changes->Rows) {
                 const auto* visible = THnswIndexChanges::Find(history, readVersion, BaseVersion);
                 if (!visible || !visible->Vector) { continue; }
                 auto deltaView = TFloatVectorView::FromSerialized(*visible->Vector);
-                if (!deltaView.IsValid() || deltaView.Dimension != Dimension) { continue; }
-                if (CosineDistances && deltaView.AllZero) { result.Covered = false; continue; }
-                similarity::Object deltaObj(-1, -1, Dimension * sizeof(float), deltaView.Data);
+                if (!deltaView.IsValid() || deltaView.Dimension != Graph->Dimension) { continue; }
+                if (Graph->CosineDistances && deltaView.AllZero) { result.Covered = false; continue; }
+                similarity::Object deltaObj(-1, -1, Graph->Dimension * sizeof(float), deltaView.Data);
                 add(key, query.DistanceObjLeft(&deltaObj));
             }
             result.Results.reserve(nearest.size());
@@ -472,19 +546,19 @@ namespace NKikimr::NDataShard {
         }
 
         size_t Size() const {
-            return Keys.size();
+            return Graph->Keys.size();
         }
 
         size_t Dim() const {
-            return Dimension;
+            return Graph->Dimension;
         }
 
         ui32 GetConnectivity() const {
-            return Connectivity;
+            return Graph->Connectivity;
         }
 
         size_t GetKeyBytes() const {
-            return KeyBytes;
+            return Graph->KeyBytes;
         }
 
         bool GetVector(TStringBuf key, TString& result, TRowVersion readVersion) const {
@@ -498,10 +572,11 @@ namespace NKikimr::NDataShard {
                 result = *visible->Vector;
                 return true;
             }
-            // Inspection helper; serving queries reads projected cells from LocalDB.
-            const auto it = std::find(Keys.begin(), Keys.end(), key);
-            if (it == Keys.end()) { return false; }
-            const auto* object = OwnedObjects[it - Keys.begin()].get();
+            auto it = Graph->KeyToIndex.find(key);
+            if (it == Graph->KeyToIndex.end()) {
+                return false;
+            }
+            const auto* object = Graph->OwnedObjects[it->second].get();
             result.assign(object->data(), object->datalength());
             result.push_back(static_cast<char>(Format<float>));
             return true;
@@ -509,7 +584,7 @@ namespace NKikimr::NDataShard {
 
         bool Upsert(TString key, TString vector, TRowVersion version) {
             auto view = TFloatVectorView::FromSerialized(vector);
-            if (!view.IsValid() || view.Dimension != Dimension) {
+            if (!view.IsValid() || view.Dimension != Graph->Dimension) {
                 return false;
             }
             Changes->Set(std::move(key), version, std::move(vector));
@@ -536,18 +611,7 @@ namespace NKikimr::NDataShard {
         TRowVersion UpperVersion = TRowVersion::Max();
         std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
 
-    private:
-        std::unique_ptr<similarity::Space<float>> Space;
-        size_t Dimension = 0;
-        ui32 Connectivity = DefaultHnswM;
-        bool SquaredGraphDistances = false;
-        bool CosineDistances = false;
-        bool HasZeroVector = false;
-        size_t KeyBytes = 0;
-        std::vector<const similarity::Object*> Objects;
-        std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
-        std::vector<TString> Keys; // Object::id() -> serialized primary key
-        std::unique_ptr<similarity::Hnsw<float>> Index;
+        std::shared_ptr<TGraph> Graph;
     };
 
     THnswIndex::THnswIndex(std::unique_ptr<TImpl> impl)
@@ -556,6 +620,144 @@ namespace NKikimr::NDataShard {
     }
 
     THnswIndex::~THnswIndex() = default;
+
+    std::unique_ptr<THnswIndex> THnswIndex::CreateView(TRowVersion base,
+            std::shared_ptr<THnswIndexChanges> changes, TRowVersion upper) const {
+        auto view = std::unique_ptr<THnswIndex>(new THnswIndex(std::make_unique<TImpl>(Impl->Graph)));
+        view->SetSnapshot(base, std::move(changes), upper);
+        return view;
+    }
+
+    bool THnswIndex::SharesGraphWith(const THnswIndex& other) const {
+        return Impl->Graph == other.Impl->Graph;
+    }
+
+    bool THnswIndex::HasGraphReservation() const {
+        return bool(Impl->Graph->Reservation);
+    }
+
+    size_t THnswIndex::GraphUseCount() const {
+        return Impl->Graph.use_count();
+    }
+
+    void THnswIndex::SetGraphReservation(std::shared_ptr<void> reservation, bool deferDeletion) {
+        Y_ENSURE(reservation && !Impl->Graph->Reservation && Impl->Graph.use_count() == 1,
+            "Install the graph reservation before sharing storage");
+        Impl->Graph->DeferDeletion = deferDeletion;
+        Impl->Graph->Reservation = std::move(reservation);
+    }
+
+    void THnswIndex::SaveGraph(std::ostream& output) const {
+        TSnapshotStreamBuf buffer(output.rdbuf());
+        std::ostream out(&buffer);
+        out.exceptions(std::ios::badbit | std::ios::failbit);
+        const auto& graph = *Impl->Graph;
+        out.write("YHNSW001", 8);
+        WriteSnapshotWord<ui32>(out, graph.Settings.metric());
+        WriteSnapshotWord<ui32>(out, graph.Dimension);
+        WriteSnapshotWord<ui32>(out, graph.Connectivity);
+        WriteSnapshotWord<ui32>(out, graph.Settings.has_ef_construction()
+            ? graph.Settings.ef_construction() : DefaultHnswEfConstruction);
+        WriteSnapshotWord<ui64>(out, graph.Keys.size());
+        for (size_t i = 0; i < graph.Keys.size(); ++i) {
+            const auto& key = graph.Keys[i];
+            Y_ENSURE(key.size() <= Max<ui32>());
+            WriteSnapshotWord<ui32>(out, key.size());
+            out.write(key.data(), key.size());
+            const auto* data = graph.OwnedObjects[i]->data();
+            for (size_t d = 0; d < graph.Dimension; ++d) {
+                ui32 bits;
+                std::memcpy(&bits, data + d * sizeof(float), sizeof(bits));
+                WriteSnapshotWord<ui32>(out, bits);
+            }
+        }
+        if (graph.Index)
+            graph.Index->SaveTopology(out);
+        WriteSnapshotWord<ui64>(output, buffer.Hash);
+        if (!output)
+            ythrow yexception() << "Cannot write HNSW snapshot";
+    }
+
+    std::unique_ptr<THnswIndex> THnswIndex::LoadGraph(std::istream& input,
+            const VectorIndexSettings& settings, ui64 maxMemoryBytes, TString& error) {
+        try {
+            Ydb::Table::KMeansTreeSettings hnswSettings;
+            *hnswSettings.mutable_settings() = settings;
+            TString validationError;
+            if (settings.vector_type() != VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    || !NKMeans::ValidateHnswSettingsPartial(hnswSettings, validationError)
+                    || !settings.vector_dimension()) {
+                error = "Invalid HNSW snapshot settings: " + validationError;
+                return nullptr;
+            }
+            TSnapshotStreamBuf buffer(input.rdbuf());
+            std::istream in(&buffer);
+            char magic[8];
+            if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, "YHNSW001", 8))
+                ythrow yexception() << "Unsupported HNSW snapshot format";
+            const auto metric = ReadSnapshotWord<ui32>(in);
+            const auto dimension = ReadSnapshotWord<ui32>(in);
+            const auto connectivity = ReadSnapshotWord<ui32>(in);
+            const auto construction = ReadSnapshotWord<ui32>(in);
+            const auto rows = ReadSnapshotWord<ui64>(in);
+            if (metric != static_cast<ui32>(settings.metric()) || dimension != settings.vector_dimension()
+                    || connectivity != (settings.has_m() ? settings.m() : DefaultHnswM)
+                    || construction != (settings.has_ef_construction()
+                        ? settings.ef_construction() : DefaultHnswEfConstruction))
+                ythrow yexception() << "Incompatible HNSW snapshot settings";
+            if (rows > Max<similarity::IdType>() || !maxMemoryBytes
+                    || EstimateMemoryBytes(rows, dimension, connectivity) > maxMemoryBytes)
+                ythrow yexception() << "HNSW snapshot exceeds memory budget";
+            auto space = CreateSpace(settings.metric(), error);
+            if (!space)
+                return nullptr;
+            auto graph = TGraph::Create(std::move(space), dimension);
+            graph->SetSettings(settings);
+            for (ui64 i = 0; i < rows; ++i) {
+                const auto keyBytes = ReadSnapshotWord<ui32>(in);
+                if (keyBytes > maxMemoryBytes || graph->KeyBytes > maxMemoryBytes - keyBytes
+                        || EstimateMemoryBytes(rows, dimension, connectivity,
+                            graph->KeyBytes + keyBytes) > maxMemoryBytes)
+                    ythrow yexception() << "HNSW keys exceed memory budget";
+                TString key = TString::Uninitialized(keyBytes);
+                if (!in.read(key.Detach(), keyBytes))
+                    ythrow yexception() << "Truncated HNSW key";
+                if (graph->KeyToIndex.contains(key))
+                    ythrow yexception() << "Duplicate HNSW key";
+                TString vector = TString::Uninitialized(dimension * sizeof(float));
+                auto* data = vector.Detach();
+                for (ui32 d = 0; d < dimension; ++d) {
+                    const ui32 bits = ReadSnapshotWord<ui32>(in);
+                    std::memcpy(data + d * sizeof(float), &bits, sizeof(bits));
+                }
+                bool allZero = true;
+                for (ui32 d = 0; d < dimension; ++d) {
+                    float value;
+                    std::memcpy(&value, data + d * sizeof(float), sizeof(value));
+                    if (!std::isfinite(value)) {
+                        ythrow yexception() << "Non-finite HNSW vector";
+                    }
+                    allZero &= value == 0;
+                }
+                graph->AddVector(std::move(key), data, allZero);
+            }
+            if (rows) {
+                const ui64 inputs = rows * (ui64(dimension) * sizeof(float) + 128) + graph->KeyBytes;
+                if (inputs >= maxMemoryBytes)
+                    ythrow yexception() << "HNSW snapshot exceeds memory budget";
+                graph->Index = std::make_unique<similarity::Hnsw<float>>(false, *graph->Space, graph->Objects);
+                graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs);
+            }
+            if (ReadSnapshotWord<ui64>(input) != buffer.Hash)
+                ythrow yexception() << "HNSW snapshot checksum mismatch";
+            if (input.peek() != std::char_traits<char>::eof())
+                ythrow yexception() << "Trailing data in HNSW snapshot";
+            return std::unique_ptr<THnswIndex>(new THnswIndex(std::make_unique<TImpl>(std::move(graph))));
+        } catch (const std::exception& ex) {
+            error = ex.what();
+            return nullptr;
+        }
+    }
 
     size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity,
                                            size_t serializedKeyBytes) {
@@ -641,7 +843,7 @@ namespace NKikimr::NDataShard {
             return nullptr;
         }
 
-        auto impl = std::make_unique<TImpl>(std::move(space), dimension);
+        auto graph = TGraph::Create(std::move(space), dimension);
 
         for (const auto& [key, vec] : keysAndVectors) {
             if (cancelled && cancelled->load(std::memory_order_relaxed)) { error = "HNSW build cancelled"; return nullptr; }
@@ -649,20 +851,20 @@ namespace NKikimr::NDataShard {
             if (!view.IsValid() || view.Dimension != dimension) {
                 continue; // Skip malformed/mismatched rows; do not fail the whole build.
             }
-            impl->AddVector(key, view.Data, view.AllZero);
+            graph->AddVector(key, view.Data, view.AllZero);
         }
 
-        if (impl->Size() == 0 && !allowEmpty) {
+        if (graph->Keys.empty() && !allowEmpty) {
             error = "No valid vectors of the expected dimension were found";
             return nullptr;
         }
 
-        if (!impl->Build(settings, cancelled)) {
+        if (!graph->Build(settings, cancelled)) {
             error = "Failed to build HNSW index";
             return nullptr;
         }
 
-        return std::unique_ptr<THnswIndex>(new THnswIndex(std::move(impl)));
+        return std::unique_ptr<THnswIndex>(new THnswIndex(std::make_unique<TImpl>(std::move(graph))));
     }
 
     THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k, TRowVersion version, ui32 efSearch) const {

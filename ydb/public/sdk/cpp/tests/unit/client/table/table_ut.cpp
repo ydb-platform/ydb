@@ -1219,3 +1219,68 @@ TEST(VectorIndexSettings, HnswIndexDefaultsHavePresence) {
     EXPECT_EQ(vector.ef_construction(), 200u);
     EXPECT_EQ(vector.delta_rows(), 10000u);
 }
+
+TEST(VectorIndexSettings, HnswTableBuilderPreservesColumnsAndSettings) {
+    NTable::TKMeansTreeSettings settings;
+    settings.Settings.Metric = NTable::TVectorIndexSettings::EMetric::InnerProduct;
+    settings.Settings.VectorType = NTable::TVectorIndexSettings::EVectorType::Float;
+    settings.Settings.VectorDimension = 200;
+    settings.Settings.MinRows = 0;
+    settings.Settings.M = 24;
+    settings.Settings.EfConstruction = 300;
+    settings.Settings.DeltaRows = 1ULL << 40;
+    settings.Levels = 1;
+    settings.Clusters = 1;
+
+    const auto table = NTable::TTableBuilder()
+                           .AddHnswIndex("plain", {"emb"}, settings)
+                           .AddHnswIndex("covering", {"scope", "emb"}, {"payload"}, settings)
+                           .Build();
+    const auto indexes = table.GetIndexDescriptions();
+    ASSERT_EQ(indexes.size(), 2u);
+
+    Ydb::Table::KMeansTreeSettings expectedSettings;
+    settings.SerializeTo(expectedSettings);
+    for (size_t i = 0; i < indexes.size(); ++i) {
+        const std::string name = i == 0 ? "plain" : "covering";
+        const std::vector<std::string> columns = i == 0
+                                                     ? std::vector<std::string>{"emb"}
+                                                     : std::vector<std::string>{"scope", "emb"};
+        const std::vector<std::string> dataColumns = i == 0
+                                                         ? std::vector<std::string>{}
+                                                         : std::vector<std::string>{"payload"};
+        EXPECT_EQ(indexes[i].GetIndexName(), name);
+        EXPECT_EQ(indexes[i].GetIndexType(), NTable::EIndexType::GlobalHnsw);
+        EXPECT_EQ(indexes[i].GetIndexColumns(), columns);
+        EXPECT_EQ(indexes[i].GetDataColumns(), dataColumns);
+
+        Ydb::Table::TableIndex request;
+        indexes[i].SerializeTo(request);
+        EXPECT_EQ(request.name(), name);
+        EXPECT_EQ(std::vector<std::string>(request.index_columns().begin(), request.index_columns().end()), columns);
+        EXPECT_EQ(std::vector<std::string>(request.data_columns().begin(), request.data_columns().end()), dataColumns);
+        ASSERT_EQ(request.type_case(), Ydb::Table::TableIndex::kGlobalHnswIndex);
+        EXPECT_EQ(request.global_hnsw_index().vector_settings().SerializeAsString(), expectedSettings.SerializeAsString());
+    }
+}
+
+TEST(VectorIndexSettings, HnswDiagnosticOutputIncludesSettings) {
+    NTable::TKMeansTreeSettings settings;
+    settings.Settings.Metric = NTable::TVectorIndexSettings::EMetric::InnerProduct;
+    settings.Settings.VectorType = NTable::TVectorIndexSettings::EVectorType::Float;
+    settings.Settings.VectorDimension = 200;
+    settings.Settings.MinRows = 0;
+    settings.Settings.M = 24;
+    settings.Settings.EfConstruction = 300;
+    settings.Settings.DeltaRows = 1ULL << 40;
+
+    const TString expected = "{ similarity: inner_product, vector_type: float, vector_dimension: 200, "
+                             "min_rows: 0, M: 24, ef_construction: 300, delta_rows: 1099511627776 }";
+    EXPECT_EQ(ToString(settings.Settings), expected);
+    const auto index = NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", settings);
+    const auto output = index.ToString();
+    EXPECT_NE(output.find("vector_settings: { settings: " + std::string(expected)), std::string::npos);
+
+    const NTable::TIndexDescription unconfigured("vidx", NTable::EIndexType::GlobalHnsw, {"emb"});
+    EXPECT_EQ(unconfigured.ToString().find("vector_settings:"), std::string::npos);
+}

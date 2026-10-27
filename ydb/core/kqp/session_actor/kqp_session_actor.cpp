@@ -2425,7 +2425,7 @@ public:
 
         auto executerActor = CreateKqpUnsafeTruncateExecuter(
             tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,
-            QueryState->QueryData->GetAllocState());
+            QueryState->UserRequestContext->TraceId, QueryState->QueryData->GetAllocState());
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

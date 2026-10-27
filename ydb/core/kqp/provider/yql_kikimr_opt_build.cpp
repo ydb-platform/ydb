@@ -121,6 +121,10 @@ struct TKiExploreTxResults {
         hasScheme = false;
         hasData = false;
         for (auto& queryBlock : QueryBlocks) {
+            // Unsafe truncate is a data effect with no TableOperations entry.
+            for (const auto& effect : queryBlock.Effects) {
+                hasData = hasData || effect.Maybe<TKiTruncateTable>();
+            }
             for (auto& node : queryBlock.TableOperations) {
                 auto op = FromString<TYdbOperation>(TString(node.Operation()));
                 hasScheme = hasScheme || (op & KikimrSchemeOps());

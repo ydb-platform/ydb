@@ -986,6 +986,60 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(count), 0u);
     }
 
+    Y_UNIT_TEST_QUAD(WriteErrorStatus, UseQueryService, AfterCommit) {
+        struct TErrorCase {
+            NKikimrDataEvents::TEvWriteResult::EStatus ShardStatus;
+            EStatus ExpectedStatus;
+        };
+        const TErrorCase errorCases[] = {
+            {NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, EStatus::BAD_REQUEST},
+            {NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, EStatus::INTERNAL_ERROR},
+            {NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, EStatus::CANCELLED},
+            {NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, EStatus::ABORTED},
+            {NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, EStatus::INTERNAL_ERROR},
+        };
+
+        for (const auto& errorCase : errorCases) {
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+            settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+            TKikimrRunner kikimr(settings);
+            auto client = GetClient<UseQueryService>(kikimr);
+            auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            kikimr.RunCall([&] { CreateAndFillSharded(session); });
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            bool injected = false;
+            auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+                [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                    auto& record = ev->Get()->Record;
+                    const auto expected = AfterCommit
+                        ? NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                        : NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
+                    if (injected || record.GetStatus() != expected) {
+                        return;
+                    }
+                    record.SetStatus(errorCase.ShardStatus);
+                    record.ClearIssues();
+                    NYql::IssueToMessage(NYql::TIssue("Injected write failure"), record.AddIssues());
+                    injected = true;
+                });
+            auto result = kikimr.RunCall([&] {
+                return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
+            });
+            observer.Remove();
+
+            UNIT_ASSERT(injected);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                AfterCommit ? EStatus::UNDETERMINED : errorCase.ExpectedStatus, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                NKikimrDataEvents::TEvWriteResult::EStatus_Name(errorCase.ShardStatus));
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Injected write failure");
+            // INTERNAL_ERROR closes the failed session; verify the data using a fresh one.
+            auto checkSession = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(checkSession); }), AfterCommit ? 0u : 4u);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(InvalidPrepareCoordinatorRejected, UseQueryService) {
         for (bool mismatch : {false, true}) {
             auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
@@ -1695,6 +1749,45 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         runtime.WaitFor("every outstanding prepare cancelled", [&] { return cancelled.size() == 4; }, TDuration::Seconds(30));
         prepares.Stop().clear();
         UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 4u);
+    }
+
+    Y_UNIT_TEST_TWIN(MixedWithSchemeRejected, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+        TKikimrRunner kikimr(settings);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = ExecuteQuery(session, R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+            TRUNCATE TABLE `/Root/UnsafeTruncateTable` WITH (unsafe = true);
+            CREATE TABLE `/Root/UnsafeTruncateOther` (Key Uint64, PRIMARY KEY (Key));
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "mixed data and scheme operations");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+    }
+
+    Y_UNIT_TEST_QUAD(SystemViewRejected, UseQueryService, RealSystemViewPaths) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        settings.FeatureFlags.SetEnableRealSystemViewPaths(RealSystemViewPaths);
+        TKikimrRunner kikimr(settings);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = ExecuteQuery(session, R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+            TRUNCATE TABLE `/Root/.sys/partition_stats` WITH (unsafe = true);
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "supports row tables only");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
     }
 
     // Truncating an impl table on its own is the one way this statement could produce the very

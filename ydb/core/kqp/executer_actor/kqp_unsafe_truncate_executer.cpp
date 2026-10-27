@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -65,11 +66,12 @@ public:
     TKqpUnsafeTruncateExecuter(
             TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
-            TTxAllocatorState::TPtr txAlloc)
+            const TString& traceId, TTxAllocatorState::TPtr txAlloc)
         : Target(target)
         , Database(database)
         , UserToken(std::move(userToken))
         , UserLockTxId(userLockTxId)
+        , TraceId(traceId)
     {
         YQL_ENSURE(phyTx);
         MainTablePath = phyTx->GetUnsafeTruncate().GetTablePath();
@@ -203,7 +205,9 @@ private:
                 return;
             }
 
-            if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable
+                || entry.TableKind == NSchemeCache::ETableKind::KindUnknown)
+            {
                 ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
                     TStringBuilder() << "Unsafe TRUNCATE TABLE supports row tables only, " << table.Path
                                      << " is not one");
@@ -218,8 +222,7 @@ private:
             // "Cannot truncate index", and any write with "Writing to index implementation tables
             // is not allowed".
             if (!table.IsIndexImplTable
-                && entry.TableKind != NSchemeCache::ETableKind::KindRegularTable
-                && entry.TableKind != NSchemeCache::ETableKind::KindUnknown)
+                && entry.TableKind != NSchemeCache::ETableKind::KindRegularTable)
             {
                 ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
                     TStringBuilder() << "Unsafe TRUNCATE TABLE cannot truncate index implementation table "
@@ -359,6 +362,16 @@ private:
     }
 
     void SendWrites() {
+        // Link the shard-local truncate records to the query, including attempts with a lost reply.
+        YDB_LOG_INFO_CTX_COMP(TlsActivationContext->AsActorContext(), NKikimrServices::DATA_INTEGRITY, "",
+            {"component", "Executer"},
+            {"type", "Request"},
+            {"operation", "UnsafeTruncate"},
+            {"traceId", TraceId},
+            {"phyTxId", ToString(*TxId)},
+            {"tablePath", MainTablePath},
+            {"userSid", UserToken ? UserToken->GetUserSID() : TString()});
+
         // One shard needs no coordinator: an immediate write is already atomic by itself, and the
         // transaction manager explicitly forbids driving a distributed commit in that case
         // (see the CanUseImmediateCommit assert in StartExecute).
@@ -654,8 +667,11 @@ private:
     void ReplyWriteError(const NKikimrDataEvents::TEvWriteResult& record) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetIssues(), issues);
-        ReplyError(Ydb::StatusIds::ABORTED, NYql::TIssuesIds::DEFAULT_ERROR,
+        const auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(record.GetStatus());
+        ReplyError(statusInfo.IsSuccess() ? statusInfo->GetYdbStatusCode() : Ydb::StatusIds::INTERNAL_ERROR,
+            statusInfo.IsSuccess() ? statusInfo->GetIssueCode() : NYql::TIssuesIds::UNEXPECTED,
             TStringBuilder() << "Unsafe truncate failed on shard " << record.GetOrigin()
+                             << " with " << NKikimrDataEvents::TEvWriteResult::EStatus_Name(record.GetStatus())
                              << ": " << issues.ToOneLineString());
     }
 
@@ -749,6 +765,7 @@ private:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const ui64 UserLockTxId;
+    const TString TraceId;
 
     TString MainTablePath;
     TVector<TTableToTruncate> Tables;
@@ -775,11 +792,11 @@ private:
 IActor* CreateKqpUnsafeTruncateExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
-    TTxAllocatorState::TPtr txAlloc)
+    const TString& traceId, TTxAllocatorState::TPtr txAlloc)
 {
     return new TKqpUnsafeTruncateExecuter(
         std::move(phyTx), target, database, std::move(userToken), userLockTxId,
-        std::move(txAlloc));
+        traceId, std::move(txAlloc));
 }
 
 } // namespace NKikimr::NKqp

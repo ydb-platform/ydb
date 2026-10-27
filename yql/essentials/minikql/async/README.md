@@ -82,3 +82,7 @@ readiness alone is not a substitute. A truly waiting task must not self-poll.
 
 The D2 compiler/runtime is in [compute](compute/README.md), a separate target
 above this standalone lifecycle library. Engine bridges are still pending D6.
+
+The D3 owner-driven batching, resource and fairness layer is described in
+[SCHEDULER.md](SCHEDULER.md). It builds on this lifecycle without adding WASM,
+transport, SQL or engine dependencies.

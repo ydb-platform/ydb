@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/async/async.h>
+#include <yql/essentials/minikql/async/scheduler.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
@@ -41,15 +42,34 @@ IComputationNode* WrapAsyncMap(TCallable& callable, const TComputationNodeFactor
 // except notification callbacks run on the task owner with its allocator bound.
 // The owner MUST call BeginTurn once at the START of each compute event, before
 // fetching any stream, including on initial execution and source/timer wakeups.
+struct TExecutionSettings {
+    TSchedulerSettings Scheduler;
+    // Cooperative thread CPU time, in microseconds; zero disables this bound.
+    ui64 CpuBudgetUs = 1000;
+    std::function<ui64()> CpuClock;
+};
+struct TComputeStats {
+    ui64 Turns = 0;
+    ui64 Steps = 0;
+    ui64 CpuBudgetYields = 0;
+    ui64 CpuTimeUs = 0;
+};
 class TExecutionServices {
 public:
-    explicit TExecutionServices(TWakeup enqueue, size_t stepBudget = 1024, TLimits limits = {});
+    explicit TExecutionServices(TWakeup enqueue, size_t stepBudget = 1024, TLimits limits = {}, TExecutionSettings settings = {});
     ~TExecutionServices();
     void RegisterProvider(TString name, std::shared_ptr<IProvider> provider);
     bool HasProvider(TStringBuf name) const;
     void BeginTurn();
+    void EndTurn();
     bool TryStep();
     void RequestRerun();
+    void Flush();
+    bool CanReadInput(ui64 frameBytes);
+    bool CanWaitForMemory() const;
+    std::shared_ptr<TMemoryReservation> ReserveFrame(ui64 bytes);
+    void AccountAllocatorBytes(ui64 bytes);
+    std::optional<TTimePoint> NextDeadline() const;
     ui64 GetTurn() const;
     TSubmission Submit(TStringBuf provider, TRequest request);
     bool IsReady(TOperationId id) const;
@@ -57,6 +77,8 @@ public:
     void CancelAndForget(TOperationId id);
     void Shutdown();
     TStats GetStats() const;
+    TSchedulerStats GetSchedulerStats() const;
+    TComputeStats GetComputeStats() const;
 
 private:
     struct TImpl;

@@ -1,4 +1,4 @@
-# Resumable MiniKQL row computation (D2)
+# Resumable MiniKQL row computation (D2/D3)
 
 This target builds on the D1 operation registry. It provides the internal YQL to
 MiniKQL projection path and an ordered async Stream operator. It does **not**
@@ -72,7 +72,10 @@ an already copied wakeup may arrive after shutdown, as in D1.
 
 At the **start** of every owner compute event, including initial, source and timer
 events, call `BeginTurn()`. It clears the notification gate before draining
-results and replenishes a deterministic instruction-step quantum. This ordering
+results and replenishes both the instruction-step quantum and a cooperative thread
+CPU budget (`CpuBudgetUs`, default 1000 microseconds, zero disables it). The clock
+is injectable for deterministic tests. Call `EndTurn()` before leaving the owner
+event so CPU metrics include its tail and exclude other tasks between events. This ordering
 allows another event to be posted while the current one is still running.
 
 - Runnable work exhausting its quantum explicitly requests a coalesced rerun
@@ -88,9 +91,23 @@ allows another event to be posted while the current one is still running.
 
 There is no thread, timer, sleep or polling loop in this target. Step budgeting
 is cooperative between synchronous fragments, not preemption of arbitrary C++.
-D3 adds batching, measured resource accounting, fair scheduling and engine quotas.
-The D1 limits reserve encoded operation payloads; the D2 window bounds frame
-count, not total allocator usage or arbitrarily large input rows/results.
+D3 adds an owner-driven scheduler with optional native batch capability, provider
+round-robin and per-stream frame round-robin. A frame already doing local work
+advances before more input is read; pending independent operations can still fill
+the bounded window. `Flush()` sends full and partial compatible batches at the
+available-work/CPU Yield boundary. A capacity wait never requests a budget rerun.
+The scheduler limits physical in-flight items until cleanup, separately from
+D1's bound on all tracked entries and encoded payload bytes.
+
+A memory quota accounts for queued/in-flight/ready buffers (one shared lease),
+continuation metadata, and the graph allocator's retained pages. Retained page
+usage is reconciled at Fetch/step boundaries; fragments and source Fetch remain
+cooperative, so temporary allocations inside arbitrary synchronous code require
+the engine allocator's own guard. Providers borrow the accepted request's buffer
+reservation and must reserve additional private buffers explicitly. The quota
+can be shared by owner contexts; actual task/node quota-manager adapters and
+allocator-guard wiring remain D6. See [scheduler contract](../SCHEDULER.md) for
+ownership, wakeup, accounting and metrics details.
 
 ## Unsupported execution modes
 

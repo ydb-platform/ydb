@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     async.cpp
+    resources.cpp
+    scheduler.cpp
 )
 
 END()

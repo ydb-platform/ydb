@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <thread>
+#include <deque>
 
 namespace NKikimr::NMiniKQL::NAsync {
 namespace {
@@ -20,9 +21,13 @@ struct TProvider final: IProvider {
     std::vector<TString> Payloads;
     size_t Cancelled = 0;
     bool Inline = false;
+    std::function<void()> OnStart;
     void Start(TOperationId, std::shared_ptr<const TRequest> request, std::shared_ptr<ICompletion> completion) override {
         Calls.push_back(completion);
         Payloads.push_back(request->Payload);
+        if (OnStart) {
+            OnStart();
+        }
         if (Inline) {
             Reply(Calls.size() - 1);
         }
@@ -36,6 +41,12 @@ struct TProvider final: IProvider {
     }
 };
 
+TExecutionSettings DeterministicSettings() {
+    TExecutionSettings settings;
+    settings.CpuBudgetUs = 0; // functional tests use deterministic step quanta
+    return settings;
+}
+
 struct TFixture {
     TSetup<false> Setup;
     std::atomic<size_t> Events = 0;
@@ -47,8 +58,8 @@ struct TFixture {
     std::vector<NUdf::TUnboxedValue> Output;
     bool Finished = false;
 
-    explicit TFixture(size_t quantum = 1000, TLimits limits = {})
-        : Services(std::make_shared<TExecutionServices>([this](ui64) { ++Events; }, quantum, limits))
+    explicit TFixture(size_t quantum = 1000, TLimits limits = {}, TExecutionSettings settings = DeterministicSettings())
+        : Services(std::make_shared<TExecutionServices>([this](ui64) { ++Events; }, quantum, limits, std::move(settings)))
     {
         Services->RegisterProvider("native", Provider);
         auto* type = Setup.PgmBuilder->NewDataLiteral<ui64>(0).GetStaticType();
@@ -129,6 +140,7 @@ struct TFixture {
                 continue;
             }
             Finished = status == NUdf::EFetchStatus::Finish;
+            Services->EndTurn();
             return;
         }
         UNIT_FAIL("Fetch failed to yield within the quantum");
@@ -188,6 +200,191 @@ struct TYqlFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TResumableComputation) {
+Y_UNIT_TEST(GraphFormsRealBatchesAndFlushesPartialTail) {
+    struct TBatch final: IBatchProvider {
+        std::shared_ptr<TProvider> Scalar;
+        std::vector<size_t> Sizes;
+        TString GetBatchKey(const TRequest&) const override {
+            return "context";
+        }
+        size_t GetMaxBatchSize() const noexcept override {
+            return 64;
+        }
+        void StartBatch(std::vector<TBatchItem> items) override {
+            Sizes.push_back(items.size());
+            for (auto& item : items) {
+                Scalar->Start(item.Id, item.Request, item.Completion);
+            }
+        }
+        void Cancel(TOperationId id) noexcept override {
+            Scalar->Cancel(id);
+        }
+    };
+    TExecutionSettings settings;
+    settings.Scheduler.MaxBatchSize = 8;
+    settings.CpuBudgetUs = 0;
+    TFixture f(10000, {}, settings);
+    auto batch = std::make_shared<TBatch>();
+    batch->Scalar = f.Provider;
+    f.Services->RegisterProvider("batch", batch);
+    auto* type = f.Pb().NewDataLiteral<ui64>(0).GetStaticType();
+    f.Registry.Register({"BatchEcho", type, type, "batch", "echo", 1024});
+    std::vector<ui64> input;
+    for (ui64 i = 0; i < 19; ++i) {
+        input.push_back(i);
+    }
+    f.Provider->Inline = true;
+    f.Build(input, [&](auto row) { return f.Registry.Call(f.Pb(), "BatchEcho", row); }, 64);
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 19);
+    UNIT_ASSERT_VALUES_EQUAL(batch->Sizes.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(batch->Sizes[0], 8);
+    UNIT_ASSERT_VALUES_EQUAL(batch->Sizes[1], 8);
+    UNIT_ASSERT_VALUES_EQUAL(batch->Sizes[2], 3);
+    for (ui64 i = 0; i < 19; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i);
+    }
+}
+Y_UNIT_TEST(MeasuredCpuYieldLetsAnotherTaskRunAfterLastCompletion) {
+    ui64 cpu = 0;
+    TExecutionSettings settings;
+    settings.CpuBudgetUs = 5;
+    settings.CpuClock = [&] { return cpu++; };
+    TFixture f(10000, {}, settings);
+    f.Build({7}, [&](auto row) {
+        auto value = f.Echo(row);
+        for (ui32 i = 0; i < 40; ++i) {
+            value = f.Pb().Add(value, f.Pb().NewDataLiteral<ui64>(1));
+        }
+        return value;
+    });
+    // Prime explicitly: disabling reruns must fail after the last response,
+    // rather than while reaching the first submission.
+    for (size_t i = 0; f.Provider->Calls.empty() && i < 500; ++i) {
+        f.Events.exchange(0);
+        f.Turn();
+    }
+    f.Events.exchange(0);
+    f.Turn(); // consume source EOF before the last completion
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(f.Events.load(), 0);
+    f.Provider->Reply(0); // Last external event. A single worker serves both tasks.
+    std::deque<bool> runnable{true, false};
+    bool coldRanBeforeHotFinished = false;
+    size_t turns = 0;
+    while (!runnable.empty()) {
+        UNIT_ASSERT(++turns < 1000);
+        const bool hot = runnable.front();
+        runnable.pop_front();
+        if (!hot) {
+            coldRanBeforeHotFinished = !f.Finished;
+            continue;
+        }
+        f.Events.exchange(0);
+        f.Turn();
+        if (f.Events.load() && !f.Finished) {
+            runnable.push_back(true);
+        }
+    }
+    UNIT_ASSERT(coldRanBeforeHotFinished);
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT(f.Services->GetComputeStats().CpuBudgetYields > 1);
+    f.Check({47});
+}
+Y_UNIT_TEST(FrameRoundRobinDoesNotStarveShortContinuation) {
+    TExecutionSettings settings;
+    settings.CpuBudgetUs = 0;
+    TFixture f(1, {}, settings);
+    f.Build({1, 2}, [&](auto row) {
+        auto value = f.Echo(row);
+        for (ui32 i = 0; i < 40; ++i) {
+            value = f.Pb().Add(value, f.Pb().NewDataLiteral<ui64>(1));
+        }
+        return f.Pb().If(f.Pb().Equals(row, f.Pb().NewDataLiteral<ui64>(1)), value, f.Echo(f.Echo(row)));
+    });
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 2);
+    bool shortStartedBeforeFirstOutput = false;
+    f.Provider->OnStart = [&] { if (f.Provider->Calls.size() == 3){ shortStartedBeforeFirstOutput = f.Output.empty();
+} };
+    f.Provider->Reply(0);
+    f.Provider->Reply(1);
+    f.Pump();
+    UNIT_ASSERT(shortStartedBeforeFirstOutput);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 3);
+    f.Provider->Reply(2);
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    f.Check({41, 2});
+}
+Y_UNIT_TEST(SlowDownstreamRetainsBoundedResultsWithoutSelfPolling) {
+    TFixture f;
+    f.Build({1, 2, 3, 4, 5, 6, 7, 8}, [&](auto row) { return f.Echo(row); }, 4);
+    f.Turn();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 4);
+    for (size_t i = 0; i < 4; ++i) {
+        f.Provider->Reply(i);
+    }
+    f.Events.exchange(0);
+    f.Services->BeginTurn(); // output blocked: owner drains, but does not Fetch
+    f.Services->EndTurn();
+    UNIT_ASSERT_VALUES_EQUAL(f.Events.load(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 4);
+    UNIT_ASSERT(f.Services->GetSchedulerStats().MemoryBytes > 0);
+    f.Turn(); // output capacity becomes available
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 8);
+    for (size_t i = 4; i < 8; ++i) {
+        f.Provider->Reply(i);
+    }
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    f.Check({1, 2, 3, 4, 5, 6, 7, 8});
+}
+Y_UNIT_TEST(GraphMemoryLimitFailsBeforeProviderAndReleasesOnDestruction) {
+    auto quota = std::make_shared<TMemoryQuota>(1);
+    {
+        TExecutionSettings settings;
+        settings.Scheduler.Quota = quota;
+        TFixture f(1000, {}, settings);
+        f.Build({1}, [&](auto row) { return f.Echo(row); });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(f.Turn(), yexception, "memory limit");
+        UNIT_ASSERT(f.Provider->Calls.empty());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(quota->GetUsed(), 0);
+}
+Y_UNIT_TEST(CpuAccountingExcludesOtherTasksBetweenTurnsAndShutdownRejectsRerun) {
+    ui64 cpu = 0;
+    size_t events = 0;
+    TExecutionSettings settings;
+    settings.CpuClock = [&] { return cpu; };
+    settings.CpuBudgetUs = 5;
+    TExecutionServices services([&](ui64) { ++events; }, 1000, {}, settings);
+    services.BeginTurn();
+    cpu = 3;
+    UNIT_ASSERT(services.TryStep());
+    services.EndTurn();
+    cpu = 1000;
+    services.BeginTurn();
+    cpu = 1002;
+    UNIT_ASSERT(services.TryStep());
+    services.EndTurn();
+    UNIT_ASSERT_VALUES_EQUAL(services.GetComputeStats().CpuTimeUs, 5);
+    services.BeginTurn();
+    cpu += 5;
+    UNIT_ASSERT(!services.TryStep());
+    services.RequestRerun();
+    services.RequestRerun();
+    UNIT_ASSERT_VALUES_EQUAL(events, 1);
+    services.EndTurn();
+    services.Shutdown();
+    UNIT_ASSERT_EXCEPTION_CONTAINS(services.BeginTurn(), yexception, "closed");
+    services.RequestRerun();
+    UNIT_ASSERT_VALUES_EQUAL(events, 1);
+}
 Y_UNIT_TEST(NestedAsyncMapsProgressWithSingleStepQuantum) {
     for (auto depth : {2u, 4u}) {
         for (bool flow : {false, true}) {

@@ -3,6 +3,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <atomic>
+#include <util/system/datetime.h>
 
 namespace NKikimr::NMiniKQL::NAsync {
 
@@ -18,7 +19,14 @@ struct TExecutionServices::TImpl {
         }
     };
     std::shared_ptr<TWakeupGate> Gate;
-    TExecutionContext Context;
+    TScheduler Context;
+    TExecutionSettings Settings;
+    std::shared_ptr<TMemoryReservation> AllocatorMemory;
+    ui64 CpuStart = 0;
+    ui64 CpuSample = 0;
+    TComputeStats Stats;
+    bool CpuExhausted = false;
+    bool Running = false;
     THashSet<TString> Providers;
     THashSet<ui64> Live;
     THashMap<ui64, TResult> Ready;
@@ -27,12 +35,17 @@ struct TExecutionServices::TImpl {
     ui64 Turn = 0;
     bool Closed = false;
 
-    TImpl(TWakeup enqueue, size_t budget, TLimits limits)
+    TImpl(TWakeup enqueue, size_t budget, TLimits limits, TExecutionSettings settings)
         : Gate(std::make_shared<TWakeupGate>(std::move(enqueue)))
-        , Context([gate = Gate](ui64 generation) { gate->Notify(generation); }, limits)
+        , Context([gate = Gate](ui64 generation) { gate->Notify(generation); }, limits, settings.Scheduler)
+        , Settings(std::move(settings))
         , StepBudget(budget)
     {
         Y_ENSURE(budget && Gate->Enqueue, "Async execution requires a budget and an enqueue callback");
+        if (!Settings.CpuClock) {
+            Settings.CpuClock = [] { return ThreadCPUTime(); };
+        }
+        AllocatorMemory = Context.GetQuota()->TryReserve(0);
     }
 
     void Drain() {
@@ -44,8 +57,8 @@ struct TExecutionServices::TImpl {
     }
 };
 
-TExecutionServices::TExecutionServices(TWakeup enqueue, size_t stepBudget, TLimits limits)
-    : Impl_(std::make_unique<TImpl>(std::move(enqueue), stepBudget, limits))
+TExecutionServices::TExecutionServices(TWakeup enqueue, size_t stepBudget, TLimits limits, TExecutionSettings settings)
+    : Impl_(std::make_unique<TImpl>(std::move(enqueue), stepBudget, limits, std::move(settings)))
 {
 }
 TExecutionServices::~TExecutionServices() {
@@ -63,20 +76,79 @@ void TExecutionServices::BeginTurn() {
     // Clear BEFORE processing. A completion racing Drain, or a budget rerun
     // requested during this turn, must be able to post the next event.
     Impl_->Gate->Pending.store(false);
+    Impl_->Running = true;
+    Impl_->CpuStart = Impl_->Settings.CpuClock();
+    Impl_->CpuSample = Impl_->CpuStart;
+    Impl_->CpuExhausted = false;
+    ++Impl_->Stats.Turns;
     Impl_->Steps = Impl_->StepBudget;
     ++Impl_->Turn;
+    Impl_->Context.ExpireDeadlines();
     Impl_->Drain();
+    Flush();
+}
+void TExecutionServices::EndTurn() {
+    if (!Impl_->Running) {
+        return;
+    }
+    Impl_->Stats.CpuTimeUs += Impl_->Settings.CpuClock() - Impl_->CpuSample;
+    Impl_->Running = false;
 }
 bool TExecutionServices::TryStep() {
     Y_ENSURE(!Impl_->Closed && Impl_->Turn, "Async execution requires BeginTurn");
+    const auto now = Impl_->Settings.CpuClock();
+    Impl_->Stats.CpuTimeUs += now - Impl_->CpuSample;
+    Impl_->CpuSample = now;
+    if (Impl_->Settings.CpuBudgetUs && now - Impl_->CpuStart >= Impl_->Settings.CpuBudgetUs) {
+        if (!Impl_->CpuExhausted) {
+            ++Impl_->Stats.CpuBudgetYields;
+        }
+        Impl_->CpuExhausted = true;
+        return false;
+    }
     if (!Impl_->Steps) {
         return false;
     }
     --Impl_->Steps;
+    ++Impl_->Stats.Steps;
     return true;
 }
 void TExecutionServices::RequestRerun() {
     Impl_->Gate->Notify(Impl_->Context.GetGeneration());
+}
+void TExecutionServices::Flush() {
+    if (Impl_->Context.Flush([this] { return TryStep(); })) {
+        RequestRerun();
+    }
+}
+bool TExecutionServices::CanWaitForMemory() const {
+    return Impl_->Settings.Scheduler.Quota || Impl_->Context.GetStats().TrackedOperations || !Impl_->Live.empty();
+}
+bool TExecutionServices::CanReadInput(ui64 frameBytes) {
+    const auto quota = Impl_->Context.GetQuota();
+    Y_ENSURE(frameBytes <= quota->GetLimit() && Impl_->AllocatorMemory->GetBytes() <= quota->GetLimit() - frameBytes, "Async frame exceeds memory limit");
+    const auto generation = Impl_->Context.GetGeneration();
+    if (quota->CanReserve(frameBytes, generation, [gate = Impl_->Gate, generation] { gate->Notify(generation); })) {
+        return true;
+    }
+    return false;
+}
+std::shared_ptr<TMemoryReservation> TExecutionServices::ReserveFrame(ui64 bytes) {
+    auto reservation = Impl_->Context.GetQuota()->TryReserve(bytes);
+    Y_ENSURE(reservation, "Async frame exceeds available memory");
+    return reservation;
+}
+void TExecutionServices::AccountAllocatorBytes(ui64 bytes) {
+    Y_ENSURE(Impl_->AllocatorMemory->Resize(bytes), "Async graph exceeds memory limit");
+}
+std::optional<TTimePoint> TExecutionServices::NextDeadline() const {
+    return Impl_->Context.NextDeadline();
+}
+TSchedulerStats TExecutionServices::GetSchedulerStats() const {
+    return Impl_->Context.GetSchedulerStats();
+}
+TComputeStats TExecutionServices::GetComputeStats() const {
+    return Impl_->Stats;
 }
 ui64 TExecutionServices::GetTurn() const {
     return Impl_->Turn;

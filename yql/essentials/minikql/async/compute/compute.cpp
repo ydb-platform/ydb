@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <util/stream/str.h>
 #include <deque>
+#include <algorithm>
 
 namespace NKikimr::NMiniKQL::NAsync {
 namespace {
@@ -16,6 +17,7 @@ struct TStep {
     TType* Type = nullptr;
 };
 struct TFrame {
+    std::shared_ptr<TMemoryReservation> Reservation;
     NUdf::TUnboxedValue Row;
     std::vector<NUdf::TUnboxedValue> Values;
     std::vector<bool> Done;
@@ -156,6 +158,10 @@ public:
                     frame.Operation = submitted.Id;
                     frame.AdmissionWait = false;
                     return;
+                case EAdmission::ResourceLimit:
+                    frame.AdmissionWait = true;
+                    frame.AdmissionTurn = Services_->GetTurn();
+                    return;
                 case EAdmission::OperationsLimit:
                 case EAdmission::BytesLimit:
                     // Retry on a new owner turn, including cleanup credit
@@ -172,7 +178,13 @@ public:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             MKQL_ENSURE(!Failed_, "AsyncMap execution has failed");
             try {
-                return FetchImpl(result);
+                Services_->AccountAllocatorBytes(Ctx_.HolderFactory.GetMemoryUsed());
+                auto status = FetchImpl(result);
+                Services_->AccountAllocatorBytes(Ctx_.HolderFactory.GetMemoryUsed());
+                if (status == NUdf::EFetchStatus::Yield) {
+                    Services_->Flush();
+                }
+                return status;
             } catch (...) {
                 Failed_ = true;
                 for (auto& frame : Frames_) {
@@ -193,6 +205,9 @@ public:
                 if (!Frames_.empty() && Frames_.front().Stack.empty()) {
                     result = std::move(Frames_.front().Values[Map_.Program_.Root]);
                     Frames_.pop_front();
+                    if (FrameCursor_) {
+                        --FrameCursor_;
+                    }
                     return NUdf::EFetchStatus::Ok;
                 }
                 if (Frames_.empty() && Finished_) {
@@ -201,8 +216,11 @@ public:
                 bool didWork = false;
                 // A bounded window admits independent rows while earlier rows
                 // wait. Output order is input order; state lives in each frame.
-                for (auto& frame : Frames_) {
+                for (size_t visited = 0; visited < Frames_.size(); ++visited) {
+                    FrameCursor_ %= Frames_.size();
+                    auto& frame = Frames_[FrameCursor_];
                     if (!Runnable(frame)) {
+                        FrameCursor_ = (FrameCursor_ + 1) % Frames_.size();
                         continue;
                     }
                     if (!Services_->TryStep()) {
@@ -210,9 +228,17 @@ public:
                         return NUdf::EFetchStatus::Yield;
                     }
                     Step(frame);
+                    Services_->AccountAllocatorBytes(Ctx_.HolderFactory.GetMemoryUsed());
+                    FrameCursor_ = (FrameCursor_ + 1) % Frames_.size();
                     didWork = true;
                 }
-                if (!Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames) {
+                const bool runnable = std::any_of(Frames_.begin(), Frames_.end(), [&](const auto& frame) { return Runnable(frame); });
+                const ui64 frameBytes = sizeof(TFrame) + 64 + Map_.Steps_.size() * (sizeof(NUdf::TUnboxedValue) + sizeof(ui32) + 1);
+                if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames && !Services_->CanReadInput(frameBytes)) {
+                    SourceWaiting_ = true;
+                    SourceWaitTurn_ = Services_->GetTurn();
+                }
+                if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames) {
                     if (!SourceFetchCharged_ && !Services_->TryStep()) {
                         Services_->RequestRerun();
                         return NUdf::EFetchStatus::Yield;
@@ -234,6 +260,8 @@ public:
                         case NUdf::EFetchStatus::Ok: {
                             SourceFetchCharged_ = false;
                             TFrame frame;
+                            frame.Reservation = Services_->ReserveFrame(frameBytes);
+                            frame.Stack.reserve(Map_.Steps_.size());
                             frame.Row = std::move(row);
                             frame.Values.resize(Map_.Steps_.size());
                             frame.Done.resize(Map_.Steps_.size());
@@ -245,6 +273,8 @@ public:
                     didWork = true;
                 }
                 if (!didWork) {
+                    const bool admissionBlocked = std::any_of(Frames_.begin(), Frames_.end(), [](const auto& frame) { return frame.AdmissionWait; });
+                    MKQL_ENSURE(!admissionBlocked || Services_->CanWaitForMemory(), "Async continuation cannot fit resource limits");
                     return NUdf::EFetchStatus::Yield;
                 }
             }
@@ -268,6 +298,7 @@ public:
         NUdf::TUnboxedValue Source_;
         const TAsyncMap& Map_;
         std::deque<TFrame> Frames_;
+        size_t FrameCursor_ = 0;
         bool Failed_ = false;
         bool Finished_ = false;
         bool SourceWaiting_ = false;

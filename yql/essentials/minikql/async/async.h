@@ -11,6 +11,7 @@
 #include <vector>
 
 namespace NKikimr::NMiniKQL::NAsync {
+class TMemoryReservation;
 
 using TTimePoint = std::chrono::steady_clock::time_point;
 using TClock = std::function<TTimePoint()>;
@@ -46,6 +47,7 @@ struct TResult {
     EOutcome Outcome = EOutcome::Success;
     EError Error = EError::None;
     TString Payload;
+    std::shared_ptr<TMemoryReservation> Reservation = {};
 };
 
 // Owned, allocator-independent bytes. Operation identifies a provider-specific
@@ -55,6 +57,9 @@ struct TRequest {
     TString Payload;
     ui64 MaxResponseBytes = 0;
     std::optional<TTimePoint> Deadline;
+    // Scheduler-owned buffer lease, shared with results/physical cleanup.
+    // Providers may borrow it for these buffers, never spend it on another call.
+    std::shared_ptr<TMemoryReservation> Reservation = {};
 };
 
 class ICompletion {
@@ -98,6 +103,8 @@ enum class EAdmission {
     OperationsLimit,
     BytesLimit,
     DeadlineExceeded,
+    ResourceLimit,
+    RequestTooLarge,
 };
 
 struct TSubmission {

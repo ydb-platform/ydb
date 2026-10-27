@@ -79,7 +79,7 @@ struct TState {
             payload.clear();
         }
         entry.Finished = true;
-        entry.Result = TResult{{Generation, sequence}, outcome, error, std::move(payload)};
+        entry.Result = TResult{{Generation, sequence}, outcome, error, std::move(payload), entry.Request->Reservation};
         Ready.push_back(sequence);
         return Notify();
     }
@@ -111,6 +111,7 @@ struct TState {
     void Release(TOperationId id) noexcept {
         const auto now = Clock();
         TWakeup notify;
+        std::shared_ptr<const TRequest> releasedRequest;
         {
             std::lock_guard guard(Mutex);
             const auto it = Entries.find(id.Sequence);
@@ -120,7 +121,7 @@ struct TState {
             auto& entry = it->second;
             notify = Finish(id.Sequence, entry, EOutcome::Error, EError::Abandoned, {}, now);
             entry.Released = true;
-            entry.Request.reset();
+            releasedRequest = std::move(entry.Request);
             const bool returnsCredits = entry.Taken;
             EraseIfDone(it);
             if (returnsCredits) {
@@ -189,11 +190,15 @@ TExecutionContext::~TExecutionContext() {
     // Discard owner results, but tokens keep physical reservations/input alive
     // until provider cleanup. They contain no pointer back to this context.
     auto& state = *Impl->State;
+    std::vector<TResult> discarded;
     std::lock_guard guard(state.Mutex);
     state.Ready.clear();
     for (auto it = state.Entries.begin(); it != state.Entries.end();) {
         auto current = it++;
         current->second.Taken = true;
+        if (current->second.Result) {
+            discarded.push_back(std::move(*current->second.Result));
+        }
         current->second.Result.reset();
         state.EraseIfDone(current);
     }

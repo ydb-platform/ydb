@@ -89,6 +89,82 @@ void CheckBlobStateCase(const TStates& states, const TCopies& copies, const TCop
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
+
+    Y_UNIT_TEST(FullSyncQuorumUsesNormalSourcesInN1RF) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TGroupVDisks = TBlobStorageGroupInfo::TGroupVDisks;
+        for (ui32 sourceRealm = 0; sourceRealm < 3; ++sourceRealm) {
+            std::array<TFailRealm::EState, 3> states{TFailRealm::F, TFailRealm::F, TFailRealm::F};
+            states[sourceRealm] = TFailRealm::N1;
+            states[(sourceRealm + 1) % 3] = TFailRealm::R;
+            const auto info = MakeInfo(states);
+            const auto& topology = info.GetTopology();
+            TGroupVDisks synced(&topology);
+            UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
+            // Replies from R and F cannot replace the surviving normal source.
+            for (ui32 disk = 0; disk < info.GetTotalVDisksNum(); ++disk) {
+                const auto vdiskId = info.GetVDiskId(disk);
+                if (vdiskId.FailRealm != sourceRealm) {
+                    synced |= TGroupVDisks(&topology, vdiskId);
+                }
+            }
+            UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
+            const auto& domains = topology.FailRealms[sourceRealm].FailDomains;
+            for (ui32 domain = 0; domain < domains.size(); ++domain) {
+                for (const auto& disk : domains[domain].VDisks) {
+                    synced |= TGroupVDisks(&topology, info.GetVDiskId(disk.OrderNumber));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced),
+                    domain + 1 == domains.size());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OsirisRestoresDurabilityInsteadOfWriteQuorum) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        auto checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
+            EMirror3dcLayout::LAYOUT_111_22, EMirror3dcLayout::LAYOUT_111_22);
+        UNIT_ASSERT(checker);
+        TSubgroupPartLayout parts;
+        parts.AddItem(0, 0, type);
+        parts.AddItem(3, 0, type);
+        parts.AddItem(1, 1, type);
+        parts.AddItem(4, 1, type);
+        UNIT_ASSERT(checker->CheckQuorumForLayout(parts)); // W is satisfied by 2+2.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 2), 1u << 2); // D requires 1+1+1.
+        parts.AddItem(2, 2, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 5), 0);
+
+        checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_11_2);
+        TSubgroupPartLayout degraded;
+        degraded.AddItem(0, 0, type);
+        degraded.AddItem(1, 1, type);
+        UNIT_ASSERT(!checker->CheckQuorumForLayout(degraded)); // W requires 2+2.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 3), 0); // D only requires 1+1.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 2), 0); // F is excluded.
+    }
+
+    Y_UNIT_TEST(OsirisRequiresAnActiveSourceAndUsesRecoveringRealmWhenNeeded) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_0);
+        UNIT_ASSERT(checker);
+        TSubgroupPartLayout parts;
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 0);
+        parts.AddItem(2, 2, type); // A source in F cannot be used.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 0);
+        parts.AddItem(0, 0, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 1), 1u << 1);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 3), 0);
+        parts.AddItem(1, 1, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
+    }
     Y_UNIT_TEST(NormalGroupFailuresMatchLegacy) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});
         const auto& legacy = info.GetTopology().GetQuorumChecker();

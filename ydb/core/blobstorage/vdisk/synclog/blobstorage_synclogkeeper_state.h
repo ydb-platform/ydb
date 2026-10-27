@@ -70,6 +70,7 @@ namespace NKikimr {
 
             // incoming events
             void TrimTailEvent(ui64 trimTailLsn);
+            void AdvanceRecoveryBase(ui64 lsn);
             void BaldLogEvent(bool dropChunksExplicitly);
             void CutLogEvent(ui64 freeUpToLsn);
             void RetryCutLogEvent();
@@ -130,6 +131,7 @@ namespace NKikimr {
             TCommitHistory LastCommit;
             // all vdisk peers synced with this lsn, i.e. confirmed lsn
             ui64 TrimTailLsn = 0;
+            ui64 RecoveryBaseLsn = 0;
             // last request to cut log from Yard/PDisk
             ui64 FreeUpToLsn = 0;
             // actions we must apply but have not applied yet

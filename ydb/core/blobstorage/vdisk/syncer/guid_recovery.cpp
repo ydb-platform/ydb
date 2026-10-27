@@ -2,6 +2,8 @@
 #include "guid_proxyobtain.h"
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncquorum.h"
+#include "guid_history.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 
 #include <ydb/library/actors/core/interconnect.h>
@@ -334,20 +336,21 @@ namespace NKikimr {
                 QuorumTracker.Update(vdisk);
             }
 
-            void RunSurveyOfAllVDisks(std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func) {
-                for (auto &x : Neighbors) {
-                    func(x);
+            bool ExpectsResponse(const TVDiskID& vdisk, const TActorId& proxy) const {
+                const auto& neighbor = Neighbors[vdisk].Get();
+                return !neighbor.Obtained && neighbor.ProxyId == proxy;
+            }
+
+            void ResetResponses() {
+                QuorumTracker.Clear();
+                for (auto& neighbor : Neighbors) {
+                    neighbor.Get() = TNeighborVDiskState();
                 }
             }
 
-            void ReconfigureAllWorkingProxies(
-                        std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func)
-            {
+            void RunSurveyOfAllVDisks(std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func) {
                 for (auto &x : Neighbors) {
-                    const auto &v = x.Get();
-                    if (!v.Obtained) {
-                        func(x);
-                    }
+                    func(x);
                 }
             }
 
@@ -369,12 +372,24 @@ namespace NKikimr {
 
 
             // calculates final decision
-            TDecision ReachAVerdict() const {
+            TDecision ReachAVerdict(TVDiskEternalGuid historicalGuid = 0) const {
                 Y_VERIFY_S(QuorumTracker.HasQuorum(), VDiskLogPrefix);
 
                 TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision();
                 if (quorumDecision.IsInconsistent) {
                     return TDecision::Inconsistency(quorumDecision.Explanation);
+                }
+
+                if (historicalGuid != TVDiskEternalGuid()) {
+                    if (quorumDecision.Guid != TVDiskEternalGuid() && quorumDecision.Guid != historicalGuid) {
+                        return TDecision::Inconsistency("Current GUID disagrees with durable GUID history");
+                    }
+                    if (quorumDecision.State != TSyncVal::Final) {
+                        // History proves prior existence, but contributes no votes. Publish the old GUID
+                        // to the current quorum before taking the LostData/Good path.
+                        return HandleQuorumInProgress(TVDiskQuorumDecision::InProgress(historicalGuid,
+                            EFirstRunStep::ACTION_WriteFinalToQuorum));
+                    }
                 }
 
                 switch (quorumDecision.State) {
@@ -626,6 +641,7 @@ namespace NKikimr {
             enum EPhase {
                 PhaseNotSet,
                 PhaseObtainGuid,
+                PhaseCommitHistory,
                 PhaseFirstRun,
                 PhaseSettleDataLoss
             };
@@ -635,6 +651,15 @@ namespace NKikimr {
             const TActorId CommitterId;
             const TActorId NotifyId;
             TDecisionMaker DecisionMaker;
+            NKikimrBlobStorage::TSyncGuidHistory SavedHistory;
+            NKikimrBlobStorage::TSyncGuidHistory History;
+            TBlobStorageGroupInfo::TGroupVDisks HistorySources;
+            TBlobStorageGroupInfo::TGroupVDisks LegacySources;
+            bool RestoreHistory = false;
+            bool HistoryValid = true;
+            bool RestartSurveyAfterCommit = false;
+            bool HistoryCommitted = false;
+            bool HistoryComplete = false;
             std::unique_ptr<TDecision> Decision;
             EPhase Phase = PhaseNotSet;
             TActorId FirstRunActorId;
@@ -648,12 +673,28 @@ namespace NKikimr {
                 YDB_LOG_INFO_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
                 SUBLOGLINE(NotifyId, ctx, { stream << "GuidRecovery: START"; });
 
-                // run Obtain VDisk Guid proxy for every VDisk in the group
+                StartSurvey(ctx);
+            }
+
+            void StartSurvey(const TActorContext& ctx) {
+                RestoreHistory = GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                    && GInfo->GetFailRealmState(VCtx->ShortSelfVDisk.FailRealm)
+                        == NKikimrBlobStorage::TGroupInfo::TFailRealm::R;
+                History.Clear();
+                HistoryValid = true;
+                HistoryComplete = false;
+                for (const auto& witness : SavedHistory.GetWitnesses()) {
+                    HistoryValid &= MergeGuidWitness(*GInfo, witness, &History);
+                }
+                HistorySources = TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology());
+                LegacySources = TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology());
+                // Run a new survey after reconfiguration; old proxy replies cannot satisfy it.
                 auto runProxyForVDisk = [this, &ctx] (TVDiskInfo<TNeighborVDiskState>& x) {
                     auto selfVDiskId = GInfo->GetVDiskId(VCtx->ShortSelfVDisk);
                     auto vd = GInfo->GetVDiskId(x.OrderNumber);
                     auto aid = GInfo->GetActorId(x.OrderNumber);
-                    auto proxyActor = CreateProxyForObtainingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID);
+                    auto proxyActor = CreateProxyForObtainingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID,
+                        RestoreHistory);
                     auto actorId = ctx.Register(proxyActor);
                     x.Get().SetActorID(actorId);
                 };
@@ -665,22 +706,10 @@ namespace NKikimr {
 
             void HandleObtainGuidQuorumMode(TEvVGenerationChange::TPtr &ev,
                                             const TActorContext &ctx) {
-                // save new Group Info
+                DecisionMaker.AbandomOngoingRequests(ctx);
                 GInfo = ev->Get()->NewInfo;
-
-                // reconfigure every proxy that hasn't returned a value yet
-                const TString& logPrefix = VCtx->VDiskLogPrefix;
-                auto reconfigureProxy = [&ctx, &logPrefix] (std::unique_ptr<TEvVGenerationChange> &&msg,
-                                                            TVDiskInfo<TNeighborVDiskState>& x) {
-                    Y_VERIFY_S(!x.Get().Obtained, logPrefix);
-                    ctx.Send(x.Get().ProxyId, msg.release());
-                };
-
-                using namespace std::placeholders;
-                auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
-                    reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
-                };
-                DecisionMaker.ReconfigureAllWorkingProxies(call);
+                DecisionMaker.ResetResponses();
+                StartSurvey(ctx);
             }
 
             STRICT_STFUNC(ObtainGuidQuorumFunc,
@@ -695,62 +724,137 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////
             void Handle(TEvVDiskGuidObtained::TPtr& ev, const TActorContext &ctx) {
                 const TEvVDiskGuidObtained *msg = ev->Get();
+                if (msg->VDiskId.GroupGeneration != GInfo->GroupGeneration
+                        || !DecisionMaker.ExpectsResponse(msg->VDiskId, ev->Sender)) {
+                    return;
+                }
 
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: ObtainedFromPeer: " << msg->ToString();
                 });
                 DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State);
-                if (DecisionMaker.GotQuorum()) {
+                if (msg->RecoveredGuid.HasGuid()) {
+                    const auto owner = VDiskIDFromVDiskID(msg->RecoveredGuid.GetOwnerVDiskID());
+                    HistoryValid &= TVDiskIdShort(owner) == VCtx->ShortSelfVDisk
+                        && MergeGuidWitness(*GInfo, msg->RecoveredGuid, &History);
+                }
+                if (RestoreHistory && msg->HasHistory) {
+                    for (const auto& witness : msg->History.GetWitnesses()) {
+                        HistoryValid &= MergeGuidWitness(*GInfo, witness, &History);
+                    }
+                    HistorySources |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), msg->VDiskId);
+                } else if (RestoreHistory) {
+                    // An old responder ignores ReadGuidHistory. Its reply still participates
+                    // in the original GUID quorum, without claiming metadata completeness.
+                    LegacySources |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), msg->VDiskId);
+                }
+                HistoryComplete = RestoreHistory
+                    && TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, HistorySources);
+                const bool historyBlockedByLegacySources = RestoreHistory
+                    && !TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, ~LegacySources);
+                const bool canFinishSurvey = !RestoreHistory || HistoryComplete || historyBlockedByLegacySources;
+                if (DecisionMaker.GotQuorum() && canFinishSurvey) {
                     // kill actors that didn't respond
                     DecisionMaker.AbandomOngoingRequests(ctx);
-                    // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict());
-
-                    // log result of guid recovery
-                    auto pri = NActors::NLog::PRI_INFO;
-                    if (Decision->BadDecision())
-                        pri = NActors::NLog::PRI_ERROR;
-                    YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
-                    SUBLOGLINE(NotifyId, ctx, {
-                        stream << "GuidRecovery: DECISION: " << Decision->ToString();
-                    });
-
-                    // perform some actions depending on result we got
-                    auto firstRunStep = Decision->GetFirstRunStep();
-                    switch (Decision->GetDecision()) {
-                        case EDecision::FirstRun: {
-                            // run or continue first run phase, create an actor
-                            // that performs all that stuff
-                            FirstRunPhase(ctx, firstRunStep);
-                            break;
+                    if (!HistoryValid) {
+                        Finish(ctx, TDecision::Inconsistency("Unable to restore consistent durable GUID history"));
+                    } else if (RestoreHistory && !ReadOnly) {
+                        if (!HistoryComplete) {
+                            YDB_LOG_WARN_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix,
+                                "GUID history is unsupported by a peer; using legacy GUID recovery without metadata completeness"));
                         }
-                        case EDecision::Good: {
-                            // all good, report decision and die
-                            if (firstRunStep == EFirstRunStep::STATE__Terminated) {
-                                Finish(ctx, *Decision);
-                            } else {
-                                FirstRunPhase(ctx, firstRunStep);
-                            }
-                            break;
-                        }
-                        case EDecision::LostData: {
-                            // save locally that we lost the data and keep
-                            // this status until database is recovered (next stages,
-                            // outside of guid recovery)
-                            if (firstRunStep == EFirstRunStep::STATE__Terminated) {
-                                SettleDataLossPhase(ctx);
-                            } else {
-                                FirstRunPhase(ctx, firstRunStep);
-                            }
-                            break;
-                        }
-                        case EDecision::Inconsistency: {
-                            // all bad, report decision and die
-                            Finish(ctx, *Decision);
-                            break;
-                        }
-                        default: Y_ABORT("Unexpected case");
+                        auto commit = std::make_unique<TEvSyncerCommit>();
+                        commit->Modif = TEvSyncerCommit::EGuidHistory;
+                        commit->GuidHistory.CopyFrom(History);
+                        ctx.Send(CommitterId, commit.release());
+                        Become(&TThis::WaitForHistoryCommitStateFunc);
+                        Phase = PhaseCommitHistory;
+                    } else {
+                        ReachAVerdict(ctx);
                     }
+                }
+            }
+
+            void HandleHistoryCommitted(TEvSyncerCommitDone::TPtr&, const TActorContext& ctx) {
+                SavedHistory.CopyFrom(History);
+                HistoryCommitted = true;
+                if (RestartSurveyAfterCommit) {
+                    RestartSurveyAfterCommit = false;
+                    DecisionMaker.ResetResponses();
+                    StartSurvey(ctx);
+                } else {
+                    ReachAVerdict(ctx);
+                }
+            }
+
+            void HandleHistoryGenerationChange(TEvVGenerationChange::TPtr& ev, const TActorContext&) {
+                GInfo = ev->Get()->NewInfo;
+                RestartSurveyAfterCommit = true;
+            }
+
+            STRICT_STFUNC(WaitForHistoryCommitStateFunc,
+                HFunc(TEvents::TEvPoisonPill, HandlePoison)
+                HFunc(TEvSyncerCommitDone, HandleHistoryCommitted)
+                HFunc(TEvVGenerationChange, HandleHistoryGenerationChange)
+                IgnoreFunc(TEvVDiskGuidObtained)
+                HFunc(TEvSublogLine, Handle)
+            )
+
+            void ReachAVerdict(const TActorContext& ctx) {
+                TVDiskEternalGuid historicalGuid;
+                for (const auto& witness : History.GetWitnesses()) {
+                    if (TVDiskIdShort(VDiskIDFromVDiskID(witness.GetOwnerVDiskID())) == VCtx->ShortSelfVDisk) {
+                        historicalGuid = witness.GetGuid();
+                        break;
+                    }
+                }
+                // reach a verdict and save it
+                Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict(historicalGuid));
+
+                // log result of guid recovery
+                auto pri = NActors::NLog::PRI_INFO;
+                if (Decision->BadDecision())
+                    pri = NActors::NLog::PRI_ERROR;
+                YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
+                SUBLOGLINE(NotifyId, ctx, {
+                    stream << "GuidRecovery: DECISION: " << Decision->ToString();
+                });
+
+                // perform some actions depending on result we got
+                auto firstRunStep = Decision->GetFirstRunStep();
+                switch (Decision->GetDecision()) {
+                    case EDecision::FirstRun: {
+                        // run or continue first run phase, create an actor
+                        // that performs all that stuff
+                        FirstRunPhase(ctx, firstRunStep);
+                        break;
+                    }
+                    case EDecision::Good: {
+                        // all good, report decision and die
+                        if (firstRunStep == EFirstRunStep::STATE__Terminated) {
+                            Finish(ctx, *Decision);
+                        } else {
+                            FirstRunPhase(ctx, firstRunStep);
+                        }
+                        break;
+                    }
+                    case EDecision::LostData: {
+                        // save locally that we lost the data and keep
+                        // this status until database is recovered (next stages,
+                        // outside of guid recovery)
+                        if (firstRunStep == EFirstRunStep::STATE__Terminated) {
+                            SettleDataLossPhase(ctx);
+                        } else {
+                            FirstRunPhase(ctx, firstRunStep);
+                        }
+                        break;
+                    }
+                    case EDecision::Inconsistency: {
+                        // all bad, report decision and die
+                        Finish(ctx, *Decision);
+                        break;
+                    }
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 
@@ -767,7 +871,12 @@ namespace NKikimr {
                     stream << "GuidRecovery: FINISH: " << outcome.ToString();
                 });
 
-                ctx.Send(NotifyId, new TEvVDiskGuidRecovered(std::move(outcome)));
+                auto result = std::make_unique<TEvVDiskGuidRecovered>(std::move(outcome));
+                if (HistoryCommitted) {
+                    result->GuidHistory = SavedHistory;
+                    result->GuidHistoryComplete = HistoryComplete;
+                }
+                ctx.Send(NotifyId, result.release());
                 Die(ctx);
             }
 
@@ -873,9 +982,11 @@ namespace NKikimr {
                         ctx.Send(FirstRunActorId, new TEvents::TEvPoisonPill());
                         break;
                     case PhaseSettleDataLoss:
+                    case PhaseCommitHistory:
                         break;
                     default: Y_ABORT("Unexpected case");
                 }
+                Die(ctx);
             }
 
             ////////////////////////////////////////////////////////////////////////
@@ -895,6 +1006,7 @@ namespace NKikimr {
                                     const TActorId &committerId,
                                     const TActorId &notifyId,
                                     const TLocalSyncerState &locallyRecoveredState,
+                                    const NKikimrBlobStorage::TSyncGuidHistory& guidHistory,
                                     bool readOnly)
                 : TActorBootstrapped<TVDiskGuidRecoveryActor>()
                 , VCtx(std::move(vctx))
@@ -905,6 +1017,9 @@ namespace NKikimr {
                                 VCtx->ShortSelfVDisk,
                                 GInfo->PickTopology(),
                                 locallyRecoveredState)
+                , SavedHistory(guidHistory)
+                , HistorySources(&GInfo->GetTopology())
+                , LegacySources(&GInfo->GetTopology())
                 , Decision()
                 , ReadOnly(readOnly)
             {}
@@ -917,9 +1032,10 @@ namespace NKikimr {
                                          const TActorId &committerId,
                                          const TActorId &notifyId,
                                          const NSyncer::TLocalSyncerState &localState,
+                                         const NKikimrBlobStorage::TSyncGuidHistory& guidHistory,
                                          bool readOnly) {
         return new NSyncer::TVDiskGuidRecoveryActor(std::move(vctx), std::move(info), committerId,
-            notifyId, localState, readOnly);
+            notifyId, localState, guidHistory, readOnly);
     }
 
 } // NKikimr

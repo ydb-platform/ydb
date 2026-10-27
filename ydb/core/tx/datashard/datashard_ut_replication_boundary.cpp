@@ -84,6 +84,30 @@ Y_UNIT_TEST_SUITE(ReplicationBoundary) {
         UNIT_ASSERT_VALUES_EQUAL(env.Acquire(1000, {"/Root/Missing"}).status(), Ydb::StatusIds::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST(OperationTimeoutWhileSnapshotIsDelayed) {
+        TEnv env;
+        env.Freeze("One");
+        env.Freeze("Two");
+        using TSnapshot = NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult;
+        TSnapshot::TPtr held;
+        auto observer = env.Runtime.AddObserver<TSnapshot>([&](TSnapshot::TPtr& ev) {
+            held = ev.Release();
+        });
+        Ydb::Replication::AcquireReplicationBoundaryRequest request;
+        request.add_source_paths("/Root/One");
+        request.add_source_paths("/Root/Two");
+        request.set_commit_interval_ms(1000);
+        request.mutable_operation_params()->mutable_operation_timeout()->set_seconds(1);
+        using TCall = NGRpcService::TGrpcRequestOperationCall<Ydb::Replication::AcquireReplicationBoundaryRequest,
+            Ydb::Replication::AcquireReplicationBoundaryResponse>;
+        auto result = NRpcService::DoLocalRpc<TCall>(std::move(request), "/Root", "", env.Runtime.GetActorSystem(0));
+        env.Runtime.WaitFor("hold boundary snapshot", [&] { return bool(held); });
+        // The operation must time out without waiting for the snapshot reply.
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_C(result.HasValue(), "operation_timeout expired while the snapshot reply is still held");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValueSync().operation().status(), Ydb::StatusIds::TIMEOUT);
+    }
+
     void CheckSnapshotRounding(ui64 step, ui64 interval, std::optional<ui64> expected) {
         TEnv env;
         env.Freeze("One");

@@ -20,7 +20,9 @@ class TAcquireReplicationBoundaryRPC
 public:
     using TBase::TBase;
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+
         const auto* request = GetProtoRequest();
         Database = Request_->GetDatabaseName().GetOrElse("");
         if (Database.empty() || request->source_paths().empty() || request->commit_interval_ms() == 0) {

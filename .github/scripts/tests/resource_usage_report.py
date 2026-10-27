@@ -183,9 +183,7 @@ def format_usage(row, key):
     if value is None:
         return "—"
     divisor = 3600 if key == "cpu_seconds" else 2**30
-    expected = row.get("suites", 1) if key == "binary_bytes" else row["chunks"]
-    partial = " †" if row[coverage_key(key)] < expected else ""
-    return f"{value / divisor:,.3f}{partial}"
+    return f"{value / divisor:,.3f}"
 
 
 def write_report(report_path, output_dir, build_output=None):

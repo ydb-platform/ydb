@@ -523,7 +523,8 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
+        AFL_ENSURE(UserRequestContext);
+        if (UserRequestContext->IsStreamingQuery) {
             // Streaming queries are long-running: held-open read locks would be
             // broken by any concurrent write and abort the query.
             return false;

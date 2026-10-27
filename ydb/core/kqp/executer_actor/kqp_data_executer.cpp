@@ -959,8 +959,7 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
 
-        const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
-        if (userRequestContext && userRequestContext->IsStreamingQuery) {
+        if (GetUserRequestContext()->IsStreamingQuery) {
             // Streaming queries are long-running: the snapshot must not be pinned
             // for their whole lifetime. Reads at the acquired step stay valid via
             // the datashard KeepSnapshotTimeout grace window and are executed

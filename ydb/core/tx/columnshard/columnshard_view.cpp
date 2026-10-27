@@ -673,8 +673,16 @@ bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& tx
         NKikimrTxColumnShard::TCutHistoryRequests requests;
         Y_ABORT_UNLESS(requests.ParseFromString(row.GetValue<T::RequestsProto>()));
         for (const auto& request : requests.GetRequests()) {
-            report += request.DebugString();
-            report += "\n";
+            report += TStringBuilder() << "<tr>"
+                                       << "<td>" << request.GetTabletID() << "</td>"
+                                       << "<td>" << request.GetChannel() << "</td>"
+                                       << "<td>" << request.GetGroupID() << "</td>"
+                                       << "<td>" << request.GetFromGeneration() << "</td>"
+                                       << "<td>" << request.GetToGeneration() << "</td>"
+                                       << "<td>" << TInstant::MicroSeconds(request.GetTimestampUs()).ToString() << "</td>"
+                                       << "<td>" << TEscapeHtml(NActors::ActorIdFromProto(request.GetRecipient()).ToString()) << "</td>"
+                                       << "<td>" << request.GetSendingGeneration() << "</td>"
+                                       << "</tr>";
         }
         if (!row.Next()) {
             return false;
@@ -836,10 +844,18 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit << " request sets; Hive confirmation is not tracked)";
+            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit
+                 << " request sets; Hive confirmation is not tracked)";
         }
-        PRE() {
-            html << TEscapeHtml(CutHistoryReport);
+        TABLE_CLASS("table table-bordered table-striped") {
+            TABLEHEAD() {
+                html << "<tr><th>Tablet ID</th><th>Channel</th><th>Group ID</th>"
+                        "<th>From generation (inclusive)</th><th>To generation (exclusive)</th>"
+                        "<th>Recorded at (UTC)</th><th>Recipient</th><th>Sending generation</th></tr>";
+            }
+            TABLEBODY() {
+                html << CutHistoryReport;
+            }
         }
     }
 

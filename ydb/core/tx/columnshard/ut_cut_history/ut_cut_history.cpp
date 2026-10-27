@@ -4,6 +4,7 @@
 #include <ydb/core/tablet/tablet_impl.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -17,10 +18,9 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/string/split.h>
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -304,7 +304,7 @@ public:
             const auto result = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(Sender);
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
             batch.OnBlobWriteResult(id.GetLogoBlobId(), result->Get()->Status);
-            return id.GetLogoBlobId(); // Discard the batch without saving Keep or a portion reference.
+            return id.GetLogoBlobId();   // Discard the batch without saving Keep or a portion reference.
         }
         UNIT_FAIL("Could not allocate an orphan on channel " << channel);
         return {};
@@ -327,19 +327,28 @@ public:
     }
 
     NKikimrProto::EReplyStatus ReadBlobStatus(const TLogoBlobID& blob, ui32 group = OldGroup) {
-        Runtime.Send(new IEventHandle(MakeBlobStorageProxyID(group), Sender,
-            new TEvBlobStorage::TEvGet(blob, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead)));
+        Runtime.Send(new IEventHandle(
+            MakeBlobStorageProxyID(group), Sender, new TEvBlobStorage::TEvGet(blob, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead)));
         const auto result = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvGetResult>(Sender);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
         return result->Get()->Responses[0].Status;
     }
 
-    TString Journal() {
-        Runtime.SendToPipe(
-            TabletId, Sender, new NMon::TEvRemoteHttpInfo("/app?page=cuthistory&TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
-        const auto page = Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(Sender);
-        const auto start = page->Get()->Html.find("<pre>") + 5;
-        return page->Get()->Html.substr(start, page->Get()->Html.find("</pre>", start) - start);
+    std::map<ui64, NKikimrTxColumnShard::TCutHistoryRequests> Journal() {
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(Runtime, TabletId, R"(
+            (
+                (let range '('('Sequence (Null) (Void))))
+                (return (AsList (SetResult 'Result
+                    (SelectRange 'CutHistoryRequests range '('Sequence 'RequestsProto) '()))))
+            )
+        )", result), NKikimrProto::OK);
+        const auto rows = NClient::TValue::Create(result)[0]["List"];
+        std::map<ui64, NKikimrTxColumnShard::TCutHistoryRequests> journal;
+        for (size_t i = 0; i < rows.Size(); ++i) {
+            UNIT_ASSERT(journal[ui64(rows[i]["Sequence"])].ParseFromString(TString(rows[i]["RequestsProto"])));
+        }
+        return journal;
     }
 
     auto Counters() {
@@ -424,29 +433,26 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             GetPipeConfigWithRetries());
         const auto page = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Persisted CutHistory request intents");
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "ToGeneration: " + ToString(f.History.back().first));
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Recipient {");
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "TimestampUs: ");
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "SendingGeneration: " + ToString(f.Controller->GetTheOnlyShard()->Generation()));
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "TabletID: " + ToString(TabletId));
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Channel: " + ToString(FirstDataChannel));
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "FromGeneration: 0");
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "GroupID: " + ToString(OldGroup));
         const auto journal = f.Journal();
         f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
         f.Restart();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 2u);
-        UNIT_ASSERT_VALUES_EQUAL(f.Journal(), journal);
+        const auto afterRestart = f.Journal();
+        UNIT_ASSERT_VALUES_EQUAL(afterRestart.size(), journal.size());
+        for (const auto& [sequence, requests] : journal) {
+            UNIT_ASSERT_VALUES_EQUAL(afterRestart.at(sequence).SerializeAsString(), requests.SerializeAsString());
+        }
     }
 
     Y_UNIT_TEST(AllRequestsCommittedBeforeSending) {
         TFixture f;
         constexpr ui32 intervalCount = CutHistoryJournalLimit + 1;
         f.PrepareClosedIntervals(intervalCount);
+        UNIT_ASSERT(f.Journal().empty());
         TEvFindEmptyHistoryIntervals::TEvContinue::TPtr scan;
-        auto pauseScan = f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>(
-            [&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
+        auto pauseScan =
+            f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>([&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
                 scan = ev.Release();
             });
         std::set<ui32> cutFrom;
@@ -479,12 +485,17 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(cutFrom.size(), intervalCount);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), intervalCount);
-        const auto journal = f.Journal();
-        UNIT_ASSERT(!journal.Contains("Requests {"));
         for (ui32 i = 0; i < intervalCount; ++i) {
             UNIT_ASSERT(cutFrom.contains(f.History[i].first));
-            UNIT_ASSERT_STRING_CONTAINS(journal, "FromGeneration: " + ToString(f.History[i].first) + "\n");
         }
+        const auto journal = f.Journal();
+        UNIT_ASSERT_VALUES_EQUAL(journal.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(journal.begin()->first, 1u);
+        std::set<ui32> persistedFrom;
+        for (const auto& request : journal.begin()->second.GetRequests()) {
+            UNIT_ASSERT(persistedFrom.insert(request.GetFromGeneration()).second);
+        }
+        UNIT_ASSERT(persistedFrom == cutFrom);
     }
 
     Y_UNIT_TEST(JournalKeepsRecentRequestSets) {
@@ -499,12 +510,16 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             f.Restart();
             f.Drive(1);
             generations.push_back(f.Controller->GetTheOnlyShard()->Generation());
-            UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "SendingGeneration: " + ToString(generations.back()) + "\n");
         }
         const auto journal = f.Journal();
-        for (size_t i = 0; i < generations.size(); ++i) {
-            const auto requests = StringSplitter(journal).SplitByString("SendingGeneration: " + ToString(generations[i]) + "\n").Count() - 1;
-            UNIT_ASSERT_VALUES_EQUAL(requests, i == 0 ? 0 : intervalCount);
+        UNIT_ASSERT_VALUES_EQUAL(journal.size(), CutHistoryJournalLimit);
+        auto generation = generations.begin() + 1;
+        for (const auto& [_, requests] : journal) {
+            UNIT_ASSERT_VALUES_EQUAL(requests.RequestsSize(), intervalCount);
+            for (const auto& request : requests.GetRequests()) {
+                UNIT_ASSERT_VALUES_EQUAL(request.GetSendingGeneration(), *generation);
+            }
+            ++generation;
         }
     }
 
@@ -522,8 +537,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         });
         TBlockEvents<TEvPrivate::TEvGarbageCollectionFinished> completion(f.Runtime);
         bool oppositeChannelCollected = false;
-        auto otherChannel = f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbageResult>(
-            [&](TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev) {
+        auto otherChannel =
+            f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbageResult>([&](TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev) {
                 if (ev->Get()->Channel == FirstDataChannel + 1 && ev->Cookie == OldGroup) {
                     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
                     oppositeChannelCollected = true;
@@ -542,7 +557,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT(!orphanChannelGC.empty());
         UNIT_ASSERT(oppositeChannelCollected);
-        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
         if (restartDuringGC) {
             // Reboot with durable preparation, but without completion of the orphan's channel.
             orphanChannelGC.clear();
@@ -554,7 +570,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         }
         UNIT_ASSERT(cuts.empty());
-        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
         orphanChannelGC.Stop().Unblock();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(f.ReadBlobStatus(blob), NKikimrProto::NODATA);
@@ -632,8 +649,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.PrepareTableForDrop();
         f.Restart(NewGroup);
         TEvFindEmptyHistoryIntervals::TEvContinue::TPtr continuation;
-        auto pauseScan = f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>(
-            [&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
+        auto pauseScan =
+            f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>([&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
                 continuation = ev.Release();
             });
         ui32 cuts = 0;
@@ -659,13 +676,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         TFixture f;
         const auto blobs = f.PreparePersistedDeletion();
         f.PrepareGCWithoutSendingDontKeep();
-        auto stopFurtherGC = f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>(
-            [&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-                const auto& gc = *ev->Get();
-                if (gc.TabletId == TabletId && gc.Channel == FirstDataChannel && ev->Cookie == OldGroup && gc.Collect) {
-                    f.Controller->DisableBackground(EBackground::GC);
-                }
-            });
+        auto stopFurtherGC = f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+            const auto& gc = *ev->Get();
+            if (gc.TabletId == TabletId && gc.Channel == FirstDataChannel && ev->Cookie == OldGroup && gc.Collect) {
+                f.Controller->DisableBackground(EBackground::GC);
+            }
+        });
         ui32 cuts = 0;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
             ++cuts;
@@ -850,7 +866,10 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.Send(commit.Release(), 0, true);
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
-        UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "GroupID: " + ToString(OldGroup));
+        const auto journal = f.Journal();
+        UNIT_ASSERT_VALUES_EQUAL(journal.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(journal.begin()->second.RequestsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(journal.begin()->second.GetRequests(0).GetGroupID(), OldGroup);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), 0u);
     }
 

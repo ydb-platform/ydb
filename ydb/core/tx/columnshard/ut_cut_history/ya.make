@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes/max
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/public/lib/value
 )
 
 YQL_LAST_ABI_VERSION()

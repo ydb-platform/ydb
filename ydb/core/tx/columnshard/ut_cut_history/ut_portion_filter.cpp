@@ -41,8 +41,10 @@ Y_UNIT_TEST_SUITE(TFindEmptyHistoryIntervalsPortionFilter) {
         for (const auto& test : cases) {
             schema.ClearIndexes();
             if (test.IndexStorageId) {
-                *schema.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
-                    indexId, "pk_max", *test.IndexStorageId, test.InheritPortionStorage, pkColumnId)).SerializeToProto();
+                *schema.AddIndexes() =
+                    NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
+                                                             indexId, "pk_max", *test.IndexStorageId, test.InheritPortionStorage, pkColumnId))
+                        .SerializeToProto();
             }
             const auto indexInfo = NOlap::TIndexInfo::BuildFromProto(
                 1, schema, NOlap::TTestStoragesManager::GetInstance(), std::make_shared<NOlap::TSchemaObjectsCache>());

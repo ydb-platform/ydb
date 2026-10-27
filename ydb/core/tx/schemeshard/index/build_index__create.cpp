@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_replication_bootstrap.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -86,9 +87,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (!request.GetInternal() || !IsReplicationBootstrapTable(tablePath, Self)) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());

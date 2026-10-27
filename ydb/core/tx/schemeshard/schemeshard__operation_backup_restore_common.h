@@ -703,8 +703,16 @@ public:
                 .IsResolved()
                 .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation();
+
+            bool bootstrapRestore = false;
+            if (checks && internal && TxType == TTxState::TxRestore && path->IsTable()) {
+                const auto& table = context.SS->Tables.at(path.Base()->PathId);
+                bootstrapRestore = table->IsRestore && table->ReplicationConfig().HasBootstrapReplication();
+            }
+            if (!bootstrapRestore) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!internal) {
                 checks

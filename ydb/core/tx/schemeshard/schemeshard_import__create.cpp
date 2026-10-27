@@ -5,6 +5,7 @@
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
+#include "schemeshard_replication_bootstrap.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
@@ -218,7 +219,8 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         explain = checks.GetError();
         return false;
     }
-    return true;
+    NKikimrSchemeOp::TTableReplicationConfig replicationConfig;
+    return GetImportReplicationConfig(dstPath, ss, replicationConfig, explain);
 }
 
 struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {

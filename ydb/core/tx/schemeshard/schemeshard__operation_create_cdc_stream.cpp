@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_replication_bootstrap.h"
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -130,8 +131,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotBackupTable()
-                .NotAsyncReplicaTable()
                 .NotUnderDeleting();
+
+            if (!Transaction.GetInternal() || !IsReplicationBootstrapTable(tablePath, context.SS)) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -552,7 +556,8 @@ public:
             NCdcStreamAtTable::CheckSrcDirOnPropose(
                 checks,
                 tablePath.IsInsideTableIndexPath(false),
-                InitialScan ? OperationId.GetTxId() : InvalidTxId);
+                InitialScan ? OperationId.GetTxId() : InvalidTxId,
+                Transaction.GetInternal() && IsReplicationBootstrapTable(tablePath, context.SS));
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -813,10 +818,12 @@ void DoCreateStreamImpl(
         const TOperationId& opId,
         const TPath& tablePath,
         const bool acceptExisted,
-        const bool initialScan)
+        const bool initialScan,
+        const bool internal)
 {
     auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
     FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+    outTx.SetInternal(internal);
     result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
 }
 
@@ -827,13 +834,15 @@ void DoCreateStream(
         const TPath& workingDirPath,
         const TPath& tablePath,
         const bool acceptExisted,
-        const bool initialScan)
+        const bool initialScan,
+        const bool internal)
 {
-    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan);
+    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan, internal);
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+        outTx.SetInternal(internal);
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
 }
@@ -952,10 +961,12 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool restore)
+    bool restore,
+    bool internal)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
-    if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, restore)) {
+    const bool bootstrapImport = internal && IsReplicationBootstrapTable(tablePath, context.SS);
+    if (auto reject = RejectOnTablePathChecks(context, opId, tablePath, restore || bootstrapImport)) {
         return reject;
     }
 
@@ -1008,7 +1019,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);
+    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted, false, tx.GetInternal());
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -1083,7 +1094,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
     }
 
-    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan);
+    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan, tx.GetInternal());
     DoCreatePqPart(result, op, opId, streamPath, streamName, table, boundaries, acceptExisted);
 
     return result;

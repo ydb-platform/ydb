@@ -5101,6 +5101,162 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(billRecords.empty());
     }
 
+    void CreateBootstrapReplication(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId,
+            const TString& name, const TString& dst, bool global) {
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "%s"
+            Config {
+                InitialScan: false
+                Specific { Targets { SrcPath: "/MyRoot/Source" DstPath: "%s" } }
+                ConsistencySettings { %s {} }
+            }
+        )", name.c_str(), dst.c_str(), global ? "Global" : "Row"));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void ImportBootstrapTables(TTestBasicRuntime& runtime, TTestEnv& env,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+        THashMap<TString, TTestDataWithScheme> backup;
+        TStringBuilder request;
+        request << R"(ImportFromS3Settings { endpoint: "localhost:%d" scheme: HTTP)";
+        for (ui32 i = 1; i <= 3; ++i) {
+            const TString name = TStringBuilder() << "Table" << i;
+            backup.emplace(name, TTestDataWithScheme(TString(R"(
+                columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
+                columns { name: "value" type { optional_type { item { type_id: UINT32 } } } }
+                columns { name: "ts" type { optional_type { item { type_id: UINT64 } } } }
+                primary_key: "key"
+                ttl_settings { value_since_unix_epoch {
+                    column_name: "ts" column_unit: UNIT_SECONDS expire_after_seconds: 300
+                } }
+            )"), {TTestData("1,42,1\n", "")}));
+            request << " items { source_prefix: \"" << name
+                << "\" destination_path: \"/MyRoot/" << name << "\" }";
+        }
+        request << " }";
+        Run(runtime, env, ConvertTestData(backup), request, expectedStatus);
+    }
+
+    Y_UNIT_TEST_FLAG(ImportForMultipleReplications, directPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 1000;
+        TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table1", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", false);
+        CreateBootstrapReplication(runtime, env, txId, "Unrelated", "/MyRoot/Other", true);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
+        ImportBootstrapTables(runtime, env);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        THashSet<ui64> pendingTtlShards;
+        for (ui32 i = 1; i <= 3; ++i) {
+            const TString path = TStringBuilder() << "/MyRoot/Table" << i;
+            const auto desc = DescribePath(runtime, path);
+            UNIT_ASSERT(desc.GetPathDescription().GetTable().GetTTLSettings().HasEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, path), 1);
+            for (const auto shard : GetTableShards(runtime, TTestTxConfig::SchemeShard, path)) {
+                pendingTtlShards.insert(shard);
+            }
+        }
+
+        // Observe both successful and rejected erases: without replication mode,
+        // this test must fail on lost rows rather than wait for a rejection forever.
+        const auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvEraseRowsResponse::EventType) {
+                pendingTtlShards.erase(ev->Get<TEvDataShard::TEvEraseRowsResponse>()->Record.GetTabletID());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        TControlBoard::SetValue(true, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(35));
+        runtime.WaitFor("TTL attempts on all restored tables", [&] { return pendingTtlShards.empty(); });
+        runtime.SetObserverFunc(previousObserver);
+        const auto rows1 = CountRows(runtime, "/MyRoot/Table1");
+        const auto rows2 = CountRows(runtime, "/MyRoot/Table2");
+        const auto rows3 = CountRows(runtime, "/MyRoot/Table3");
+        Cerr << "Rows after TTL: Table1=" << rows1 << ", Table2=" << rows2 << ", Table3=" << rows3 << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(rows3, 0, "TTL must delete the expired row from the ordinary table");
+        UNIT_ASSERT_VALUES_EQUAL_C(rows1, 1, "TTL deleted the restored row before Replication1 attached");
+        UNIT_ASSERT_VALUES_EQUAL_C(rows2, 1, "TTL deleted the restored row before Replication2 attached");
+
+        // The exception only permits the initial import, not another restore
+        // into a replica that has already finished importing its data.
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            InternalTransaction(RestoreRequest(++txId, "/MyRoot", R"(TableName: "Table1")")));
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusSchemeError, "async replica table"}});
+
+        for (ui32 i = 1; i <= 3; ++i) {
+            const auto desc = DescribePath(runtime, TStringBuilder() << "/MyRoot/Table" << i);
+            const auto& table = desc.GetPathDescription().GetTable();
+            const auto& config = table.GetReplicationConfig();
+            if (i == 3) {
+                UNIT_ASSERT(!config.HasBootstrapReplication());
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), i == 1
+                    ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+                    : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+                const auto replication = DescribePath(runtime, TStringBuilder() << "/MyRoot/Replication" << i);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetBootstrapReplication().GetLocalId(),
+                    replication.GetPathDescription().GetSelf().GetPathId());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ImportRejectsAmbiguousReplication) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 1000;
+        TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table2", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", true);
+        ImportBootstrapTables(runtime, env, Ydb::StatusIds::BAD_REQUEST);
+        for (ui32 i = 1; i <= 3; ++i) {
+            TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/Table" << i), {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(ImportReplicationCancellation, drop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 1000;
+        TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table1", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot/Table2", false);
+        ImportBootstrapTables(runtime, env);
+        if (drop) {
+            TestDropReplication(runtime, ++txId, "/MyRoot", "Replication1");
+        } else {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+                Name: "Replication1" State { Done { FailoverMode: FAILOVER_MODE_FORCE } }
+            )");
+        }
+        env.TestWaitNotification(runtime, txId);
+        bool detached = false;
+        for (ui32 attempt = 0; attempt < 60; ++attempt) {
+            const auto description = DescribePath(runtime, "/MyRoot/Table1");
+            if (description.GetPathDescription().GetTable().GetReplicationConfig().GetMode()
+                    == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE) {
+                detached = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(detached, "Restored table was not detached");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 1);
+        if (!drop) {
+            TestDropReplication(runtime, ++txId, "/MyRoot", "Replication1");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 1);
+        }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+    }
+
     void ShouldRestoreSettings(const TString& settings, const TVector<NLs::TCheckFunc>& checks, bool enableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
 
@@ -7337,6 +7493,52 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 });
             }
         };
+    }
+
+    Y_UNIT_TEST_FLAG(ImportReplicationWithIndexAndChangefeed, directPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        ui64 txId = 1000;
+        CreateBootstrapReplication(runtime, env, txId, "Replication", "/MyRoot/Table", true);
+
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+            ttl_settings { value_since_unix_epoch {
+                column_name: "key" column_unit: UNIT_SECONDS expire_after_seconds: 300
+            } }
+            indexes { name: "by_value" index_columns: "value" global_index {} }
+        )", {{"", 1}});
+        THashMap<TString, TTestDataWithScheme> backup{{"/Table", data}};
+        const auto changefeed = GenChangefeed();
+        backup.emplace(changefeed.Changefeed);
+        Run(runtime, env, ConvertTestData(backup), R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_prefix: "Table" destination_path: "/MyRoot/Table" }
+            }
+        )");
+        changefeed.Checker(runtime);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1);
+        const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table/by_value/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto indexData = ReadTable(runtime, *shards.begin(), "indexImplTable", {"value"}, {"key", "value"}, "'ExcFrom ");
+        NKqp::CompareYson(data.Data[0].YsonStr, indexData);
+
+        // Import's internal metadata operations must not allow ordinary DDL on replicas.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription { Name: "user_feed" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatProto }
+        )", {{NKikimrScheme::StatusSchemeError, "async replica table"}});
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            "user_index", {"value"}, Ydb::StatusIds::BAD_REQUEST);
     }
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(

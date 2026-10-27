@@ -228,11 +228,12 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
 }
 
 template <typename TEvResponse, bool IsWrite, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc,
+        TDataShard::ELogThrottlerType logThrottlerType, bool restoreUpload = false) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated()) {
+    if (self->IsReplicated() && !restoreUpload) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);
@@ -295,7 +296,10 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
         return;
     }
 
-    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject)) {
+    // Use the same restore transaction and actor validation as direct-part import.
+    const bool restoreUpload = IsActiveDirectImport(ev->Get()->TxId, ev->Get()->Record.GetTableId(), ev->Sender);
+    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert",
+            TDataShard::ELogThrottlerType::S3UploadRows_Reject, restoreUpload)) {
         Executor()->Execute(new TTxS3UploadRows(this, ev), ctx);
     }
 }

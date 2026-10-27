@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_replication_bootstrap.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
@@ -159,6 +160,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
+    if (tx.GetInternal() && baseTableDescription.GetIsRestore()) {
+        NKikimrSchemeOp::TTableReplicationConfig replicationConfig;
+        TString error;
+        if (!GetImportReplicationConfig(baseTablePath.PathString(), context.SS, replicationConfig, error)) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, error)};
+        }
+        if (replicationConfig.HasBootstrapReplication()) {
+            indexedTable.MutableTableDescription()->MutableReplicationConfig()->CopyFrom(replicationConfig);
+        }
+    }
     {
         TString msg = "invalid table name: ";
         if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {
@@ -421,6 +432,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
+            if (baseTableDescription.GetReplicationConfig().HasBootstrapReplication()
+                && GetIndexType(indexDescription) != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                implTableDesc.MutableReplicationConfig()->CopyFrom(baseTableDescription.GetReplicationConfig());
+            }
             // Index impl tables inherit their base table's detailed metrics level.
             if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && baseTableDescription.HasDetailedMetricsSettings()) {
                 *implTableDesc.MutableDetailedMetricsSettings() = baseTableDescription.GetDetailedMetricsSettings();

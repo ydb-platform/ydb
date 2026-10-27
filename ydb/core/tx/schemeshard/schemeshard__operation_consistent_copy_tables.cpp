@@ -34,9 +34,6 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
         operation->SetCopyFromTable(src.PathString());
         operation->SetOmitFollowers(descr.GetOmitFollowers());
         operation->SetIsBackup(descr.GetIsBackup());
-        if (descr.HasReplicationConfig()) {
-            operation->MutableReplicationConfig()->CopyFrom(descr.GetReplicationConfig());
-        }
         operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
         operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
         if (descr.HasCreateSrcCdcStream()) {
@@ -382,9 +379,6 @@ bool CreateConsistentCopyTables(
 
                 indexDescr.SetOmitFollowers(descr.GetOmitFollowers());
                 indexDescr.SetIsBackup(descr.GetIsBackup());
-                if (descr.HasReplicationConfig() && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
-                    indexDescr.MutableReplicationConfig()->CopyFrom(descr.GetReplicationConfig());
-                }
                 indexDescr.SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
 
                 if (descr.HasTargetPathTargetState()) {

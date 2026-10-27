@@ -363,6 +363,7 @@ private:
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
+    bool HeartbeatRecheckPending = false;
     ui64 CommittingTxId = 0;
     THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
     std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;

@@ -219,7 +219,8 @@ public:
             }
         }
 
-        if (Self->PendingHeartbeats) {
+        if (Self->PendingHeartbeats || Self->HeartbeatRecheckPending) {
+            Self->HeartbeatRecheckPending = false;
             Self->Execute(new TTxHeartbeat(Self), ctx);
         } else {
             Self->ProcessHeartbeatsInFlight = false;
@@ -229,10 +230,14 @@ public:
 }; // TTxHeartbeat
 
 void TController::RunTxHeartbeat(const TActorContext& ctx) {
-    if (!ProcessHeartbeatsInFlight) {
-        ProcessHeartbeatsInFlight = true;
-        Execute(new TTxHeartbeat(this), ctx);
+    if (ProcessHeartbeatsInFlight) {
+        // The current Execute may already have rejected an incomplete quorum.
+        // Registration can finish before its Complete, without a new heartbeat.
+        HeartbeatRecheckPending = true;
+        return;
     }
+    ProcessHeartbeatsInFlight = true;
+    Execute(new TTxHeartbeat(this), ctx);
 }
 
 class TController::TTxCommitChanges: public TTxBase {

@@ -300,6 +300,80 @@ Y_UNIT_TEST_SUITE(ReplicationApplyProgress) {
         runtime.RegisterService(MakeTxProxyID(), proxy);
     }
 
+    Y_UNIT_TEST(RegistrationRechecksCommitAfterHeartbeat) {
+        TApplyEnv env;
+        env.WaitState(TProgress::WAITING_HEARTBEATS);
+        auto& runtime = env.GetRuntime();
+        auto ids = env.Send<TEvService::TEvTxIdResult>(env.TabletId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(1, 0)}));
+        const auto writeTxId = ids->Get()->Record.GetVersionTxIds(0).GetTxId();
+        const auto proxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto commitGate = runtime.Register(new TEventGate(proxy, env.GetSender(), [](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType
+                && ev.Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction().HasCommitWrites();
+        }));
+        runtime.RegisterService(MakeTxProxyID(), commitGate);
+        env.Heartbeat(TRowVersion(10000, 0));
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.WaitState(TProgress::WAITING_COMMITS);
+
+        auto info = env.Send<TEvHive::TEvGetTabletStorageInfoResult>(Tests::Hive,
+            new TEvHive::TEvGetTabletStorageInfo(env.TabletId));
+        const auto& channel = info->Get()->Record.GetInfo().GetChannels(0);
+        const auto storageService = MakeBlobStorageProxyID(channel.GetHistory(channel.HistorySize() - 1).GetGroupID());
+        const auto storageOriginal = runtime.GetLocalServiceId(storageService);
+        const auto cacheService = MakeSchemeCacheID();
+        const auto cacheOriginal = runtime.GetLocalServiceId(cacheService);
+        const auto topicPath = SplitPath(env.TopicPath);
+        const auto cacheGate = runtime.Register(new TEventGate(cacheOriginal, env.GetSender(), [topicPath](IEventHandle& ev) {
+            if (ev.GetTypeRewrite() != TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) { return false; }
+            for (const auto& entry : ev.Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet) {
+                if (entry.Path == topicPath) { return true; }
+            }
+            return false;
+        }));
+        runtime.RegisterService(cacheService, cacheGate);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        auto handshake = runtime.GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
+        UNIT_ASSERT(handshake->Sender != env.Controller);
+        env.Controller = handshake->Sender;
+        env.SendAsync(env.Controller, new TEvService::TEvStatus());
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ui32(env.Describe().GetApplyProgress().state()), ui32(TProgress::INITIALIZING));
+
+        const auto tabletId = env.TabletId;
+        const auto storageGate = runtime.Register(new TEventGate(storageOriginal, env.GetSender(), [tabletId](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvBlobStorage::TEvPut::EventType
+                && ev.Get<TEvBlobStorage::TEvPut>()->Id.TabletID() == tabletId;
+        }));
+        runtime.RegisterService(storageService, storageGate);
+        runtime.RegisterService(cacheService, cacheOriginal);
+        env.SendAsync(cacheGate, new TEvents::TEvWakeup());
+        // CompleteWorkerSet has executed but cannot publish fresh enumeration yet.
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        // Execute a heartbeat while that enumeration's redo is still unconfirmed.
+        env.Heartbeat(TRowVersion(20000, 0));
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        runtime.RegisterService(storageService, storageOriginal);
+        env.SendAsync(storageGate, new TEvents::TEvWakeup());
+        auto progress = env.WaitState(TProgress::WAITING_COMMITS);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!progress.commit_in_progress() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(10));
+            progress = env.Describe().GetApplyProgress();
+        }
+        UNIT_ASSERT_C(progress.worker_set_complete(), progress.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(progress.workers_at_boundary(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(progress.assigned_transactions(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(progress.min_applied_heartbeat().step(), 20000);
+        UNIT_ASSERT_C(progress.commit_in_progress(), "Fresh complete membership and persisted heartbeat did not resume commit: " << progress.DebugString());
+        auto status = new TEvTxUserProxy::TEvProposeTransactionStatus();
+        status->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        runtime.Send(new IEventHandle(env.Controller, env.GetSender(), status, 0, writeTxId));
+        env.WaitState(TProgress::APPLIED);
+        runtime.RegisterService(MakeTxProxyID(), proxy);
+    }
+
     Y_UNIT_TEST(PendingCommitSurvivesRestart) { CheckPendingCommitRestart(false); }
     Y_UNIT_TEST(UnpersistedCommitDeletionSurvivesRestart) { CheckPendingCommitRestart(true); }
 

@@ -16,5 +16,6 @@ After a pull request to the documentation is merged into the `main` branch, the 
 
 - [{#T}](structure.md)
 - [{#T}](genres.md)
+- [{#T}](feature-flags.md)
 - [GitHub documentation](https://docs.github.com/en)
 - [Git documentation](https://git-scm.com/doc)

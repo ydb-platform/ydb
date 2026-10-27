@@ -574,6 +574,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    enum class ENodeListStorageCache {
+        None,
+        All,
+        PoolsOnly,
+        GroupsAndVSlots,
+    };
+
     struct TNodeListStorageOptions {
         std::optional<bool> IncludeStorage;
         bool Database = true;
@@ -582,6 +589,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool EmptyPools = false;
         bool MissingPool = false;
         bool DropVSlots = false;
+        bool RootDatabase = false;
+        bool OldGenerationDonor = false;
+        std::optional<bool> UseCache = false;
+        ENodeListStorageCache Cache = ENodeListStorageCache::None;
+        bool MissingCachedPool = false;
+        bool Redirect = false;
+        std::optional<std::array<ui32, 3>> ExpectedStorageResponses;
     };
 
     void CheckNodeListStorage(const TNodeListStorageOptions& options) {
@@ -600,11 +614,56 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
 
-        const TPathId databaseKey(7000000000, 2);
+        const TPathId databaseKey(options.RootDatabase
+            ? TPathId(runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot, 1)
+            : TPathId(7000000000, 2));
         const TPathId sharedKey(7000000000, 1);
-        const std::vector<ui32> nodeIds = {1, 2, 3, 4, 5, 50001, 50002};
+        const std::vector<ui32> nodeIds = {1, 2, 3, 4, 5, 6, 7, 50001, 50002, 50003};
         std::unordered_set<ui32> storageRequestTypes;
+        std::array<ui32, 3> storageResponses = {};
         bool resolvedSharedDatabase = false;
+        auto makePools = [](bool missingPool) {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
+            for (auto [boxId, poolId] : {std::pair<ui64, ui64>{1, 7}, {1, 8}, {2, 7}}) {
+                auto* pool = response->Record.AddEntries();
+                pool->MutableKey()->SetBoxId(boxId);
+                pool->MutableKey()->SetStoragePoolId(poolId);
+                pool->MutableInfo()->SetName(boxId == 1 && poolId == 7 && !missingPool
+                    ? "storage-pool" : "unrelated-pool");
+            }
+            return response;
+        };
+        auto makeGroups = [] {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetGroupsResponse>();
+            for (ui32 groupId : {0, 10, 20, 30}) {
+                auto* group = response->Record.AddEntries();
+                group->MutableKey()->SetGroupId(groupId);
+                group->MutableInfo()->SetBoxId(groupId == 0 ? 0 : groupId == 30 ? 2 : 1);
+                group->MutableInfo()->SetStoragePoolId(groupId == 0 ? 0 : groupId == 20 ? 8 : 7);
+                group->MutableInfo()->SetGeneration(2);
+            }
+            return response;
+        };
+        auto makeVSlots = [&] {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetVSlotsResponse>();
+            auto addSlot = [&](ui32 nodeId, ui32 groupId, ui32 generation) {
+                auto* slot = response->Record.AddEntries();
+                slot->MutableKey()->SetNodeId(nodeId);
+                slot->MutableKey()->SetPDiskId(1);
+                slot->MutableKey()->SetVSlotId(response->Record.EntriesSize());
+                slot->MutableInfo()->SetGroupId(groupId);
+                slot->MutableInfo()->SetGroupGeneration(generation);
+            };
+            for (auto [nodeId, groupId] : {std::pair<ui32, ui32>{1, 10}, {1, 10},
+                    {2, 10}, {3, 20}, {4, 30}, {6, 0}, {50002, 10}, {50003, 20}}) {
+                addSlot(nodeId, groupId, 2);
+            }
+            if (options.OldGenerationDonor) {
+                // The controller keeps the old generation for donor VSlots.
+                addSlot(7, 10, 1);
+            }
+            return response;
+        };
         const auto isNodeListActor = [&](const TActorId& actorId) {
             return actorId.NodeId() == runtime.GetNodeId(0)
                 && dynamic_cast<TJsonNodeList*>(runtime.FindActor(actorId));
@@ -632,11 +691,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     response->Request->ErrorCount = 0;
                     entry.Status = TSchemeCacheNavigate::EStatus::Ok;
                     entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
-                    entry.Path = {"Root", shared ? "shared" : "database"};
+                    entry.Path = options.RootDatabase ? TVector<TString>{"Root"}
+                        : TVector<TString>{"Root", shared ? "shared" : "database"};
                     entry.DomainInfo = MakeIntrusive<TDomainInfo>(
                         shared ? sharedKey : databaseKey,
                         options.Serverless ? sharedKey : databaseKey);
                     auto domain = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                    const auto key = shared ? sharedKey : databaseKey;
+                    domain->Description.MutableDomainKey()->SetSchemeShard(key.OwnerId);
+                    domain->Description.MutableDomainKey()->SetPathId(key.LocalPathId);
                     if (!options.EmptyPools) {
                         auto* pool = domain->Description.AddStoragePools();
                         pool->SetName(options.Serverless && !shared ? "unused-serverless-pool" : "storage-pool");
@@ -679,62 +742,75 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    ++storageResponses[0];
                     auto& record = event->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
-                    record.ClearEntries();
-                    for (auto [boxId, poolId] : {std::pair<ui64, ui64>{1, 7}, {1, 8}, {2, 7}}) {
-                        auto* pool = record.AddEntries();
-                        pool->MutableKey()->SetBoxId(boxId);
-                        pool->MutableKey()->SetStoragePoolId(poolId);
-                        pool->MutableInfo()->SetName(boxId == 1 && poolId == 7 && !options.MissingPool
-                            ? "storage-pool" : "unrelated-pool");
-                    }
+                    record = makePools(options.MissingPool)->Record;
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    ++storageResponses[1];
                     auto& record = event->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
-                    record.ClearEntries();
-                    for (ui32 groupId : {10, 20, 30}) {
-                        auto* group = record.AddEntries();
-                        group->MutableKey()->SetGroupId(groupId);
-                        group->MutableInfo()->SetBoxId(groupId == 30 ? 2 : 1);
-                        group->MutableInfo()->SetStoragePoolId(groupId == 20 ? 8 : 7);
-                    }
+                    record = makeGroups()->Record;
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    ++storageResponses[2];
                     if (options.DropVSlots) {
                         event.Reset();
                         return;
                     }
                     auto& record = event->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
-                    record.ClearEntries();
-                    for (auto [nodeId, groupId] : {std::pair<ui32, ui32>{1, 10}, {1, 10},
-                            {2, 10}, {3, 20}, {4, 30}, {50002, 10}}) {
-                        auto* slot = record.AddEntries();
-                        slot->MutableKey()->SetNodeId(nodeId);
-                        slot->MutableKey()->SetPDiskId(1);
-                        slot->MutableKey()->SetVSlotId(record.EntriesSize());
-                        slot->MutableInfo()->SetGroupId(groupId);
-                    }
+                    record = makeVSlots()->Record;
                     break;
                 }
             }
         });
 
-        THttpRequest httpRequest(HTTP_METHOD_GET);
+        struct TNodeListHttpRequest : THttpRequest {
+            using THttpRequest::THttpRequest;
+            TString Uri;
+
+            const char* GetURI() const override {
+                return Uri.c_str();
+            }
+        } httpRequest(HTTP_METHOD_GET);
         if (options.Database) {
-            httpRequest.CgiParameters.InsertUnescaped("database", "/Root/database");
+            httpRequest.CgiParameters.InsertUnescaped("database", options.RootDatabase ? "/Root" : "/Root/database");
         }
         if (options.IncludeStorage) {
             httpRequest.CgiParameters.InsertUnescaped("include_storage", *options.IncludeStorage ? "true" : "false");
         }
-        httpRequest.CgiParameters.InsertUnescaped("direct", "true");
-        httpRequest.CgiParameters.InsertUnescaped("use_cache", "false");
+        httpRequest.CgiParameters.InsertUnescaped("direct", options.Redirect ? "false" : "true");
+        if (options.UseCache) {
+            httpRequest.CgiParameters.InsertUnescaped("use_cache", *options.UseCache ? "true" : "false");
+        }
+        httpRequest.Uri = TStringBuilder() << "/viewer/json/nodelist?" << httpRequest.CgiParameters.Print();
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, page.Get(), "/json/nodelist", nullptr);
         NACLibProto::TUserToken token;
         token.SetUserSID(options.ViewerAccess ? "viewer-user" : "database-user");
         const auto sender = runtime.AllocateEdgeActor();
+        if (options.Cache == ENodeListStorageCache::All || options.Cache == ENodeListStorageCache::PoolsOnly) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makePools(options.MissingCachedPool))));
+        }
+        if (options.Cache == ENodeListStorageCache::All || options.Cache == ENodeListStorageCache::GroupsAndVSlots) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makeGroups())));
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makeVSlots())));
+        }
+        if (options.Redirect) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NMon::TEvHttpInfo(monRequest, token.SerializeAsString())));
+            TAutoPtr<IEventHandle> redirectHandle;
+            const auto* redirect = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(redirectHandle);
+            UNIT_ASSERT_C(redirect->Answer.StartsWith("HTTP/1.1 307"), redirect->Answer);
+            UNIT_ASSERT_C(redirect->Answer.Contains(httpRequest.Uri), redirect->Answer);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
+            // The destination receives the same parameters and token with the forwarding header.
+            httpRequest.HttpHeaders.AddHeader("X-Forwarded-From-Node", "1");
+        }
         runtime.Send(new IEventHandle(MakeViewerID(0), sender,
             new NMon::TEvHttpInfo(monRequest, token.SerializeAsString())));
         TAutoPtr<IEventHandle> handle;
@@ -746,13 +822,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
             return;
         }
+        std::array<ui32, 3> expectedResponses = {};
+        if (includeStorage && (!options.EmptyPools || options.RootDatabase)) {
+            expectedResponses = {options.EmptyPools ? 0u : 1u, 1, 1};
+        }
+        if (options.ExpectedStorageResponses) {
+            expectedResponses = *options.ExpectedStorageResponses;
+        }
+        for (size_t index = 0; index < expectedResponses.size(); ++index) {
+            UNIT_ASSERT_VALUES_EQUAL_C(storageResponses[index], expectedResponses[index], index);
+        }
         if (options.MissingPool || options.DropVSlots) {
             UNIT_ASSERT_C(response->Answer.StartsWith(options.DropVSlots ? "HTTP/1.1 504" : "HTTP/1.1 500"), response->Answer);
             UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 3);
             return;
         }
         UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
-        UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), includeStorage && !options.EmptyPools ? 3 : 0);
         UNIT_ASSERT_VALUES_EQUAL(resolvedSharedDatabase, options.Serverless);
         const auto bodyStart = response->Answer.find("\r\n\r\n");
         UNIT_ASSERT(bodyStart != TString::npos);
@@ -767,9 +852,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(node["Location"]["DataCenter"].GetString(), "example-dc");
             UNIT_ASSERT_VALUES_EQUAL(node["Location"]["Rack"].GetString(), "example-rack");
         }
-        const std::set<ui32> expectedIds = !options.Database ? std::set<ui32>(nodeIds.begin(), nodeIds.end())
-            : includeStorage && !options.EmptyPools ? std::set<ui32>{1, 2, 5, 50001}
-            : std::set<ui32>{5, 50001};
+        std::set<ui32> expectedIds = {5, 50001};
+        if (!options.Database) {
+            expectedIds = std::set<ui32>(nodeIds.begin(), nodeIds.end());
+        } else if (includeStorage) {
+            if (!options.EmptyPools) {
+                expectedIds.insert({1, 2, 50002});
+                if (options.OldGenerationDonor) {
+                    expectedIds.insert(7);
+                }
+            }
+            if (options.RootDatabase) {
+                expectedIds.insert(6);
+            }
+        }
         UNIT_ASSERT(actualIds == expectedIds);
     }
 
@@ -781,8 +877,66 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckNodeListStorage({.IncludeStorage = false});
     }
 
-    Y_UNIT_TEST(NodeListStorageIncludesOnlyRelatedStaticNodes) {
+    Y_UNIT_TEST(NodeListStorageIncludesOnlyRelatedNodes) {
         CheckNodeListStorage({.IncludeStorage = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRootWithNamedPools) {
+        CheckNodeListStorage({.IncludeStorage = true, .RootDatabase = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRootWithoutNamedPools) {
+        CheckNodeListStorage({.IncludeStorage = true, .EmptyPools = true, .RootDatabase = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageKeepsOldGenerationDonors) {
+        CheckNodeListStorage({.IncludeStorage = true, .OldGenerationDonor = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageDefaultCacheHit) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
+            .Cache = ENodeListStorageCache::All, .ExpectedStorageResponses = {{0, 0, 0}}});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePartialCacheHit) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::PoolsOnly, .ExpectedStorageResponses = {{0, 1, 1}}});
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageExplicitCacheBypass) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = false,
+            .Cache = ENodeListStorageCache::All});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRefreshesMissingCachedPool) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRefreshesMissingPoolWithPartialCache) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::PoolsOnly, .MissingCachedPool = true,
+            .ExpectedStorageResponses = {{1, 2, 2}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingPoolRefreshIsBounded) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .ExpectedStorageResponses = {{2, 2, 2}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingPoolAfterCacheRefreshFails) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRedirect) {
+        CheckNodeListStorage({.IncludeStorage = true, .Redirect = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRedirectRequiresViewerAccess) {
+        CheckNodeListStorage({.IncludeStorage = true, .ViewerAccess = false, .Redirect = true});
     }
 
     Y_UNIT_TEST(NodeListStorageSharedDatabase) {
@@ -816,14 +970,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(NodeListStorageSwagger) {
         const auto swagger = TJsonNodeList::GetSwagger();
         bool found = false;
+        bool foundCache = false;
         for (const auto& parameter : swagger["get"]["parameters"]) {
             if (parameter["name"].as<std::string>() == "include_storage") {
                 UNIT_ASSERT_VALUES_EQUAL(parameter["schema"]["type"].as<std::string>(), "boolean");
                 UNIT_ASSERT(!parameter["schema"]["default"].as<bool>());
                 found = true;
+            } else if (parameter["name"].as<std::string>() == "use_cache") {
+                UNIT_ASSERT_VALUES_EQUAL(parameter["schema"]["type"].as<std::string>(), "boolean");
+                UNIT_ASSERT(parameter["schema"]["default"].as<bool>());
+                foundCache = true;
             }
         }
         UNIT_ASSERT(found);
+        UNIT_ASSERT(foundCache);
     }
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {

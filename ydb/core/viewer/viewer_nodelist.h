@@ -15,8 +15,23 @@ class TJsonNodeList : public TViewerPipeClient {
     TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> VSlots;
     std::unordered_set<TString> StoragePoolNames;
     bool IncludeStorage = false;
+    bool IncludeRootStaticPool = false;
     using TBase = TViewerPipeClient;
     using TThis = TJsonNodeList;
+
+    enum class EStorageNodesResult {
+        Ok,
+        MissingPool,
+        Error,
+    };
+
+    void RequestStorageData() {
+        if (!StoragePoolNames.empty()) {
+            StoragePools = MakeCachedRequestBSControllerPools();
+        }
+        Groups = MakeCachedRequestBSControllerGroups();
+        VSlots = MakeCachedRequestBSControllerVSlots();
+    }
 
     bool RequestStorageNodes() {
         if (IsStrictDatabaseOnlyRequest() || !Viewer->CheckAccessViewer(GetRequest())) {
@@ -38,31 +53,37 @@ class TJsonNodeList : public TViewerPipeClient {
         for (const auto& pool : domain->Description.GetStoragePools()) {
             StoragePoolNames.insert(pool.GetName());
         }
-        if (!StoragePoolNames.empty()) {
-            StoragePools = MakeCachedRequestBSControllerPools();
-            Groups = MakeCachedRequestBSControllerGroups();
-            VSlots = MakeCachedRequestBSControllerVSlots();
+        const auto& domainKey = domain->Description.GetDomainKey();
+        IncludeRootStaticPool = domainKey.GetSchemeShard() == AppData()->DomainsInfo->GetDomain()->SchemeRoot
+            && domainKey.GetPathId() == 1;
+        if (!StoragePoolNames.empty() || IncludeRootStaticPool) {
+            RequestStorageData();
         }
         return true;
     }
 
-    bool CollectStorageNodes(std::unordered_set<TNodeId>& nodeIds) const {
-        if (StoragePoolNames.empty()) {
-            return true;
+    EStorageNodesResult CollectStorageNodes(std::unordered_set<TNodeId>& nodeIds) const {
+        if (StoragePoolNames.empty() && !IncludeRootStaticPool) {
+            return EStorageNodesResult::Ok;
         }
-        if (!StoragePools.IsOk() || !Groups.IsOk() || !VSlots.IsOk()) {
-            return false;
+        if ((!StoragePoolNames.empty() && !StoragePools.IsOk()) || !Groups.IsOk() || !VSlots.IsOk()) {
+            return EStorageNodesResult::Error;
         }
         auto missingPools = StoragePoolNames;
         std::set<std::pair<ui64, ui64>> poolIds;
-        for (const auto& pool : StoragePools->Record.GetEntries()) {
-            if (StoragePoolNames.contains(pool.GetInfo().GetName())) {
-                poolIds.emplace(pool.GetKey().GetBoxId(), pool.GetKey().GetStoragePoolId());
-                missingPools.erase(pool.GetInfo().GetName());
+        if (IncludeRootStaticPool) {
+            poolIds.emplace(0, 0);
+        }
+        if (StoragePools.IsOk()) {
+            for (const auto& pool : StoragePools->Record.GetEntries()) {
+                if (StoragePoolNames.contains(pool.GetInfo().GetName())) {
+                    poolIds.emplace(pool.GetKey().GetBoxId(), pool.GetKey().GetStoragePoolId());
+                    missingPools.erase(pool.GetInfo().GetName());
+                }
             }
         }
         if (!missingPools.empty()) {
-            return false;
+            return EStorageNodesResult::MissingPool;
         }
         std::unordered_set<ui32> groupIds;
         for (const auto& group : Groups->Record.GetEntries()) {
@@ -71,11 +92,12 @@ class TJsonNodeList : public TViewerPipeClient {
             }
         }
         for (const auto& slot : VSlots->Record.GetEntries()) {
+            // Older generations can still host donor VDisks displayed by /storage/groups.
             if (groupIds.contains(slot.GetInfo().GetGroupId())) {
                 nodeIds.insert(slot.GetKey().GetNodeId());
             }
         }
-        return true;
+        return EStorageNodesResult::Ok;
     }
 
 public:
@@ -142,9 +164,19 @@ public:
 
     void ReplyAndPassAway() override {
         std::unordered_set<TNodeId> storageNodeIds;
-        if (IncludeStorage && IsDatabaseRequest() && (!NodesInfo.IsOk() || !CollectStorageNodes(storageNodeIds))) {
-            TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Failed to resolve database storage nodes"));
-            return;
+        if (IncludeStorage && IsDatabaseRequest()) {
+            const auto result = NodesInfo.IsOk() ? CollectStorageNodes(storageNodeIds) : EStorageNodesResult::Error;
+            if (result == EStorageNodesResult::MissingPool && UseCache) {
+                // Navigation may already know a pool missing from the cached controller snapshot.
+                // Refresh all storage data once, keeping the original request deadline.
+                UseCache = false;
+                RequestStorageData();
+                return;
+            }
+            if (result != EStorageNodesResult::Ok) {
+                TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Failed to resolve database storage nodes"));
+                return;
+            }
         }
         NJson::TJsonValue json;
         json.SetType(NJson::EJsonValueType::JSON_ARRAY);
@@ -155,7 +187,7 @@ public:
         }
         if (NodesInfo.IsOk()) {
             for (auto it = NodesInfo->Nodes.begin(); it != NodesInfo->Nodes.end(); ++it) {
-                const bool storageNode = it->IsStatic && storageNodeIds.contains(it->NodeId);
+                const bool storageNode = storageNodeIds.contains(it->NodeId);
                 if (databaseNodeIds && databaseNodeIds->count(it->NodeId) == 0 && !storageNode) {
                     continue; // skip nodes that are not in the database
                 }
@@ -215,10 +247,16 @@ public:
                     type: string
                 - name: include_storage
                   in: query
-                  description: Also include static nodes hosting groups from the database's storage pools. Requires viewer access for database-scoped requests. Serverless databases use the shared database's pools. Has no effect without a database filter.
+                  description: Also include nodes hosting groups from the database's storage pools, including donor nodes present in controller data. Requires viewer access for database-scoped requests. Serverless databases use the shared database's pools. The root domain also includes its static storage groups. Has no effect without a database filter.
                   schema:
                     type: boolean
                     default: false
+                - name: use_cache
+                  in: query
+                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A missing pool triggers one refresh without the cache. Set false to request fresh controller data. Has no effect without include_storage and a database filter.
+                  schema:
+                    type: boolean
+                    default: true
                 responses:
                     403:
                         description: Insufficient permissions to include storage nodes

@@ -607,7 +607,7 @@ void TStreamingTestFixture::CreatePqSource(const std::string& pqSourceName) {
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "NONE"
             );
-        )sql", "pq_source"_a = pqSourceName, "pq_location"_a = YDB_ENDPOINT, "pq_database_name"_a = YDB_DATABASE));
+        )sql", "pq_source"_a = pqSourceName, "pq_location"_a = YDB_ENDPOINT, "pq_database_name"_a = GetEnv("YDB_DATABASE")));
 }
 
 void TStreamingTestFixture::CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets, const bool createSecrets) {

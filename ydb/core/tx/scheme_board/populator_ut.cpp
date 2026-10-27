@@ -451,6 +451,39 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             "replay of the latest description must use that description's current path for routing");
     }
 
+    Y_UNIT_TEST(ColdDeletionWithPathWaitsForReplicaQuorum) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({ {} }, ReplicasInRingGroup));
+        const auto edge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        TWaitForFirstEvent<TEvStateStorage::TEvListSchemeBoardResult> initialized(runtime);
+        const TActorId populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        initialized.Wait(TDuration::Seconds(10));
+        initialized.Stop();
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
+            return ev->Sender == populator && ev->Cookie == cookie;
+        });
+        TBlockEvents<TUpdateAck> mainAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == edge && ev->Cookie == cookie;
+        });
+
+        auto deletion = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        deletion->Record = GenerateDescribe("/Root/TestPath", pathId, 2);
+        deletion->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+        runtime.Send(new IEventHandle(populator, edge, deletion.Release(), 0, cookie));
+        runtime.WaitFor("cold deletion routed to replicas", [&] {
+            return !updates.empty() || !mainAcks.empty();
+        }, TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(mainAcks.empty(),
+            "a deletion replay with a routing path must not be acknowledged before replica quorum");
+        UNIT_ASSERT_C(!updates.empty(),
+            "a deletion replay with a routing path must be sent to replicas");
+    }
+
     Y_UNIT_TEST(OneRingGroup) {
         TestPopulatorQuorum({ {} });
     }

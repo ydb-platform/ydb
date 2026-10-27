@@ -699,6 +699,39 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
     }
 
+    Y_UNIT_TEST(ReadBadTopicData) {
+        TEnv env;
+
+        // create topic
+        {
+            auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName("consumer")
+                .EndAddConsumer();
+
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+
+        TActorId reader = CreateTopicReader(env, "/Root/topic");
+
+        UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic",
+                    NYdb::NTopic::TWriteMessage::CompressedMessage(
+                        "baddata",
+                        NYdb::NTopic::ECodec::GZIP,   // GZIP has signature and junk message will be rejected
+                        12345)));
+        env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
+
+        {
+            auto ev = env.GetRuntime().template GrabEdgeEventRethrow<TEvYdbProxy::TEvTopicReaderGone>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, reader);
+            UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::EXTERNAL_ERROR);
+        }
+    }
+
     Y_UNIT_TEST_QUAD(ClientModificationsCommitOffset, enableClientModifications, local) {
         TEnv env;
         auto create = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(

@@ -539,11 +539,11 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
-  - from: /getting_started/ansible
+  - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/ansible/initial-deployment
+  - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/deployment-options/ansible/initial-deployment
+  - from: /devops/deployment-options/ansible/initial-deployment(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /db/terraform.md
     to: /dev/terraform.md
@@ -581,11 +581,11 @@ ru:
     to: /integrations/sql-translation/sql-dialect-converter.md
 
 en:
-  - from: /getting_started/ansible
+  - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/ansible/initial-deployment
+  - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
-  - from: /devops/deployment-options/ansible/initial-deployment
+  - from: /devops/deployment-options/ansible/initial-deployment(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md
     to: /recipes/ydb-sdk/debug-jaeger.md

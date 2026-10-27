@@ -516,6 +516,7 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     out_tables = []
     suite_dir = os.path.join(data_path, suite)
     res_dir = get_yql_dir('table_')
+    input_dir = tempfile.mkdtemp(prefix='input_table_')
 
     for splitted in cfg:
         if len(splitted) == 4:
@@ -532,7 +533,7 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
                 yqlrun_file=yqlrun_file,
                 format_name=format_name,
                 def_attr=def_attr,
-                res_dir=res_dir,
+                res_dir=input_dir,
                 attr_postprocess=attr_postprocess
             ))
         if type_name == 'out':

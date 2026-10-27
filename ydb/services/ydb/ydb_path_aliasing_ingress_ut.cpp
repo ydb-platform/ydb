@@ -416,7 +416,7 @@ namespace NKikimr::NGRpcService {
             createTopic("/alias/Root/kfront/dlq");
             createTopic("/alias/Root/other/dlq");
             const char* relativeDlq = "Root/kfront/dlq/";
-            const char* expectedRelativeDlq = enableRelativePaths ? "/Root/kfront/Root/kfront/dlq/" : relativeDlq;
+            const char* expectedRelativeDlq = enableRelativePaths ? "/Root/kfront/Root/kfront/dlq" : relativeDlq;
             auto checkDlq = [&](const char* name, const char* expected) {
                 Ydb::Topic::DescribeTopicRequest describe;
                 describe.set_path("/alias/source");

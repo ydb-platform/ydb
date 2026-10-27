@@ -131,7 +131,7 @@ runs:
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
-        # Temporary comparison: same as #56769 — full small/medium, no remote cache.
+        # Temporary comparison: full small/medium, no remote cache.
         increment: false
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }} --no-bazel-remote-store

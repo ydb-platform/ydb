@@ -38,7 +38,7 @@ public:
     TLocalTopicPartitionReaderActor(
             const TActorId& parent,
             const std::string& database,
-            TEvYdbProxy::TTopicReaderSettings& settings)
+            TEvYdbProxy::TTopicReaderSettings&& settings)
         : TBaseLocalTopicPartitionActor(
             database,
             settings.GetBase().Topics_[0].Path_,
@@ -390,7 +390,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev
     AFL_VERIFY(1 == topics.size())("topic count", topics.size());
     AFL_VERIFY(1 == topics.at(0).PartitionIds_.size())("partition count", topics.at(0).PartitionIds_.size());
 
-    auto reader = RegisterWithSameMailbox(new TLocalTopicPartitionReaderActor(ev->Sender, Database, settings));
+    auto reader = RegisterWithSameMailbox(new TLocalTopicPartitionReaderActor(ev->Sender, Database, std::move(settings)));
     Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);
 }
 

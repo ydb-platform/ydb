@@ -82,13 +82,13 @@ To transition from mode `PRIMARY/NOT_SYNCHRONIZED` to `PRIMARY/SYNCHRONIZED`, sy
 To enable the prototype for an existing secondary pile, use the hidden `update` command:
 
 ```bash
-ydb bridge update --set pile_name:HOT_STANDBY
+ydb admin cluster bridge update --set pile_name:HOT_STANDBY
 ```
 
 Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed, and the prototype does not run periodic synchronization. Before promotion, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
 
 ```bash
-ydb bridge rejoin --pile pile_name
+ydb admin cluster bridge rejoin --pile pile_name
 ```
 
 Rejoin proceeds through `NOT_SYNCHRONIZED_1` and `NOT_SYNCHRONIZED_2`, fences writers using old group generations, and copies missing data. Direct promotion from `HOT_STANDBY` is not allowed. Background replication still consumes network and storage resources. Garbage collection barriers and `DO_NOT_KEEP` flags are deferred until rejoin so they cannot overtake unconfirmed `KEEP` flags; storage usage can therefore grow while the pile remains in standby.

@@ -504,14 +504,14 @@ namespace NActors {
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
-        NActors::LogVerifFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                          \
+        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                \
     }
 
 #define AFL_ENSURE(condition)                                                                                                   \
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
-        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                         \
+        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                \
     }
 
 #ifndef NDEBUG

@@ -1,5 +1,6 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInferPDiskSlotCountFromSlotSizeWithRealNodeWarden
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.UseFixedVDiskSlotSizeRuntimeSwitch
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.ActivationAndValidation
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum

@@ -5314,6 +5314,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
     }
 
     if (NWriter::ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
+        // The descriptor channel differs from the main group channel then and may be missing from
+        // the slots (e.g. of a tier output); a slot of an already added channel is merged
         addChannel(descriptorChannel);
     }
 
@@ -5462,6 +5464,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     // Data of the main group is written to the leader family channel too until tier compaction,
     // so parts keep descriptor pages and main group data in a single page collection
     if (NWriter::ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+        // The descriptor channel differs from the main group channel then and may be missing from
+        // the slots (e.g. of a tier output); a slot of an already added channel is merged
         addChannel(descriptorChannel);
     }
 

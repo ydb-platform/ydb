@@ -251,7 +251,6 @@ namespace NKikimr {
         s.Signature = SyncerDataSignature;
         Neighbors->Serialize(&s.Proto, info);
         LocalSyncerState.Serialize(s.Proto.MutableLocalGuidInfo());
-        s.Proto.MutableGuidHistory()->CopyFrom(GuidHistory);
         s.Proto.MutableCompatibilityInfo()->CopyFrom(CurrentCompatibilityInfo);
     }
 
@@ -267,7 +266,6 @@ namespace NKikimr {
             auto status = proto.ParseFromString(serProto);
             Y_VERIFY_S(status, VDiskLogPrefix);
             LocalSyncerState.Parse(proto.GetLocalGuidInfo());
-            GuidHistory.CopyFrom(proto.GetGuidHistory());
             Neighbors->Parse(proto);
 
             if (proto.HasCompatibilityInfo()) {

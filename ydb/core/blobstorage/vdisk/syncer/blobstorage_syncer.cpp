@@ -6,7 +6,6 @@
 #include "blobstorage_syncer_recoverlostdata.h"
 #include "guid_recovery.h"
 #include "guid_propagator.h"
-#include "guid_history.h"
 #include <ydb/core/blobstorage/base/html.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
@@ -306,15 +305,12 @@ namespace NKikimr {
         void SyncGuid(const TActorContext &ctx) {
             Become(&TThis::SyncGuidStateFunc);
             GuidRecoveryId = ctx.Register(CreateVDiskGuidRecoveryActor(SyncerCtx->VCtx, GInfo, CommitterId, SelfId(),
-                LocalSyncerState, SyncerData->GuidHistory, SyncerCtx->Config->BaseInfo.ReadOnly));
+                LocalSyncerState, SyncerCtx->Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(GuidRecoveryId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Phase = TPhaseVal::PhaseSyncGuid;
         }
 
         void Handle(TEvVDiskGuidRecovered::TPtr &ev, const TActorContext &ctx) {
-            if (ev->Get()->GuidHistory) {
-                SyncerData->GuidHistory.CopyFrom(*ev->Get()->GuidHistory);
-            }
             ActiveActors.Erase(ev->Sender);
             GuidRecoveryId = TActorId();
             GuidRecovOutcome = std::make_unique<NSyncer::TOutcome>(std::move(ev->Get()->Outcome));
@@ -585,11 +581,11 @@ namespace NKikimr {
                 // is knows exact values
                 const ui64 prevGuidInMemory = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo.Info.GetGuid();
                 auto &data = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo;
+                data.Info = info;
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
                     TAppData::TimeProvider->Now(), nullptr, nullptr, ev->GetChannel());
                 if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
-                    data.Info = info;
                     // put reply into the queue and wait until it would be committed
                     ui64 seqNum = DelayedQueue.WriteRequest(ev->Sender, std::move(result));
                     // commit
@@ -607,33 +603,6 @@ namespace NKikimr {
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
                     TAppData::TimeProvider->Now(), guid, state, nullptr, nullptr, ev->GetChannel());
-                for (const auto& witness : SyncerData->GuidHistory.GetWitnesses()) {
-                    if (TVDiskIdShort(VDiskIDFromVDiskID(witness.GetOwnerVDiskID())) == TVDiskIdShort(vdisk)) {
-                        result->Record.MutableRecoveredGuid()->CopyFrom(witness);
-                        break;
-                    }
-                }
-                if (record.GetReadGuidHistory()) {
-                    auto* history = result->Record.MutableGuidHistory();
-                    history->CopyFrom(SyncerData->GuidHistory);
-                    // These direct observations share the durability barrier of the read reply.
-                    for (const auto& peer : *SyncerData->Neighbors) {
-                        const auto& peerGuid = peer.Get().PeerGuidInfo.Info;
-                        if (peerGuid.GetState() == NKikimrBlobStorage::TSyncGuidInfo::Final) {
-                            history->AddWitnesses()->CopyFrom(MakeGuidWitness(
-                                GInfo->GetVDiskId(peer.OrderNumber), peerGuid.GetGuid(), selfVDisk));
-                        }
-                    }
-                    TVDiskEternalGuid locallyCommittedGuid;
-                    if (Phase == TPhaseVal::PhaseStandardMode) {
-                        locallyCommittedGuid = GuidRecovOutcome->Guid;
-                    } else if (LocalSyncerState.State == NKikimrBlobStorage::TLocalGuidInfo::Final) {
-                        locallyCommittedGuid = LocalSyncerState.Guid;
-                    }
-                    if (locallyCommittedGuid != TVDiskEternalGuid()) {
-                        history->AddWitnesses()->CopyFrom(MakeGuidWitness(selfVDisk, locallyCommittedGuid, selfVDisk));
-                    }
-                }
                 // put reply into the queue and wait until all required writes are committed
                 DelayedQueue.ReadRequest(ctx, ev->Sender, std::move(result));
             }

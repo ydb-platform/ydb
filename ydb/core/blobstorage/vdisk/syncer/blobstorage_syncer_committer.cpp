@@ -83,9 +83,6 @@ namespace NKikimr {
                     Sds.Proto.MutableEntries(index)->MergeFrom(msg->VDiskEntry);
                     break;
                 }
-                case TEvSyncerCommit::EGuidHistory:
-                    Sds.Proto.MutableGuidHistory()->CopyFrom(msg->GuidHistory);
-                    break;
                 default:
                     Y_ABORT("Unexpected case");
             }

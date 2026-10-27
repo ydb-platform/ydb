@@ -736,17 +736,6 @@ message TLocalGuidInfo {
     optional uint64 DbBirthLsn = 3;
 }
 
-// A durable observation of a Final GUID. Forwarding it does not create another quorum vote.
-message TSyncGuidWitness {
-    optional TVDiskID OwnerVDiskID = 1;
-    optional uint64 Guid = 2;
-    optional TVDiskID WitnessVDiskID = 3;
-}
-
-message TSyncGuidHistory {
-    repeated TSyncGuidWitness Witnesses = 1;
-}
-
 message TEvVSyncGuid {
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
     optional NKikimrBlobStorage.TVDiskID TargetVDiskID = 3; // ... this vdisk
@@ -755,7 +744,6 @@ message TEvVSyncGuid {
     // if Info is absent ==> we send TEvVSyncGuid to read remote vdisk state
     // if Info is present ==> we write it to remote vdisk
     optional TSyncGuidInfo Info = 7;
-    optional bool ReadGuidHistory = 8;
 }
 
 message TEvVSyncGuidResult {
@@ -765,9 +753,6 @@ message TEvVSyncGuidResult {
     // if we answer to read request ==> ReadInfo contains result
     // if we answer to write request ==> ReadInfo is empty
     optional TSyncGuidInfo ReadInfo = 7;
-    // Presence confirms that the responder supports history recovery, even when empty.
-    optional TSyncGuidHistory GuidHistory = 8;
-    optional TSyncGuidWitness RecoveredGuid = 9;
 }
 
 message TEvVSync {

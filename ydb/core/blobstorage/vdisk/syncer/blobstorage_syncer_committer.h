@@ -28,8 +28,7 @@ namespace NKikimr {
         enum EModif {
             ENone,
             ELocalGuid,
-            EVDiskEntry,
-            EGuidHistory
+            EVDiskEntry
         };
 
         // what we modify local state or info about other VDisk
@@ -40,7 +39,6 @@ namespace NKikimr {
         TVDiskEternalGuid Guid;
         // if we modify local info this field is set
         NKikimrBlobStorage::TLocalGuidInfo LocalGuidInfo;
-        NKikimrBlobStorage::TSyncGuidHistory GuidHistory;
         // if we modify info about remote VDisk this field is set
         NKikimrVDiskData::TSyncerVDiskEntry VDiskEntry;
         // in case of Modif=EVDiskEntry we modify info about this VDisk

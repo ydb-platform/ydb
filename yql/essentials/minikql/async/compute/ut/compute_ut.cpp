@@ -200,6 +200,77 @@ struct TYqlFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TResumableComputation) {
+Y_UNIT_TEST(CpuQuantumMakesProgressWhenFirstCheckIsExpired) {
+    ui64 cpu = 0;
+    TExecutionSettings settings;
+    settings.CpuBudgetUs = 1;
+    settings.CpuClock = [&] { return cpu++; };
+    TFixture f(10000, {}, settings);
+    f.Provider->Inline = true;
+    f.Build({7}, [&](auto row) { return f.Echo(row); });
+    for (size_t turn = 0; turn < 100 && !f.Finished; ++turn) {
+        f.Events.exchange(0);
+        f.Turn();
+    }
+    UNIT_ASSERT_C(f.Finished, "100 owner turns without progress when CPU expires before the first instruction");
+    f.Check({7});
+    UNIT_ASSERT(f.Services->GetComputeStats().CpuBudgetYields > 0);
+}
+
+Y_UNIT_TEST(NestedFramePathFailsWhenLocalQuotaCannotFit) {
+    ui64 singleFrameMemory = 0;
+    {
+        TFixture f(1);
+        f.BuildNested({1}, 1);
+        f.Turn();
+        singleFrameMemory = f.Services->GetSchedulerStats().MemoryBytes;
+        UNIT_ASSERT(f.Provider->Calls.empty());
+    }
+    auto settings = DeterministicSettings();
+    settings.Scheduler.MaxMemoryBytes = singleFrameMemory;
+    TFixture f(1, {}, settings);
+    f.BuildNested({1}, 2);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Turn(), yexception, "cannot fit resource limits");
+    UNIT_ASSERT(f.Provider->Calls.empty());
+}
+Y_UNIT_TEST(NestedMapsConsumeReadyResultsAtMemoryLimit) {
+    for (ui32 depth : {2u, 4u}) {
+        for (bool flow : {false, true}) {
+            ui64 required = 0;
+            {
+                TFixture f(10000);
+                f.BuildNested({1, 2, 3, 4}, depth, flow);
+                f.Turn();
+                UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 4);
+                required = f.Services->GetSchedulerStats().MemoryBytes;
+            }
+            auto quota = std::make_shared<TMemoryQuota>(required);
+            {
+                auto settings = DeterministicSettings();
+                settings.Scheduler.Quota = quota;
+                TFixture f(10000, {}, settings);
+                f.BuildNested({1, 2, 3, 4}, depth, flow);
+                f.Turn();
+                UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(quota->GetUsed(), required);
+                size_t replied = 0;
+                for (ui32 stage = 0; stage < depth; ++stage) {
+                    const size_t end = f.Provider->Calls.size();
+                    UNIT_ASSERT_VALUES_EQUAL(end, (stage + 1) * 4);
+                    while (replied < end) {
+                        f.Provider->Reply(replied++);
+                    }
+                    f.Pump();
+                }
+                UNIT_ASSERT(f.Finished);
+                f.Check({1, 2, 3, 4});
+                UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), depth * 4);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(quota->GetUsed(), 0);
+        }
+    }
+}
+
 Y_UNIT_TEST(GraphFormsRealBatchesAndFlushesPartialTail) {
     struct TBatch final: IBatchProvider {
         std::shared_ptr<TProvider> Scalar;
@@ -374,6 +445,7 @@ Y_UNIT_TEST(CpuAccountingExcludesOtherTasksBetweenTurnsAndShutdownRejectsRerun) 
     services.EndTurn();
     UNIT_ASSERT_VALUES_EQUAL(services.GetComputeStats().CpuTimeUs, 5);
     services.BeginTurn();
+    UNIT_ASSERT(services.TryStep()); // every turn guarantees one progress step
     cpu += 5;
     UNIT_ASSERT(!services.TryStep());
     services.RequestRerun();

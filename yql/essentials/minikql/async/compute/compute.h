@@ -65,9 +65,8 @@ public:
     bool TryStep();
     void RequestRerun();
     void Flush();
-    bool CanReadInput(ui64 frameBytes);
     bool CanWaitForMemory() const;
-    std::shared_ptr<TMemoryReservation> ReserveFrame(ui64 bytes);
+    std::shared_ptr<TMemoryReservation> TryReserveFrame(ui64 bytes);
     void AccountAllocatorBytes(ui64 bytes);
     std::optional<TTimePoint> NextDeadline() const;
     ui64 GetTurn() const;

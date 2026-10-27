@@ -18,10 +18,31 @@ struct TShared {
     std::mutex Mutex;
     std::set<ui64> ActiveIds;
     std::atomic<bool> Closed = false;
-    const TWakeup Wakeup;
+    TWakeup Wakeup;
     explicit TShared(TWakeup wakeup)
         : Wakeup(std::move(wakeup))
     {
+    }
+    void Notify(ui64 generation) {
+        TWakeup notify;
+        {
+            std::lock_guard lock(Mutex);
+            if (!Closed.load()) {
+                notify = Wakeup;
+            }
+        }
+        if (notify) {
+            notify(generation);
+        }
+    }
+    TWakeup Close() {
+        TWakeup detached;
+        {
+            std::lock_guard lock(Mutex);
+            Closed.store(true);
+            detached.swap(Wakeup);
+        }
+        return detached;
     }
 };
 class TCleanup final: public ICompletion {
@@ -54,9 +75,7 @@ public:
                 State_->ActiveIds.erase(GetId().Sequence);
                 --State_->Active;
             }
-            if (!State_->Closed.load()) {
-                State_->Wakeup(GetId().Generation);
-            }
+            State_->Notify(GetId().Generation);
         }
     }
 
@@ -127,9 +146,7 @@ struct TScheduler::TImpl {
         , Shared(std::make_shared<TShared>(std::move(wakeup)))
         , Quota(Settings.Quota ? Settings.Quota : std::make_shared<TMemoryQuota>(Settings.MaxMemoryBytes))
         , Context([s = Shared](ui64 generation) {
-            if (!s->Closed.load()) {
-                s->Wakeup(generation);
-            }
+            s->Notify(generation);
         }, limits, Settings.Clock)
     {
         Y_ENSURE(Settings.MaxInFlight && Settings.MaxBatchSize && Settings.Clock, "Invalid async scheduler limits");
@@ -179,9 +196,7 @@ TSubmission TScheduler::Submit(TStringBuf provider, TRequest request) {
     }
     const auto generation = GetGeneration();
     request.Reservation = impl.Quota->TryReserve(bytes, generation, [s = impl.Shared, generation] {
-        if (!s->Closed.load()) {
-            s->Wakeup(generation);
-        }
+        s->Notify(generation);
     });
     if (!request.Reservation) {
         return {EAdmission::ResourceLimit, {}};
@@ -291,7 +306,9 @@ void TScheduler::Shutdown() {
         return;
     }
     Impl_->Closed = true;
-    Impl_->Shared->Closed.store(true);
+    // Keep the capture alive through cancellation, then destroy outside locks.
+    // A callback already in flight owns its own copy and may safely finish.
+    auto detachedWakeup = Impl_->Shared->Close();
     Impl_->Quota->RemoveWaiter(GetGeneration());
     Impl_->Context.Shutdown();
 }

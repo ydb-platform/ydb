@@ -2,6 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <atomic>
 #include <thread>
+#include <barrier>
 
 namespace NKikimr::NMiniKQL::NAsync {
 namespace {
@@ -59,6 +60,120 @@ void Flush(TScheduler& scheduler) {
 }
 } // namespace
 Y_UNIT_TEST_SUITE(TAsyncScheduler) {
+Y_UNIT_TEST(RejectedSubmissionDoesNotWakeUnsatisfiedMemoryWaiter) {
+    size_t wakeups = 0;
+    TSchedulerSettings settings;
+    settings.MaxMemoryBytes = 8000;
+    TScheduler scheduler([&](ui64) { ++wakeups; }, {.MaxOperations = 1}, settings);
+    auto provider = std::make_shared<TBatch>();
+    scheduler.RegisterProvider("p", provider);
+    UNIT_ASSERT(scheduler.Submit("p", Request()).Status == EAdmission::Accepted);
+    Flush(scheduler);
+    wakeups = 0;
+    for (size_t i = 0; i < 64; ++i) {
+        UNIT_ASSERT(scheduler.Submit("p", Request(TString(4000, 'A'))).Status == EAdmission::ResourceLimit);
+        UNIT_ASSERT(scheduler.Submit("p", Request()).Status == EAdmission::OperationsLimit);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(provider->Items.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(wakeups, 0);
+    provider->Reply(0);
+    scheduler.TakeReady();
+    UNIT_ASSERT(wakeups > 0);
+    UNIT_ASSERT(scheduler.Submit("p", Request(TString(4000, 'A'))).Status == EAdmission::Accepted);
+}
+
+Y_UNIT_TEST(QuotaWakesOnlySatisfiableWaitersAndKeepsSmallestNeed) {
+    auto quota = std::make_shared<TMemoryQuota>(100);
+    auto held = quota->TryReserve(100);
+    size_t small = 0, large = 0;
+    UNIT_ASSERT(!quota->TryReserve(20, 1, [&] { ++small; }));
+    UNIT_ASSERT(!quota->TryReserve(40, 1, [&] { ++small; }));
+    UNIT_ASSERT(!quota->CanReserve(60, 2, [&] { ++large; }));
+    UNIT_ASSERT(held->Resize(90));
+    UNIT_ASSERT_VALUES_EQUAL(small, 0);
+    UNIT_ASSERT_VALUES_EQUAL(large, 0);
+    UNIT_ASSERT(held->Resize(80));
+    UNIT_ASSERT_VALUES_EQUAL(small, 1);
+    UNIT_ASSERT_VALUES_EQUAL(large, 0);
+    UNIT_ASSERT(held->Resize(40));
+    UNIT_ASSERT_VALUES_EQUAL(small, 1);
+    UNIT_ASSERT_VALUES_EQUAL(large, 1);
+}
+Y_UNIT_TEST(ShutdownReleasesWakeupOwnedPendingAndAcknowledgedTokens) {
+    struct TBackend {
+        std::shared_ptr<ICompletion> Completion;
+    };
+    struct TProvider final: IProvider {
+        std::weak_ptr<TBackend> Backend;
+        bool AliveDuringCancel = false;
+        void Start(TOperationId, std::shared_ptr<const TRequest>, std::shared_ptr<ICompletion> c) override {
+            Backend.lock()->Completion = std::move(c);
+        }
+        void Cancel(TOperationId) noexcept override {
+            if (auto backend = Backend.lock()) {
+                AliveDuringCancel = true;
+                backend->Completion->Complete("late");
+            }
+        }
+    };
+    for (bool acknowledged : {false, true}) {
+        auto backend = std::make_shared<TBackend>();
+        const std::weak_ptr<TBackend> weak = backend;
+        auto provider = std::make_shared<TProvider>();
+        provider->Backend = backend;
+        TScheduler scheduler([backend](ui64) { (void)backend; });
+        scheduler.RegisterProvider("p", provider);
+        UNIT_ASSERT(scheduler.Submit("p", Request()).Status == EAdmission::Accepted);
+        Flush(scheduler);
+        if (acknowledged) {
+            backend->Completion->Complete("done");
+            backend->Completion->Release();
+            scheduler.TakeReady();
+        }
+        backend.reset();
+        scheduler.Shutdown();
+        const bool leaked = !weak.expired();
+        // Break the cycle in a failing regression run as well.
+        if (auto live = weak.lock()) {
+            live->Completion.reset();
+        }
+        UNIT_ASSERT_C(!leaked, "Shutdown must detach the original wakeup capture");
+        UNIT_ASSERT_VALUES_EQUAL(provider->AliveDuringCancel, !acknowledged);
+        scheduler.TakeReady();
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetStats().CleanupPending, 0);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetSchedulerStats().InFlight, 0);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetQuota()->GetUsed(), 0);
+    }
+}
+Y_UNIT_TEST(InFlightWakeupCopySurvivesSchedulerShutdownAndDestruction) {
+    std::barrier entered(2), resume(2);
+    auto count = std::make_shared<std::atomic<size_t>>(0);
+    const std::weak_ptr<std::atomic<size_t>> weak = count;
+    auto provider = std::make_shared<TBatch>();
+    auto scheduler = std::make_unique<TScheduler>([count, &entered, &resume](ui64) {
+        entered.arrive_and_wait();
+        resume.arrive_and_wait();
+        ++*count;
+    });
+    scheduler->RegisterProvider("p", provider);
+    scheduler->Submit("p", Request());
+    Flush(*scheduler);
+    auto completion = provider->Items[0].Completion;
+    count.reset();
+    std::thread producer([completion] {
+        completion->Complete("A");
+        completion->Release();
+    });
+    entered.arrive_and_wait();
+    scheduler->Shutdown();
+    scheduler.reset();
+    const bool aliveInFlight = !weak.expired();
+    resume.arrive_and_wait();
+    producer.join();
+    UNIT_ASSERT(aliveInFlight);
+    UNIT_ASSERT(weak.expired());
+}
+
 Y_UNIT_TEST(RealBatchesAndPartialTailAtWorkBoundary) {
     for (size_t batchSize : {1u, 8u, 64u}) {
         auto provider = std::make_shared<TBatch>();

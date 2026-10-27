@@ -40,8 +40,10 @@ need a separate batch-filling timer.
 
 `TMemoryQuota` is a thread-safe shared reservation pool. By default each
 scheduler owns its pool; a host can supply a shared pool. A waiter is identified
-by the D1 execution generation. Releasing bytes moves waiters out of the lock
-and enqueues notifications, once per registration. Shutdown removes the waiter;
+by the D1 execution generation. Releasing bytes wakes only generations whose smallest blocked reservation now
+fits. Callbacks are moved out of the lock and enqueued once per registration;
+rolling back a rejected submission cannot wake an unsatisfied waiter. Shutdown removes the waiter and detaches the original wakeup capture after
+cancellation, outside locks; callbacks already in flight retain their own copy;
 a notification already in flight is rejected by the generation/closed gate.
 Wakeup callbacks must be nonthrowing and only enqueue work.
 
@@ -58,7 +60,12 @@ The graph additionally reserves continuation vectors/metadata and reconciles
 its allocator's retained-page usage on Fetch and instruction boundaries. These
 are distinct allocations from the encoded provider buffers. Ready/reorder
 frames keep their reservations until consumed or cancelled. Input admission
-stops when frame memory is unavailable. Temporary occupancy waits for a real
+reserves the destination frame before starting Source.Fetch and retains this
+reservation across Yield. Nested sources can therefore consume their ready
+results without requiring new outer-frame credits. The reservation transfers
+into the returned row frame, or is released on EOF, failure or destruction.
+Admission stops when frame memory is unavailable; a local pool that cannot fit
+the suspended frame path and has no outstanding work fails explicitly. Temporary occupancy waits for a real
 credit notification; an impossible continuation with no outstanding work fails.
 A shared external pool may instead wait for another execution to release bytes.
 
@@ -84,7 +91,9 @@ progress. Per-row dependent calls remain sequential; batching combines only
 already submitted independent operations.
 
 Each owner event calls `BeginTurn()` once, then fetches, then `EndTurn()`.
-Thread CPU time (microseconds) and a step bound limit local work. EndTurn includes
+Thread CPU time (microseconds) and a step bound limit local work. Each turn
+permits at least one cooperative step, even when bookkeeping exhausted its CPU
+budget; subsequent steps enforce the bound. This prevents zero-progress reruns. EndTurn includes
 the final local work in metrics; BeginTurn starts a fresh CPU sample so other
 tasks and callback waiting are not charged. A runtime rerun is coalesced and
 posted before budget Yield. Provider/input/quota/output waits do not cause a

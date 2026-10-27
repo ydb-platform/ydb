@@ -99,7 +99,9 @@ bool TExecutionServices::TryStep() {
     const auto now = Impl_->Settings.CpuClock();
     Impl_->Stats.CpuTimeUs += now - Impl_->CpuSample;
     Impl_->CpuSample = now;
-    if (Impl_->Settings.CpuBudgetUs && now - Impl_->CpuStart >= Impl_->Settings.CpuBudgetUs) {
+    // Permit one cooperative step even if owner bookkeeping exhausted the time
+    // budget. Repeated zero-step turns must never starve runnable work.
+    if (Impl_->Steps != Impl_->StepBudget && Impl_->Settings.CpuBudgetUs && now - Impl_->CpuStart >= Impl_->Settings.CpuBudgetUs) {
         if (!Impl_->CpuExhausted) {
             ++Impl_->Stats.CpuBudgetYields;
         }
@@ -124,19 +126,11 @@ void TExecutionServices::Flush() {
 bool TExecutionServices::CanWaitForMemory() const {
     return Impl_->Settings.Scheduler.Quota || Impl_->Context.GetStats().TrackedOperations || !Impl_->Live.empty();
 }
-bool TExecutionServices::CanReadInput(ui64 frameBytes) {
+std::shared_ptr<TMemoryReservation> TExecutionServices::TryReserveFrame(ui64 frameBytes) {
     const auto quota = Impl_->Context.GetQuota();
     Y_ENSURE(frameBytes <= quota->GetLimit() && Impl_->AllocatorMemory->GetBytes() <= quota->GetLimit() - frameBytes, "Async frame exceeds memory limit");
     const auto generation = Impl_->Context.GetGeneration();
-    if (quota->CanReserve(frameBytes, generation, [gate = Impl_->Gate, generation] { gate->Notify(generation); })) {
-        return true;
-    }
-    return false;
-}
-std::shared_ptr<TMemoryReservation> TExecutionServices::ReserveFrame(ui64 bytes) {
-    auto reservation = Impl_->Context.GetQuota()->TryReserve(bytes);
-    Y_ENSURE(reservation, "Async frame exceeds available memory");
-    return reservation;
+    return quota->TryReserve(frameBytes, generation, [gate = Impl_->Gate, generation] { gate->Notify(generation); });
 }
 void TExecutionServices::AccountAllocatorBytes(ui64 bytes) {
     Y_ENSURE(Impl_->AllocatorMemory->Resize(bytes), "Async graph exceeds memory limit");

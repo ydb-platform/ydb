@@ -193,6 +193,7 @@ public:
                     }
                 }
                 Frames_.clear();
+                SourceReservation_.reset();
                 throw;
             }
         }
@@ -234,9 +235,16 @@ public:
                 }
                 const bool runnable = std::any_of(Frames_.begin(), Frames_.end(), [&](const auto& frame) { return Runnable(frame); });
                 const ui64 frameBytes = sizeof(TFrame) + 64 + Map_.Steps_.size() * (sizeof(NUdf::TUnboxedValue) + sizeof(ui32) + 1);
-                if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames && !Services_->CanReadInput(frameBytes)) {
-                    SourceWaiting_ = true;
-                    SourceWaitTurn_ = Services_->GetTurn();
+                if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames && !SourceReservation_) {
+                    // Reserve the destination before starting a possibly nested
+                    // Fetch, and retain it across Yield. Source completion must
+                    // not need fresh quota to consume its own ready results.
+                    SourceReservation_ = Services_->TryReserveFrame(frameBytes);
+                    if (!SourceReservation_) {
+                        MKQL_ENSURE(Services_->CanWaitForMemory(), "Async source continuation cannot fit resource limits");
+                        SourceWaiting_ = true;
+                        SourceWaitTurn_ = Services_->GetTurn();
+                    }
                 }
                 if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames) {
                     if (!SourceFetchCharged_ && !Services_->TryStep()) {
@@ -250,6 +258,7 @@ public:
                     NUdf::TUnboxedValue row;
                     switch (Source_.Fetch(row)) {
                         case NUdf::EFetchStatus::Finish:
+                            SourceReservation_.reset();
                             SourceFetchCharged_ = false;
                             Finished_ = true;
                             break;
@@ -260,7 +269,7 @@ public:
                         case NUdf::EFetchStatus::Ok: {
                             SourceFetchCharged_ = false;
                             TFrame frame;
-                            frame.Reservation = Services_->ReserveFrame(frameBytes);
+                            frame.Reservation = std::move(SourceReservation_);
                             frame.Stack.reserve(Map_.Steps_.size());
                             frame.Row = std::move(row);
                             frame.Values.resize(Map_.Steps_.size());
@@ -298,6 +307,7 @@ public:
         NUdf::TUnboxedValue Source_;
         const TAsyncMap& Map_;
         std::deque<TFrame> Frames_;
+        std::shared_ptr<TMemoryReservation> SourceReservation_;
         size_t FrameCursor_ = 0;
         bool Failed_ = false;
         bool Finished_ = false;

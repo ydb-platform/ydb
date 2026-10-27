@@ -8,19 +8,18 @@ The `DROP ASYNC REPLICATION` statement deletes an [asynchronous replication](../
 ## Syntax {#syntax}
 
 ```yql
-DROP ASYNC REPLICATION <name> [CASCADE] [WITH (FORCE = TRUE | FALSE)]
+DROP ASYNC REPLICATION <name> [CASCADE] [FORCE]
 ```
 
 ### Parameters
 
 * `name` — the name of the asynchronous replication instance.
 * `CASCADE` — cascaded deletion of the replicas that were created for a given asynchronous replication instance.
-
-* `FORCE` — a Boolean literal. `TRUE` deletes the replication locally after completion without accessing the source or resolving its credentials. The default is `FALSE`, which preserves ordinary source cleanup. This option applies only to asynchronous replication.
+* `FORCE` deletes the replication locally after completion without accessing the source or resolving its credentials. Omit it to preserve ordinary source cleanup. This option applies only to asynchronous replication. If used together, specify `CASCADE` before `FORCE`.
 
 ## Deleting without source access {#force}
 
-Use `FORCE = TRUE` when the source is unavailable and its automatically created changefeeds must be abandoned. First request [forced completion](alter-async-replication.md). A successful `ALTER` response confirms that this request was accepted:
+Use `FORCE` when the source is unavailable and its automatically created changefeeds must be abandoned. First request [forced completion](alter-async-replication.md). A successful `ALTER` response confirms that this request was accepted:
 
 ```yql
 ALTER ASYNC REPLICATION my_replication
@@ -30,13 +29,13 @@ SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');
 After the request is accepted, issue `FORCE DROP`. It waits for pending local completion before deleting the replication. To retain the destination tables and data:
 
 ```yql
-DROP ASYNC REPLICATION my_replication WITH (FORCE = TRUE);
+DROP ASYNC REPLICATION my_replication FORCE;
 ```
 
 The retained tables remain writable. To delete the destination tables owned by the replication as well, add `CASCADE`:
 
 ```yql
-DROP ASYNC REPLICATION my_replication CASCADE WITH (FORCE = TRUE);
+DROP ASYNC REPLICATION my_replication CASCADE FORCE;
 ```
 
 To inspect the actual completion state, use [`ydb scheme describe`](../../../reference/ydb-cli/commands/scheme-describe.md) with JSON output:
@@ -51,7 +50,7 @@ Local completion and deletion can take time and continue after a destination res
 
 {% note warning %}
 
-`FORCE = TRUE` permanently discards the replication's source cleanup metadata. Source changefeeds, consumers, and their configuration remain unchanged. Restoring source connectivity does not trigger delayed cleanup; remove unwanted source resources separately. If ordinary cleanup is required, omit `FORCE` or use `FORCE = FALSE`.
+`FORCE` permanently discards the replication's source cleanup metadata. Source changefeeds, consumers, and their configuration remain unchanged. Restoring source connectivity does not trigger delayed cleanup; remove unwanted source resources separately. If ordinary cleanup is required, omit `FORCE`.
 
 {% endnote %}
 

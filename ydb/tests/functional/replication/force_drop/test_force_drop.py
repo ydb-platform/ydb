@@ -182,7 +182,7 @@ def test_force_drop_after_physical_source_outage(cascade):
         assert path_id(destination, '/Root/replica') == evidence['destination_id']
         data(dst, 'UPSERT INTO `/Root/replica` (key, value) VALUES (9, "writable-after-restart");')
         scheme(dst, 'DROP ASYNC REPLICATION `/Root/replication` '
-               + ('CASCADE ' if cascade else '') + 'WITH (FORCE=TRUE);')
+               + ('CASCADE ' if cascade else '') + 'FORCE;')
         names = [entry.name for entry in dst.scheme_client.list_directory('/Root').children]
         assert 'replication' not in names
         if cascade:

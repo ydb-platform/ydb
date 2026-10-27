@@ -965,40 +965,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            auto mode = EReplicationDropMode::Normal;
-            if (node.HasBlock6()) {
-                TSqlExpression expr(*this);
-                bool seenForce = false;
-                auto setting = [&](const TRule_replication_settings_entry& entry) {
-                    const auto key = IdEx(entry.GetRule_an_id1(), expr);
-                    if (to_lower(key.Name) != "force") {
-                        Ctx_.Error() << "Unknown replication DROP setting: " << key.Name;
-                        return false;
-                    }
-                    if (seenForce) {
-                        Ctx_.Error() << "Duplicate replication DROP setting: " << key.Name;
-                        return false;
-                    }
-                    seenForce = true;
-                    const auto value = Unwrap(expr.Build(entry.GetRule_expr3()));
-                    if (!value || !value->IsLiteral() || value->GetLiteralType() != "Bool") {
-                        Ctx_.Error() << "Literal of Bool type is expected for FORCE";
-                        return false;
-                    }
-                    mode = to_lower(value->GetLiteralValue()) == "true"
-                        ? EReplicationDropMode::ForceLocal : EReplicationDropMode::Normal;
-                    return true;
-                };
-                const auto& settings = node.GetBlock6().GetRule_replication_settings3();
-                if (!setting(settings.GetRule_replication_settings_entry1())) {
-                    return false;
-                }
-                for (const auto& extra : settings.GetBlock2()) {
-                    if (!setting(extra.GetRule_replication_settings_entry2())) {
-                        return false;
-                    }
-                }
-            }
+            const auto mode = node.HasBlock6() ? EReplicationDropMode::ForceLocal : EReplicationDropMode::Normal;
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx_.Pos(),
                                                                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),

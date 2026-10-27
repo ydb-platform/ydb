@@ -2479,7 +2479,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             SendWorkerStopped(env, env.Info.ControllerId, env.Worker);
             ev.Reset();
         });
-        auto result = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE=TRUE);");
+        auto result = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         const auto completed = runtime.WaitFuture(std::move(result));
         UNIT_ASSERT_C(completed.IsSuccess(), completed.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
@@ -2509,7 +2509,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         runtime.WaitFor("local DDL result held", [&] { return bool(held); }, TDuration::Seconds(30));
         env.Source = std::make_unique<TSourceAccessBlocker>(env);
         env.SchemeOk("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE='DONE', FAILOVER_MODE='FORCE');");
-        auto result = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE=TRUE);");
+        auto result = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         runtime.WaitFor("FORCE forwarded during local DDL", [&] { return forceForwarded; }, TDuration::Seconds(30));
         const auto saved = ReadControllerQuery(runtime, env.Info.ControllerId, R"((
             (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1))))
@@ -2565,7 +2565,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             }
         });
         auto drop = env.Session.ExecuteSchemeQuery(TStringBuilder()
-            << "DROP ASYNC REPLICATION `/Root/replication` " << (Cascade ? "CASCADE " : "") << "WITH(FORCE=TRUE);");
+            << "DROP ASYNC REPLICATION `/Root/replication` " << (Cascade ? "CASCADE " : "") << "FORCE;");
         runtime.WaitFor("lost final reply after target deletion", [&] { return lost; }, TDuration::Seconds(30));
         UNIT_ASSERT_C(!memberExists(), "Completed barrier membership survived FORCE target deletion");
         env.SendAsync(env.Info.ControllerId, new TEvents::TEvPoisonPill());
@@ -2606,7 +2606,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         runtime.WaitFor("finished local DDL result held", [&] { return bool(held); }, TDuration::Seconds(30));
         env.Source = std::make_unique<TSourceAccessBlocker>(env);
         env.SchemeOk("ALTER ASYNC REPLICATION `/Root/replication` SET(STATE='DONE', FAILOVER_MODE='FORCE');");
-        auto drop = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH(FORCE=TRUE);");
+        auto drop = env.Session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` CASCADE FORCE;");
         runtime.WaitFor("durable FORCE stopped worker", [&] { return stopped; }, TDuration::Seconds(30));
         const auto owner = ReadControllerQuery(runtime, env.Info.ControllerId, R"((
             (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1))))
@@ -2686,7 +2686,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             return session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `/Root/replication` SET(STATE='DONE',FAILOVER_MODE='FORCE');").GetValueSync();
         });
         UNIT_ASSERT_C(done.IsSuccess(), done.GetIssues().ToString());
-        auto drop = session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` WITH(FORCE=TRUE);");
+        auto drop = session.ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         runtime.WaitFor("normal sibling reports terminal stop after FORCE", [&] { return siblingError; }, TDuration::Seconds(30));
         // The status was emitted after durable FORCE acceptance; its source
         // failure cannot poison the local continuation or retain a dead session.
@@ -2753,7 +2753,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
                 }
             });
             Drop = Env.Session.ExecuteSchemeQuery(
-                "DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE=TRUE);");
+                "DROP ASYNC REPLICATION `/Root/replication` CASCADE FORCE;");
             runtime.WaitFor("durably accepted FORCE CASCADE", [&] { return Attempts != 0 || Drop.HasValue(); });
             UNIT_ASSERT_C(Attempts, Drop.GetValueSync().GetIssues().ToString());
             AssertIntent();
@@ -2917,12 +2917,12 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
                     }
                 }
             });
-        const auto result = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        const auto result = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(schemaDrops, 0);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(env.SourceStreamPath), env.SourceStream);
-        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = FALSE);");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication`;");
         UNIT_ASSERT(schemaDrops > 0);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
     }
@@ -2949,7 +2949,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         });
         NYdb::NQuery::TQueryClient client(env.GetDriver());
         const auto result = env.RunCall([&] {
-            return client.ExecuteQuery("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE=TRUE);",
+            return client.ExecuteQuery("DROP ASYNC REPLICATION `/Root/replication` FORCE;",
                 NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         });
         UNIT_ASSERT(compiled > 0);
@@ -3023,7 +3023,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             RestartController(env, env.Info.ControllerId);
             UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
         }
-        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
             NKikimrScheme::StatusPathDoesNotExist);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
@@ -3044,7 +3044,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             RestartController(env, env.Info.ControllerId);
             UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
         }
-        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE FORCE;");
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
             NKikimrScheme::StatusPathDoesNotExist);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
@@ -3063,23 +3063,20 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         UNIT_ASSERT(replacement != env.Destination);
         env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'replacement'), (9, 'unrelated');");
         RestartController(env, env.Info.ControllerId);
-        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE FORCE;");
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), replacement);
         AssertDestinationWritable(env);
         env.AssertRows("replacement", "unrelated");
         env.AssertSourceRetained();
     }
 
-    // Catches changes to the omitted option's source cleanup, and FALSE being
-    // interpreted as FORCE merely because the option is present.
-    Y_UNIT_TEST_TWIN(LegacyDropAfterDoneCleansSource, ExplicitFalse) {
+    // Catches changes to ordinary DROP's source cleanup after restart.
+    Y_UNIT_TEST(LegacyDropAfterDoneCleansSource) {
         TSqlEnv env;
         env.Done();
         RestartController(env, env.Info.ControllerId);
         env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'retained'), (9, 'ordinary-drop');");
-        env.SchemeOk(ExplicitFalse
-            ? "DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = FALSE);"
-            : "DROP ASYNC REPLICATION `/Root/replication`;");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication`;");
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
         AssertDestinationWritable(env);
@@ -3093,7 +3090,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         if constexpr (Paused) {
             env.Pause();
         }
-        const auto rejected = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        const auto rejected = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         UNIT_ASSERT_C(!rejected.IsSuccess(), "FORCE must require DONE");
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
@@ -3171,7 +3168,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             .GetState().HasDone());
         UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
         auto drop = env.Session.ExecuteSchemeQuery(
-            "DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+            "DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         runtime.WaitFor("FORCE admission decision", [&] {
             return drop.HasValue() || forwardedDrop != 0;
         });
@@ -3195,7 +3192,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
             runtime.WaitFor("actual DONE after retry", [&] {
                 return DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone();
             }, TDuration::Seconds(30));
-            env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+            env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         } else {
             const auto result = runtime.WaitFuture(std::move(drop));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -3246,7 +3243,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
                 }
             });
         auto drop = env.Session.ExecuteSchemeQuery(
-            "DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+            "DROP ASYNC REPLICATION `/Root/replication` CASCADE FORCE;");
         runtime.WaitFor("local FORCE CASCADE deletion", [&] {
             return rejectedDrop != 0 || drop.HasValue();
         });

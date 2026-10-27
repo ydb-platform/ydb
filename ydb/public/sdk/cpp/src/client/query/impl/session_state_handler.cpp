@@ -7,7 +7,8 @@ namespace NYdb::inline Dev::NQuery {
 EAttachStreamReadAction HandleAttachSessionState(
     const Ydb::Query::SessionState& state,
     TKqpSessionCommon* session,
-    const std::shared_ptr<ISessionClient>& client)
+    const std::shared_ptr<ISessionClient>& client,
+    const std::function<void()>& beforeShutdownTransition)
 {
     if (state.has_session_shutdown() || state.has_node_shutdown()) {
         if (!session) {
@@ -22,7 +23,11 @@ EAttachStreamReadAction HandleAttachSessionState(
                 client->PessimizeNode(nodeId);
             }
         }
-        if (session->GetState() == TKqpSessionCommon::S_IDLE) {
+        const auto previousState = session->GetState();
+        if (beforeShutdownTransition) {
+            beforeShutdownTransition();
+        }
+        if (previousState == TKqpSessionCommon::S_IDLE) {
             if (client) {
                 session->CloseFromServer(client, closeCommand.Reason);
             }

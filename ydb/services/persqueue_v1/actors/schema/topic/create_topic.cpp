@@ -26,7 +26,9 @@ public:
         for (auto& consumer : *request.mutable_consumers()) {
             if (consumer.shared_consumer_type().dead_letter_policy().has_move_action()) {
                 auto* moveAction = consumer.mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_move_action();
-                moveAction->set_dead_letter_queue(ResolveDeadLetterQueuePath(moveAction->dead_letter_queue()));
+                if (!ResolveDeadLetterQueuePath(*moveAction->mutable_dead_letter_queue())) {
+                    return;
+                }
             }
         }
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {

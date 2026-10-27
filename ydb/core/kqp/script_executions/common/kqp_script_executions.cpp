@@ -2,17 +2,15 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
+#include <google/protobuf/util/time_util.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-
-#include <google/protobuf/util/time_util.h>
-
 #include <util/string/builder.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NKqp {
 
@@ -36,7 +34,9 @@ std::optional<TString> ScriptExecutionIdFromOperation(const std::string& operati
 
 std::optional<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId, TString& error) try {
     if (operationId.GetKind() != NOperationId::TOperationId::SCRIPT_EXECUTION) {
-        error = TStringBuilder() << "Invalid operation id, expected SCRIPT_EXECUTION = " << static_cast<int>(NOperationId::TOperationId::SCRIPT_EXECUTION) << " kind, got " << static_cast<int>(operationId.GetKind());
+        error = TStringBuilder() << "Invalid operation id, expected SCRIPT_EXECUTION = "
+                                 << static_cast<int>(NOperationId::TOperationId::SCRIPT_EXECUTION) << " kind, got "
+                                 << static_cast<int>(operationId.GetKind());
         return std::nullopt;
     }
 
@@ -62,7 +62,7 @@ NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, 
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
 
-    return {rootIssue};
+    return { rootIssue };
 }
 
 TString SerializeIssues(const NYql::TIssues& issues) {
@@ -110,14 +110,12 @@ void DeserializeBinaryProto(const NJson::TJsonValue& value, NProtoBuf::Message& 
 
 void TimestampToProtoWithSaturation(const TInstant timestamp, google::protobuf::Timestamp* proto) {
     *proto = google::protobuf::util::TimeUtil::MicrosecondsToTimestamp(
-        std::min(timestamp.MicroSeconds(), static_cast<ui64>(google::protobuf::util::TimeUtil::kTimestampMaxSeconds * 1000000))
-    );
+        std::min(timestamp.MicroSeconds(), static_cast<ui64>(google::protobuf::util::TimeUtil::kTimestampMaxSeconds * 1000000)));
 }
 
 void DurationToProtoWithSaturation(const TDuration duration, google::protobuf::Duration* proto) {
     *proto = google::protobuf::util::TimeUtil::MicrosecondsToDuration(
-        std::min(duration.MicroSeconds(), static_cast<ui64>(google::protobuf::util::TimeUtil::kDurationMaxSeconds * 1000000))
-    );
+        std::min(duration.MicroSeconds(), static_cast<ui64>(google::protobuf::util::TimeUtil::kDurationMaxSeconds * 1000000)));
 }
 
 TString SequenceToJsonString(const ui64 size, std::function<void(const ui64 i, NJson::TJsonValue& value)> valueFiller) {
@@ -153,4 +151,4 @@ TString CheckScriptExecutionAccess(std::optional<TString>& userSID) {
     return "";
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

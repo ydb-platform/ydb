@@ -56,7 +56,7 @@ struct TPDiskMockState::TImpl {
     THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
     NPDisk::EDeviceType DeviceType;
-    std::optional<TRcBuf> Metadata;
+    std::shared_ptr<TMetadata> Metadata = std::make_shared<TMetadata>();
 
     ESpaceColorPolicy SpaceColorPolicy;
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
@@ -209,7 +209,14 @@ struct TPDiskMockState::TImpl {
         bool slotIsValid = (slotId != Max<ui32>());
         for (auto& [ownerId, owner] : Owners) {
             if (slotIsValid) {
-                if (slotId == owner.SlotId) {
+                if (slotId == owner.SlotId && owner.Slain && !owner.VDiskId.SameExceptGeneration(vdiskId)) {
+                    // the slot of slain VDisk is given to another one, as real PDisk allows (it tells owners by VDisk id)
+                    owner = TOwner();
+                    owner.VDiskId = vdiskId;
+                    owner.SlotId = slotId;
+                    *created = true;
+                    return std::make_tuple(ownerId, &owner);
+                } else if (slotId == owner.SlotId) {
                     Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
                     *created = false;
                     return std::make_tuple(ownerId, &owner);
@@ -358,10 +365,14 @@ struct TPDiskMockState::TImpl {
 };
 
 TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, bool isDiskReadOnly,
-        NPDisk::EDeviceType deviceType, ESpaceColorPolicy spaceColorPolicy)
+        NPDisk::EDeviceType deviceType, ESpaceColorPolicy spaceColorPolicy, std::shared_ptr<TMetadata> metadata)
     : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, isDiskReadOnly, deviceType,
             spaceColorPolicy))
-{}
+{
+    if (metadata) {
+        Impl->Metadata = std::move(metadata);
+    }
+}
 
 TPDiskMockState::TPDiskMockState(std::unique_ptr<TImpl>&& impl)
     : Impl(std::move(impl))
@@ -433,6 +444,7 @@ ui32 TPDiskMockState::GetNumActiveSlots() const {
 
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
+    res->Impl->Metadata = std::make_shared<TMetadata>(*Impl->Metadata);
     res->Impl->AdjustRefs();
     return res;
 }
@@ -1503,15 +1515,15 @@ public:
     }
 
     void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
-        if (Impl.Metadata) {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
+        if (*Impl.Metadata) {
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(**Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
         } else {
             Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, GetPDiskGuid()), 0, ev->Cookie);
         }
     }
 
     void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
-        Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
+        Impl.Metadata->emplace(std::move(ev->Get()->Metadata));
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, GetPDiskGuid()), 0, ev->Cookie);
     }
 
@@ -1533,6 +1545,15 @@ public:
     }
 
     void Ignore() {}
+
+    void HandlePoison(TEvents::TEvPoison::TPtr& ev) {
+        LogQ.clear();
+        Arbiter.reset();
+        if (ev->Sender && ev->Cookie) {
+            Send(ev->Sender, new TEvents::TEvPoisonTaken, 0, ev->Cookie);
+        }
+        PassAway();
+    }
 
     STFUNC(StateNormal) {
         const bool poison = ev->GetTypeRewrite() == TEvents::TSystem::Poison;
@@ -1575,7 +1596,7 @@ public:
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
 
-        cFunc(TEvents::TSystem::Poison, PassAway);
+        hFunc(TEvents::TEvPoison, HandlePoison);
     )
 
     STRICT_STFUNC(StateError,
@@ -1606,7 +1627,7 @@ public:
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
 
-        cFunc(TEvents::TSystem::Poison, PassAway);
+        hFunc(TEvents::TEvPoison, HandlePoison);
     )
 };
 

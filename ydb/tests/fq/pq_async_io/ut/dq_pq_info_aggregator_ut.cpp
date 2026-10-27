@@ -11,7 +11,7 @@ using namespace NTestUtils;
 
 namespace {
 
-class TPqComputeActorTestFixture : public TTestWithActorSystemFixture {
+class TPqComputeActorTestFixture: public TTestWithActorSystemFixture {
     using TBase = TTestWithActorSystemFixture;
 
     struct TResponse {
@@ -34,8 +34,8 @@ protected:
         Runtime.Send(InfoAggregationActorId, clientId, new TPqInfoAggregationActorEvents::TEvUpdateCounter(value));
     }
 
-    NPq::NProto::TEvDqPqUpdateCounterValue MakeSumValue(const TString& counterId, ui64 seqNo, i64 sum,
-        TDuration reportPeriod = TDuration::Days(1), i64 deltaThreshold = 0)
+    NPq::NProto::TEvDqPqUpdateCounterValue MakeSumValue(
+        const TString& counterId, ui64 seqNo, i64 sum, TDuration reportPeriod = TDuration::Days(1), i64 deltaThreshold = 0)
     {
         NPq::NProto::TEvDqPqUpdateCounterValue value;
         *value.MutableSettings()->MutableReportPeriod() = NProtoInterop::CastToProto(reportPeriod);
@@ -46,8 +46,8 @@ protected:
         return value;
     }
 
-    NPq::NProto::TEvDqPqUpdateCounterValue MakeMinValue(const TString& counterId, ui64 seqNo, i64 minVal,
-        TDuration reportPeriod = TDuration::Days(1), i64 deltaThreshold = 0)
+    NPq::NProto::TEvDqPqUpdateCounterValue MakeMinValue(
+        const TString& counterId, ui64 seqNo, i64 minVal, TDuration reportPeriod = TDuration::Days(1), i64 deltaThreshold = 0)
     {
         NPq::NProto::TEvDqPqUpdateCounterValue value;
         *value.MutableSettings()->MutableReportPeriod() = NProtoInterop::CastToProto(reportPeriod);
@@ -81,13 +81,13 @@ protected:
     }
 
     void CheckResponse(const TActorId& clientId, const TString& counterId, i64 scalar, ui64 seqNo) {
-        CheckResponse(clientId, {{counterId, {scalar, seqNo}}});
+        CheckResponse(clientId, { { counterId, { scalar, seqNo } } });
     }
 
     TActorId InfoAggregationActorId;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqInfoAggregatorTest) {
     Y_UNIT_TEST_F(TestSumAggregationBasic, TPqComputeActorTestFixture) {
@@ -163,11 +163,11 @@ Y_UNIT_TEST_SUITE(TDqPqInfoAggregatorTest) {
 
         SendValue(clientId, MakeSumValue(sumCounterId, 1, 100));
         SendValue(clientId, MakeMinValue(minCounterId, 1, 50));
-        CheckResponse(clientId, {{sumCounterId, {100, 1}}, {minCounterId, {50, 1}}});
+        CheckResponse(clientId, { { sumCounterId, { 100, 1 } }, { minCounterId, { 50, 1 } } });
 
         SendValue(clientId, MakeSumValue(sumCounterId, 2, 25));
         SendValue(clientId, MakeMinValue(minCounterId, 2, 30));
-        CheckResponse(clientId, {{sumCounterId, {25, 2}}, {minCounterId, {30, 2}}});
+        CheckResponse(clientId, { { sumCounterId, { 25, 2 } }, { minCounterId, { 30, 2 } } });
     }
 
     Y_UNIT_TEST_F(TestMultipleCountersDifferentAggTypesTwoClients, TPqComputeActorTestFixture) {
@@ -231,7 +231,8 @@ Y_UNIT_TEST_SUITE(TDqPqInfoAggregatorTest) {
         SendValue(liveClientId, MakeSumValue(counterId, 1, 10));
         CheckResponse(liveClientId, counterId, 10, 1);
 
-        Runtime.Send(InfoAggregationActorId, nonExistentSender, new TPqInfoAggregationActorEvents::TEvUpdateCounter(MakeSumValue(counterId, 1, 5)));
+        Runtime.Send(
+            InfoAggregationActorId, nonExistentSender, new TPqInfoAggregationActorEvents::TEvUpdateCounter(MakeSumValue(counterId, 1, 5)));
         Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         Runtime.GrabEdgeEvent<TPqInfoAggregationActorEvents::TEvOnAggregateUpdated>(liveClientId);
@@ -242,4 +243,4 @@ Y_UNIT_TEST_SUITE(TDqPqInfoAggregatorTest) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

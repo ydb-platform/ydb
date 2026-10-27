@@ -33,6 +33,13 @@ public:
             return true;
         }
 
+        if (!Replication->IsExpectedResourceIdResolver(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore stale resource id resolver result",
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
             YDB_LOG_NOTICE_CTX(ctx, "Resource id resolved",

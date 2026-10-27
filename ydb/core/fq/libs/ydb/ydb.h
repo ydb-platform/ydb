@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
+#include <ydb/core/fq/libs/ydb/table_client.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
@@ -9,19 +11,16 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
-
-#include <ydb/core/fq/libs/ydb/table_client.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimrConfig {
 
 class TStreamingQueriesConfig_TExternalStorageConfig;
 
-} // namespace NKikimrConfig
+}   // namespace NKikimrConfig
 
 namespace NFq {
 
@@ -52,7 +51,7 @@ private:
     YDB_ACCESSOR(TDuration, MaxRetryTimeout, TDuration::Seconds(600));
 };
 
-struct TYdbConnection : public TThrRefBase {
+struct TYdbConnection: public TThrRefBase {
     NYdb::TDriver Driver;
     NYdb::NTable::TTableClient TableClient;
     NYdb::NScheme::TSchemeClient SchemeClient;
@@ -62,14 +61,12 @@ struct TYdbConnection : public TThrRefBase {
     const TString TablePathPrefix;
 
     TYdbConnection(
-        const TExternalStorageSettings& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-        const NYdb::TDriver& driver);
+        const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 };
 
 using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
 
-struct IYdbConnection : public TThrRefBase {
+struct IYdbConnection: public TThrRefBase {
     using TPtr = TIntrusivePtr<IYdbConnection>;
 
     virtual IYdbTableClient::TPtr GetTableClient() const = 0;
@@ -78,20 +75,14 @@ struct IYdbConnection : public TThrRefBase {
     virtual TString GetTablePathPrefixWithoutDb() const = 0;
 };
 
-IYdbConnection::TPtr CreateLocalYdbConnection(
-    const TString& db,
-    const TString& tablePathPrefix,
-    ui64 maxActiveSessions);
+IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions);
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
-    const TExternalStorageSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-    const NYdb::TDriver& driver);
-
+    const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TGenerationContext : public TThrRefBase {
+struct TGenerationContext: public TThrRefBase {
     enum EOperationType {
         Register,
         RegisterCheck,
@@ -135,15 +126,9 @@ struct TGenerationContext : public TThrRefBase {
 
     NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
 
-    TGenerationContext(ISession::TPtr session,
-                       bool commitTx,
-                       const TString& tablePathPrefix,
-                       const TString& table,
-                       const TString& primaryKeyColumn,
-                       const TString& generationColumn,
-                       const TString& primaryKey,
-                       ui64 generation,
-                       const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
+    TGenerationContext(ISession::TPtr session, bool commitTx, const TString& tablePathPrefix, const TString& table,
+        const TString& primaryKeyColumn, const TString& generationColumn, const TString& primaryKey, ui64 generation,
+        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
         : Session(std::move(session))
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
@@ -161,28 +146,20 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYdbConnectionPtr NewYdbConnection(const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
+TYdbConnectionPtr NewYdbConnection(
+    const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
-NYdb::TStatus MakeErrorStatus(
-    NYdb::EStatus code,
-    const TString& msg,
-    NYql::ESeverity severity = NYql::TSeverityIds::S_WARNING);
+NYdb::TStatus MakeErrorStatus(NYdb::EStatus code, const TString& msg, NYql::ESeverity severity = NYql::TSeverityIds::S_WARNING);
 
 NYql::TIssues StatusToIssues(const NYdb::TStatus& status);
 
-NThreading::TFuture<NYql::TIssues> StatusToIssues(
-    const NThreading::TFuture<NYdb::TStatus>& future);
+NThreading::TFuture<NYql::TIssues> StatusToIssues(const NThreading::TFuture<NYdb::TStatus>& future);
 
 NThreading::TFuture<NYdb::TStatus> CreateTable(
-    const TYdbConnectionPtr& ydbConnection,
-    const TString& name,
-    NYdb::NTable::TTableDescription&& description);
+    const TYdbConnectionPtr& ydbConnection, const TString& name, NYdb::NTable::TTableDescription&& description);
 
 NThreading::TFuture<NYdb::TStatus> CreateTable(
-    const IYdbConnection::TPtr& ydbConnection,
-    const TString& name,
-    NYdb::NTable::TTableDescription&& description,
-    const NACLib::TDiffACL& acl);
+    const IYdbConnection::TPtr& ydbConnection, const TString& name, NYdb::NTable::TTableDescription&& description, const NACLib::TDiffACL& acl);
 
 bool IsTableCreated(const NYdb::TStatus& status);
 bool IsTableDeleted(const NYdb::TStatus& status);
@@ -203,9 +180,7 @@ NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TExternalStorage
 template <class TSettings>
 TSettings GetClientSettings(const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
     TSettings settings;
-    settings
-        .DiscoveryEndpoint(config.GetEndpoint())
-        .Database(config.GetDatabase());
+    settings.DiscoveryEndpoint(config.GetEndpoint()).Database(config.GetDatabase());
 
     settings.CredentialsProviderFactory(credProviderFactory(GetYdbCredentialSettings(config)));
 
@@ -219,11 +194,10 @@ TSettings GetClientSettings(const TExternalStorageSettings& config, const NKikim
     }
 
     if constexpr (std::is_same_v<TSettings, NYdb::NTable::TClientSettings>) {
-        settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings()
-            .MaxActiveSessions(config.GetMaxActiveQuerySessions()));
+        settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(config.GetMaxActiveQuerySessions()));
     }
 
     return settings;
 }
 
-} // namespace NFq
+}   // namespace NFq

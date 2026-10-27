@@ -3,17 +3,15 @@
 #include <ydb/core/kqp/runtime/common/kqp_program_builder.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 
+#include <library/cpp/threading/future/future.h>
+#include <util/stream/str.h>
+#include <util/string/escape.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-
-#include <library/cpp/threading/future/future.h>
-
-#include <util/stream/str.h>
-#include <util/string/escape.h>
 
 #include <bit>
 #include <deque>
@@ -28,8 +26,7 @@ TString CheckQuotedIdentifier(NSQLTranslation::ILexer& lexer, const TStringBuf& 
     const TString query = TStringBuilder() << "SELECT " << quoted << " FROM input_table; SELECT 42;";
     NSQLTranslation::TParsedTokenList tokens;
     NYql::TIssues issues;
-    UNIT_ASSERT_C(NSQLTranslation::Tokenize(lexer, query, "quoted identifier", tokens, issues, 10),
-        EscapeC(name) << ": " << issues.ToString());
+    UNIT_ASSERT_C(NSQLTranslation::Tokenize(lexer, query, "quoted identifier", tokens, issues, 10), EscapeC(name) << ": " << issues.ToString());
 
     TVector<TString> tokenNames;
     TVector<TString> tokenContents;
@@ -39,9 +36,7 @@ TString CheckQuotedIdentifier(NSQLTranslation::ILexer& lexer, const TStringBuf& 
             tokenContents.push_back(token.Content);
         }
     }
-    const TVector<TString> expectedNames = {
-        "SELECT", "ID_QUOTED", "FROM", "ID_PLAIN", "SEMICOLON", "SELECT", "DIGITS", "SEMICOLON", "EOF"
-    };
+    const TVector<TString> expectedNames = { "SELECT", "ID_QUOTED", "FROM", "ID_PLAIN", "SEMICOLON", "SELECT", "DIGITS", "SEMICOLON", "EOF" };
     UNIT_ASSERT_VALUES_EQUAL_C(tokenNames.size(), expectedNames.size(), EscapeC(name));
     for (size_t i = 0; i < tokenNames.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(tokenNames[i], expectedNames[i], EscapeC(name));
@@ -53,11 +48,12 @@ TString CheckQuotedIdentifier(NSQLTranslation::ILexer& lexer, const TStringBuf& 
 }
 
 class TOutputTableAggregationRuntime {
-    class TInput final : public TComputationValue<TInput> {
+    class TInput final: public TComputationValue<TInput> {
     public:
         explicit TInput(TMemoryUsageInfo* const memInfo)
             : TComputationValue<TInput>(memInfo)
-        {}
+        {
+        }
 
         std::deque<NUdf::TUnboxedValue> Rows;
         bool Finished = false;
@@ -86,27 +82,34 @@ public:
         ComputeCtx.SetCheckpointContext(Checkpoints);
         TKqpProgramBuilder pb(*Setup.Env, *Setup.FunctionRegistry);
         const auto zero = pb.NewDataLiteral<ui64>(0);
-        const auto row = pb.NewStruct({{"key", zero}, {"value", zero}});
+        const auto row = pb.NewStruct({ { "key", zero }, { "value", zero } });
         const auto input = pb.Arg(TStreamType::Create(row.GetStaticType(), *Setup.Env));
-        const auto key = pb.NewStruct({{"key", zero}});
-        const auto saved = pb.NewStruct({{"total", zero}});
+        const auto key = pb.NewStruct({ { "key", zero } });
+        const auto saved = pb.NewStruct({ { "total", zero } });
         KeyType = key.GetStaticType();
         SavedType = saved.GetStaticType();
-        const auto binding = pb.NewTuple({pb.NewDataLiteral<NUdf::EDataSlot::String>("/Root/result"),
-            pb.NewStruct({{"key", pb.NewDataLiteral<NUdf::EDataSlot::String>("key")},
-                {"total", pb.NewDataLiteral<NUdf::EDataSlot::String>("total")}})});
-        const auto aggregation = pb.KqpStreamingAggregation(pb.ToFlow(input, {}),
-            [&](TRuntimeNode item) { return pb.NewStruct({{"key", pb.Member(item, "key")}}); },
-            [&](TRuntimeNode item) { return pb.NewStruct({{"total", pb.Member(item, "value")}}); },
+        const auto binding = pb.NewTuple({ pb.NewDataLiteral<NUdf::EDataSlot::String>("/Root/result"),
+            pb.NewStruct({ { "key", pb.NewDataLiteral<NUdf::EDataSlot::String>("key") },
+                { "total", pb.NewDataLiteral<NUdf::EDataSlot::String>("total") } }) });
+        const auto aggregation = pb.KqpStreamingAggregation(
+            pb.ToFlow(input, {}),
+            [&](TRuntimeNode item) {
+                return pb.NewStruct({ { "key", pb.Member(item, "key") } });
+            },
+            [&](TRuntimeNode item) {
+                return pb.NewStruct({ { "total", pb.Member(item, "value") } });
+            },
             [&](TRuntimeNode state, TRuntimeNode item) {
-                return pb.NewStruct({{"total", pb.Add(pb.Member(state, "total"), pb.Member(item, "value"))}});
+                return pb.NewStruct({ { "total", pb.Add(pb.Member(state, "total"), pb.Member(item, "value")) } });
             },
             [&](TRuntimeNode key, TRuntimeNode state) {
-                return pb.NewTuple({pb.Member(key, "key"), pb.Member(state, "total")});
-            }, binding, {}, {}, [&](TRuntimeNode state, TRuntimeNode other) {
-                return pb.NewStruct({{"total", pb.Add(pb.Member(state, "total"), pb.Member(other, "total"))}});
+                return pb.NewTuple({ pb.Member(key, "key"), pb.Member(state, "total") });
+            }, binding,
+            {}, {},
+            [&](TRuntimeNode state, TRuntimeNode other) {
+                return pb.NewStruct({ { "total", pb.Add(pb.Member(state, "total"), pb.Member(other, "total")) } });
             });
-        Graph = Setup.BuildGraph(pb.FromFlow(aggregation), {input.GetNode()});
+        Graph = Setup.BuildGraph(pb.FromFlow(aggregation), { input.GetNode() });
         InputValue = Graph->GetHolderFactory().Create<TInput>();
         Input = static_cast<TInput*>(InputValue.AsBoxed().Get());
         Graph->GetEntryPoint(0, true)->SetValue(Graph->GetContext(), NUdf::TUnboxedValue(InputValue));
@@ -122,15 +125,15 @@ public:
         const TValuePacker keyPacker(false, KeyType);
         const TValuePacker statePacker(false, SavedType);
         for (const auto& [key, value] : rows) {
-            out.WriteUnboxedValue(keyPacker, Array({key}));
-            out.WriteUnboxedValue(statePacker, Array({value}));
+            out.WriteUnboxedValue(keyPacker, Array({ key }));
+            out.WriteUnboxedValue(statePacker, Array({ value }));
         }
-        out.Write<ui64>(0); // Pending lookups.
+        out.Write<ui64>(0);   // Pending lookups.
         ctx.MutableValues[AggregationNode->GetIndex()] = out.MakeState();
     }
 
     void Add(ui64 key, ui64 value) {
-        Input->Rows.push_back(Array({key, value}));
+        Input->Rows.push_back(Array({ key, value }));
     }
 
     void FinishInput() {
@@ -156,7 +159,7 @@ public:
     std::pair<ui64, ui64> FetchRow() {
         NUdf::TUnboxedValue row;
         UNIT_ASSERT_VALUES_EQUAL(Stream.Fetch(row), NUdf::EFetchStatus::Ok);
-        return {row.GetElement(0).Get<ui64>(), row.GetElement(1).Get<ui64>()};
+        return { row.GetElement(0).Get<ui64>(), row.GetElement(1).Get<ui64>() };
     }
 
     void ExpectRow(ui64 key, ui64 value) {
@@ -208,12 +211,12 @@ private:
     NUdf::TUnboxedValue Stream;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     Y_UNIT_TEST(OutputTableFrozenSnapshotAndNewerLive) {
         TOutputTableAggregationRuntime test;
-        test.Seed({{1, 10}});
+        test.Seed({ { 1, 10 } });
         test.ExpectRow(1, 10);
         test.Add(1, 5);
         test.ExpectStatus();
@@ -229,14 +232,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
         test.ExpectStatus();
         test.Save(1, 12);
         test.Commit(1, 12);
-        test.ExpectStatus(); // Evict before emitting this unchanged snapshot again.
+        test.ExpectStatus();   // Evict before emitting this unchanged snapshot again.
         test.FinishInput();
         test.ExpectStatus(NUdf::EFetchStatus::Finish);
     }
 
     Y_UNIT_TEST_TWIN(OutputTableUpdateCancelsEviction, AfterSave) {
         TOutputTableAggregationRuntime test;
-        test.Seed({{1, 10}});
+        test.Seed({ { 1, 10 } });
         test.ExpectRow(1, 10);
         test.ExpectStatus();
         if constexpr (AfterSave) {
@@ -264,22 +267,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
 
     Y_UNIT_TEST(OutputTableAbortedSaveAndCompletedRecovery) {
         TOutputTableAggregationRuntime test;
-        test.Seed({{1, 10}, {2, 20}});
-        const std::map<ui64, ui64> initial = {{1, 10}, {2, 20}};
+        test.Seed({ { 1, 10 }, { 2, 20 } });
+        const std::map<ui64, ui64> initial = { { 1, 10 }, { 2, 20 } };
         UNIT_ASSERT(test.Drain() == initial);
         test.Save(1, 10);
         test.Add(1, 7);
         test.ExpectStatus();
-        const auto checkpoint = test.Save(1, 12); // Checkpoint 10 was aborted.
+        const auto checkpoint = test.Save(1, 12);   // Checkpoint 10 was aborted.
         test.ExpectStatus();
-        test.Restore(checkpoint); // Completed restoration does not resend commit 12.
-        const std::map<ui64, ui64> expected = {{1, 17}, {2, 20}};
+        test.Restore(checkpoint);   // Completed restoration does not resend commit 12.
+        const std::map<ui64, ui64> expected = { { 1, 17 }, { 2, 20 } };
         // A restored durable batch emits without a new save or commit notification.
         UNIT_ASSERT(test.Drain() == expected);
         test.FinishInput();
         test.ExpectStatus();
         test.Save(2, 1);
-        test.Commit(1, 100); // A stale generation must not enable output or eviction.
+        test.Commit(1, 100);   // A stale generation must not enable output or eviction.
         test.ExpectStatus();
         test.Commit(2, 1);
         test.ExpectStatus(NUdf::EFetchStatus::Finish);
@@ -315,16 +318,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
 
     Y_UNIT_TEST(OutputTableFinishedInputWaitsForDurability) {
         TOutputTableAggregationRuntime test;
-        test.Seed({{1, 10}});
+        test.Seed({ { 1, 10 } });
         test.ExpectRow(1, 10);
         test.FinishInput();
         test.ExpectStatus();
         const auto checkpoint = test.Save(1, 10);
         test.Restore(checkpoint);
         test.ExpectRow(1, 10);
-        test.ExpectStatus(); // The restored input flow reports Finish again.
+        test.ExpectStatus();   // The restored input flow reports Finish again.
         test.Commit(1, 10);
-        test.ExpectStatus(); // The restored commit cannot evict newly re-emitted rows.
+        test.ExpectStatus();   // The restored commit cannot evict newly re-emitted rows.
         test.Save(1, 11);
         test.Commit(1, 11);
         test.ExpectStatus(NUdf::EFetchStatus::Finish);
@@ -333,11 +336,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     Y_UNIT_TEST_TWIN(QuoteIdentifierSqlSyntax, Ansi) {
         const auto factory = Ansi ? NSQLTranslationV1::MakeAntlr4AnsiLexerFactory() : NSQLTranslationV1::MakeAntlr4LexerFactory();
         const auto lexer = factory->MakeLexer();
-        const TVector<TString> names = {
-            "", "normal", "select", "column with spaces", "a`b", "``", "\\", "\\`", "\\\\`", "ends-with-\\",
-            "` FROM input_table; SELECT 123; --", "`; DROP TABLE input_table; /*", "'\"; -- /* */",
-            "line\n\r\t--!ansi_lexer\nSELECT 123;", R"(\x60\u0060\140)", "?" "?/`", "ключ"
-        };
+        const TVector<TString> names = { "", "normal", "select", "column with spaces", "a`b", "``", "\\", "\\`", "\\\\`", "ends-with-\\",
+            "` FROM input_table; SELECT 123; --", "`; DROP TABLE input_table; /*", "'\"; -- /* */", "line\n\r\t--!ansi_lexer\nSELECT 123;",
+            R"(\x60\u0060\140)",
+            "?"
+            "?/`",
+            "ключ" };
         for (const auto& name : names) {
             const auto quoted = CheckQuotedIdentifier(*lexer, name);
             TString decoded;
@@ -359,7 +363,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
             allBytes.push_back(byte);
             CheckQuotedIdentifier(*lexer, TStringBuf(&byte, 1));
             for (ui32 second = 0; second < 256; ++second) {
-                const char pair[] = {byte, static_cast<char>(second)};
+                const char pair[] = { byte, static_cast<char>(second) };
                 CheckQuotedIdentifier(*lexer, TStringBuf(pair, sizeof(pair)));
             }
         }
@@ -376,14 +380,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
         TSetup<false> setup(GetKqpBaseComputeFactory(&computeCtx));
         TKqpProgramBuilder pb(*setup.Env, *setup.FunctionRegistry);
         const auto one = pb.NewDataLiteral<ui64>(1);
-        const auto flow = pb.ToFlow(pb.ListFromRange(
-            pb.NewDataLiteral<ui64>(0), pb.NewDataLiteral<ui64>(keyCount), one), {});
-        const auto aggregation = pb.KqpStreamingAggregation(flow,
-            [&](TRuntimeNode item) { return pb.NewTuple({item}); },
-            [&](TRuntimeNode) { return one; },
-            [&](TRuntimeNode state, TRuntimeNode) { return pb.Add(state, one); },
-            [&](TRuntimeNode key, TRuntimeNode state) { return pb.Add(pb.Nth(key, 0), state); },
-            pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
+        const auto flow = pb.ToFlow(pb.ListFromRange(pb.NewDataLiteral<ui64>(0), pb.NewDataLiteral<ui64>(keyCount), one), {});
+        const auto aggregation = pb.KqpStreamingAggregation(
+            flow,
+            [&](TRuntimeNode item) {
+                return pb.NewTuple({ item });
+            },
+            [&](TRuntimeNode) {
+                return one;
+            },
+            [&](TRuntimeNode state, TRuntimeNode) {
+                return pb.Add(state, one);
+            },
+            [&](TRuntimeNode key, TRuntimeNode state) {
+                return pb.Add(pb.Nth(key, 0), state);
+            }, pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
         auto graph = setup.BuildGraph(pb.FromFlow(aggregation));
         const auto stream = graph->GetValue();
         const auto usedBefore = setup.Alloc.GetUsed();
@@ -410,16 +421,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
         const auto one = pb.NewDataLiteral<ui64>(1);
         const auto count = pb.NewDataLiteral<ui64>(keyCount);
         const auto prefix = pb.NewDataLiteral<NUdf::EDataSlot::String>(TString(keySize, 'x'));
-        const auto flow = pb.ToFlow(pb.ListFromRange(
-            pb.NewDataLiteral<ui64>(0), pb.NewDataLiteral<ui64>(2 * keyCount), one), {});
-        const auto aggregation = pb.KqpStreamingAggregation(flow,
+        const auto flow = pb.ToFlow(pb.ListFromRange(pb.NewDataLiteral<ui64>(0), pb.NewDataLiteral<ui64>(2 * keyCount), one), {});
+        const auto aggregation = pb.KqpStreamingAggregation(
+            flow,
             [&](TRuntimeNode item) {
-                return pb.NewStruct({{"key", pb.Concat(prefix, pb.ToString(pb.Mod(item, count)))}});
+                return pb.NewStruct({ { "key", pb.Concat(prefix, pb.ToString(pb.Mod(item, count))) } });
             },
-            [&](TRuntimeNode) { return one; },
-            [&](TRuntimeNode state, TRuntimeNode) { return pb.Add(state, one); },
-            [&](TRuntimeNode, TRuntimeNode state) { return state; },
-            pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
+            [&](TRuntimeNode) {
+                return one;
+            },
+            [&](TRuntimeNode state, TRuntimeNode) {
+                return pb.Add(state, one);
+            },
+            [&](TRuntimeNode, TRuntimeNode state) {
+                return state;
+            }, pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
         auto graph = setup.BuildGraph(pb.FromFlow(aggregation));
         const auto stream = graph->GetValue();
         const auto usedBefore = setup.Alloc.GetUsed();
@@ -438,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     }
 
     Y_UNIT_TEST_TWIN(TypedKeysAndCheckpointRecovery, LegacyCheckpoint) {
-        for (const auto keyKind : {TType::EKind::Data, TType::EKind::Tuple, TType::EKind::Struct}) {
+        for (const auto keyKind : { TType::EKind::Data, TType::EKind::Tuple, TType::EKind::Struct }) {
             TKqpComputeContextBase computeCtx;
             TSetup<false> setup(GetKqpBaseComputeFactory(&computeCtx));
             TKqpProgramBuilder pb(*setup.Env, *setup.FunctionRegistry);
@@ -446,30 +462,37 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
             const auto zero = pb.NewDataLiteral<double>(0.0);
             const auto nan = std::bit_cast<double>(ui64(0x7ff8000000000001));
             const auto otherNan = std::bit_cast<double>(ui64(0xfff8000000000002));
-            const auto flow = pb.ToFlow(pb.AsList({zero, pb.NewDataLiteral<double>(-0.0),
-                pb.NewDataLiteral<double>(nan), pb.NewDataLiteral<double>(otherNan),
-                pb.NewDataLiteral<double>(1.0), pb.NewDataLiteral<double>(nan), zero}), {});
+            const auto flow =
+                pb.ToFlow(pb.AsList({ zero, pb.NewDataLiteral<double>(-0.0), pb.NewDataLiteral<double>(nan), pb.NewDataLiteral<double>(otherNan),
+                              pb.NewDataLiteral<double>(1.0), pb.NewDataLiteral<double>(nan), zero }),
+                    {});
             const auto keyExtractor = [&](TRuntimeNode item) {
                 if (keyKind == TType::EKind::Tuple) {
-                    return pb.NewTuple({item});
+                    return pb.NewTuple({ item });
                 }
                 if (keyKind == TType::EKind::Struct) {
-                    return pb.NewStruct({{"key", item}});
+                    return pb.NewStruct({ { "key", item } });
                 }
                 return item;
             };
-            const auto aggregation = pb.KqpStreamingAggregation(flow, keyExtractor,
-                [&](TRuntimeNode) { return one; },
-                [&](TRuntimeNode state, TRuntimeNode) { return pb.Add(state, one); },
-                [&](TRuntimeNode, TRuntimeNode state) { return state; },
-                pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
+            const auto aggregation = pb.KqpStreamingAggregation(
+                flow, keyExtractor,
+                [&](TRuntimeNode) {
+                    return one;
+                },
+                [&](TRuntimeNode state, TRuntimeNode) {
+                    return pb.Add(state, one);
+                },
+                [&](TRuntimeNode, TRuntimeNode state) {
+                    return state;
+                }, pb.NewDataLiteral<NUdf::EDataSlot::String>(""));
             const auto program = pb.FromFlow(aggregation);
             TString checkpoint;
             {
                 auto graph = setup.BuildGraph(program);
                 const auto stream = graph->GetValue();
                 NUdf::TUnboxedValue item;
-                for (const ui64 expected : {1, 2, 1, 2, 1, 3, 3}) {
+                for (const ui64 expected : { 1, 2, 1, 2, 1, 3, 3 }) {
                     UNIT_ASSERT_VALUES_EQUAL(stream.Fetch(item), NUdf::EFetchStatus::Ok);
                     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), expected);
                 }
@@ -481,8 +504,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
                     out.Write<ui64>(3);
                     const TValuePacker keyPacker(true, keyExtractor(zero).GetStaticType());
                     const TValuePacker statePacker(false, one.GetStaticType());
-                    for (const double value : {0.0, nan, 1.0}) {
-                        NUdf::TUnboxedValue key{NUdf::TUnboxedValuePod(value)};
+                    for (const double value : { 0.0, nan, 1.0 }) {
+                        NUdf::TUnboxedValue key{ NUdf::TUnboxedValuePod(value) };
                         if (keyKind != TType::EKind::Data) {
                             NUdf::TUnboxedValue* fields = nullptr;
                             key = ctx.HolderFactory.CreateDirectArrayHolder(1, fields);
@@ -509,7 +532,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
             graph->LoadGraphState(checkpoint);
             const auto stream = graph->GetValue();
             NUdf::TUnboxedValue item;
-            for (const ui64 expected : {4, 5, 4, 5, 2, 6, 6}) {
+            for (const ui64 expected : { 4, 5, 4, 5, 2, 6, 6 }) {
                 UNIT_ASSERT_VALUES_EQUAL(stream.Fetch(item), NUdf::EFetchStatus::Ok);
                 UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), expected);
             }
@@ -518,19 +541,27 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     }
 
     Y_UNIT_TEST(PatternIsNotCacheable) {
-        for (const TStringBuf stateTablePath : {"", "/Root/state"}) {
+        for (const TStringBuf stateTablePath : { "", "/Root/state" }) {
             TKqpComputeContextBase computeCtx;
             TSetup<false> setup(GetKqpBaseComputeFactory(&computeCtx));
             TKqpProgramBuilder pb(*setup.Env, *setup.FunctionRegistry);
             const auto one = pb.NewDataLiteral<ui64>(1);
             const auto two = pb.NewDataLiteral<ui64>(2);
-            const auto flow = pb.ToFlow(pb.AsList({one, one, two}), {});
-            const auto aggregation = pb.KqpStreamingAggregation(flow,
-                [&](TRuntimeNode item) { return pb.NewTuple({item}); },
-                [&](TRuntimeNode) { return one; },
-                [&](TRuntimeNode state, TRuntimeNode) { return pb.Add(state, one); },
-                [&](TRuntimeNode key, TRuntimeNode state) { return pb.NewTuple({key, state}); },
-                pb.NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath));
+            const auto flow = pb.ToFlow(pb.AsList({ one, one, two }), {});
+            const auto aggregation = pb.KqpStreamingAggregation(
+                flow,
+                [&](TRuntimeNode item) {
+                    return pb.NewTuple({ item });
+                },
+                [&](TRuntimeNode) {
+                    return one;
+                },
+                [&](TRuntimeNode state, TRuntimeNode) {
+                    return pb.Add(state, one);
+                },
+                [&](TRuntimeNode key, TRuntimeNode state) {
+                    return pb.NewTuple({ key, state });
+                }, pb.NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath));
             auto graph = setup.BuildGraph(pb.Collect(aggregation));
             UNIT_ASSERT(!setup.Pattern->GetSuitableForCache());
 
@@ -539,7 +570,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
                 const auto result = graph->GetValue();
                 const auto iterator = result.GetListIterator();
                 NUdf::TUnboxedValue item;
-                for (const ui64 expected : {1, 2, 1}) {
+                for (const ui64 expected : { 1, 2, 1 }) {
                     UNIT_ASSERT(iterator.Next(item));
                     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<ui64>(), expected);
                 }
@@ -549,8 +580,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     }
 
     Y_UNIT_TEST(WakeupCallbackOutlivesContext) {
-        for (const bool readyBeforeSubscribe : {false, true}) {
-            for (const bool failed : {false, true}) {
+        for (const bool readyBeforeSubscribe : { false, true }) {
+            for (const bool failed : { false, true }) {
                 auto promise = NThreading::NewPromise<void>();
                 const auto complete = [&]() {
                     if (failed) {
@@ -567,9 +598,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
                 {
                     TKqpComputeContextBase computeCtx;
                     UNIT_ASSERT(!computeCtx.GetWakeupCallback());
-                    computeCtx.SetWakeupCallback([&]() { ++wakeups; });
+                    computeCtx.SetWakeupCallback([&]() {
+                        ++wakeups;
+                    });
                     const auto wakeupCallback = computeCtx.GetWakeupCallback();
-                    promise.GetFuture().Subscribe([wakeupCallback](const auto&) { wakeupCallback(); });
+                    promise.GetFuture().Subscribe([wakeupCallback](const auto&) {
+                        wakeupCallback();
+                    });
                     computeCtx.SetWakeupCallback({});
                     UNIT_ASSERT_VALUES_EQUAL(wakeups, readyBeforeSubscribe ? 1 : 0);
                 }
@@ -584,4 +619,4 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregationRuntime) {
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

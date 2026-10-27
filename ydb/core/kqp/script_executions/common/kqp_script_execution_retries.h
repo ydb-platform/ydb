@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
@@ -53,7 +54,7 @@ public:
     bool PolicyInitialized = false;
 };
 
-class TRetryLimiter final : public TRetryPolicyState {
+class TRetryLimiter final: public TRetryPolicyState {
     using TBase = TRetryPolicyState;
 
 public:
@@ -69,4 +70,4 @@ public:
     TString LastError;
 };
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

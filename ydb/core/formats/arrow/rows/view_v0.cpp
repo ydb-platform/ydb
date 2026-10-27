@@ -2,7 +2,10 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NArrow {
 
@@ -29,7 +32,7 @@ public:
         }
         if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
             using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
-            return CustomActor.template OnValue<TWrap>(fieldIndex, *(CType*)(data));
+            return CustomActor.template OnValue<TWrap>(fieldIndex, ReadUnaligned<CType>(data));
         }
         AFL_VERIFY(false);
         return false;
@@ -66,7 +69,7 @@ public:
 TConclusion<TString> TSimpleRowViewV0::DebugString(const std::shared_ptr<arrow::Schema>& schema) const {
     TDebugStringActor custom;
     TGeneralActor<TDebugStringActor> resultActor(std::move(custom));
-    auto conclusion = Scan(schema, resultActor);
+    auto conclusion = Scan(*schema, resultActor);
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -107,7 +110,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
     AFL_VERIFY((ui32)schema->num_fields() == builders.size());
     TBuildersActor custom(builders);
     TGeneralActor<TBuildersActor> resultActor(std::move(custom));
-    return Scan(schema, resultActor);
+    return Scan(*schema, resultActor);
 }
 
 class TCompareActor {
@@ -131,12 +134,8 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        const int cmp = std::string_view(data, size).compare(*ItemView);
-        if (cmp < 0) {
-            Result = std::partial_ordering::less;
-        } else if (cmp > 0) {
-            Result = std::partial_ordering::greater;
-        }
+        Result = TComparator::CompareValueNotNull(
+            arrow::util::string_view(data, size), arrow::util::string_view(ItemView->data(), ItemView->size()));
         return false;
     }
 
@@ -147,11 +146,10 @@ public:
             return false;
         }
         AFL_VERIFY(ItemView->size() == sizeof(CType));
-        const CType itemValue = *(CType*)(ItemView->data());
-        if (value < itemValue) {
-            Result = std::partial_ordering::less;
-        } else if (itemValue < value) {
-            Result = std::partial_ordering::greater;
+        Result = TComparator::CompareValueNotNull(value, ReadUnaligned<CType>(ItemView->data()));
+        // Packed rows historically treat unordered floating-point values as equivalent.
+        if (Result == std::partial_ordering::unordered) {
+            Result = std::partial_ordering::equivalent;
         }
         return false;
     }
@@ -162,8 +160,8 @@ public:
 };
 
 TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
-    const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount) const {
-    AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema->num_fields());
+    const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount) const {
+    AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema.num_fields());
     TIterator itSelf(Values, schema);
     TIterator itItem(item.Values, schema);
     {
@@ -179,7 +177,7 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
         }
     }
 
-    ui32 idx = columnsCount.value_or((ui32)schema->num_fields());
+    ui32 idx = columnsCount.value_or((ui32)schema.num_fields());
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
@@ -291,7 +289,7 @@ public:
 TConclusion<std::shared_ptr<arrow::Scalar>> TSimpleRowViewV0::GetScalar(
     const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
     TGetScalarActor resultActor(columnIndex, schema);
-    auto conclusion = Scan(schema, resultActor);
+    auto conclusion = Scan(*schema, resultActor);
     if (conclusion.IsFail()) {
         return conclusion;
     }

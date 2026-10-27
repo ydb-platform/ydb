@@ -27,5 +27,5 @@ void* ObjectFrameworkGet(TObjectHandle handle, const TObjectType* expectedType);
 void ObjectFrameworkDestroy(TObjectHandle handle);
 
 #ifdef __cplusplus
-} // extern "C"
+}   // extern "C"
 #endif

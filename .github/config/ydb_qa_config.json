@@ -31,6 +31,7 @@
               "mute_events": "test_results/analytics/mute_events",
               "ci_metrics": "analytics/ci_metrics",
               "ci_metrics_state": "analytics/ci_metrics_state",
+              "ci_capacity": "analytics/ci_capacity",
               "analytics_events": "analytics/events"
 
           }

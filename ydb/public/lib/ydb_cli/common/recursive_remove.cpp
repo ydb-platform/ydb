@@ -89,6 +89,10 @@ TStatus RemoveStreamingQuery(NQuery::TQueryClient& client, const TString& path, 
     return DropSchemeObject("STREAMING QUERY", client, path, settings);
 }
 
+TStatus RemoveSecret(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("SECRET", client, path, settings);
+}
+
 NYdb::NIssue::TIssues MakeIssues(const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue(error));
@@ -182,6 +186,8 @@ TStatus Remove(
         return Remove(&RemoveTransfer, schemeClient, queryClient, type, path, prompt, settings);
     case ESchemeEntryType::StreamingQuery:
         return Remove(&RemoveStreamingQuery, schemeClient, queryClient, type, path, prompt, settings);
+    case ESchemeEntryType::Secret:
+        return Remove(&RemoveSecret, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -199,6 +205,7 @@ TStatus RemoveDirectoryRecursive(
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
     const auto listingSettings = TRecursiveListSettings()
+        .SkipMode(settings.SkipMode_)
         .Filter([](const TSchemeEntry& entry) {
             // explicitly skip subdomains
             return entry.Type != ESchemeEntryType::SubDomain;

@@ -18,9 +18,7 @@ constexpr TDuration ControllerTickInterval = TDuration::Seconds(10);
 //! controller actually owns this node's compiles.
 constexpr ui64 ResolveDomainCookie = 1;
 
-void AddNavigateByPathId(
-    NSchemeCache::TSchemeCacheNavigate::TResultSet& items,
-    const TPathId& pathId)
+void AddNavigateByPathId(NSchemeCache::TSchemeCacheNavigate::TResultSet& items, const TPathId& pathId)
 {
     auto& entry = items.emplace_back();
     entry.TableId = TTableId(pathId.OwnerId, pathId.LocalPathId);
@@ -30,7 +28,7 @@ void AddNavigateByPathId(
     entry.ShowPrivatePath = true;
 }
 
-} // namespace
+}   // namespace
 
 void TUdfStoreService::ResolveCompileController() {
     if (ControllerResolveStage == EControllerResolveStage::InFlight) {
@@ -77,8 +75,7 @@ void TUdfStoreService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TP
         second->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         AddNavigateByPathId(second->ResultSet, domainInfo->ResourcesDomainKey);
         ControllerResolveStage = EControllerResolveStage::InFlight;
-        Send(MakeSchemeCacheID(),
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(second.release()), 0, ResolveDomainCookie);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(second.release()), 0, ResolveDomainCookie);
         return;
     }
 
@@ -104,8 +101,7 @@ void TUdfStoreService::ConnectToCompileController() {
     config.RetryPolicy = {
         .RetryLimitCount = 3,
     };
-    CompileControllerPipe = Register(NTabletPipe::CreateClient(
-        SelfId(), CompileControllerTabletId, config));
+    CompileControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), CompileControllerTabletId, config));
     SendRegister();
 }
 
@@ -227,19 +223,13 @@ void TUdfStoreService::RequestArtifact(const TString& name, const TString& uid, 
     auto request = std::make_unique<TEvCompileController::TEvNeedArtifact>();
     auto& key = *request->Record.MutableKey();
     key.SetName(name);
-    key.SetKind(isLibrary
-        ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY
-        : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
+    key.SetKind(isLibrary ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
     key.SetUid(uid);
     key.SetCpuSpec(LocalCpuSpec);
     NTabletPipe::SendData(SelfId(), CompileControllerPipe, request.release());
 }
 
-void TUdfStoreService::ReportCompileResult(
-    const TActiveAssignment& assignment,
-    bool success,
-    bool stale,
-    const TString& error)
+void TUdfStoreService::ReportCompileResult(const TActiveAssignment& assignment, bool success, bool stale, const TString& error)
 {
     if (!CompileControllerPipe) {
         return;
@@ -262,9 +252,7 @@ void TUdfStoreService::ReportCompileResult(
     NTabletPipe::SendData(SelfId(), CompileControllerPipe, failed.release());
 }
 
-void TUdfStoreService::RejectAssignment(
-    const NKikimrUdfStore::TEvAssignCompile& record,
-    const TString& reason)
+void TUdfStoreService::RejectAssignment(const NKikimrUdfStore::TEvAssignCompile& record, const TString& reason)
 {
     if (!CompileControllerPipe) {
         return;
@@ -339,7 +327,7 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
 
     if (isLibrary) {
         if (!IsLibraryPending(name)) {
-            PendingLibraryCompile.push_back(TPendingLibrary{.Name = name});
+            PendingLibraryCompile.push_back(TPendingLibrary{ .Name = name });
         }
         if (!LibraryCompileInProgress) {
             FetchNextLibraryCompile();
@@ -355,8 +343,7 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
         PendingWasmCompile.push_back(TPendingUdf{
             .Name = name,
             .Uid = key.GetUid(),
-            .Type = EUdfType::WASM,
-            // The manifest travels with the assignment: this node must compile
+            .Type = EUdfType::WASM,   // The manifest travels with the assignment: this node must compile
             // the upload the controller decided on, not whatever its own
             // snapshot happens to show right now.
             .Manifest = record.GetManifest(),
@@ -392,4 +379,4 @@ void TUdfStoreService::Handle(TEvCompileController::TEvArtifactReady::TPtr& ev) 
     }
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -1,11 +1,12 @@
 #pragma once
 
 #include "events.h"
-#include <ydb/services/metadata/request/common.h>
-#include <ydb/services/metadata/request/request_actor_cb.h>
-#include <ydb/library/table_creator/table_creator.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/table_creator/table_creator.h>
+#include <ydb/services/metadata/request/common.h>
+#include <ydb/services/metadata/request/request_actor_cb.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -13,7 +14,7 @@ namespace NKikimr::NUdfStore {
 //   1. Creates modules + module_chunks tables.
 //   2. Creates the KV volume for native UDF binaries.
 // Artifact tables are created lazily per CPU spec by TUdfStoreService.
-class TUdfStoreInitializer : public NActors::TActorBootstrapped<TUdfStoreInitializer> {
+class TUdfStoreInitializer: public NActors::TActorBootstrapped<TUdfStoreInitializer> {
 private:
     using TBase = NActors::TActorBootstrapped<TUdfStoreInitializer>;
 
@@ -39,7 +40,8 @@ public:
     explicit TUdfStoreInitializer(const NActors::TActorId& parentId, const TString& kvStorageMedia = "ssd")
         : ParentId(parentId)
         , KvStorageMedia(kvStorageMedia)
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -54,4 +56,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -1,21 +1,20 @@
 #include "proxy_private.h"
-#include <util/datetime/base.h>
-
-#include <ydb/library/services/services.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <google/protobuf/util/time_util.h>
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/yson/node/node_io.h>
+#include <util/datetime/base.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
 
@@ -24,23 +23,19 @@ namespace NFq {
 using namespace NActors;
 using namespace NMonitoring;
 
-class TTaskPingRequestActor
-    : public NActors::TActorBootstrapped<TTaskPingRequestActor>
-{
+class TTaskPingRequestActor: public NActors::TActorBootstrapped<TTaskPingRequestActor> {
 public:
-    TTaskPingRequestActor(
-        const NActors::TActorId& sender,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TAutoPtr<TEvents::TEvPingTaskRequest> ev,
+    TTaskPingRequestActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider, TAutoPtr<TEvents::TEvPingTaskRequest> ev,
         TDynamicCounterPtr counters)
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "PingTask")))
-        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs",  ExponentialHistogram(10, 2, 50)))
-        , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
+        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs", ExponentialHistogram(10, 2, 50)))
+        , RequestedMBytes(Counters->GetHistogram("RequestedMB", ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_PING_TASK";
 
@@ -152,16 +147,9 @@ private:
     NYql::TIssues Issues;
 };
 
-IActor* CreatePingTaskRequestActor(
-    const NActors::TActorId& sender,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TAutoPtr<TEvents::TEvPingTaskRequest> ev,
-    TDynamicCounterPtr counters) {
-    return new TTaskPingRequestActor(
-        sender,
-        timeProvider,
-        std::move(ev),
-        std::move(counters));
+IActor* CreatePingTaskRequestActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvPingTaskRequest> ev, TDynamicCounterPtr counters) {
+    return new TTaskPingRequestActor(sender, timeProvider, std::move(ev), std::move(counters));
 }
 
-} /* NFq */
+}   // namespace NFq

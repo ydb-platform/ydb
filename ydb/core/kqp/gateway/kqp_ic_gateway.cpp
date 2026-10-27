@@ -1297,8 +1297,7 @@ public:
                     } else {
                         for (const auto& sid : settings.Roles) {
                             for (const auto& permission : settings.Permissions) {
-                                TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
-                                acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                                RevokeYdbPermission(permission, sid, acl);
                             }
                         }
                     }
@@ -1967,6 +1966,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
+        ev->Record.MutableRequest()->SetIsInternalCall(settings.IsInternalCall);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         FillParameters(params, ev->Record.MutableRequest()->MutableYdbParameters());
@@ -2003,6 +2003,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
+        ev->Record.MutableRequest()->SetIsInternalCall(settings.IsInternalCall);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
@@ -2043,6 +2044,8 @@ public:
             nullptr, // query_cache_policy
             nullptr
         );
+
+        ev->Record.MutableRequest()->SetIsInternalCall(settings.IsInternalCall);
 
         // TODO: Rewrite CollectParameters at kqp_host
         FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
@@ -2104,6 +2107,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
+        ev->Record.MutableRequest()->SetIsInternalCall(settings.IsInternalCall);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
@@ -2172,6 +2176,7 @@ public:
         }
 
         auto& request = *ev->Record.MutableRequest();
+        request.SetIsInternalCall(settings.IsInternalCall);
         request.SetCollectStats(settings.CollectStats);
 
         FillParameters(std::move(params), request.MutableYdbParameters());
@@ -2213,6 +2218,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
+        ev->Record.MutableRequest()->SetIsInternalCall(settings.IsInternalCall);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());

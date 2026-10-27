@@ -22,12 +22,18 @@ public:
 
     void Configure(const TDispatcherConfigPtr& config);
 
-    //! Returns the invoker for the single thread used to dispatch light callbacks
+    //! Returns the invoker used to dispatch light callbacks
     //! (e.g. discovery or request cancelation).
-    const IInvokerPtr& GetLightInvoker();
+    IInvokerPtr GetLightInvoker();
     //! Returns the invoker for the thread pool used to dispatch heavy callbacks
     //! (e.g. serialization).
-    const IInvokerPtr& GetHeavyInvoker();
+    IInvokerPtr GetHeavyInvoker();
+
+    //! Reconfigures the dispatcher to dispatch light and heavy callbacks
+    //! via invokers from the provided worker pool instead of its own
+    //! light action queue and heavy thread pool.
+    //! Passing nullptr restores the default invokers.
+    void SetWorkerPool(NConcurrency::ITwoLevelFairShareThreadPoolPtr workerPool);
 
     //! Returns the invoker for the thread pool used to dispatch compression callbacks.
     const IInvokerPtr& GetCompressionPoolInvoker();

@@ -1,8 +1,10 @@
 #include "decoder.h"
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+
 #include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT 0
 
@@ -156,4 +158,4 @@ bool TDecoderBase::ReadDebugProto(const i32 columnIdx, ::google::protobuf::Messa
     return true;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

@@ -1,15 +1,15 @@
 #include "yql_yt_client.h"
+
+#include <util/generic/yexception.h>
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/connection.h>
-#include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/rpc_proxy/config.h>
+#include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/ytree/convert.h>
-#include <util/generic/yexception.h>
 
 namespace NYql {
 NYT::NApi::IClientPtr CreateYtClient(const TString& endpoint, const TString& token) {
-
     // Strip scheme if present ("http://host:port" → "host:port")
     TString rpcAddress = endpoint;
     if (rpcAddress.StartsWith("http://")) {
@@ -23,8 +23,8 @@ NYT::NApi::IClientPtr CreateYtClient(const TString& endpoint, const TString& tok
     // discover proxies via HTTP (/api/v4/discover_proxies) — which would fail in
     // Docker-based test environments where internal RPC addresses are not reachable.
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
-    connectionConfig->ProxyAddresses = std::make_optional<std::vector<std::string>>(
-        std::vector<std::string>{std::string(rpcAddress.data(), rpcAddress.size())});
+    connectionConfig->ProxyAddresses =
+        std::make_optional<std::vector<std::string>>(std::vector<std::string>{ std::string(rpcAddress.data(), rpcAddress.size()) });
     connectionConfig->EnableProxyDiscovery = false;
 
     auto connection = NYT::NApi::NRpcProxy::CreateConnection(connectionConfig);
@@ -50,4 +50,4 @@ NThreading::TFuture<bool> IsYtQueue(const NYT::NApi::IClientPtr& client, const T
     return promise.GetFuture();
 }
 
-}
+}   // namespace NYql

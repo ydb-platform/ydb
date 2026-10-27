@@ -7,6 +7,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
+
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/services/metadata/scheme_transaction/interface.h>
 
@@ -25,7 +26,7 @@ using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 using EStatus = TNavigate::EStatus;
 using TStatus = TEvTxUserProxy::TResultStatus;
 
-struct TInvokeExceptionHandler final : TActorRunnableItem::TImpl<TInvokeExceptionHandler> {
+struct TInvokeExceptionHandler final: TActorRunnableItem::TImpl<TInvokeExceptionHandler> {
     void DoRun(IActor* actor) noexcept {
         auto* handler = dynamic_cast<IActorExceptionHandler*>(actor);
         Y_ABORT_UNLESS(handler && handler->OnUnhandledException(std::runtime_error("injected failure")));
@@ -41,7 +42,7 @@ struct TFixture {
     static constexpr ui64 TxId = 100;
     static constexpr ui64 Generation = 7;
 
-    TTestBasicRuntime Runtime{2, false};
+    TTestBasicRuntime Runtime{ 2, false };
     TActorId Client;
     TActorId Cache;
     TActorId Proxy;
@@ -103,7 +104,7 @@ struct TFixture {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName("/Root");
         request->Record.SetPeerName("peer");
-        request->Record.SetUserToken(NACLib::TUserToken("user", TVector<NACLib::TSID>{"group"}).SerializeAsString());
+        request->Record.SetUserToken(NACLib::TUserToken("user", TVector<NACLib::TSID>{ "group" }).SerializeAsString());
         auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir("/Root");
         tx.SetOperationType(create ? NKikimrSchemeOp::ESchemeOpCreateStreamingQuery : NKikimrSchemeOp::ESchemeOpAlterStreamingQuery);
@@ -136,8 +137,7 @@ struct TFixture {
     }
 
     void ReplyNavigation(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr ev) {
-        Runtime.Send(new IEventHandle(Actor, Cache,
-            new TEvTxProxySchemeCache::TEvNavigateKeySetResult(ev->Get()->Request.Release())));
+        Runtime.Send(new IEventHandle(Actor, Cache, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(ev->Get()->Request.Release())));
     }
 
     static void Allow(TNavigate::TEntry& entry, ui32 access = NACLib::CreateTable | NACLib::AlterSchema) {
@@ -159,14 +159,16 @@ struct TFixture {
     }
 
     TActorId Pipe(size_t index = 0) {
-        Runtime.WaitFor("pipe created", [&] { return Pipes.size() > index; }, TDuration::Seconds(5));
+        Runtime.WaitFor("pipe created", [&] {
+            return Pipes.size() > index;
+        }, TDuration::Seconds(5));
         return Pipes[index];
     }
 
-    void Connect(ui32 node = 0, size_t index = 0, ui64 generation = Generation,
-        NKikimrProto::EReplyStatus status = NKikimrProto::OK, bool leader = true) {
-        Runtime.Send(new IEventHandle(Actor, Pipe(index), new TEvTabletPipe::TEvClientConnected(
-            SchemeShard, status, Pipe(index), node ? RemoteMetadata : Tablet, leader, false, generation)));
+    void Connect(ui32 node = 0, size_t index = 0, ui64 generation = Generation, NKikimrProto::EReplyStatus status = NKikimrProto::OK,
+        bool leader = true) {
+        Runtime.Send(new IEventHandle(Actor, Pipe(index),
+            new TEvTabletPipe::TEvClientConnected(SchemeShard, status, Pipe(index), node ? RemoteMetadata : Tablet, leader, false, generation)));
     }
 
     void Allocate() {
@@ -240,7 +242,7 @@ struct TFixture {
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
     Y_UNIT_TEST_TWIN(UnhandledExceptionRepliesAndClosesResources, Remote) {
@@ -254,13 +256,15 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
             f.Allocate();
             f.Proposal();
         }
-        f.Runtime.Send(new IEventHandle(f.Actor, f.Client,
-            new TEvents::TEvResumeRunnable(new TInvokeExceptionHandler()), TEvents::TEvResumeRunnable::EventFlags));
+        f.Runtime.Send(new IEventHandle(
+            f.Actor, f.Client, new TEvents::TEvResumeRunnable(new TInvokeExceptionHandler()), TEvents::TEvResumeRunnable::EventFlags));
         const auto response = f.Response(TStatus::ExecError, NKikimrScheme::StatusSchemeError);
         UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.GetSchemeShardReason(), "Unhandled exception: injected failure");
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 0);
         if constexpr (Remote) {
-            f.Runtime.WaitFor("session unsubscribed", [&] { return f.Unsubscriptions == 1; }, TDuration::Seconds(5));
+            f.Runtime.WaitFor("session unsubscribed", [&] {
+                return f.Unsubscriptions == 1;
+            }, TDuration::Seconds(5));
         }
     }
 
@@ -318,7 +322,7 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
     }
 
     Y_UNIT_TEST(WorkingDirectoryResolutionErrors) {
-        for (const auto status : {EStatus::PathErrorUnknown, EStatus::LookupError, EStatus::RedirectLookupError}) {
+        for (const auto status : { EStatus::PathErrorUnknown, EStatus::LookupError, EStatus::RedirectLookupError }) {
             TFixture f;
             f.Start(f.Request(true));
             auto nav = f.Navigation();
@@ -334,8 +338,8 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
     }
 
     Y_UNIT_TEST(AccessResolutionErrors) {
-        for (const auto status : {EStatus::AccessDenied, EStatus::PathErrorUnknown, EStatus::LookupError,
-            EStatus::RedirectLookupError, EStatus::TableCreationNotComplete}) {
+        for (const auto status : { EStatus::AccessDenied, EStatus::PathErrorUnknown, EStatus::LookupError, EStatus::RedirectLookupError,
+                 EStatus::TableCreationNotComplete }) {
             TFixture f;
             f.Start();
             auto nav = f.Navigation();
@@ -454,14 +458,12 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
         f.Connect();
         f.Runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(f.Proxy);
         const auto oldPipe = f.Pipe();
-        f.Runtime.Send(new IEventHandle(f.Actor, oldPipe,
-            new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, oldPipe, f.Tablet)));
+        f.Runtime.Send(new IEventHandle(f.Actor, oldPipe, new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, oldPipe, f.Tablet)));
         const auto newPipe = f.Pipe(1);
         f.Runtime.Send(new IEventHandle(f.Actor, f.Proxy, new TEvTxUserProxy::TEvAllocateTxIdResult(TFixture::TxId, {}, {})));
         // Late notifications from the old pipe must not reconnect or fail the actor.
         f.Connect();
-        f.Runtime.Send(new IEventHandle(f.Actor, oldPipe,
-            new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, oldPipe, f.Tablet)));
+        f.Runtime.Send(new IEventHandle(f.Actor, oldPipe, new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, oldPipe, f.Tablet)));
         f.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(f.Proposals, 0);
         f.Connect(0, 1, TFixture::Generation + 1);
@@ -485,8 +487,7 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
         if constexpr (Accepted) {
             f.Accept();
         }
-        f.Runtime.Send(new IEventHandle(f.Actor, f.Pipe(),
-            new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, f.Pipe(), f.Tablet)));
+        f.Runtime.Send(new IEventHandle(f.Actor, f.Pipe(), new TEvTabletPipe::TEvClientDestroyed(TFixture::SchemeShard, f.Pipe(), f.Tablet)));
         f.Response(TStatus::ProxyShardNotAvailable, NKikimrScheme::StatusNotAvailable);
         UNIT_ASSERT_VALUES_EQUAL(f.Pipes.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Proposals, 1);
@@ -511,7 +512,9 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
         f.Runtime.Send(new IEventHandle(f.Actor, f.RemoteMetadata, response.Release()), 1);
         const auto actual = f.Response(TStatus::ExecComplete, NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(actual->Get()->Record.SerializeAsString(), expected);
-        f.Runtime.WaitFor("session unsubscribed", [&] { return f.Unsubscriptions == 1; }, TDuration::Seconds(5));
+        f.Runtime.WaitFor("session unsubscribed", [&] {
+            return f.Unsubscriptions == 1;
+        }, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(f.Proposals, 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 0);
     }
@@ -541,17 +544,20 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
                 new TEvents::TEvUndelivered(TEvTxUserProxy::TEvProposeTransaction::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
         }
         f.Response(TStatus::ProxyShardNotAvailable, NKikimrScheme::StatusNotAvailable);
-        f.Runtime.WaitFor("session unsubscribed", [&] { return f.Unsubscriptions == 1; }, TDuration::Seconds(5));
+        f.Runtime.WaitFor("session unsubscribed", [&] {
+            return f.Unsubscriptions == 1;
+        }, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(f.Proposals, 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 0);
     }
 
     Y_UNIT_TEST(RejectedProposalsPreserveStatusAndDoNotSubscribeOrTrack) {
-        for (const auto status : {NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusInvalidParameter,
-            NKikimrScheme::StatusPreconditionFailed, NKikimrScheme::StatusMultipleModifications}) {
+        for (const auto status : { NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusInvalidParameter,
+                 NKikimrScheme::StatusPreconditionFailed, NKikimrScheme::StatusMultipleModifications }) {
             TFixture f;
             f.Submit();
-            auto response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(status, TFixture::TxId, TFixture::SchemeShard, "reason");
+            auto response =
+                MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(status, TFixture::TxId, TFixture::SchemeShard, "reason");
             response->Record.SetPathId(10);
             response->Record.AddIssues()->set_message("issue");
             f.Runtime.Send(new IEventHandle(f.Actor, f.Tablet, response.Release()));
@@ -568,14 +574,14 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
 
     Y_UNIT_TEST_TWIN(TracksOnlyAfterCompletionAndPublishedDescription, ImmediateSuccess) {
         TFixture f;
-        f.Submit(3); // Reaching the redirect limit still allows execution on the local SchemeShard.
+        f.Submit(3);   // Reaching the redirect limit still allows execution on the local SchemeShard.
         UNIT_ASSERT_VALUES_EQUAL(f.Subscriptions, 0);
         f.Accept(ImmediateSuccess ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusAccepted);
         f.Runtime.Send(new IEventHandle(f.Actor, f.Tablet, new TEvSchemeShard::TEvNotifyTxCompletionResult(TFixture::TxId + 1)));
         f.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 0);
         f.Complete();
-        f.Complete(); // duplicate completion must not launch another navigation/tracker
+        f.Complete();   // duplicate completion must not launch another navigation/tracker
         f.ResolveQuery();
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 0);
         f.ResolveDatabase();
@@ -607,7 +613,7 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
         if constexpr (Database) {
             f.ResolveQuery();
         }
-        for (const auto status : {EStatus::LookupError, EStatus::RedirectLookupError, EStatus::TableCreationNotComplete}) {
+        for (const auto status : { EStatus::LookupError, EStatus::RedirectLookupError, EStatus::TableCreationNotComplete }) {
             auto nav = f.Navigation();
             nav->Get()->Request->ResultSet.front().Status = status;
             f.ReplyNavigation(std::move(nav));
@@ -634,21 +640,25 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
             auto& entry = nav->Get()->Request->ResultSet.front();
             f.FillQuery(entry, variant == 0 ? f.Tablet : f.Client);
             switch (variant) {
-            case 1: entry.Status = EStatus::PathErrorUnknown; break;
-            case 2: entry.Status = EStatus::RootUnknown; break;
-            case 3: {
-                auto self = MakeIntrusive<TNavigate::TDirEntryInfo>(*entry.Self);
-                self->Info.SetPathId(11);
-                entry.Self = self;
-                entry.StreamingQueryInfo.Reset();
-                break;
-            }
-            case 4: {
-                auto query = MakeIntrusive<TNavigate::TStreamingQueryInfo>(*entry.StreamingQueryInfo);
-                query->Description.ClearOperationOwnerActorId();
-                entry.StreamingQueryInfo = query;
-                break;
-            }
+                case 1:
+                    entry.Status = EStatus::PathErrorUnknown;
+                    break;
+                case 2:
+                    entry.Status = EStatus::RootUnknown;
+                    break;
+                case 3: {
+                    auto self = MakeIntrusive<TNavigate::TDirEntryInfo>(*entry.Self);
+                    self->Info.SetPathId(11);
+                    entry.Self = self;
+                    entry.StreamingQueryInfo.Reset();
+                    break;
+                }
+                case 4: {
+                    auto query = MakeIntrusive<TNavigate::TStreamingQueryInfo>(*entry.StreamingQueryInfo);
+                    query->Description.ClearOperationOwnerActorId();
+                    entry.StreamingQueryInfo = query;
+                    break;
+                }
             }
             f.ReplyNavigation(std::move(nav));
             f.Response(TStatus::ExecComplete, NKikimrScheme::StatusSuccess);
@@ -685,4 +695,4 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

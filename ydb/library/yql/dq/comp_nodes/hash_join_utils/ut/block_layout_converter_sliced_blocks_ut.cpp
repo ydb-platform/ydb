@@ -14,6 +14,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <util/system/cpu_id.h>
+
 using namespace NYql::NUdf;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -251,6 +253,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
 
 #define DECL_TEST(NAME, SLOT, TAG)    \
     Y_UNIT_TEST(Test_##NAME##_Full) { \
+        if (!NX86::HaveAVX2()) { \
+            return; \
+        } \
         RunCase<TAG>(SLOT);           \
     }
 

@@ -142,6 +142,9 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 
     Y_UNIT_TEST(Shuffle) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TSimd8<i8> index(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
                         16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
         TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
@@ -152,6 +155,9 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 
     Y_UNIT_TEST(Shuffle128) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TSimd8<i8> index(   0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1,
                             0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1);
         TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
@@ -162,6 +168,9 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 
     Y_UNIT_TEST(ShiftBytes) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto mask0 = NSimd::AdvanceBytesMask<NSimd::TSimdAVX2Traits>(5);
         auto mask1 = NSimd::AdvanceBytesMask<NSimd::TSimdAVX2Traits>(-5);
 
@@ -184,6 +193,9 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 
     Y_UNIT_TEST(UnpackMask) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdAVX2Traits>(2, 1, false);
         unpackMask.Log<i8>(Cout);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11,
@@ -191,11 +203,17 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
     }
 
     Y_UNIT_TEST(CRC) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         ui32 val = 0x454234;
         UNIT_ASSERT_EQUAL(TSimd8<i8>::CRC32u32(0, val), 1867938110);
     }
 
     Y_UNIT_TEST(Blend) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         ui8 to[32], from[32];
         for (ui8 i = 0; i < 32; i += 1) {
             to[i] = i;

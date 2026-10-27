@@ -8483,7 +8483,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())
             .SetEnableChangefeedDynamoDBStreamsFormat(true)
-            .SetEnableChangefeedDebeziumJsonFormat(true));
+            .SetEnableChangefeedDebeziumJsonFormat(true)
+            .SetEnableBinaryChangefeedForAsyncReplication(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

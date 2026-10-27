@@ -711,27 +711,25 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         };
     }
 
+    TUserDataTable defaultMounts;
     if (RunOptions_.MountConfig) {
-        TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
-
-        if (!CompileLibraries(translators, RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
-            *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
-            ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
-            return -1;
-        }
-
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
-                                                           ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        auto mounts = GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker);
-        if (mounts.empty()) {
-            *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
-            ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
-            return -1;
-        }
-        RunOptions_.DataTable.insert(mounts.begin(), mounts.end());
+        LoadYqlDefaultMounts(defaultMounts);
     }
+
+    TModulesTable modules;
+    const auto& mounts = RunOptions_.MountConfig ? RunOptions_.DataTable : defaultMounts;
+    if (!CompileLibraries(translators, mounts, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+        *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
+        ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
+        return -1;
+    }
+    RunOptions_.DataTable.insert(defaultMounts.begin(), defaultMounts.end());
+
+    // Optimize libraries attached by the program independently of mounted libraries.
+    moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
+                                                       ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 

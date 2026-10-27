@@ -1,6 +1,7 @@
 #include "intersection_tree.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <limits>
 #include <vector>
 #include <span>
 
@@ -86,10 +87,10 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
 
     void CheckMaxRange(const TExampleTree& tree) {
         auto maxCount = tree.GetMaxCount();
-        auto maxRange = tree.GetMaxRange();
+        const auto maxRange = tree.GetMaxRange();
+        UNIT_ASSERT_VALUES_EQUAL(maxRange.GetCount(), maxCount);
         if (maxCount > 0) {
             UNIT_ASSERT(maxRange.HasLeftKey() && maxRange.HasRightKey());
-            UNIT_ASSERT_VALUES_EQUAL(maxRange.GetCount(), maxCount);
             i32 count = 0;
             bool unique = true;
             THashSet<ui64> visited;
@@ -102,6 +103,67 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
             });
             UNIT_ASSERT_VALUES_EQUAL(count, maxRange.GetCount());
             UNIT_ASSERT(unique);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyRangeCount) {
+        TExampleTree::TFoundRange range;
+        UNIT_ASSERT_VALUES_EQUAL(range.GetCount(), 0);
+
+        TExampleTree tree;
+        UNIT_ASSERT_VALUES_EQUAL(tree.FirstRange().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(15).GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.GetMaxRange().GetCount(), 0);
+
+        tree.Add(0, 10, 20);
+        tree.Remove(0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FirstRange().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(15).GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.GetMaxRange().GetCount(), 0);
+    }
+
+    Y_UNIT_TEST(OutOfBoundsRangeCount) {
+        TExampleTree tree;
+        tree.Add(0, 10, 20);
+        auto range = tree.FirstRange();
+        UNIT_ASSERT_VALUES_EQUAL(range.GetCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(9).GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(21).GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(range.Prev().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(range.Next().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(range.Prev().Prev().GetCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(range.Next().Next().GetCount(), 0);
+    }
+
+    Y_UNIT_TEST(RejectReversedEndpoints) {
+        TExampleTree tree;
+        tree.Add(0, 10, 20);
+        const auto before = ToString(TreeToRanges(tree));
+
+        UNIT_ASSERT_EXCEPTION(tree.Add(1, 20, 10), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(ToString(TreeToRanges(tree)), before);
+        CheckMaxRange(tree);
+
+        // Rejection must leave the value available, and equal endpoints are valid.
+        tree.Add(1, 15, 15);
+        UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(15).GetCount(), 2);
+        tree.Remove(1);
+        UNIT_ASSERT_VALUES_EQUAL(ToString(TreeToRanges(tree)), before);
+    }
+
+    Y_UNIT_TEST(RejectUnorderedEndpoints) {
+        TIntersectionTree<double, size_t> tree;
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const std::pair<double, double> endpoints[] = {{nan, 20.0}, {10.0, nan}, {nan, nan}};
+        for (const auto& [left, right] : endpoints) {
+            UNIT_ASSERT_EXCEPTION(tree.Add(0, left, right), yexception);
+            UNIT_ASSERT(!tree.FirstRange());
+            UNIT_ASSERT_VALUES_EQUAL(tree.GetMaxCount(), 0);
+
+            tree.Add(0, 10.0, 20.0);
+            UNIT_ASSERT_VALUES_EQUAL(tree.FindRange(15.0).GetCount(), 1);
+            tree.Remove(0);
+            UNIT_ASSERT(!tree.FirstRange());
         }
     }
 
@@ -185,7 +247,7 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
             for (const auto& s : b->Segments) {
                 if (IsRightOf(p, s.Left) && !IsRightOf(p, s.Right)) { seg = &s; break; }
             }
-            auto found = b->Tree.FindRange(p);
+            const auto found = b->Tree.FindRange(p);
             if (!seg) {
                 UNIT_ASSERT_C(!found, "probe " << p);
                 UNIT_ASSERT_VALUES_EQUAL(expected, 0);

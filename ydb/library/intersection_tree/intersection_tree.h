@@ -190,6 +190,7 @@ namespace NKikimr {
 
     public:
         void Add(const TValue& value, const TKey& leftKey, const TKey& rightKey) {
+            Y_ENSURE(CompareKeys(*this, leftKey, rightKey) <= 0);
             auto res = Values.emplace(
                 std::piecewise_construct,
                 std::forward_as_tuple(value),
@@ -299,11 +300,15 @@ namespace NKikimr {
             }
 
             i32 GetCount() const {
-                return LastLeft ? (RightCount + RightBorder->LeftDelta) : (LeftCount + LeftBorder->RightDelta);
+                const TNode* node = LastLeft ? RightBorder : LeftBorder;
+                if (!node) {
+                    return 0;
+                }
+                return LastLeft ? (RightCount + node->LeftDelta) : (LeftCount + node->RightDelta);
             }
 
             template<class TCallback>
-            bool ForEachValue(const TCallback& callback) {
+            bool ForEachValue(const TCallback& callback) const {
                 const TNode* node = LastLeft ? RightBorder : LeftBorder;
                 if (!node) {
                     return true;

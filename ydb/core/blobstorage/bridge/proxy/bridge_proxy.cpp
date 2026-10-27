@@ -391,17 +391,19 @@ namespace NKikimr {
 
                 for (size_t i = 0; i < state.NumResponses; ++i) {
                     auto& current = ev->Responses[i];
+                    auto& merged = state.Responses[i];
                     auto& item = RestoreQueue[i];
 
                     if (current.Status == NKikimrProto::OK) {
                         item.Id = current.Id;
                         item.Buffer = TRcBuf(current.Buffer);
                         item.ReadFrom = pile.BridgePileId;
-                        item.IssueKeepFlag = current.DoNotKeep < current.Keep;
                     } else if (current.Status == NKikimrProto::NODATA) {
                         item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                         RestoreIndex = Min(RestoreIndex, i); // we gonna restore this
                     }
+                    // the flag seen by any pile goes with the restored copy, as the pile we read from may not know it
+                    item.IssueKeepFlag = merged.DoNotKeep < merged.Keep;
                 }
 
                 state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
@@ -521,8 +523,9 @@ namespace NKikimr {
                     state.Buffer = std::move(ev->Buffer);
                     state.Winner = pile.BridgePileId;
 
+                    // the body is not taken for restoration, as discovery doesn't tell the Keep flag; the read of the
+                    // blob before restoring it does
                     item.Id = state.Id;
-                    item.Buffer = TRcBuf(state.Buffer);
                     item.ReadFrom = state.Winner;
                     item.WriteTo |= Processed;
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
@@ -595,6 +598,10 @@ namespace NKikimr {
                         } else { // items in both ranges, so both present
                             targetIt->Keep |= sourceIt->Keep;
                             targetIt->DoNotKeep |= sourceIt->DoNotKeep;
+                            // the flag seen by any pile goes with the restored copy, as the pile we read from may not
+                            // know it
+                            RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].IssueKeepFlag =
+                                targetIt->DoNotKeep < targetIt->Keep;
                             Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
                             if (targetIt->Buffer && sourceIt->Buffer) {
                                 Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);

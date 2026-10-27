@@ -494,10 +494,17 @@ namespace NKikimr::NBridge {
                 }
             }
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
+            std::unique_ptr<TVector<TLogoBlobID>> keep;
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
-                    // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier
-                    SourceKeepFlags.erase(r.Id);
+                    // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
+                    // the blob has been written since then without it, as the bridge proxy restoring it may do
+                    if (SourceKeepFlags.erase(r.Id) && !r.Keep) {
+                        if (!keep) {
+                            keep = std::make_unique<TVector<TLogoBlobID>>();
+                        }
+                        keep->push_back(r.Id);
+                    }
                     SyncerDataStats->BytesDone += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -514,6 +521,12 @@ namespace NKikimr::NBridge {
                     Y_DEBUG_ABORT();
                     errorReason = TStringBuilder() << "TEvGet from target group failed with " << r.Status;
                 }
+            }
+            if (keep) {
+                const ui64 tabletId = keep->front().TabletID(); // the index query is made for blobs of a single tablet
+                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
+                    false, 0u, 0u, keep.release(), nullptr, TInstant::Max(), true, TWriteSource::SyncerMergeGC, false,
+                    true));
             }
         } else {
             Y_DEBUG_ABORT();

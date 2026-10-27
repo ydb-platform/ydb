@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "datashard_failpoints.h"
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
@@ -5418,6 +5419,176 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
         });
     }
+
+    // Freeze contract audit on stable-26-3. These tests express the contract
+    // required for selecting a final replication boundary after Freeze.
+    void FreezeAuditRejectsDirectWrite(bool erase, bool reboot, bool s3 = false) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        const auto tablet = GetTableShards(server, sender, "/Root/Table").at(0);
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        if (reboot) {
+            RebootTablet(runtime, tablet, sender);
+        }
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const TVector<TCell> key{TCell::Make(ui32(1))};
+        if (erase) {
+            auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.SetSchemaVersion(tableId.SchemaVersion);
+            request->Record.AddKeyColumnIds(1);
+            request->Record.AddKeyColumns(TSerializedCellVec::Serialize(key));
+            runtime.SendToPipe(tablet, sender, request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvEraseRowsResponse>(sender);
+            const auto actual = KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/Table`;");
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+                NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE,
+                "Erase after Freeze; actual contents: " << actual);
+        } else {
+            auto request = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.SetSchemaVersion(tableId.SchemaVersion);
+            request->Record.MutableRowScheme()->AddKeyColumnIds(1);
+            request->Record.MutableRowScheme()->AddValueColumnIds(2);
+            auto* row = request->Record.AddRows();
+            row->SetKeyColumns(TSerializedCellVec::Serialize(key));
+            const TVector<TCell> value{TCell::Make(ui32(20))};
+            row->SetValueColumns(TSerializedCellVec::Serialize(value));
+            ui32 status;
+            if (s3) {
+                auto record = std::make_shared<NKikimrTxDataShard::TEvUploadRowsRequest>(request->Record);
+                TS3Download info;
+                info.DataETag = "freeze-audit";
+                runtime.Send(new IEventHandle(ResolveTablet(runtime, tablet), sender,
+                    new TEvDataShard::TEvS3UploadRowsRequest(123, record, info)), 0, true);
+                auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvS3UploadRowsResponse>(sender);
+                status = response->Get()->Record.GetStatus();
+            } else {
+                runtime.SendToPipe(tablet, sender, request.Release());
+                auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+                status = response->Get()->Record.GetStatus();
+            }
+            const auto actual = KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/Table`;");
+            UNIT_ASSERT_VALUES_EQUAL_C(status, ui32(NKikimrTxDataShard::TError::WRONG_SHARD_STATE),
+                "Upload after Freeze; actual contents: " << actual);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT value FROM `/Root/Table`;"),
+            "{ items { uint32_value: 10 } }");
+    }
+
+    Y_UNIT_TEST(FreezeAuditRejectsUpload) { FreezeAuditRejectsDirectWrite(false, false); }
+    Y_UNIT_TEST(FreezeAuditRejectsErase) { FreezeAuditRejectsDirectWrite(true, false); }
+    Y_UNIT_TEST(FreezeAuditRejectsUploadAfterReboot) { FreezeAuditRejectsDirectWrite(false, true); }
+
+    Y_UNIT_TEST(FreezeAuditRejectsEraseAfterReboot) { FreezeAuditRejectsDirectWrite(true, true); }
+    Y_UNIT_TEST(FreezeAuditRejectsS3Upload) { FreezeAuditRejectsDirectWrite(false, false, true); }
+
+    Y_UNIT_TEST(FreezeAuditRejectsDeferredImmediate) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134))
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        const auto tablet = GetTableShards(server, sender, "/Root/Table").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        TBlockOperationsFailPoint::TGuard blocked;
+        auto request = MakeWriteRequest(123, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId,
+            std::vector<ui32>{1, 2}, std::vector<TCell>{TCell::Make(ui32(1)), TCell::Make(ui32(10))});
+        runtime.SendToPipe(tablet, sender, request.release());
+        runtime.WaitFor("blocked immediate write", [&]{ return !blocked.empty(); });
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        blocked.Disable();
+        blocked.Unblock();
+        auto response = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT key FROM `/Root/Table`;"), "");
+    }
+
+    void FreezeAuditRejectsResumedDirectWrite(bool erase) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root").SetEnableDataShardVolatileTransactions(true));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto directSender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table1", SimpleTable());
+        CreateShardedTable(server, sender, "/Root", "Table2", SimpleTable());
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table1",
+            WithVirtualTimestamps(WithResolvedTimestamps(TDuration::Seconds(1),
+                Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        const auto tablet = GetTableShards(server, sender, "/Root/Table1").at(0);
+        const auto actor = ResolveTablet(runtime, tablet);
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table1");
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blocker = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](auto& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+        auto result = KqpSimpleSend(runtime,
+            "UPSERT INTO `/Root/Table1` (key, value) VALUES (1, 10);"
+            "UPSERT INTO `/Root/Table2` (key, value) VALUES (2, 20);");
+        runtime.WaitFor("blocked volatile decisions", [&]{ return readSets.size() >= 4; });
+        std::unique_ptr<IEventHandle> allocate;
+        auto allocation = runtime.AddObserver<TEvTxUserProxy::TEvAllocateTxId>([&](auto& ev) {
+            if (ev->Sender == actor) {
+                UNIT_ASSERT(!allocate);
+                allocate.reset(ev.Release());
+            }
+        });
+        const TVector<TCell> key{TCell::Make(ui32(1))};
+        if (erase) {
+            auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.AddKeyColumnIds(1);
+            request->Record.AddKeyColumns(TSerializedCellVec::Serialize(key));
+            runtime.SendToPipe(tablet, directSender, request.Release());
+        } else {
+            auto request = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.MutableRowScheme()->AddKeyColumnIds(1);
+            request->Record.MutableRowScheme()->AddValueColumnIds(2);
+            auto* row = request->Record.AddRows();
+            row->SetKeyColumns(TSerializedCellVec::Serialize(key));
+            const TVector<TCell> value{TCell::Make(ui32(20))};
+            row->SetValueColumns(TSerializedCellVec::Serialize(value));
+            runtime.SendToPipe(tablet, directSender, request.Release());
+        }
+        runtime.WaitFor("direct write waiting for a global tx id", [&]{ return bool(allocate); });
+        blocker.Remove();
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(result))), "<empty>");
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table1",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        allocation.Remove();
+        runtime.Send(allocate.release(), 0, true);
+        if (erase) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvEraseRowsResponse>(directSender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
+                NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+        } else {
+            auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(directSender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::WRONG_SHARD_STATE));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT value FROM `/Root/Table1`;"),
+            "{ items { uint32_value: 10 } }");
+    }
+
+    Y_UNIT_TEST(FreezeAuditRejectsResumedUpload) { FreezeAuditRejectsResumedDirectWrite(false); }
+    Y_UNIT_TEST(FreezeAuditRejectsResumedErase) { FreezeAuditRejectsResumedDirectWrite(true); }
 
     Y_UNIT_TEST(SequentialSplitMerge) {
         TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);

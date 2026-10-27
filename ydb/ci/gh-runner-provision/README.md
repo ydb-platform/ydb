@@ -1,6 +1,6 @@
 # GitHub runner provision
 
-`shapes/` описывает только VM: платформу, CPU, память, диск. `fleet/` говорит, сколько таких машин нужно и с какими лейблами. `poll` читает весь `fleet/` и сверяет его с GitHub. Статики (включая fat, slim и release в zone a), analytic и tiny лежат там рядом. Лейбл `ghrun` в этот каталог не входит: им занимается автоскейлер.
+`shapes/` описывает только VM: платформу, CPU, память, диск. `fleet/` говорит, сколько таких машин нужно и с какими лейблами. `poll` читает весь `fleet/` и сверяет его с GitHub. Статики (включая fat, slim, xxl и release в zone a), analytic и tiny лежат там рядом. Лейбл `ghrun` в этот каталог не входит: им занимается автоскейлер.
 
 ```bash
 python3 ydb/ci/gh-runner-provision/provision.py poll

@@ -458,7 +458,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     dashboard_url = dashboard_rel if os.path.isfile(os.path.join(os.path.dirname(fn), dashboard_rel)) else None
     test_bloat_rel = "test_bloat/tree_map.html"
     test_bloat_url = test_bloat_rel if os.path.isfile(os.path.join(os.path.dirname(fn), test_bloat_rel)) else None
-    resource_usage_rel = "test_resources/index.html"
+    resource_usage_rel = "test_resources/report.html"
     resource_usage_url = resource_usage_rel if os.path.isfile(os.path.join(os.path.dirname(fn), resource_usage_rel)) else None
     
     # Load owner to area mapping

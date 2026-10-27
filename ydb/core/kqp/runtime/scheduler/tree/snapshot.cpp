@@ -340,12 +340,13 @@ TDatabase::TDatabase(const TDatabaseId& id, const NStatic::TPoolPtr& pool)
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(const NStatic::TRootPtr& tree)
+TRoot::TRoot(const NStatic::TRootPtr& tree, TMonotonic timestamp)
     : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>("(ROOT)")
     , TPool("(ROOT)", {}, tree)
     , StaticTree(tree)
     , TotalCpuLimit(tree->TotalCpuLimit)
     , TotalMemoryLimit(tree->TotalMemoryLimit)
+    , Timestamp(timestamp)
 {
 }
 

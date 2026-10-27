@@ -20,12 +20,22 @@ TSchedulableTask::~TSchedulableTask() {
 
 void TSchedulableTask::RegisterForResume(const NActors::TActorId& actorId) {
     Y_ENSURE(!Iterator);
-    Iterator = Query->AddTask(shared_from_this());
     ActorId = actorId;
+    Iterator = Query->AddTask(shared_from_this());
+}
+
+void TSchedulableTask::RegisterForResume(std::function<void()> resume) {
+    Y_ENSURE(!Iterator && resume);
+    ResumeCallback = std::move(resume);
+    Iterator = Query->AddTask(shared_from_this());
 }
 
 void TSchedulableTask::Resume() {
-    NActors::TActivationContext::Send(ActorId, GetResumeEvent());
+    if (ResumeCallback) {
+        ResumeCallback();
+    } else if (NActors::TlsActivationContext) {
+        NActors::TActivationContext::Send(ActorId, GetResumeEvent());
+    }
 }
 
 bool TSchedulableTask::TryIncreaseUsage() {

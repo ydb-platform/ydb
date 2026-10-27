@@ -20,6 +20,8 @@ using namespace NHdrf::NDynamic;
 TSchedulableBase::TSchedulableBase(const TOptions& options)
     : FullPoolId(options.Query ? options.Query->GetFullPoolId() : NHdrf::TFullPoolId{})
     , IsSchedulable(options.IsSchedulable)
+    , TimeProvider(options.TimeProvider)
+    , Random(options.Random)
     , LastExecutionTime(AverageExecutionTime)
 {
     if (options.Query) {
@@ -54,6 +56,13 @@ void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
     }
 }
 
+void TSchedulableBase::RegisterForResume(std::function<void()> resume) {
+    Y_ASSERT(SchedulableTask);
+    if (IsSchedulable) {
+        SchedulableTask->RegisterForResume(std::move(resume));
+    }
+}
+
 std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
     if (StartExecution(now)) {
         return std::nullopt;
@@ -83,7 +92,11 @@ bool TSchedulableBase::StartExecution(TMonotonic now) {
             SchedulableTask->IncreaseBurstThrottle(now - StartThrottle);
         }
 
-        Timer.Reset();
+        if (TimeProvider) {
+            StartTime = now;
+        } else {
+            Timer.Reset();
+        }
         if (Executed) {
             if (Throttled) {
                 Resume();
@@ -126,7 +139,9 @@ void TSchedulableBase::StopExecution() {
     if (Executed) {
         Y_ASSERT(!Throttled);
 
-        TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
+        const TDuration timePassed = TimeProvider
+            ? TimeProvider->Now() - StartTime
+            : TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
         SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
         LastExecutionTime = timePassed;
         SchedulableTask->DecreaseUsage(timePassed, ForcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
@@ -134,14 +149,14 @@ void TSchedulableBase::StopExecution() {
         Executed = false;
 
         if (auto spareUsage = SchedulableTask->GetSpareUsage()) {
-            // Waking up peers is optional work and needs an actor context.
-            if (NActors::TlsActivationContext) {
+            // Actor-backed wake-ups need an actor context. The simulator uses callbacks.
+            if (NActors::TlsActivationContext || TimeProvider) {
                 SchedulableTask->Query->ResumeTasks(spareUsage);
             }
         }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
-        if (const auto now = TMonotonic::Now(); now > StartThrottle) {
+        if (const auto now = TimeProvider ? TimeProvider->Now() : TMonotonic::Now(); now > StartThrottle) {
             SchedulableTask->IncreaseBurstThrottle(now - StartThrottle);
         }
         Resume();
@@ -164,7 +179,7 @@ TDuration TSchedulableBase::CalculateDelay(TMonotonic) const {
             + (query->WaitingTasksTime / share)                                          // waiting tasks to complete
             // TODO: (currentUsage - averageUsage) * penalty                             // penalty for usage since last snapshot
             - (ExecuteAttempts * query->DelayParams->AttemptBonus.MicroSeconds())        // bonus for number of attempts
-            + (RandomNumber<ui64>() % query->DelayParams->MaxRandomDelay.MicroSeconds()) // random delay
+            + ((Random ? Random() : RandomNumber<ui64>()) % query->DelayParams->MaxRandomDelay.MicroSeconds())
         ;
         delayDuration = Min(query->DelayParams->MaxDelay, Max(query->DelayParams->MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
     }

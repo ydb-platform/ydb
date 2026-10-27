@@ -301,9 +301,10 @@ NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(const NMonitoring::TDynamicCounterPtr& counters)
+TRoot::TRoot(const NMonitoring::TDynamicCounterPtr& counters, TTimeProviderPtr timeProvider)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>("(ROOT)")
     , TPool("(ROOT)", {})
+    , TimeProvider(std::move(timeProvider))
 {
     Y_ASSERT(counters);
     auto group = counters;
@@ -326,7 +327,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     // The scheduler holds its tree lock until all children have captured the same static version.
     const auto tree = GetStaticTree();
-    auto* newRoot = new NSnapshot::TRoot(tree);
+    auto* newRoot = new NSnapshot::TRoot(tree, TimeProvider ? TimeProvider->Now() : TMonotonic::Now());
     const ui64 totalCpuLimit = tree->TotalCpuLimit;
     const ui64 totalMemoryLimit = tree->TotalMemoryLimit;
 

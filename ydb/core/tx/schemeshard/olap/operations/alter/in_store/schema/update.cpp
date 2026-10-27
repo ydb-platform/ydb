@@ -4,25 +4,6 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
-    const auto& originalTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
-    {
-        const auto& originalTableInfo = originalTable.GetTableInfoVerified();
-        const auto& storeInfo = originalTable.GetStoreInfo();
-        AFL_VERIFY(!!storeInfo)("problem", "Unexpected schema preset without olap store");
-        AFL_VERIFY(originalTableInfo.Description.HasSchemaPresetId());
-        const ui32 presetId = originalTableInfo.Description.GetSchemaPresetId();
-        AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId))("problem", "Failed to find schema preset in an olap store")("id", presetId);
-        auto& preset = storeInfo->SchemaPresets.at(presetId);
-        size_t presetIndex = preset.GetProtoIndex();
-        SchemaPreset = storeInfo->GetDescription().GetSchemaPresets(presetIndex);
-    }
-
-    TEntityInitializationContext eContext(context.GetSSOperationContext());
-    if (const auto& alterData = originalTable.GetTableInfoVerified().AlterData) {
-        TargetInStoreTable = std::make_shared<TInStoreTable>(originalTable.GetPathId(), alterData, eContext);
-        return TConclusionStatus::Success();
-    }
-
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
         return alter;
@@ -35,7 +16,20 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
         return TConclusionStatus::Fail("no data for update");
     }
     AlterTTL.emplace(alterCS.GetAlterTtlSettings());
+    const auto& originalTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
     auto description = originalTable.GetTableInfoVerified().Description;
+
+    {
+        const auto& originalTableInfo = originalTable.GetTableInfoVerified();
+        const auto& storeInfo = originalTable.GetStoreInfo();
+        AFL_VERIFY(!!storeInfo)("problem", "Unexpected schema preset without olap store");
+        AFL_VERIFY(originalTableInfo.Description.HasSchemaPresetId());
+        const ui32 presetId = originalTableInfo.Description.GetSchemaPresetId();
+        AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId))("problem", "Failed to find schema preset in an olap store")("id", presetId);
+        auto& preset = storeInfo->SchemaPresets.at(presetId);
+        size_t presetIndex = preset.GetProtoIndex();
+        SchemaPreset = storeInfo->GetDescription().GetSchemaPresets(presetIndex);
+    }
 
     if (AlterTTL) {
         TOlapSchema originalSchema;
@@ -48,13 +42,14 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
         }
         TSimpleErrorCollector collector;
         if (!originalSchema.ValidateTtlSettings(ttl.GetData(), *context.GetSSOperationContext(), collector)) {
-            return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor IN_STORE_SCHEMA_UPDATE");
+            return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(context.GetOriginalEntityAsVerified<TInStoreTable>().GetTableInfoVerified().AlterVersion + 1,
         std::move(description), TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), std::move(alterCS));
+    TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
     return TConclusionStatus::Success();
 }

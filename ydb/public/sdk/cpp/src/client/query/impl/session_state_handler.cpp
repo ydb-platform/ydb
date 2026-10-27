@@ -23,16 +23,20 @@ EAttachStreamReadAction HandleAttachSessionState(
                 client->PessimizeNode(nodeId);
             }
         }
-        const auto previousState = session->GetState();
         if (beforeShutdownTransition) {
             beforeShutdownTransition();
         }
+        // Do not separate the state check from MarkAsClosing: the application
+        // can return the session to the pool between those two operations.
+        const auto previousState = session->MarkAsClosingIfNotIdle();
         if (previousState == TKqpSessionCommon::S_IDLE) {
             if (client) {
                 session->CloseFromServer(client, closeCommand.Reason);
             }
-        } else {
-            closeCommand.Execute(*session, client.get());
+        } else if (previousState != TKqpSessionCommon::S_BROKEN &&
+                   previousState != TKqpSessionCommon::S_CLOSING &&
+                   client && session->IsOwnedBySessionPool()) {
+            client->RecordSessionClosed(closeCommand.Reason);
         }
         return EAttachStreamReadAction::Stop;
     }

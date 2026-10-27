@@ -157,9 +157,11 @@ std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
 
 TBaseEventLogAutoFlushActor::TBaseEventLogAutoFlushActor(
     std::shared_ptr<TBaseEventLogWriter> writer,
-    TDuration flushInterval)
+    TDuration flushInterval,
+    bool once)
     : Writer(std::move(writer))
     , FlushInterval(flushInterval)
+    , Once(once)
 {
 }
 
@@ -180,7 +182,7 @@ void TBaseEventLogAutoFlushActor::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr
             Writer->Flush();
         }
 
-        if (Writer->IsAlive()) {
+        if (Writer->IsAlive() && !Once) {
             ScheduleNextFlush();
         } else {
             PassAway();

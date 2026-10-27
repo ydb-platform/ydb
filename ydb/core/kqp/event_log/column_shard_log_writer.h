@@ -55,7 +55,8 @@ protected:
     void CreateStorage(const TString& sessionId);
     void CreateTable(const TString& sessionId);
     void CreateOrUpdateStorage() override;
-    void SetCreateError();
+    void SetTryCreateAgainState();
+    void SetCreateErrorState();
 
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 

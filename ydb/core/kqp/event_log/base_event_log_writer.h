@@ -87,7 +87,7 @@ protected:
 
 class TBaseEventLogAutoFlushActor : public NActors::TActorBootstrapped<TBaseEventLogAutoFlushActor> {
 public:
-    TBaseEventLogAutoFlushActor(std::shared_ptr<TBaseEventLogWriter> writer, TDuration flushInterval);
+    TBaseEventLogAutoFlushActor(std::shared_ptr<TBaseEventLogWriter> writer, TDuration flushInterval, bool once = false);
 
     void Bootstrap();
 
@@ -103,6 +103,7 @@ private:
 
     const std::shared_ptr<TBaseEventLogWriter> Writer;
     const TDuration FlushInterval;
+    const bool Once;
 };
 
 } // namespace NKikimr::NKqp::NEventLog

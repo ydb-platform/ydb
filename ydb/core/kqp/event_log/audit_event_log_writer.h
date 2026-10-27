@@ -195,10 +195,6 @@ public:
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TBaseAuditEventLogWriter::GetColumns();
-        TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
-            std::make_shared<TDBLogMessageStringValueColumn>("node_id"),
-        };
-        std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
 };

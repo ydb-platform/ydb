@@ -1,7 +1,7 @@
-#include "helpers/get_value.h"
-#include "helpers/local.h"
-#include "helpers/query_executor.h"
-#include "helpers/writer.h"
+#include "../helpers/get_value.h"
+#include "../helpers/local.h"
+#include "../helpers/query_executor.h"
+#include "../helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <util/generic/size_literals.h>

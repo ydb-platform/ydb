@@ -542,10 +542,12 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                 RunTxWorkerError(id, record.GetErrorDescription(), ctx);
             } else {
                 session.DetachWorker(id);
-                if (IsValidWorker(id)) {
-                    auto* worker = GetOrCreateWorker(id);
-                    worker->ClearSession();
-                    if (worker->HasCommand()) {
+                const auto worker = Workers.find(id);
+                if (worker != Workers.end()) {
+                    if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
+                        worker->second.ClearSession();
+                    }
+                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -832,7 +834,6 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
         {"workerId", id});
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
-    auto& session = Sessions[nodeId];
 
     auto ev = MakeHolder<TEvService::TEvStopWorker>();
     auto& record = ev->Record;
@@ -843,7 +844,8 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     id.Serialize(*record.MutableWorker());
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
-    session.DetachWorker(id);
+    // Keep ownership until STATUS_STOPPED, so a disconnect before the
+    // acknowledgement clears the worker's session and allows it to recover.
 }
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
@@ -874,6 +876,14 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
 
     RemoveQueue.erase(id);
+    const auto worker = Workers.find(id);
+    if (worker != Workers.end() && worker->second.HasSession()) {
+        const auto session = Sessions.find(worker->second.GetSession());
+        if (session != Sessions.end()) {
+            session->second.DetachWorker(id);
+        }
+    }
+
     Workers.erase(id);
     TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
 

@@ -1545,7 +1545,8 @@ void ApplyChanges(
     auto status = ev->Get()->Record.GetStatus();
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
-        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected)
+        << ": " << ev->Get()->Record.ShortDebugString());
 }
 
 TRowVersion CommitWrites(

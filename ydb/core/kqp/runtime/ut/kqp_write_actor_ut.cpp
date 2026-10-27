@@ -10,6 +10,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 
@@ -454,57 +455,6 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
-    Y_UNIT_TEST_TWIN(StreamingQuerySinkCounters, EnableCounters) {
-        const TString queryPath = "/Root/streaming_query";
-        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, EnableCounters, queryPath);
-        const auto tracker = fixture.GetSinkCounters();
-        if (!EnableCounters) {
-            UNIT_ASSERT(!tracker);
-            return;
-        }
-        UNIT_ASSERT(tracker);
-        const auto sink = tracker->FindSubgroup("sink", "TableSink");
-        UNIT_ASSERT(sink);
-        const auto query = sink->FindSubgroup("path", queryPath);
-        UNIT_ASSERT(query);
-        const auto counter = query->FindCounter("InFlyCheckpoints");
-        UNIT_ASSERT(counter);
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
-        const auto egressDataRate = query->FindCounter("EgressDataRate");
-        UNIT_ASSERT(egressDataRate);
-        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
-
-        fixture.Write(1, MakeCheckpoint(1));
-        const auto write = fixture.GrabWrite();
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
-
-        // A checkpoint queued behind the active one must not increase the gauge.
-        fixture.Write(2, MakeCheckpoint(2));
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
-        fixture.Acknowledge(write);
-        const auto firstWriteBytes = egressDataRate->Val();
-        UNIT_ASSERT(firstWriteBytes > 0);
-        fixture.Execute([&](auto& sink, auto&) {
-            UNIT_ASSERT_VALUES_EQUAL(firstWriteBytes, sink.GetEgressStats().Bytes);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
-        const auto secondWrite = fixture.GrabWrite(2);
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
-        fixture.Acknowledge(secondWrite);
-        UNIT_ASSERT(egressDataRate->Val() > firstWriteBytes);
-        fixture.Execute([&](auto& sink, auto&) {
-            UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), sink.GetEgressStats().Bytes);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, (TVector<ui64>{1, 2}));
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
-    }
-
-    Y_UNIT_TEST(NoSinkCountersForRegularQuery) {
-        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, true);
-        UNIT_ASSERT(!fixture.GetSinkCounters());
-    }
-
     // These event-driven scenarios reproduce the stable-version failures.
     // Main retains in-flight column batches during re-resolution; the same tests
     // also verify checkpoint and backpressure behavior under that retry policy.
@@ -790,6 +740,56 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
     }
 
+    Y_UNIT_TEST_TWIN(StreamingQuerySinkCounters, EnableCounters) {
+        const TString queryPath = "/Root/streaming_query";
+        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, EnableCounters, queryPath);
+        const auto tracker = fixture.GetSinkCounters();
+        if (!EnableCounters) {
+            UNIT_ASSERT(!tracker);
+            return;
+        }
+        UNIT_ASSERT(tracker);
+        const auto sink = tracker->FindSubgroup("sink", "TableSink");
+        UNIT_ASSERT(sink);
+        const auto query = sink->FindSubgroup("path", queryPath);
+        UNIT_ASSERT(query);
+        const auto counter = query->FindCounter("InFlyCheckpoints");
+        UNIT_ASSERT(counter);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+        const auto egressDataRate = query->FindCounter("EgressDataRate");
+        UNIT_ASSERT(egressDataRate);
+        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
+
+        fixture.Write(1, MakeCheckpoint(1));
+        const auto write = fixture.GrabWrite();
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+        // A checkpoint queued behind the active one must not increase the gauge.
+        fixture.Write(2, MakeCheckpoint(2));
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), 0);
+        fixture.Acknowledge(write);
+        const auto firstWriteBytes = egressDataRate->Val();
+        UNIT_ASSERT(firstWriteBytes > 0);
+        fixture.Execute([&](auto& sink, auto&) {
+            UNIT_ASSERT_VALUES_EQUAL(firstWriteBytes, sink.GetEgressStats().Bytes);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
+        const auto secondWrite = fixture.GrabWrite(2);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+        fixture.Acknowledge(secondWrite);
+        UNIT_ASSERT(egressDataRate->Val() > firstWriteBytes);
+        fixture.Execute([&](auto& sink, auto&) {
+            UNIT_ASSERT_VALUES_EQUAL(egressDataRate->Val(), sink.GetEgressStats().Bytes);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, (TVector<ui64>{1, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+    }
+
+    Y_UNIT_TEST(NoSinkCountersForRegularQuery) {
+        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, Nothing()}}, 5, true);
+        UNIT_ASSERT(!fixture.GetSinkCounters());
+    }
 }
 
 } // namespace NKikimr::NKqp

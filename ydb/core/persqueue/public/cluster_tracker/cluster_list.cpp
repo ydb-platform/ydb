@@ -74,4 +74,12 @@ TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf accou
     return visible;
 }
 
+i64 TClustersList::SumAccountVersions() const {
+    i64 sum = 0;
+    for (const auto& [_, account] : Accounts) {
+        sum += account.Version;
+    }
+    return sum;
+}
+
 } // namespace NKikimr::NPQ::NClusterTracker

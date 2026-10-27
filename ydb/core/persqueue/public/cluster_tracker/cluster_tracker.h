@@ -44,6 +44,8 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     // Read clusters for an account. Unknown account or no cluster with CanRead: every non-FNX
     // cluster plus FNX clusters with CanWrite. Otherwise only CanRead clusters, plus those FNX clusters.
     TVector<TCluster> GetReadClusters(TStringBuf account) const;
+    // Sum of PQ/Config/V2/Account.version. Each account keeps its own version.
+    i64 SumAccountVersions() const;
     void MarkFnxFromBalancers();
     void BuildVisibleClusters();
 
@@ -58,9 +60,11 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         };
 
         absl::flat_hash_map<TString, TAccess> Clusters;
+        // From PQ/Config/V2/Account.version. Independent of every other account.
+        i64 Version = 0;
 
         bool operator==(const TAccountClusters& rhs) const {
-            return Clusters == rhs.Clusters;
+            return Clusters == rhs.Clusters && Version == rhs.Version;
         }
     };
 
@@ -79,6 +83,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     i64 Version = 0;
     i64 ClusterVersion = 0;
     i64 BalancerVersion = 0;
+    // Sum of per-account versions. Not the Versions row named Account.
     i64 AccountVersion = 0;
 };
 

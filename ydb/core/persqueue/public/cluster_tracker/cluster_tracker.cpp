@@ -94,7 +94,7 @@ private:
     void StartListAccounts() {
         QueryInFlight = true;
         CurrentQuery = EQueryKind::ListAccounts;
-        SendDml(MakeListAccountsQuery(GetAccountTablePath(), Cfg().GetVersionTablePath()));
+        SendDml(MakeListAccountsQuery(GetAccountTablePath()));
     }
 
     void ApplyCachedAccounts(TClustersList& clustersList) const {
@@ -400,6 +400,7 @@ private:
     void FinishClustersList(TIntrusivePtr<TClustersList> clustersList) {
         AFL_ENSURE(clustersList);
         AFL_ENSURE(clustersList->Clusters.size());
+        clustersList->AccountVersion = clustersList->SumAccountVersions();
         clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->AccountVersion;
         clustersList->MarkFnxFromBalancers();
         clustersList->BuildVisibleClusters();
@@ -502,12 +503,11 @@ private:
             };
             add(readNames, true, false);
             add(writeNames, false, true);
+            spec.Version = parser.ColumnParser(3).GetOptionalInt64().value_or(0);
             clustersList->Accounts[name] = std::move(spec);
-            clustersList->AccountVersion = std::max<i64>(
-                clustersList->AccountVersion,
-                parser.ColumnParser(3).GetOptionalInt64().value_or(0));
         }
 
+        clustersList->AccountVersion = clustersList->SumAccountVersions();
         RememberAccounts(*clustersList);
         FinishClustersList(std::move(clustersList));
     }

@@ -127,14 +127,13 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
             )", TString(clusterTablePath).c_str(), TString(versionTablePath).c_str());
 }
 
-TString MakeListAccountsQuery(TStringBuf accountTablePath, TStringBuf versionTablePath) {
+TString MakeListAccountsQuery(TStringBuf accountTablePath) {
+    // Version is per account row. It changes only when that account's cluster set changes.
     return Sprintf(
         R"(
                --!syntax_v1
-               SELECT A.name, A.readClusters, A.writeClusters, V.version FROM `%s` AS A
-               CROSS JOIN
-               (SELECT MAX(version) AS version FROM `%s` WHERE name == 'Account') AS V;
-            )", TString(accountTablePath).c_str(), TString(versionTablePath).c_str());
+               SELECT A.name, A.readClusters, A.writeClusters, A.version FROM `%s` AS A;
+            )", TString(accountTablePath).c_str());
 }
 
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath) {

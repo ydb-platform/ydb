@@ -20,7 +20,7 @@ TString AccountTablePathFromClusterTable(TStringBuf clusterTablePath);
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath);
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath);
-TString MakeListAccountsQuery(TStringBuf accountTablePath, TStringBuf versionTablePath);
+TString MakeListAccountsQuery(TStringBuf accountTablePath);
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath);
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath);
 TString MakeCreateVersionsQuery(TStringBuf versionTablePath);

@@ -122,6 +122,67 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         };
         list.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"myt", "klg"}));
+
+        list.Accounts["prod"].Clusters = {
+            {"sas", {true, true}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas"}));
+
+        list.Accounts["prod"].Clusters.clear();
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla"}));
+
+        list.Accounts["prod"].Clusters = {
+            {"klg", {true, false}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"klg"}));
+    }
+
+    Y_UNIT_TEST(AccountVersionsStayIndependent) {
+        TClustersList::TAccountClusters left;
+        left.Clusters = {{"sas", {true, false}}};
+        left.Version = 2;
+        TClustersList::TAccountClusters right = left;
+        UNIT_ASSERT(left == right);
+        right.Version = 3;
+        UNIT_ASSERT(!(left == right));
+        right.Version = 2;
+        right.Clusters["sas"].CanWrite = true;
+        UNIT_ASSERT(!(left == right));
+
+        TClustersList list;
+        list.Clusters.push_back(MakeCluster("sas", false));
+        list.Clusters.push_back(MakeCluster("vla", false));
+        list.Clusters.push_back(MakeCluster("myt", true));
+        list.ClusterVersion = 3;
+        list.BalancerVersion = 4;
+        list.Accounts["prod"].Clusters = {{"myt", {false, true}}};
+        list.Accounts["prod"].Version = 2;
+        list.Accounts["dev"].Clusters = {{"sas", {true, false}}};
+        list.Accounts["dev"].Version = 5;
+
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 7);
+        list.AccountVersion = list.SumAccountVersions();
+        list.Version = list.ClusterVersion + list.BalancerVersion + list.AccountVersion;
+        UNIT_ASSERT_VALUES_EQUAL(list.Version, 14);
+
+        list.Accounts["prod"].Version = 9;
+        UNIT_ASSERT_VALUES_EQUAL(list.Accounts["dev"].Version, 5);
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 14);
+
+        auto names = [](const auto& clusters) {
+            TVector<TString> result;
+            for (const auto& cluster : clusters) {
+                result.push_back(cluster.Name);
+            }
+            return result;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla", "myt"}));
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("dev")), (TVector<TString>{"sas"}));
+        list.Accounts["prod"].Version = 0;
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla", "myt"}));
+
+        list.Accounts.clear();
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 0);
     }
 
     Y_UNIT_TEST(AccountNameFromDatabase) {
@@ -209,8 +270,12 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
         const TString account = AccountTablePathFromClusterTable(cluster);
         UNIT_ASSERT_VALUES_EQUAL(account, "/Root/PQ/Config/V2/Account");
-        UNIT_ASSERT(MakeListAccountsQuery(account, versions).Contains("A.readClusters"));
-        UNIT_ASSERT(MakeListAccountsQuery(account, versions).Contains("A.writeClusters"));
+        const TString accountsQuery = MakeListAccountsQuery(account);
+        UNIT_ASSERT(accountsQuery.Contains("A.readClusters"));
+        UNIT_ASSERT(accountsQuery.Contains("A.writeClusters"));
+        UNIT_ASSERT(accountsQuery.Contains("A.version"));
+        UNIT_ASSERT(!accountsQuery.Contains("Versions"));
+        UNIT_ASSERT(!accountsQuery.Contains("name == 'Account'"));
         UNIT_ASSERT(IssuesLookLikeMissingAccountTable("Cannot find table `/Root/PQ/Config/V2/Account`"));
         UNIT_ASSERT(IssuesLookLikeMissingAccountTable("Member not found: readClusters. Path: /Root/PQ/Config/V2/Account"));
         UNIT_ASSERT(!IssuesLookLikeMissingAccountTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));

@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/events.h>
 
+#include <optional>
+
 namespace NKikimr::NMemory {
 
 enum class EMemoryConsumerKind {
@@ -17,6 +19,13 @@ enum class EMemoryConsumerKind {
     ColumnTablesPortionsMetaDataCache,
 
     QueryExecution,
+};
+
+// Node memory pressure as the tablets see it: Green admits, Yellow forbids growth, Red admits one at a time
+enum class EMemoryZone : ui8 {
+    Green,
+    Yellow,
+    Red,
 };
 
 struct TConsumerReport {
@@ -45,6 +54,8 @@ enum EEvMemory {
     EvMemTableUnregister,
 
     EvConsumerUnregister,
+
+    EvMemoryZone,
 
     EvEnd
 };
@@ -82,6 +93,20 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     TEvConsumerLimit(ui64 limitBytes)
         : LimitBytes(limitBytes) {
     }
+};
+
+// Sent to the executors of the tablets a Local runs
+struct TEvMemoryZone : public TEventLocal<TEvMemoryZone, EvMemoryZone> {
+    const EMemoryZone Zone;
+    // Set when the tablet reported a reclaimable part: how much of it it may keep
+    const std::optional<ui64> Share;
+    const bool ClearShare;
+
+    TEvMemoryZone(EMemoryZone zone, std::optional<ui64> share = std::nullopt, bool clearShare = false)
+        : Zone(zone)
+        , Share(share)
+        , ClearShare(clearShare)
+    {}
 };
 
 struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {

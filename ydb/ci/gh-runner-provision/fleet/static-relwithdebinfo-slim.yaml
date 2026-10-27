@@ -1,7 +1,6 @@
-# Manual create only. Not in fleet/: poll and reconcile ignore this directory.
 shape: ../shapes/static-relwithdebinfo-slim.yaml
 name: static-relwithdebinfo-slim-a
-count: 1
+count: 2
 zone: ru-central1-a
 subnet_id: e9b1l2j8tlnpph34qcn8
 labels:

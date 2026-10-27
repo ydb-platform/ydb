@@ -23,6 +23,7 @@ ydb/core/kqp/ut/tracing TKqpQueryTrace.SpillingReportsFollowRequestedStatsMode
 ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
 ydb/core/memory_controller/ut TMemoryController.MemTable
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
+ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/tablet/ut TNodeDatabaseMetricsAggregatorTest.ConcurrentPackSeesWholeBuckets
 ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch

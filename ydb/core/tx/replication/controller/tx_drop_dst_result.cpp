@@ -62,6 +62,11 @@ public:
                 {"error", Ev->Get()->Error});
         }
 
+        if (!Ev->Get()->IsSuccess() && Replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+            // A failed local operation does not relinquish durable ownership.
+            target->Shutdown(ctx);
+            return true;
+        }
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Targets>().Key(rid, tid).Delete();
         db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();

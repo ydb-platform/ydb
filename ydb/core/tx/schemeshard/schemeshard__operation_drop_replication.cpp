@@ -71,6 +71,9 @@ public:
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
+            if (txState->ReplicationDropMode == TTxState::EReplicationDropMode::ForceLocal) {
+                ev->Record.SetMode(NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL);
+            }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvDropReplication to controller",
                 {"tabletId", tabletId},
@@ -335,6 +338,30 @@ public:
         auto replication = context.SS->Replications.at(path->PathId);
         Y_ABORT_UNLESS(!replication->AlterData);
 
+        const auto& unknownFields = op.GetReflection()->GetUnknownFields(op);
+        for (int i = 0; i < unknownFields.field_count(); ++i) {
+            const auto& field = unknownFields.field(i);
+            if (field.number() == 4) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unknown replication DROP mode");
+                return result;
+            }
+        }
+        const auto mode = op.GetReplicationMode();
+        if (!NKikimrReplication::EDropReplicationMode_IsValid(mode)) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unknown replication DROP mode");
+            return result;
+        }
+        if (mode == NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL) {
+            if (Strategy != &ReplicationStrategy || !AppData(context.Ctx)->FeatureFlags.GetEnableAsyncReplicationForceDrop()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "FORCE DROP ASYNC REPLICATION is disabled or unsupported");
+                return result;
+            }
+            if (!replication->Description.GetState().HasDone()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "FORCE DROP requires DONE");
+                return result;
+            }
+        }
+
         const auto txType = Cascade
             ? TTxState::TxDropReplicationCascade
             : TTxState::TxDropReplication;
@@ -342,6 +369,7 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, path->PathId);
         txState.State = TTxState::DropParts;
+        txState.ReplicationDropMode = static_cast<TTxState::EReplicationDropMode>(mode);
         txState.MinStep = TStepId(1);
 
         const auto& shardIdx = replication->ControllerShardIdx;

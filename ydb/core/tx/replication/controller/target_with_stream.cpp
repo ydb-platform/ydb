@@ -240,6 +240,14 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
+    if (replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+        // Retain submitted attachment reconciliation, but never start source
+        // preparation or workers while waiting for the already-requested DONE.
+        if (GetDstState() != EDstState::Creating && GetDstState() != EDstState::Ready) {
+            TTargetBase::Progress(ctx);
+        }
+        return;
+    }
     if (CanDetachWithoutStream()) {
         Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose

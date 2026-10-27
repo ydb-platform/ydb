@@ -106,7 +106,9 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        if (Replication->GetState() != TReplication::EState::Ready
+            && Replication->GetDropMode() != TReplication::EDropMode::ForceLocal)
+        {
             Replication.Reset();
         }
 

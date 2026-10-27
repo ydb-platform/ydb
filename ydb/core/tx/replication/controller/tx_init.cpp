@@ -65,6 +65,14 @@ class TController::TTxInit: public TTxBase {
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
+            const auto dropMode = rowset.GetValueOrDefault<Schema::Replications::DropMode>();
+            const auto dropTargets = rowset.GetValueOrDefault<Schema::Replications::DropTargets>();
+            replication->SetDropIntent(dropMode, dropTargets);
+            if (!replication->IsDropIntentSupported()) {
+                // Keep the original storage values, including the lifecycle
+                // state, readable by the version that owns this intent.
+                replication->SetState(TReplication::EState::Error, "Unsupported durable replication drop intent");
+            }
             Self->CommittedVersions[rid] = TRowVersion(
                 rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),
                 rowset.GetValueOrDefault<Schema::Replications::CommittedTxId>(0));

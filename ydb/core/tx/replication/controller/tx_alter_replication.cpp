@@ -247,6 +247,14 @@ public:
             return true;
         }
 
+        if (!Replication->IsDropIntentSupported()
+            || Replication->GetDropMode() == TReplication::EDropMode::ForceLocal)
+        {
+            Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::UNKNOWN);
+            Replication.Reset();
+            return true;
+        }
+
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
@@ -460,6 +468,32 @@ public:
         Replication = Self->Find(replicationId);
         if (!Replication) {
             return true;
+        }
+
+        if (!Replication->IsDropIntentSupported()) {
+            Replication.Reset();
+            return true;
+        }
+        if (Replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+            // HasPendingAlter has already waited for every local DDL/flush
+            // owner and index cancellation. Retire only obsolete source waits.
+            for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+                if (it->first.first != replicationId) {
+                    ++it;
+                    continue;
+                }
+                const auto key = it->first;
+                for (const auto& worker : it->second.ExpectedWorkers) {
+                    db.Table<Schema::SchemaBarrierWorkers>().Key(
+                        worker.ReplicationId(), worker.TargetId(), worker.WorkerId()).Delete();
+                }
+                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
+                it = Self->SchemaBarriers.erase(it);
+            }
         }
 
         Replication->ResetCredentials(ctx);

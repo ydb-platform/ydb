@@ -2321,20 +2321,25 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, EReplicationDropMode mode, const TObjectOperatorContext& context)
         : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+        , Mode_(mode)
     {
     }
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
-        return options;
+        return Mode_ == EReplicationDropMode::ForceLocal
+            ? L(options, Q(Y(Q("dropMode"), Q("forceLocal"))))
+            : options;
     }
 
+private:
+    const EReplicationDropMode Mode_;
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, EReplicationDropMode mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, cascade, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {

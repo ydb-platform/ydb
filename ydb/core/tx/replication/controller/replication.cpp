@@ -59,9 +59,18 @@ class TReplication::TImpl: public TLagProvider {
         TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
+    bool IsDropIntentSupported() const {
+        const bool knownTargets = DropTargets == EDropTargets::Legacy
+            || DropTargets == EDropTargets::Retain || DropTargets == EDropTargets::Cascade;
+        return knownTargets && (DropMode == EDropMode::Normal
+            || (DropMode == EDropMode::ForceLocal && DesiredState == EState::Done
+                && DropTargets != EDropTargets::Legacy));
+    }
+
     bool CanApplyResolvedCredentials() const {
         // DROP still needs source credentials to remove retained streams after DONE.
-        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
+        return IsDropIntentSupported() && DropMode == EDropMode::Normal
+            && State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
     }
 
     template <typename... Args>
@@ -179,6 +188,22 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
+        // Preserve unsupported durable intent for a compatible reader. Never
+        // reinterpret a future mode or partial FORCE record as ordinary DROP.
+        if (!IsDropIntentSupported()) {
+            return;
+        }
+        if (DropMode == EDropMode::ForceLocal) {
+            if (State == EState::Done || (State == EState::Removing && !Targets)) {
+                return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
+            }
+            // Accepted intent survives flag changes, credentials loss and restart.
+            // Existing local attachment/detach actors retain their ownership.
+            if (!Database) {
+                ResolveDatabase(ctx);
+            }
+            return ProgressTargets(ctx);
+        }
         if (State == EState::Done) {
             return;
         }
@@ -361,6 +386,8 @@ private:
     EState State = EState::Ready;
     TString Issue;
     EState DesiredState = EState::Ready;
+    EDropMode DropMode = EDropMode::Normal;
+    EDropTargets DropTargets = EDropTargets::Legacy;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
@@ -534,6 +561,23 @@ const TString& TReplication::GetIssue() const {
 
 TReplication::EState TReplication::GetDesiredState() const {
     return Impl->DesiredState;
+}
+
+TReplication::EDropMode TReplication::GetDropMode() const {
+    return Impl->DropMode;
+}
+
+TReplication::EDropTargets TReplication::GetDropTargets() const {
+    return Impl->DropTargets;
+}
+
+bool TReplication::IsDropIntentSupported() const {
+    return Impl->IsDropIntentSupported();
+}
+
+void TReplication::SetDropIntent(EDropMode mode, EDropTargets targets) {
+    Impl->DropMode = mode;
+    Impl->DropTargets = targets;
 }
 
 void TReplication::SetDesiredState(EState state) {

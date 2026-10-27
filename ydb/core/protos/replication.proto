@@ -248,10 +248,18 @@ message TEvAlterReplicationResult {
     optional EStatus Status = 3;
 }
 
+// FORCE_LOCAL abandons source resources after local DONE. All deployed and
+// rollback handlers must support this mode before admission is enabled.
+enum EDropReplicationMode {
+    DROP_REPLICATION_NORMAL = 0;
+    DROP_REPLICATION_FORCE_LOCAL = 1;
+}
+
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional bool Cascade = 3 [default = true];
+    optional EDropReplicationMode Mode = 4 [default = DROP_REPLICATION_NORMAL];
 }
 
 message TEvDropReplicationResult {
@@ -259,6 +267,7 @@ message TEvDropReplicationResult {
         UNKNOWN = 0;
         SUCCESS = 1;
         NOT_FOUND = 2;
+        INVALID_REQUEST = 3;
     }
 
     optional TOperationId OperationId = 1;

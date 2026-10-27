@@ -169,6 +169,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
+        if (DropMode == TReplication::EDropMode::ForceLocal) {
+            YDB_LOG_WARN("Retry local DONE for accepted FORCE DROP", {"status", status}, {"error", error});
+            return Retry();
+        }
         YDB_LOG_ERROR("Error",
             {"status", status},
             {"reason", error});
@@ -205,7 +209,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TReplication::EState desiredState)
+            const TReplication::EState desiredState,
+            TReplication::EDropMode dropMode)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -213,6 +218,7 @@ public:
         , Kind(kind)
         , DstPathId(dstPathId)
         , DesiredState(desiredState)
+        , DropMode(dropMode)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
@@ -258,6 +264,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TReplication::EState DesiredState;
+    const TReplication::EDropMode DropMode;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
@@ -277,13 +284,13 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
         ? target->GetDstPathId()
         : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState(), replication->GetDropMode());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState, TReplication::EDropMode dropMode)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, dropMode);
 }
 
 }

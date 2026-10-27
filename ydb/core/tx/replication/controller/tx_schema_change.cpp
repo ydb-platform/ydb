@@ -812,6 +812,7 @@ void TController::StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, co
         .TxId = it->second.DstAlterTxId,
         .RequireTargetFlush = global && !AssignedTxIds.empty() && it->second.TargetFlushTxIds.empty(),
         .GlobalConsistency = global,
+        .DropMode = replication->GetDropMode(),
     };
     const auto actorId = ctx.Register(CreateSchemaChangeDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
         key.first, key.second, target->GetKind(), target->GetDstPathId(), it->second.Schema, settings));
@@ -980,6 +981,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         if (!Event->Get()->IsSuccess()) {
             auto replication = Self->Find(key.first);
+            if (replication && replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+                // Preserve the local operation accepted before FORCE. A new
+                // actor reconciles the same durable tx id with local retries.
+                RestartAlter = true;
+                return true;
+            }
             auto* target = replication ? replication->FindTarget(key.second) : nullptr;
             it->second.Phase = ESchemaBarrierPhase::Error;
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(

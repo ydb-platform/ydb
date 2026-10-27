@@ -33,6 +33,11 @@ public:
         Error = Max<ui8>()
     };
 
+    enum class EDropMode: ui8 { Normal = 0, ForceLocal = 1 };
+    // Legacy rows have only per-target destination state. Never reinterpret
+    // their missing replication-wide choice as retain or cascade.
+    enum class EDropTargets: ui8 { Legacy = 0, Retain = 1, Cascade = 2 };
+
     enum class ETargetKind: ui8 {
         Table,
         IndexTable,
@@ -178,6 +183,10 @@ public:
     EState GetState() const;
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
+    EDropMode GetDropMode() const;
+    EDropTargets GetDropTargets() const;
+    void SetDropIntent(EDropMode mode, EDropTargets targets);
+    bool IsDropIntentSupported() const;
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;

@@ -91,6 +91,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
+        if (DropMode == TReplication::EDropMode::ForceLocal && record.GetTxId() != TxId) {
+            return;
+        }
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
@@ -109,14 +112,14 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         case NKikimrScheme::StatusPathDoesNotExist:
             return Success();
         case NKikimrScheme::StatusNameConflict:
-            if (PendingDstPathId) {
+            if (PendingDstPathId || DropMode == TReplication::EDropMode::ForceLocal) {
                 // ALTER reports a collected path id as a name conflict.
                 // Confirm that the pending destination is absent before detaching.
                 DetachError = record.GetReason();
                 Send(
                     PipeCache,
                     new TEvPipeCache::TEvForward(
-                        new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId),
+                        new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId ? PendingDstPathId : DstPathId),
                         SchemeShardId));
                 return Become(&TThis::StateCheckDst);
             }
@@ -189,6 +192,10 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
+        if (DropMode == TReplication::EDropMode::ForceLocal) {
+            YDB_LOG_WARN("Retry local FORCE CASCADE", {"status", status}, {"error", error});
+            return Retry();
+        }
         YDB_LOG_ERROR("Error",
             {"status", status},
             {"reason", error});
@@ -215,7 +222,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TPathId& pendingDstPathId)
+            const TPathId& pendingDstPathId,
+            TReplication::EDropMode dropMode)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -224,6 +232,7 @@ public:
         , Kind(kind)
         , DstPathId(dstPathId)
         , PendingDstPathId(pendingDstPathId)
+        , DropMode(dropMode)
         , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
     }
@@ -267,6 +276,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TPathId PendingDstPathId;
+    const TReplication::EDropMode DropMode;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
@@ -280,14 +290,14 @@ IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
-        target->GetPendingDstPathId());
+        target->GetPendingDstPathId(), replication->GetDropMode());
 }
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
-        const TPathId& pendingDstPathId)
+        const TPathId& pendingDstPathId, TReplication::EDropMode dropMode)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId, dropMode);
 }
 
 }

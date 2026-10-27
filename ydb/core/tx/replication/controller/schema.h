@@ -34,6 +34,15 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
+        struct DropMode: Column<13, NScheme::NTypeIds::Uint8> {
+            using Type = TReplication::EDropMode;
+            static constexpr Type Default = Type::Normal;
+        };
+        struct DropTargets: Column<14, NScheme::NTypeIds::Uint8> {
+            using Type = TReplication::EDropTargets;
+            static constexpr Type Default = Type::Legacy;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -47,7 +56,9 @@ struct TControllerSchema: NIceDb::Schema {
             Database,
             DeferredAlter,
             CommittedStep,
-            CommittedTxId
+            CommittedTxId,
+            DropMode,
+            DropTargets
         >;
     };
 

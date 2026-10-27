@@ -1547,8 +1547,10 @@ struct TAlterReplicationSettings {
 };
 
 struct TDropReplicationSettings {
+    enum class EMode { Normal, ForceLocal };
     TString Name;
     bool Cascade = false;
+    EMode Mode = EMode::Normal;
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {

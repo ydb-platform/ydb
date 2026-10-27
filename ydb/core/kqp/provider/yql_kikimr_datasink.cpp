@@ -1752,10 +1752,19 @@ public:
                         .Done()
                         .Ptr();
                 } else if (mode == "drop" || mode == "dropCascade") {
+                    TString dropMode = "normal";
+                    for (const auto& option : settings.Other) {
+                        if (option.Name().Value() != "dropMode" || !option.Value().Maybe<TCoAtom>()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), "Unsupported replication DROP setting"));
+                            return nullptr;
+                        }
+                        dropMode = option.Value().Cast<TCoAtom>().Value();
+                    }
                     return Build<TKiDropReplication>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Replication().Build(key.GetReplicationPath())
+                        .DropMode().Build(dropMode)
                         .Cascade<TCoAtom>()
                             .Value(mode == "dropCascade")
                             .Build()

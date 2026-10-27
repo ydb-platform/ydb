@@ -51,6 +51,7 @@ message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
+    optional NKikimrReplication.EDropReplicationMode ReplicationMode = 4 [default = DROP_REPLICATION_NORMAL];
 }
 
 enum EColumnCodec {
@@ -1411,6 +1412,7 @@ message TGenericTxInFlyExtraData {
     // we do not use oneof here as far as we want to combine some subops rarely
     // and it can be used in this case
     optional TTxCopyTableExtraData TxCopyTableExtraData = 1;
+    optional NKikimrReplication.EDropReplicationMode ReplicationDropMode = 2 [default = DROP_REPLICATION_NORMAL];
 }
 
 message TIndexAlteringConfig {

@@ -574,6 +574,12 @@ Y_UNIT_TEST(AsyncReplication) {
          "DROP ASYNC REPLICATION user;\n"},
         {"drop async replication user cascade",
          "DROP ASYNC REPLICATION user CASCADE;\n"},
+        {"drop async replication force with (force=true)",
+         "DROP ASYNC REPLICATION force WITH (force = TRUE);\n"},
+        {"drop async replication user cascade with (force=true)",
+         "DROP ASYNC REPLICATION user CASCADE WITH (force = TRUE);\n"},
+        {"drop async replication user with (force=false)",
+         "DROP ASYNC REPLICATION user WITH (force = FALSE);\n"},
     };
 
     TSetup setup;

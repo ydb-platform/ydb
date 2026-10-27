@@ -87,6 +87,8 @@ struct TTxState {
     // uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
+    enum class EReplicationDropMode : ui8 { Normal = 0, ForceLocal = 1 };
+    EReplicationDropMode ReplicationDropMode = EReplicationDropMode::Normal;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

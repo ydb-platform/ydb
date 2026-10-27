@@ -41,11 +41,69 @@ public:
         }
     }
 
+    bool Reject(const TActorContext& ctx) {
+        auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
+        ev->Record.MutableOperationId()->CopyFrom(PubEv->Get()->Record.GetOperationId());
+        ev->Record.SetOrigin(Self->TabletID());
+        ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::INVALID_REQUEST);
+        Result = MakeHolder<IEventHandle>(PubEv->Sender, ctx.SelfID, ev.Release());
+        Replication.Reset(); // Invalid input cannot trigger Progress or source work.
+        return true;
+    }
+
+    void BeginForceRemoval(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(Replication->GetState() == TReplication::EState::Done);
+        Replication->SetState(TReplication::EState::Removing);
+        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()));
+        const auto rid = Replication->GetId();
+        for (auto* target : Replication->GetTargets()) {
+            const auto tid = target->GetId();
+            target->Shutdown(ctx);
+            if (Replication->GetDropTargets() == TReplication::EDropTargets::Cascade) {
+                target->SetStreamState(TReplication::EStreamState::Removed);
+                target->SetDstState(TReplication::EDstState::Removing);
+                db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                db.Table<Schema::Targets>().Key(rid, tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+            } else {
+                db.Table<Schema::Targets>().Key(rid, tid).Delete();
+                db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
+                for (const auto wid : target->GetWorkers()) {
+                    db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
+                }
+                Self->CompleteWorkerSets.erase({rid, tid});
+                Self->IndexBuilds.erase({rid, tid});
+                for (auto it = Self->IndexBuildProgress.begin(); it != Self->IndexBuildProgress.end();) {
+                    if (it->first.ReplicationId() == rid && it->first.TargetId() == tid) {
+                        db.Table<Schema::IndexBuildWorkers>().Key(rid, tid, it->first.WorkerId()).Delete();
+                        Self->IndexBuildProgress.erase(it++);
+                    } else {
+                        ++it;
+                    }
+                }
+                Replication->RemoveTarget(tid);
+            }
+        }
+    }
+
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Execute",
             {"ev", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
+        const auto& unknownFields = record.GetReflection()->GetUnknownFields(record);
+        for (int i = 0; i < unknownFields.field_count(); ++i) {
+            if (unknownFields.field(i).number() == 4) {
+                return Reject(ctx);
+            }
+        }
+        if (!NKikimrReplication::EDropReplicationMode_IsValid(record.GetMode())) {
+            return Reject(ctx);
+        }
+        const auto mode = static_cast<TReplication::EDropMode>(record.GetMode());
+        const auto targets = record.GetCascade() ? TReplication::EDropTargets::Cascade : TReplication::EDropTargets::Retain;
         const auto pathId = TPathId::FromProto(record.GetPathId());
         const auto& opId = record.GetOperationId();
         Replication = Self->Find(pathId);
@@ -63,12 +121,71 @@ public:
             return true;
         }
 
-        if (Replication->GetState() == TReplication::EState::Removing) {
+        if (!Replication->IsDropIntentSupported()) {
+            return Reject(ctx);
+        }
+
+        if (Replication->GetState() == TReplication::EState::Removing
+            || Replication->GetDropMode() == TReplication::EDropMode::ForceLocal)
+        {
+            // Accepted durable intent wins over all resends, including conflicts.
+            if (mode != Replication->GetDropMode()
+                || (Replication->GetDropTargets() != TReplication::EDropTargets::Legacy
+                    && targets != Replication->GetDropTargets()))
+            {
+                return Reject(ctx);
+            }
             Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
             return true;
         }
 
+        if (mode == TReplication::EDropMode::ForceLocal
+            && (Replication->GetDesiredState() != TReplication::EState::Done
+                || Replication->GetConfig().HasTransferSpecific()))
+        {
+            return Reject(ctx);
+        }
+
         NIceDb::TNiceDb db(txc.DB);
+        Replication->SetDropIntent(mode, targets);
+        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::DropMode>(mode),
+            NIceDb::TUpdate<Schema::Replications::DropTargets>(targets));
+        if (mode == TReplication::EDropMode::ForceLocal) {
+            Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
+            Replication->ResetCredentials(ctx);
+            if (Replication->GetState() == TReplication::EState::Done) {
+                BeginForceRemoval(db, ctx);
+            } else {
+                // Do not cancel submitted attachment/barrier DDL. Rebuild only
+                // local detach actors so their failure policy follows the intent.
+                bool recoverable = true;
+                for (auto* target : Replication->GetTargets()) {
+                    const auto state = target->GetDstState();
+                    if (state == TReplication::EDstState::Error) {
+                        if (!target->GetDstPathId() && !target->GetPendingDstPathId()) {
+                            recoverable = false;
+                            continue;
+                        }
+                        target->SetDstState(TReplication::EDstState::Alter);
+                        target->SetIssue({});
+                        db.Table<Schema::Targets>().Key(Replication->GetId(), target->GetId()).Update(
+                            NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                            NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
+                    }
+                    if (target->GetDstState() == TReplication::EDstState::Alter) {
+                        target->Shutdown(ctx);
+                    }
+                }
+                if (recoverable && Replication->GetState() == TReplication::EState::Error) {
+                    Replication->SetState(TReplication::EState::Ready);
+                    db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                        NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                        NIceDb::TUpdate<Schema::Replications::Issue>(TString()));
+                }
+            }
+            return true;
+        }
 
         Self->DeferredAlters.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
@@ -186,6 +303,14 @@ public:
             return true;
         }
 
+        if (Replication->GetDropMode() == TReplication::EDropMode::ForceLocal
+            && Replication->GetState() == TReplication::EState::Done)
+        {
+            NIceDb::TNiceDb db(txc.DB);
+            BeginForceRemoval(db, ctx);
+            return true;
+        }
+
         if (Replication->GetState() != TReplication::EState::Removing) {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
                 {"rid", rid},
@@ -193,6 +318,9 @@ public:
             return true;
         }
 
+        if (!Replication->GetTargets().empty()) {
+            return true;
+        }
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Delete();
 
@@ -225,7 +353,26 @@ public:
         }
 
         if (Replication) {
+            if (Replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+                // Stop source readers immediately, including siblings of a
+                // target whose local DDL/flush still owns its completion.
+                // Keep worker metadata until the existing removal path runs.
+                for (const auto& [id, worker] : Self->Workers) {
+                    if (id.ReplicationId() == Replication->GetId() && worker.HasSession()) {
+                        Self->StopQueue.emplace(id, worker.GetSession());
+                    }
+                }
+                Self->ScheduleProcessQueues();
+            }
             Replication->Progress(ctx);
+            if (Replication->GetDropMode() == TReplication::EDropMode::ForceLocal
+                && Self->DeferredAlters.contains(Replication->GetId()))
+            {
+                Self->RunTxIndexBuild(ctx);
+                if (!Self->HasPendingAlter(Replication->GetId())) {
+                    ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(Replication->GetId()));
+                }
+            }
         }
     }
 

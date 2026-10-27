@@ -6234,6 +6234,19 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(DropAsyncReplicationForceOptions) {
+    for (const TString& suffix : {"WITH (FORCE = TRUE)", "CASCADE WITH (FORCE = TRUE)", "WITH (FORCE = FALSE)"}) {
+        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION force " << suffix << ";");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+    for (const TString& options : {"FORCE = 'TRUE'", "FORCE = 1", "FORCE = NULL", "FORCE = TRUE, FORCE = FALSE", "UNKNOWN = TRUE"}) {
+        const auto res = SqlToYql(TStringBuilder() << "USE plato; DROP ASYNC REPLICATION r WITH (" << options << ");");
+        UNIT_ASSERT_C(!res.IsOk(), options);
+    }
+    UNIT_ASSERT(!SqlToYql("USE plato; DROP TRANSFER r WITH (FORCE = TRUE);").IsOk());
+    UNIT_ASSERT(!SqlToYql("USE plato; DROP TABLE r WITH (FORCE = TRUE);").IsOk());
+}
+
 Y_UNIT_TEST(PragmaCompactGroupBy) {
     auto req = "PRAGMA CompactGroupBy; SELECT key, COUNT(*) FROM plato.Input GROUP BY key;";
     auto res = SqlToYql(req);

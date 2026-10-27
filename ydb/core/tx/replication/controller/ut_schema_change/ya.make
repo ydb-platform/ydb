@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/replication/controller)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
 

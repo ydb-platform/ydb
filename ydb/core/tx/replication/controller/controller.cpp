@@ -246,8 +246,18 @@ void TController::Reset() {
 }
 
 bool TController::HasActiveSchemaBarrier(ui64 replicationId) const {
-    return AnyOf(SchemaBarriers, [replicationId](const auto& item) {
-        return item.first.first == replicationId && item.second.IsActive();
+    const auto replication = Find(replicationId);
+    const bool force = replication && replication->IsDropIntentSupported()
+        && replication->GetDropMode() == TReplication::EDropMode::ForceLocal;
+    return AnyOf(SchemaBarriers, [replicationId, force](const auto& item) {
+        if (item.first.first != replicationId) {
+            return false;
+        }
+        // FORCE abandons source reports/heartbeats/acknowledgements. Local DDL
+        // and target flushes retain their durable transaction identities.
+        return force
+            ? item.second.Phase == ESchemaBarrierPhase::Altering || item.second.Phase == ESchemaBarrierPhase::FlushingTarget
+            : item.second.IsActive();
     });
 }
 
@@ -742,7 +752,10 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
         return false;
     }
 
-    if (replication->GetState() != TReplication::EState::Ready) {
+    if (replication->GetState() != TReplication::EState::Ready
+        || !replication->IsDropIntentSupported()
+        || replication->GetDropMode() == TReplication::EDropMode::ForceLocal)
+    {
         return false;
     }
 

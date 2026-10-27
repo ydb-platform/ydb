@@ -15,6 +15,7 @@ struct TSchemaChangeDstAlterSettings {
     TString IndexName;
     ui64 SnapshotTxId = 0;
     bool CancelIndex = false;
+    TReplication::EDropMode DropMode = TReplication::EDropMode::Normal;
 };
 
 // Reconciles an OLTP replica table with a complete source schema snapshot.

@@ -3973,6 +3973,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 txState.PlanStep =      txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::PlanStep>(InvalidStepId);
 
                 TString extraData =     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::ExtraBytes>("");
+                if ((txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade)
+                    && !extraData.empty())
+                {
+                    NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                    Y_ABORT_UNLESS(proto.ParseFromString(extraData));
+                    // Unknown proto2 enum values live in UnknownFields, not the getter.
+                    const auto& unknownFields = proto.GetReflection()->GetUnknownFields(proto);
+                    for (int i = 0; i < unknownFields.field_count(); ++i) {
+                        const auto& field = unknownFields.field(i);
+                        Y_ABORT_UNLESS(field.number() != 2);
+                    }
+                    Y_ABORT_UNLESS(NKikimrReplication::EDropReplicationMode_IsValid(proto.GetReplicationDropMode()));
+                    txState.ReplicationDropMode = static_cast<TTxState::EReplicationDropMode>(proto.GetReplicationDropMode());
+                }
                 txState.StartTime =     TInstant::MicroSeconds(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::StartTime>());
                 txState.DataTotalSize = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::DataTotalSize>(0);
                 txState.Cancel = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::CancelBackup>(false);

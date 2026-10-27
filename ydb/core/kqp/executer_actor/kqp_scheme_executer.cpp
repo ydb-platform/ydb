@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
@@ -563,6 +564,11 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kDropReplication: {
                 const auto& modifyScheme = schemeOp.GetDropReplication();
+                if (modifyScheme.GetDrop().GetReplicationMode() == NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL
+                    && !AppData()->FeatureFlags.GetEnableAsyncReplicationForceDrop())
+                {
+                    return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, "FORCE DROP ASYNC REPLICATION is disabled");
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

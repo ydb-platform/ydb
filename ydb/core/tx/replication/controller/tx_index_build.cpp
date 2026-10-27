@@ -492,6 +492,7 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
         .IndexName = SplitPath(target->GetSrcPath()).back(),
         .SnapshotTxId = build.GetSnapshotTxId(),
         .CancelIndex = cancelling,
+        .DropMode = replication->GetDropMode(),
     };
     IndexReadyActors[key] = ctx.Register(CreateSchemaChangeDstAlterer(ctx.SelfID,
         replication->GetSchemeShardId(), key.first, key.second, TReplication::ETargetKind::Table,
@@ -503,6 +504,8 @@ class TController::TTxIndexReady: public TTxBase {
     TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr ResultEvent;
     ui64 SavedTxId = 0;
     bool Finished = false;
+    enum class ECompletion { Progress, RetryLocal };
+    ECompletion Completion = ECompletion::Progress;
     TReplication::TPtr Replication;
 
 public:
@@ -578,6 +581,11 @@ public:
                 } else {
                     build.SetPhase(TBuild::READY);
                 }
+            } else if (Replication->GetDropMode() == TReplication::EDropMode::ForceLocal) {
+                // An actor started before FORCE may report its legacy terminal
+                // error. Preserve CANCELLING/MAKING_READY and the saved tx id;
+                // its replacement uses the FORCE local retry policy.
+                Completion = ECompletion::RetryLocal;
             } else {
                 target->SetDstState(TReplication::EDstState::Error);
                 target->SetIssue(ResultEvent->Get()->Error);
@@ -603,7 +611,12 @@ public:
         }
 
         if (Finished) {
-            Self->IndexReadyActors.erase(std::make_pair(ResultEvent->Get()->ReplicationId, ResultEvent->Get()->TargetId));
+            const auto key = std::make_pair(ResultEvent->Get()->ReplicationId, ResultEvent->Get()->TargetId);
+            Self->IndexReadyActors.erase(key);
+            if (Completion == ECompletion::RetryLocal) {
+                Self->StartIndexReady(key, ctx);
+                return;
+            }
             Replication->Progress(ctx);
             if (Self->DeferredAlters.contains(Replication->GetId()) && !Self->HasPendingAlter(Replication->GetId())) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(Replication->GetId()));

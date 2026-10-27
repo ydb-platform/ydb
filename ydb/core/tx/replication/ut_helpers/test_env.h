@@ -141,10 +141,11 @@ public:
         }
     }
 
-    TEnv(const TFeatureFlags& featureFlags, bool init = true)
+    TEnv(const TFeatureFlags& featureFlags, bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
             .SetFeatureFlags(featureFlags.FeatureFlags)
+            .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)
         , Client(Settings)

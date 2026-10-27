@@ -656,6 +656,12 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
+        if (DropMode == TReplication::EDropMode::ForceLocal) {
+            // Keep the saved operation identity and reconcile local DDL again.
+            // Accepted FORCE cannot require a new public ALTER to resume.
+            YDB_LOG_WARN("Retry local DDL during FORCE DROP", {"status", status}, {"error", error});
+            return RetryAllocate();
+        }
         const TString reason = TStringBuilder() << "destination table " << DstPathId.ToString()
             << ", source schema version " << DesiredSchema.GetSourceSchemaVersion() << ": " << error;
         YDB_LOG_ERROR("Schema change destination alter failed",
@@ -701,6 +707,7 @@ public:
         , SnapshotTxId(settings.SnapshotTxId)
         , CancelIndex(settings.CancelIndex)
         , StartedWithTxId(settings.TxId != 0)
+        , DropMode(settings.DropMode)
     {
     }
 
@@ -737,6 +744,7 @@ private:
     const ui64 SnapshotTxId;
     const bool CancelIndex;
     const bool StartedWithTxId;
+    const TReplication::EDropMode DropMode;
     bool MayHaveProposedTxId = false;
     bool AlterCompletionConfirmed = false;
     TActorId PipeCache;

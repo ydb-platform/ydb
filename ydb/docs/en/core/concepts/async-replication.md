@@ -191,7 +191,7 @@ To complete asynchronous replication, use the [ALTER ASYNC REPLICATION](../yql/r
 
 ## Dropping an Asynchronous Replication Instance {#drop}
 
-When you drop an asynchronous replication instance:
+By default, when you drop an asynchronous replication instance:
 
 * Changefeeds are deleted in the source tables.
 * The source tables are unlocked, and you can add and delete columns again.
@@ -203,5 +203,7 @@ When you drop an asynchronous replication instance:
 If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading.
 
 {% endnote %}
+
+For deletion after completion without accessing the source, use [`DROP ASYNC REPLICATION ... WITH (FORCE = TRUE)`](../yql/reference/syntax/drop-async-replication.md#force). It leaves source resources unchanged and permanently discards their cleanup metadata.
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.

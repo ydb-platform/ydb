@@ -2986,7 +2986,11 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDropReplication(TKiDropReplication node, TExprContext&) override {
+    virtual TStatus HandleDropReplication(TKiDropReplication node, TExprContext& ctx) override {
+        if (node.DropMode().Value() != "normal" && node.DropMode().Value() != "forceLocal") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported replication DROP mode"));
+            return TStatus::Error;
+        }
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

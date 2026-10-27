@@ -1086,7 +1086,7 @@ alter_replication_action:
 
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
-drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE? (WITH LPAREN replication_settings RPAREN)?;
 
 lambda_or_parameter:
     lambda

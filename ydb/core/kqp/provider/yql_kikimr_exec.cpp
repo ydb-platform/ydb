@@ -3764,6 +3764,8 @@ public:
             TDropReplicationSettings settings;
             settings.Name = TString(dropReplication.Replication());
             settings.Cascade = (dropReplication.Cascade().Value() == "1");
+            settings.Mode = dropReplication.DropMode().Value() == "forceLocal"
+                ? TDropReplicationSettings::EMode::ForceLocal : TDropReplicationSettings::EMode::Normal;
 
             auto cluster = TString(dropReplication.DataSink().Cluster());
             auto future = Gateway->DropReplication(cluster, settings);

@@ -14,6 +14,20 @@ using NTabletFlatExecutor::TTransactionContext;
 
 namespace NDataShard {
 
+namespace {
+
+void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+    table.HnswSettings.reset();
+    table.HnswVectorColumnTag = 0;
+    if (descr.GetVectorIndexHnsw() && descr.HasVectorIndexKmeansTreeDescription()
+            && descr.HasVectorIndexEmbeddingColumnId()) {
+        table.HnswSettings = descr.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
+        table.HnswVectorColumnTag = descr.GetVectorIndexEmbeddingColumnId();
+    }
+}
+
+} // namespace
+
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
@@ -333,6 +347,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    ParseHnswSettings(*this, descr);
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -735,6 +750,23 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
+    // Persist the build settings with the posting table so followers, restarted
+    // tablets and split destinations reconstruct the same graph.
+    if (delta.HasVectorIndexKmeansTreeDescription()) {
+        schema.MutableVectorIndexKmeansTreeDescription()->CopyFrom(delta.GetVectorIndexKmeansTreeDescription());
+    }
+    if (delta.HasVectorIndexHnsw()) {
+        schema.SetVectorIndexHnsw(delta.GetVectorIndexHnsw());
+    }
+    if (delta.HasVectorIndexEmbeddingColumn()) {
+        schema.SetVectorIndexEmbeddingColumn(delta.GetVectorIndexEmbeddingColumn());
+    }
+    if (delta.HasVectorIndexEmbeddingColumnId()) {
+        schema.SetVectorIndexEmbeddingColumnId(delta.GetVectorIndexEmbeddingColumnId());
+    }
+    // Ordinary schema deltas omit the index annotation. Restore it from the
+    // merged description, while honoring explicit parameter/marker changes.
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 

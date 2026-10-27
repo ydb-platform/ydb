@@ -1,6 +1,10 @@
 YQL_LIBRARY()
 
 SRCS(
+    datashard_hnsw.cpp
+    hnsw_index_build_actor.cpp
+    hnsw_index_build_actor.h
+    hnsw_memory_tracker.h
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h
@@ -474,6 +478,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/datashard/hnsw_index
     ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers

@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 SRCS(
     hnsw_index_ut.cpp
+    hnsw_memory_tracker_ut.cpp
 )
 
 PEERDIR(

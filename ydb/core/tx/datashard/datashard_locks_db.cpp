@@ -19,6 +19,7 @@ void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
             // Removing the lock also removes any uncommitted data
             if (DB.HasOpenTx(tid, lockId)) {
                 DB.RemoveTx(tid, lockId);
+                Self.AbortHnswIndexChanges(tid, lockId, DB);
                 Self.GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(lockId, DB);
             }
         }

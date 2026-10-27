@@ -300,6 +300,11 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    InvalidateHnswIndexes();
+    if (HnswCacheMemoryTracker) {
+        Send(NMemory::MakeMemoryControllerId(),
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+    }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
     }
@@ -428,6 +433,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
+        InvalidateHnswIndexes();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -474,6 +480,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     }
 
     SignalTabletActive(ctx);
+    ScheduleHnswInitialBuilds();
     DoPeriodicTasks(ctx);
 
     NotifySchemeshard(ctx);
@@ -4178,6 +4185,7 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     // Unrelated executor commits may update yellow-stop flags without notifying
     // the shard. Stop active direct imports on the next periodic check as well.
     AbortDirectImportsForSpace();
+    PruneHnswIndexes();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
@@ -4660,6 +4668,15 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+        // Some embedded runtimes, including tests, have no controller.
+        // Distinguish that disabled cache from a pending first limit grant.
+        if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->SetLimit(0);
+        }
+        return;
+    }
+
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());

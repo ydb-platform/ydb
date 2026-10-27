@@ -1,6 +1,5 @@
 #include "sqs_serialization.h"
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 #include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/core/http_proxy/sqs_xml/xml_builder.h>
 
@@ -12,7 +11,8 @@ namespace NKikimr::NHttpProxy::NSQS {
     void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityRequest& value, const TParameters& params) {
         value.set_queue_url(params.QueueUrl.GetOrElse(""));
         if (params.ReceiptHandle) {
-            value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
+            // The form body is already URL-decoded. Escaping again turns '+' and '=' into %2B and %3D.
+            value.set_receipt_handle(*params.ReceiptHandle);
         }
         if (params.VisibilityTimeout) {
             value.set_visibility_timeout(*params.VisibilityTimeout);
@@ -27,7 +27,7 @@ namespace NKikimr::NHttpProxy::NSQS {
                 entry->set_id(*item.Id);
             }
             if (item.ReceiptHandle) {
-                entry->set_receipt_handle(CGIEscapeRet(*item.ReceiptHandle));
+                entry->set_receipt_handle(*item.ReceiptHandle);
             }
             if (item.VisibilityTimeout) {
                 entry->set_visibility_timeout(*item.VisibilityTimeout);
@@ -48,7 +48,7 @@ namespace NKikimr::NHttpProxy::NSQS {
     void DeserializeXml(Ydb::Ymq::V1::DeleteMessageRequest& value, const TParameters& params) {
         value.set_queue_url(params.QueueUrl.GetOrElse(""));
         if (params.ReceiptHandle) {
-            value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
+            value.set_receipt_handle(*params.ReceiptHandle);
         }
     }
 
@@ -60,7 +60,7 @@ namespace NKikimr::NHttpProxy::NSQS {
                 entry->set_id(*item.Id);
             }
             if (item.ReceiptHandle) {
-                entry->set_receipt_handle(CGIEscapeRet(*item.ReceiptHandle));
+                entry->set_receipt_handle(*item.ReceiptHandle);
             }
         }
     }

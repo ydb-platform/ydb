@@ -66,6 +66,7 @@ namespace NKikimr {
         };
         TInstant Deadline;
         std::deque<TItem> Items;
+        bool IgnoreConnectionQuorum = false;
 
         TString ToString() const {
             TStringStream s;

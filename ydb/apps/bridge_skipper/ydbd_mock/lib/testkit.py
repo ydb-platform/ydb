@@ -75,6 +75,18 @@ class LiveCluster:
                 if isinstance(result, BaseException):
                     raise result
             self._http = aiohttp.ClientSession()
+            # Reachability's startup grace also calls peers connected before they
+            # have answered. Wait for real heartbeats before testing health: slow
+            # listener startup can consume that grace period on a busy machine.
+            await wait_until(
+                lambda: all(
+                    peer in process.inst.reach.last_ok and process.inst.connected(peer)
+                    for process in self.procs.values()
+                    for peer in range(len(self.topo.pile_names))
+                    if peer != process.inst.index
+                ),
+                message="initial peer heartbeats",
+            )
         except BaseException:
             await self.stop()
             raise

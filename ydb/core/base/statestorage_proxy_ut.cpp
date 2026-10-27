@@ -206,6 +206,24 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[4]), 0);
     }
 
+    Y_UNIT_TEST(SigAsyncCountsRepeatedReplicaFailureOnce) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigAsync);
+        f.Empty(0);
+        f.Empty(1);
+        f.Empty(2);
+        f.ExpectReply(NKikimrProto::NODATA);
+
+        f.Fail(3);
+        f.Fail(3);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+
+        f.KnownLeader(4);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.GetReplicaSignature(f.Replicas[4]), 5);
+    }
+
     Y_UNIT_TEST(EachRingGroupRequiresItsOwnNegativeQuorum) {
         TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, 2);
         f.Empty(0);

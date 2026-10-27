@@ -24,13 +24,11 @@ from ydb.tests.library.compatibility.fixtures import (
     inter_stable_name,
     string_version_to_tuple,
 )
-from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-FORCE_FLAG = 'enable_async_replication_force_drop'
 PREVIOUS_LABEL = os.environ.get('YDB_ROLLBACK_PREVIOUS_LABEL', inter_stable_name)
 PDISK_BYTES = 8 * 1024**3
 
@@ -124,8 +122,6 @@ def binary_info(path, label):
 
 
 class ReplicationRollback(RollingDowngradeAndUpgradeFixture):
-    enable_force = False
-
     @pytest.fixture(autouse=True, params=[[current_binary_path, inter_stable_binary_path]],
                     ids=[f'current_to_{PREVIOUS_LABEL}_to_current'])
     def base_setup(self, request):
@@ -165,34 +161,26 @@ class ReplicationRollback(RollingDowngradeAndUpgradeFixture):
             self.source.start()
             self.source_driver = self.create_source_driver()
             for _ in self.setup_cluster(
-                    nodes=3, separate_node_configs=True,
+                    tenant_db='replication_rollback', nodes=3,
                     output_path=str(self.output / 'destination'),
                     pdisk_store_path=str(self.destination_disks), static_pdisk_size=PDISK_BYTES,
-                    use_in_memory_pdisks=False, extra_grpc_services=['replication'],
-                    extra_feature_flags=[FORCE_FLAG] if self.enable_force else []):
-                # Static nodes have separate configs; harness tenant slots use
-                # the shared config path. Populate it before creating slots.
-                self.config.write_proto_configs(self.cluster.config_path)
-                self.stop_driver()
-                with ydb_database_ctx(self.cluster, '/Root/replication_rollback', node_count=3) as database:
-                    self.database_path = database
-                    self.driver = self.create_driver()
-                    self.disk_identity = {str(path): [path.stat().st_ino, path.stat().st_size]
-                                          for directory in (self.source_disks, self.destination_disks)
-                                          for path in directory.glob('pdisk*.data')}
-                    assert len(self.disk_identity) == 10, self.disk_identity
-                    assert all(value[1] == PDISK_BYTES for value in self.disk_identity.values())
-                    self.evidence['persistent_disks'] = self.disk_identity
-                    self.evidence['framework_policy'] = {
-                        'suppress_compatibility_check': self.cluster.nodes[1].read_node_config()[
-                            'feature_flags']['suppress_compatibility_check'],
-                        'suppress_version_check': self.config.suppress_version_check,
-                    }
-                    assert all(self.evidence['framework_policy'].values())
-                    try:
-                        yield
-                    finally:
-                        self.stop_driver()
+                    use_in_memory_pdisks=False, extra_grpc_services=['replication']):
+                self.disk_identity = {str(path): [path.stat().st_ino, path.stat().st_size]
+                                      for directory in (self.source_disks, self.destination_disks)
+                                      for path in directory.glob('pdisk*.data')}
+                assert len(self.disk_identity) == 10, self.disk_identity
+                assert all(value[1] == PDISK_BYTES for value in self.disk_identity.values())
+                self.evidence['persistent_disks'] = self.disk_identity
+                self.evidence['framework_policy'] = {
+                    'suppress_compatibility_check': self.cluster.nodes[1].read_node_config()[
+                        'feature_flags']['suppress_compatibility_check'],
+                    'suppress_version_check': self.config.suppress_version_check,
+                }
+                assert all(self.evidence['framework_policy'].values())
+                try:
+                    yield
+                finally:
+                    self.stop_driver()
         finally:
             self.stop_driver()
             if self.source_driver is not None:
@@ -240,15 +228,6 @@ class ReplicationRollback(RollingDowngradeAndUpgradeFixture):
         self.evidence.update(source_before=self.source_before, destination_id=self.destination_id,
                              replication_id=self.replication_id, source_table_id=self.source_table_id)
 
-    def remove_unknown_flag_before_rollback(self):
-        config = self.cluster.nodes[1].read_node_config()
-        config.setdefault('feature_flags', {}).pop(FORCE_FLAG, None)
-        self.cluster.overwrite_configs(config)
-        self.config.write_proto_configs(self.cluster.config_path)
-        for node in list(self.cluster.nodes.values()) + list(self.cluster.slots.values()):
-            assert FORCE_FLAG not in node.read_node_config().get('feature_flags', {})
-        self.evidence['steps'].append('unknown FORCE flag removed from all on-disk static and tenant configs')
-
     def record_cut(self, step):
         nodes = [{'role': role, 'node_id': index, 'binary': os.path.realpath(node.binary_path),
                   'pid': node.daemon.process.pid}
@@ -271,8 +250,6 @@ class ReplicationRollback(RollingDowngradeAndUpgradeFixture):
 
 
 class TestCompletedForceDropRollback(ReplicationRollback):
-    enable_force = True
-
     @pytest.mark.parametrize('cascade', [False, True], ids=['retain', 'cascade'])
     def test_completed_force(self, cascade):
         self.prepare_replication()
@@ -291,7 +268,6 @@ class TestCompletedForceDropRollback(ReplicationRollback):
         self.evidence['steps'].append('FORCE completed with source process stopped and valid credential deleted')
         self.source.nodes[1].start()
         self.source_driver = self.create_source_driver()
-        self.remove_unknown_flag_before_rollback()
         for step, _ in enumerate(self.roll()):
             self.record_cut(step)
             names = [entry.name for entry in self.driver.scheme_client.list_directory(self.database_path).children]
@@ -312,13 +288,12 @@ class TestCompletedForceDropRollback(ReplicationRollback):
 
 
 class TestOrdinaryReplicationRollback(ReplicationRollback):
-    def test_active_replication_and_default_off_drop(self):
+    def test_active_replication_and_drop(self):
         self.prepare_replication()
-        with pytest.raises(ydb.Error):
+        with pytest.raises(ydb.Error, match='DONE'):
             scheme(self.driver, f'DROP ASYNC REPLICATION `{self.path("replication")}` FORCE;')
         assert path_id(self.cluster, self.path('replication')) == self.replication_id
         assert source_config(self.source, self.stream) == self.source_before
-        self.remove_unknown_flag_before_rollback()
         for step, _ in enumerate(self.roll()):
             self.record_cut(step)
             data(self.source_driver, f'UPSERT INTO `/Root/original` (key, value) VALUES (9, "active-{step}");')

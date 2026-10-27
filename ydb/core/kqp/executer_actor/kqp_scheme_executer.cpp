@@ -564,11 +564,6 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kDropReplication: {
                 const auto& modifyScheme = schemeOp.GetDropReplication();
-                if (modifyScheme.GetDrop().GetReplicationMode() == NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL
-                    && !AppData()->FeatureFlags.GetEnableAsyncReplicationForceDrop())
-                {
-                    return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, "FORCE DROP ASYNC REPLICATION is disabled");
-                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

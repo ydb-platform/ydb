@@ -3314,13 +3314,6 @@ public:
     TFuture<TGenericResult> DropReplication(const TString& cluster, const NYql::TDropReplicationSettings& settings) override {
         CHECK_PREPARED_DDL(DropReplication);
 
-        // An older SchemeShard ignores the new field. Gate before sending it,
-        // even when the frontend and schema tablet run different versions.
-        if (settings.Mode == TDropReplicationSettings::EMode::ForceLocal
-            && !SessionCtx->Config().FeatureFlags.GetEnableAsyncReplicationForceDrop())
-        {
-            return MakeFuture(ResultFromError<TGenericResult>("FORCE DROP ASYNC REPLICATION is disabled"));
-        }
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));

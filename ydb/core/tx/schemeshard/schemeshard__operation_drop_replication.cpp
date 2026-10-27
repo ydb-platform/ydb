@@ -352,8 +352,8 @@ public:
             return result;
         }
         if (mode == NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL) {
-            if (Strategy != &ReplicationStrategy || !AppData(context.Ctx)->FeatureFlags.GetEnableAsyncReplicationForceDrop()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "FORCE DROP ASYNC REPLICATION is disabled or unsupported");
+            if (Strategy != &ReplicationStrategy) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "FORCE DROP is supported only for ASYNC REPLICATION");
                 return result;
             }
             if (!replication->Description.GetState().HasDone()) {

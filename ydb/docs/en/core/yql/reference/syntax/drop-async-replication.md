@@ -54,7 +54,7 @@ Local completion and deletion can take time and continue after a destination res
 
 {% endnote %}
 
-The cluster administrator must enable `enable_async_replication_force_drop`, which is disabled by default. Enable it only after every deployed server version and every permitted rollback version supports this option and its recovery behavior. Disabling the flag rejects new FORCE requests; it does not cancel already accepted deletion operations.
+Use `FORCE` only after every deployed server version and every permitted rollback version supports this option and its recovery behavior.
 
 ## Examples {#examples}
 

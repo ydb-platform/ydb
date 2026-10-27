@@ -106,7 +106,7 @@ def source_config(cluster, stream):
                 'attributes': dict(result.attributes)}
 
 
-def make_cluster(name, base, binary, force):
+def make_cluster(name, base, binary):
     output = os.path.join(base, name)
     disks = os.path.join(output, 'disks')
     os.makedirs(disks, exist_ok=True)
@@ -114,8 +114,7 @@ def make_cluster(name, base, binary, force):
     # independent. A RAM PDisk would invalidate the restart assertion.
     config = KikimrConfigGenerator(
         nodes=1, binary_paths=[binary], output_path=output, static_pdisk_size=8 * 1024**3,
-        pdisk_store_path=disks, use_in_memory_pdisks=False, extra_grpc_services=['replication'],
-        extra_feature_flags=['enable_async_replication_force_drop'] if force else [])
+        pdisk_store_path=disks, use_in_memory_pdisks=False, extra_grpc_services=['replication'])
     return KiKiMR(config, cluster_name=name)
 
 
@@ -130,8 +129,8 @@ def test_force_drop_after_physical_source_outage(cascade):
     base = yatest.common.output_path('native-cascade' if cascade else 'native-retain')
     os.makedirs(base, exist_ok=True)
     binary = yatest.common.binary_path('ydb/apps/ydbd/ydbd')
-    source = make_cluster('source', base, binary, False)
-    destination = make_cluster('destination', base, binary, True)
+    source = make_cluster('source', base, binary)
+    destination = make_cluster('destination', base, binary)
     evidence = {'binary': os.path.realpath(binary), 'cascade': cascade, 'output': base, 'steps': []}
     with open(binary, 'rb') as handle:
         evidence['sha256'] = hashlib.file_digest(handle, 'sha256').hexdigest()

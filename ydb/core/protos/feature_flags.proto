@@ -458,7 +458,4 @@ message TFeatureFlags {
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
-    // Enable only after all deployed and permitted rollback versions support
-    // source-independent FORCE DROP. Disabling does not cancel admitted work.
-    optional bool EnableAsyncReplicationForceDrop = 372 [default = false];
 }

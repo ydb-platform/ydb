@@ -2334,7 +2334,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
 
     enum class ESchemaChanges { Disabled, Enabled };
 
-    NTestHelpers::TFeatureFlags ForceDropFlags(ESchemaChanges schema = ESchemaChanges::Disabled) {
+    NTestHelpers::TFeatureFlags SchemaChangeFlags(ESchemaChanges schema = ESchemaChanges::Disabled) {
         NTestHelpers::TFeatureFlags flags;
         flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(schema == ESchemaChanges::Enabled);
         return flags;
@@ -2354,7 +2354,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         EWorkerState WorkerState = EWorkerState::Attached;
 
         explicit TSqlEnv(ESchemaChanges schema = ESchemaChanges::Disabled)
-            : TTestEnv(ForceDropFlags(schema), true, NTestHelpers::ERuntimeMode::Simulated)
+            : TTestEnv(SchemaChangeFlags(schema), true, NTestHelpers::ERuntimeMode::Simulated)
             , Info(StartReplication(*this))
             , Worker(TWorkerId::Parse(GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(GetSender())
                 ->Get()->Record.GetWorker()))
@@ -2645,7 +2645,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
     }
 
     Y_UNIT_TEST_TWIN(ForceRetiresLateNormalSiblingErrorDuringLocalDdl, Restart) {
-        TTestEnv env(ForceDropFlags(ESchemaChanges::Enabled), true, NTestHelpers::ERuntimeMode::Simulated);
+        TTestEnv env(SchemaChangeFlags(ESchemaChanges::Enabled), true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const auto info = StartReplication(env, 2);
         const auto first = TWorkerId::Parse(runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender())->Get()->Record.GetWorker());

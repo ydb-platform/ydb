@@ -13,6 +13,7 @@ PY_SRCS(
     internal/nemesis/monitored_actor.py
     internal/nemesis/cluster_context.py
     internal/nemesis/local_cluster_view.py
+    internal/nemesis/local_control_proxy.py
     internal/nemesis/local_harness_controller.py
     internal/nemesis/cluster_entries.py
     internal/nemesis/runners/__init__.py

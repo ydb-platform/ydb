@@ -7,10 +7,9 @@ import subprocess
 
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
     local_harness_mode,
-    require_cluster,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import (
-    HarnessNodeController,
+from ydb.tests.stability.nemesis.internal.nemesis.local_control_proxy import (
+    local_node_controller,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
@@ -33,7 +32,7 @@ class KillNodeNemesis(MonitoredAgentActor):
                 raise ValueError(
                     "KillNodeNemesis: local harness target must include node_id"
                 )
-            restarted = HarnessNodeController(require_cluster()).kill_and_restart(node_id)
+            restarted = local_node_controller().kill_and_restart(node_id)
             self._logger.info(
                 "Restarted local harness node_id=%d pid=%d->%d",
                 restarted.node_id,

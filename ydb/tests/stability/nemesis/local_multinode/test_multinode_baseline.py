@@ -22,6 +22,14 @@ from ydb.tests.library.stability.healthcheck.healthcheck_reporter import (
 from ydb.tests.stability.nemesis.internal.nemesis.local_cluster_view import (
     LocalClusterView,
 )
+from ydb.tests.stability.nemesis.internal.nemesis.local_control_proxy import (
+    HarnessControlClient,
+    HarnessControlProxy,
+    use_local_node_controller,
+)
+from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import (
+    HarnessNodeController,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import use_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
@@ -116,6 +124,21 @@ def local_multinode_model(local_multinode_cluster):
         inventory = ClusterInventory(topology, cluster_view=view)
         guard = FailureModelGuard(topology)
         yield view, topology, inventory, guard
+
+
+@pytest.fixture(params=("embedded", "unix"))
+def node_control_transport(request, local_multinode_cluster, tmp_path):
+    if request.param == "embedded":
+        yield request.param
+        return
+
+    path = tmp_path / "nemesis-control.sock"
+    with HarnessControlProxy(
+        path,
+        HarnessNodeController(local_multinode_cluster),
+    ):
+        with use_local_node_controller(HarnessControlClient(path)):
+            yield request.param
 
 
 def test_inventory_preserves_eight_logical_nodes_and_allocated_ports(
@@ -246,6 +269,7 @@ def test_all_allocated_endpoints_stay_sighted_for_five_idle_ticks(
 def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
     local_multinode_cluster,
     local_multinode_model,
+    node_control_transport,
 ):
     view, _, inventory, guard = local_multinode_model
     endpoints = [
@@ -283,7 +307,7 @@ def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
         pytest.fail("Eight-node healthcheck did not become GOOD before node chaos")
 
     metrics = NemesisMetrics(
-        run_id="local-multinode-kill",
+        run_id=f"local-multinode-kill-{node_control_transport}",
         mon=_NoopMonitor(),
     )
     guard.set_metrics(metrics)
@@ -347,12 +371,13 @@ def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
         for node_id, node in local_multinode_cluster.nodes.items()
     }
     health_update_before = reporter.last_update
+    table_name = f"local_nemesis_node_restart_{node_control_transport}"
     workload_progress = 0
     try:
         with ydb.QuerySessionPool(driver) as pool:
             pool.execute_with_retries(
-                """
-                CREATE TABLE `local_nemesis_node_restart` (
+                f"""
+                CREATE TABLE `{table_name}` (
                     id Uint64 NOT NULL,
                     value Uint64,
                     PRIMARY KEY (id)
@@ -378,14 +403,14 @@ def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
                     try:
                         pool.execute_with_retries(
                             f"""
-                            UPSERT INTO `local_nemesis_node_restart` (id, value)
+                            UPSERT INTO `{table_name}` (id, value)
                             VALUES (1, {workload_progress})
                             """
                         )
                         result = pool.execute_with_retries(
-                            """
+                            f"""
                             SELECT value
-                            FROM `local_nemesis_node_restart`
+                            FROM `{table_name}`
                             WHERE id = 1
                             """
                         )

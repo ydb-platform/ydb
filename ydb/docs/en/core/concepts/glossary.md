@@ -830,7 +830,9 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 **PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`).
 
-PDisk stores data for its clients ([VDisks](#vdisk)) and manages their I/O. Each PDisk supports multiple VDisks. It divides its capacity, IOPS, and bandwidth into [VDisk slots](#slot). At any given time, no more than one VDisk can own each slot. A scheduler, which is part of PDisk, shares the device's bandwidth among these VDisks.
+PDisk stores data for its clients ([VDisks](#vdisk)) and manages their I/O. Each PDisk serves multiple VDisks and divides its capacity, IOPS, and bandwidth among them. PDisk includes a specialized operation scheduler that shares the device's bandwidth among the VDisks. VDisks can move from one PDisk to another using replication mechanisms without interrupting data access for applications and users.
+
+The maximum number of VDisks on a single PDisk is limited and is determined by a setting that depends on the physical device type: the number of [VDisk slots](#slot). Each VDisk occupies a certain number of slots on a PDisk (usually one slot, and two in some configurations). When the free slots are exhausted, no additional VDisks can be placed on that PDisk.
 
 PDisk maintains a recovery log shared by PDisk service records and all VDisks. It protects data with checksums and uses erasure coding to recover damaged sectors of the log and service records. In addition, PDisk supports transparent encryption of all data on the disk.
 
@@ -838,7 +840,7 @@ PDisk maintains a recovery log shared by PDisk service records and all VDisks. I
 
 **VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk.
 
-Unlike PDisk, which hides blocks and journals behind itself, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command.
+VDisk provides an operations interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command.
 
 VDisk is a member of a [storage group](#storage-group). VDisk itself is local: it runs on the node that hosts its PDisk. Multiple VDisks in a storage group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
 

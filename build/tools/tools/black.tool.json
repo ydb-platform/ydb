@@ -1,0 +1,6 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Python styler, Python 3 only"
+    }
+}

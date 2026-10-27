@@ -1,0 +1,215 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(objc2_core_foundation)
+
+CRATE_VERSION(0.3.2)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/__cf_macro_helpers.rs
+    src/array.rs
+    src/base.rs
+    src/bundle.rs
+    src/cf_type.rs
+    src/data.rs
+    src/date.rs
+    src/dictionary.rs
+    src/error.rs
+    src/filedescriptor.rs
+    src/generated/CFArray.rs
+    src/generated/CFAttributedString.rs
+    src/generated/CFAvailability.rs
+    src/generated/CFBag.rs
+    src/generated/CFBinaryHeap.rs
+    src/generated/CFBitVector.rs
+    src/generated/CFBundle.rs
+    src/generated/CFByteOrder.rs
+    src/generated/CFCGTypes.rs
+    src/generated/CFCalendar.rs
+    src/generated/CFCharacterSet.rs
+    src/generated/CFData.rs
+    src/generated/CFDate.rs
+    src/generated/CFDateFormatter.rs
+    src/generated/CFDictionary.rs
+    src/generated/CFError.rs
+    src/generated/CFFileDescriptor.rs
+    src/generated/CFFileSecurity.rs
+    src/generated/CFLocale.rs
+    src/generated/CFMachPort.rs
+    src/generated/CFMessagePort.rs
+    src/generated/CFNotificationCenter.rs
+    src/generated/CFNumber.rs
+    src/generated/CFNumberFormatter.rs
+    src/generated/CFPlugIn.rs
+    src/generated/CFPlugInCOM.rs
+    src/generated/CFPreferences.rs
+    src/generated/CFPropertyList.rs
+    src/generated/CFRunLoop.rs
+    src/generated/CFSet.rs
+    src/generated/CFSocket.rs
+    src/generated/CFStream.rs
+    src/generated/CFString.rs
+    src/generated/CFStringEncodingExt.rs
+    src/generated/CFStringTokenizer.rs
+    src/generated/CFTimeZone.rs
+    src/generated/CFTree.rs
+    src/generated/CFURL.rs
+    src/generated/CFURLAccess.rs
+    src/generated/CFURLEnumerator.rs
+    src/generated/CFUUID.rs
+    src/generated/CFUserNotification.rs
+    src/generated/CFUtilities.rs
+    src/generated/CFXMLNode.rs
+    src/generated/CFXMLParser.rs
+    src/generated/mod.rs
+    src/geometry.rs
+    src/number.rs
+    src/opaque.rs
+    src/retained.rs
+    src/retained/forwarding_impls.rs
+    src/string.rs
+    src/thread_safety.rs
+    src/timezone.rs
+    src/type_traits.rs
+    src/url.rs
+    src/user_notification.rs
+    src/uuid.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    Cargo.modified.toml
+    README.md
+    translation-config.toml
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    CFArray
+    CFBase
+    CFData
+    CFDictionary
+    CFPlugInCOM
+    CFRunLoop
+    CFString
+    CFURL
+    CFUUID
+    alloc
+    bitflags
+    std
+)
+
+PEERDIR(
+    contrib/crates/bitflags-2.13.2
+)
+
+LICENSE("Zlib OR Apache-2.0 OR MIT")
+VERSION(0.3.2)
+ORIGINAL_SOURCE(https://static.crates.io/crates/objc2-core-foundation/objc2-core-foundation-0.3.2.crate)
+
+CRATE_FEATURES(
+    CFAttributedString
+    CFCGTypes
+    CFCalendar
+    CFCharacterSet
+    CFDate
+    CFError
+    CFFileSecurity
+    CFLocale
+    CFMachPort
+    CFMessagePort
+    CFSet
+    CFStream
+    CFUserNotification
+    objc2
+)
+
+PEERDIR(
+    contrib/crates/objc2-0.6.5
+)
+
+CRATE_SOURCES(
+    src/generated/CFArray.rs
+    src/generated/CFAttributedString.rs
+    src/generated/CFAvailability.rs
+    src/generated/CFBag.rs
+    src/generated/CFBinaryHeap.rs
+    src/generated/CFBitVector.rs
+    src/generated/CFBundle.rs
+    src/generated/CFByteOrder.rs
+    src/generated/CFCGTypes.rs
+    src/generated/CFCalendar.rs
+    src/generated/CFCharacterSet.rs
+    src/generated/CFData.rs
+    src/generated/CFDate.rs
+    src/generated/CFDateFormatter.rs
+    src/generated/CFDictionary.rs
+    src/generated/CFError.rs
+    src/generated/CFFileDescriptor.rs
+    src/generated/CFFileSecurity.rs
+    src/generated/CFLocale.rs
+    src/generated/CFMachPort.rs
+    src/generated/CFMessagePort.rs
+    src/generated/CFNotificationCenter.rs
+    src/generated/CFNumber.rs
+    src/generated/CFNumberFormatter.rs
+    src/generated/CFPlugIn.rs
+    src/generated/CFPlugInCOM.rs
+    src/generated/CFPreferences.rs
+    src/generated/CFPropertyList.rs
+    src/generated/CFRunLoop.rs
+    src/generated/CFSet.rs
+    src/generated/CFSocket.rs
+    src/generated/CFStream.rs
+    src/generated/CFString.rs
+    src/generated/CFStringEncodingExt.rs
+    src/generated/CFStringTokenizer.rs
+    src/generated/CFTimeZone.rs
+    src/generated/CFTree.rs
+    src/generated/CFURL.rs
+    src/generated/CFURLAccess.rs
+    src/generated/CFURLEnumerator.rs
+    src/generated/CFUUID.rs
+    src/generated/CFUserNotification.rs
+    src/generated/CFUtilities.rs
+    src/generated/CFXMLNode.rs
+    src/generated/CFXMLParser.rs
+)
+
+CRATE_SOURCES(
+    src/__cf_macro_helpers.rs
+    src/array.rs
+    src/base.rs
+    src/bundle.rs
+    src/cf_type.rs
+    src/data.rs
+    src/date.rs
+    src/dictionary.rs
+    src/error.rs
+    src/filedescriptor.rs
+    src/generated/mod.rs
+    src/geometry.rs
+    src/lib.rs
+    src/number.rs
+    src/opaque.rs
+    src/retained.rs
+    src/retained/forwarding_impls.rs
+    src/string.rs
+    src/thread_safety.rs
+    src/timezone.rs
+    src/type_traits.rs
+    src/url.rs
+    src/user_notification.rs
+    src/uuid.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+)
+
+END()

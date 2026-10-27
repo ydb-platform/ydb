@@ -1,0 +1,12 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run Clang-Format source code formatter (18 version)",
+        "definition": {
+            "formula": "build/platform/clang/clang-format/clang-format18.json",
+            "executable": [
+                "clang-format"
+            ]
+        }
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run Allure commandline",
+        "definition": {
+            "executable": [
+                "bin",
+                "allure"
+            ]
+        }
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run clangd language server",
+        "definition": {
+            "formula": "build/platform/clang/clangd/clangd20.json",
+            "executable": [
+                "bin",
+                "clangd"
+            ]
+        }
+    }
+}

@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package coresdk.child_workflow;
+option ruby_package = "Temporalio::Internal::Bridge::Api::ChildWorkflow";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/sdk/core/common/common.proto";
+
+// Used by core to resolve child workflow executions.
+message ChildWorkflowResult {
+    oneof status {
+        Success completed = 1;
+        Failure failed = 2;
+        Cancellation cancelled = 3;
+    }
+}
+
+// Used in ChildWorkflowResult to report successful completion.
+message Success {
+    temporal.api.common.v1.Payload result = 1;
+}
+
+// Used in ChildWorkflowResult to report non successful outcomes such as
+// application failures, timeouts, terminations, and cancellations.
+message Failure {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+// Used in ChildWorkflowResult to report cancellation.
+// Failure should be ChildWorkflowFailure with a CanceledFailure cause.
+message Cancellation {
+    temporal.api.failure.v1.Failure failure = 1;
+}
+
+// Used by the service to determine the fate of a child workflow
+// in case its parent is closed.
+enum ParentClosePolicy {
+    // Let's the server set the default.
+    PARENT_CLOSE_POLICY_UNSPECIFIED = 0;
+    // Terminate means terminating the child workflow.
+    PARENT_CLOSE_POLICY_TERMINATE = 1;
+    // Abandon means not doing anything on the child workflow.
+    PARENT_CLOSE_POLICY_ABANDON = 2;
+    // Cancel means requesting cancellation on the child workflow.
+    PARENT_CLOSE_POLICY_REQUEST_CANCEL = 3;
+}
+
+// Possible causes of failure to start a child workflow
+enum StartChildWorkflowExecutionFailedCause {
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED = 0;
+    START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS = 1;
+}
+
+// Controls at which point to report back to lang when a child workflow is cancelled
+enum ChildWorkflowCancellationType {
+    // Do not request cancellation of the child workflow if already scheduled
+    ABANDON = 0;
+    // Initiate a cancellation request and immediately report cancellation to the parent.
+    TRY_CANCEL = 1;
+    // Wait for child cancellation completion.
+    WAIT_CANCELLATION_COMPLETED = 2;
+    // Request cancellation of the child and wait for confirmation that the request was received.
+    WAIT_CANCELLATION_REQUESTED = 3;
+}
+

@@ -1,0 +1,311 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(sysinfo)
+
+CRATE_VERSION(0.38.4)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/c_interface.rs
+    src/common/component.rs
+    src/common/disk.rs
+    src/common/impl_get_set.rs
+    src/common/mod.rs
+    src/common/network.rs
+    src/common/system.rs
+    src/common/user.rs
+    src/debug.rs
+    src/macros.rs
+    src/network.rs
+    src/serde.rs
+    src/unix/apple/app_store/component.rs
+    src/unix/apple/app_store/mod.rs
+    src/unix/apple/app_store/process.rs
+    src/unix/apple/component.rs
+    src/unix/apple/cpu.rs
+    src/unix/apple/disk.rs
+    src/unix/apple/ffi.rs
+    src/unix/apple/ios.rs
+    src/unix/apple/macos/component/arm.rs
+    src/unix/apple/macos/component/mod.rs
+    src/unix/apple/macos/component/x86.rs
+    src/unix/apple/macos/cpu.rs
+    src/unix/apple/macos/disk.rs
+    src/unix/apple/macos/ffi.rs
+    src/unix/apple/macos/mod.rs
+    src/unix/apple/macos/process.rs
+    src/unix/apple/macos/system.rs
+    src/unix/apple/macos/utils.rs
+    src/unix/apple/mod.rs
+    src/unix/apple/motherboard.rs
+    src/unix/apple/network.rs
+    src/unix/apple/process.rs
+    src/unix/apple/product.rs
+    src/unix/apple/system.rs
+    src/unix/apple/users.rs
+    src/unix/apple/utils.rs
+    src/unix/bsd/common.rs
+    src/unix/bsd/freebsd/component.rs
+    src/unix/bsd/freebsd/cpu.rs
+    src/unix/bsd/freebsd/disk.rs
+    src/unix/bsd/freebsd/ffi.rs
+    src/unix/bsd/freebsd/mod.rs
+    src/unix/bsd/freebsd/motherboard.rs
+    src/unix/bsd/freebsd/network.rs
+    src/unix/bsd/freebsd/process.rs
+    src/unix/bsd/freebsd/product.rs
+    src/unix/bsd/freebsd/system.rs
+    src/unix/bsd/freebsd/utils.rs
+    src/unix/bsd/mod.rs
+    src/unix/bsd/netbsd/component.rs
+    src/unix/bsd/netbsd/cpu.rs
+    src/unix/bsd/netbsd/disk.rs
+    src/unix/bsd/netbsd/ffi.rs
+    src/unix/bsd/netbsd/mod.rs
+    src/unix/bsd/netbsd/motherboard.rs
+    src/unix/bsd/netbsd/network.rs
+    src/unix/bsd/netbsd/process.rs
+    src/unix/bsd/netbsd/product.rs
+    src/unix/bsd/netbsd/system.rs
+    src/unix/bsd/netbsd/utils.rs
+    src/unix/bsd/network_common.rs
+    src/unix/bsd/system_common.rs
+    src/unix/groups.rs
+    src/unix/linux/component.rs
+    src/unix/linux/cpu.rs
+    src/unix/linux/disk.rs
+    src/unix/linux/mod.rs
+    src/unix/linux/motherboard.rs
+    src/unix/linux/network.rs
+    src/unix/linux/process.rs
+    src/unix/linux/product.rs
+    src/unix/linux/system.rs
+    src/unix/linux/utils.rs
+    src/unix/mod.rs
+    src/unix/network_helper.rs
+    src/unix/users.rs
+    src/unix/utils.rs
+    src/unknown/component.rs
+    src/unknown/cpu.rs
+    src/unknown/disk.rs
+    src/unknown/groups.rs
+    src/unknown/mod.rs
+    src/unknown/motherboard.rs
+    src/unknown/network.rs
+    src/unknown/process.rs
+    src/unknown/product.rs
+    src/unknown/system.rs
+    src/unknown/users.rs
+    src/utils.rs
+    src/windows/component.rs
+    src/windows/cpu.rs
+    src/windows/disk.rs
+    src/windows/ffi.rs
+    src/windows/groups.rs
+    src/windows/mod.rs
+    src/windows/motherboard.rs
+    src/windows/network.rs
+    src/windows/network_helper.rs
+    src/windows/process.rs
+    src/windows/product.rs
+    src/windows/sid.rs
+    src/windows/system.rs
+    src/windows/users.rs
+    src/windows/utils.rs
+    test_bin/main.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    .cirrus.yml
+    .gitignore
+    ADDING_NEW_PLATFORMS.md
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    Makefile
+    README.md
+    funding.json
+    md_doc/is_supported.md
+    md_doc/minimum_cpu_update_interval.md
+    md_doc/pid.md
+    md_doc/serde.md
+    md_doc/sid.md
+    md_doc/supported_signals.md
+    migration_guide.md
+    src/sysinfo.h
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    objc2-io-kit
+    system
+)
+
+PEERDIR(
+    contrib/crates/libc-0.2.191
+    contrib/crates/memchr-2.8.3
+)
+
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64)
+    CRATE_FEATURES(
+        objc2-core-foundation
+    )
+
+    PEERDIR(
+    contrib/crates/objc2-core-foundation-0.3.2
+    contrib/crates/objc2-io-kit-0.3.2
+)
+
+ELSEIF (OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    CRATE_FEATURES(
+        windows
+    )
+
+    PEERDIR(
+    contrib/crates/ntapi-0.4.3
+    contrib/crates/windows-0.62.2
+)
+
+    ENDIF()
+
+LICENSE("MIT")
+VERSION(0.38.4)
+ORIGINAL_SOURCE(https://static.crates.io/crates/sysinfo/sysinfo-0.38.4.crate)
+
+CRATE_INPUTS(
+    README.md
+    md_doc/is_supported.md
+    md_doc/minimum_cpu_update_interval.md
+    md_doc/pid.md
+    md_doc/serde.md
+    md_doc/sid.md
+    md_doc/supported_signals.md
+)
+
+CRATE_SOURCES(
+    src/c_interface.rs
+    src/common/component.rs
+    src/common/disk.rs
+    src/common/impl_get_set.rs
+    src/common/mod.rs
+    src/common/network.rs
+    src/common/system.rs
+    src/common/user.rs
+    src/debug.rs
+    src/lib.rs
+    src/macros.rs
+    src/network.rs
+    src/serde.rs
+    src/unix/apple/app_store/component.rs
+    src/unix/apple/app_store/mod.rs
+    src/unix/apple/app_store/process.rs
+    src/unix/apple/component.rs
+    src/unix/apple/cpu.rs
+    src/unix/apple/disk.rs
+    src/unix/apple/ffi.rs
+    src/unix/apple/ios.rs
+    src/unix/apple/macos/component/arm.rs
+    src/unix/apple/macos/component/mod.rs
+    src/unix/apple/macos/component/x86.rs
+    src/unix/apple/macos/cpu.rs
+    src/unix/apple/macos/disk.rs
+    src/unix/apple/macos/ffi.rs
+    src/unix/apple/macos/mod.rs
+    src/unix/apple/macos/process.rs
+    src/unix/apple/macos/system.rs
+    src/unix/apple/macos/utils.rs
+    src/unix/apple/mod.rs
+    src/unix/apple/motherboard.rs
+    src/unix/apple/network.rs
+    src/unix/apple/process.rs
+    src/unix/apple/product.rs
+    src/unix/apple/system.rs
+    src/unix/apple/users.rs
+    src/unix/apple/utils.rs
+    src/unix/bsd/common.rs
+    src/unix/bsd/freebsd/component.rs
+    src/unix/bsd/freebsd/cpu.rs
+    src/unix/bsd/freebsd/disk.rs
+    src/unix/bsd/freebsd/ffi.rs
+    src/unix/bsd/freebsd/mod.rs
+    src/unix/bsd/freebsd/motherboard.rs
+    src/unix/bsd/freebsd/network.rs
+    src/unix/bsd/freebsd/process.rs
+    src/unix/bsd/freebsd/product.rs
+    src/unix/bsd/freebsd/system.rs
+    src/unix/bsd/freebsd/utils.rs
+    src/unix/bsd/mod.rs
+    src/unix/bsd/netbsd/component.rs
+    src/unix/bsd/netbsd/cpu.rs
+    src/unix/bsd/netbsd/disk.rs
+    src/unix/bsd/netbsd/ffi.rs
+    src/unix/bsd/netbsd/mod.rs
+    src/unix/bsd/netbsd/motherboard.rs
+    src/unix/bsd/netbsd/network.rs
+    src/unix/bsd/netbsd/process.rs
+    src/unix/bsd/netbsd/product.rs
+    src/unix/bsd/netbsd/system.rs
+    src/unix/bsd/netbsd/utils.rs
+    src/unix/bsd/network_common.rs
+    src/unix/bsd/system_common.rs
+    src/unix/groups.rs
+    src/unix/linux/component.rs
+    src/unix/linux/cpu.rs
+    src/unix/linux/disk.rs
+    src/unix/linux/mod.rs
+    src/unix/linux/motherboard.rs
+    src/unix/linux/network.rs
+    src/unix/linux/process.rs
+    src/unix/linux/product.rs
+    src/unix/linux/system.rs
+    src/unix/linux/utils.rs
+    src/unix/mod.rs
+    src/unix/network_helper.rs
+    src/unix/users.rs
+    src/unix/utils.rs
+    src/unknown/component.rs
+    src/unknown/cpu.rs
+    src/unknown/disk.rs
+    src/unknown/groups.rs
+    src/unknown/mod.rs
+    src/unknown/motherboard.rs
+    src/unknown/network.rs
+    src/unknown/process.rs
+    src/unknown/product.rs
+    src/unknown/system.rs
+    src/unknown/users.rs
+    src/utils.rs
+    src/windows/component.rs
+    src/windows/cpu.rs
+    src/windows/disk.rs
+    src/windows/ffi.rs
+    src/windows/groups.rs
+    src/windows/mod.rs
+    src/windows/motherboard.rs
+    src/windows/network.rs
+    src/windows/network_helper.rs
+    src/windows/process.rs
+    src/windows/product.rs
+    src/windows/sid.rs
+    src/windows/system.rs
+    src/windows/users.rs
+    src/windows/utils.rs
+)
+
+CRATE_INPUTS(
+    src/sysinfo.h
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/windows-implement-0.60.2
+    contrib/crates/windows-interface-0.59.3
+)
+
+END()

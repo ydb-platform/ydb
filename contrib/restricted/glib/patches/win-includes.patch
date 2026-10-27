@@ -1,0 +1,41 @@
+--- a/gio/glocalfile.c
++++ b/gio/glocalfile.c
+@@ -73,6 +73,7 @@
+ 
+ #ifdef G_OS_WIN32
+ #include <windows.h>
++#include <shellapi.h>
+ #include <io.h>
+ #include <direct.h>
+ 
+--- a/gio/gwin32networkmonitor.c
++++ b/gio/gwin32networkmonitor.c
+@@ -29,6 +29,7 @@
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ #include <iphlpapi.h>
++#include <winternl.h>
+ #include <stdio.h>
+ 
+ #include "gwin32networkmonitor.h"
+--- a/glib/gstdio.c
++++ b/glib/gstdio.c
+@@ -33,6 +33,7 @@
+ 
+ #ifdef G_OS_WIN32
+ #include <windows.h>
++#include <winioctl.h>
+ #include <errno.h>
+ #include <wchar.h>
+ #include <direct.h>
+--- a/gio/gwin32file-sync-stream.h
++++ b/gio/gwin32file-sync-stream.h
+@@ -23,6 +23,8 @@
+ 
+ #ifdef G_PLATFORM_WIN32
+ 
++#include <objidl.h>
++
+ typedef struct _GWin32FileSyncStream GWin32FileSyncStream;
+ 
+ struct _GWin32FileSyncStream

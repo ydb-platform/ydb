@@ -2565,12 +2565,9 @@ class Cuda(object):
         if self.use_arcadia_cuda.value:
             self.cuda_root.value = '$CUDA_RESOURCE_GLOBAL'
 
-            host, target = self.build.host_target
-
-            # Keep an explicit target SDK when using bundled host tools.
+            # Keep the Linux target SDK path independent of the build host.
             if not self.cuda_target_root.from_user:
-                # ARM64 libraries use a separate SDK even for native ARM64 builds.
-                if target.is_linux_armv8 or target.is_linux_armv9a or host != target:
+                if self.build.target.is_linux:
                     self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
                 else:
                     self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'

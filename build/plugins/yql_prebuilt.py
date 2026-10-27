@@ -2,6 +2,12 @@ import ymake
 
 
 @ymake.macro
+def _YQL_INTERNALIZED_SOURCE_FINALIZE(unit: ymake.Unit):
+    unit.onsrcs((unit.get('_YQL_SOURCE_SRCS') or '').split())
+    unit.onpeerdir((unit.get('_YQL_SOURCE_PEERS') or '').split())
+
+
+@ymake.macro
 def _YQL_PREBUILT_FINALIZE(unit: ymake.Unit):
     program = unit.get('_YQL_PREBUILT_KIND') == 'PROGRAM'
     resource = unit.get('_YQL_PREBUILT_RESOURCE_ID')

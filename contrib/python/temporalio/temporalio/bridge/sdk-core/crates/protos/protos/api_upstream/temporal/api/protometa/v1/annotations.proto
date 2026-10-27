@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package temporal.api.protometa.v1;
+
+option go_package = "go.temporal.io/api/protometa/v1;protometa";
+option java_package = "io.temporal.api.protometa.v1";
+option java_multiple_files = true;
+option java_outer_classname = "AnnotationsProto";
+option ruby_package = "Temporalio::Api::Protometa::V1";
+option csharp_namespace = "Temporalio.Api.Protometa.V1";
+
+import "google/protobuf/descriptor.proto";
+
+// RequestHeaderAnnotation allows specifying that field values from a request
+// should be propagated as outbound headers.
+//
+// The value field supports template interpolation where field paths enclosed
+// in braces will be replaced with the actual field values from the request.
+// For example:
+//   value: "{workflow_execution.workflow_id}"
+//   value: "workflow-{workflow_execution.workflow_id}"
+//   value: "{namespace}/{workflow_execution.workflow_id}"
+message RequestHeaderAnnotation {
+  // The name of the header to set (e.g., "temporal-resource-id")
+  string header = 1;
+
+  // A template string that may contain field paths in braces.
+  // Field paths use dot notation to traverse nested messages.
+  // Example: "{workflow_execution.workflow_id}"
+  string value = 2;
+}
+
+// Extension to add request-header annotations to RPC methods.
+// Multiple headers can be set by repeating this option.
+extend google.protobuf.MethodOptions {
+  repeated RequestHeaderAnnotation request_header = 7234001;
+}

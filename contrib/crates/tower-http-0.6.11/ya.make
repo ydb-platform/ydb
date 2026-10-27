@@ -1,0 +1,310 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(tower_http)
+
+CRATE_VERSION(0.6.11)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/add_extension.rs
+    src/auth/add_authorization.rs
+    src/auth/async_require_authorization.rs
+    src/auth/mod.rs
+    src/auth/require_authorization.rs
+    src/body.rs
+    src/builder.rs
+    src/catch_panic.rs
+    src/classify/grpc_errors_as_failures.rs
+    src/classify/map_failure_class.rs
+    src/classify/mod.rs
+    src/classify/status_in_range_is_error.rs
+    src/compression/body.rs
+    src/compression/future.rs
+    src/compression/layer.rs
+    src/compression/mod.rs
+    src/compression/pin_project_cfg.rs
+    src/compression/predicate.rs
+    src/compression/service.rs
+    src/compression_utils.rs
+    src/content_encoding.rs
+    src/cors/allow_credentials.rs
+    src/cors/allow_headers.rs
+    src/cors/allow_methods.rs
+    src/cors/allow_origin.rs
+    src/cors/allow_private_network.rs
+    src/cors/expose_headers.rs
+    src/cors/max_age.rs
+    src/cors/mod.rs
+    src/cors/tests.rs
+    src/cors/vary.rs
+    src/decompression/body.rs
+    src/decompression/future.rs
+    src/decompression/layer.rs
+    src/decompression/mod.rs
+    src/decompression/request/future.rs
+    src/decompression/request/layer.rs
+    src/decompression/request/mod.rs
+    src/decompression/request/service.rs
+    src/decompression/service.rs
+    src/follow_redirect/mod.rs
+    src/follow_redirect/policy/and.rs
+    src/follow_redirect/policy/clone_body_fn.rs
+    src/follow_redirect/policy/filter_credentials.rs
+    src/follow_redirect/policy/limited.rs
+    src/follow_redirect/policy/mod.rs
+    src/follow_redirect/policy/or.rs
+    src/follow_redirect/policy/redirect_fn.rs
+    src/follow_redirect/policy/same_origin.rs
+    src/limit/body.rs
+    src/limit/future.rs
+    src/limit/layer.rs
+    src/limit/mod.rs
+    src/limit/service.rs
+    src/macros.rs
+    src/map_request_body.rs
+    src/map_response_body.rs
+    src/metrics/in_flight_requests.rs
+    src/metrics/mod.rs
+    src/normalize_path.rs
+    src/on_early_drop/body.rs
+    src/on_early_drop/early_drops_as_failures.rs
+    src/on_early_drop/failure.rs
+    src/on_early_drop/future.rs
+    src/on_early_drop/guard.rs
+    src/on_early_drop/layer.rs
+    src/on_early_drop/mod.rs
+    src/on_early_drop/service.rs
+    src/on_early_drop/traits.rs
+    src/propagate_header.rs
+    src/request_id.rs
+    src/sensitive_headers.rs
+    src/service_ext.rs
+    src/services/fs/mod.rs
+    src/services/fs/serve_dir/future.rs
+    src/services/fs/serve_dir/headers.rs
+    src/services/fs/serve_dir/mod.rs
+    src/services/fs/serve_dir/open_file.rs
+    src/services/fs/serve_dir/tests.rs
+    src/services/fs/serve_file.rs
+    src/services/mod.rs
+    src/services/redirect.rs
+    src/set_header/mod.rs
+    src/set_header/request/mod.rs
+    src/set_header/request/multiple_headers.rs
+    src/set_header/request/single_header.rs
+    src/set_header/response/mod.rs
+    src/set_header/response/multiple_headers.rs
+    src/set_header/response/single_header.rs
+    src/set_status.rs
+    src/test_helpers.rs
+    src/timeout/body.rs
+    src/timeout/mod.rs
+    src/timeout/service.rs
+    src/trace/body.rs
+    src/trace/future.rs
+    src/trace/layer.rs
+    src/trace/make_span.rs
+    src/trace/mod.rs
+    src/trace/on_body_chunk.rs
+    src/trace/on_eos.rs
+    src/trace/on_failure.rs
+    src/trace/on_request.rs
+    src/trace/on_response.rs
+    src/trace/service.rs
+    src/validate_request.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    follow-redirect
+    futures-util
+    tower
+)
+
+PEERDIR(
+    contrib/crates/bitflags-2.13.2
+    contrib/crates/bytes-1.12.1
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/http-1.5.0
+    contrib/crates/http-body-1.1.0
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/tower-0.5.3
+    contrib/crates/tower-layer-0.3.3
+    contrib/crates/tower-service-0.3.3
+    contrib/crates/url-2.5.8
+)
+
+LICENSE("MIT")
+VERSION(0.6.11)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tower-http/tower-http-0.6.11.crate)
+
+CRATE_FEATURES(
+    cors
+    default
+    fs
+    futures-core
+    httpdate
+    mime
+    mime_guess
+    percent-encoding
+    propagate-header
+    set-status
+    tokio
+    tokio-util
+    trace
+    tracing
+)
+
+CRATE_FEATURES(
+    decompression-gzip
+)
+
+PEERDIR(
+    contrib/crates/async-compression-0.4.51
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/http-body-util-0.1.5
+    contrib/crates/http-range-header-0.4.2
+    contrib/crates/httpdate-1.0.3
+    contrib/crates/mime-0.3.17
+    contrib/crates/mime_guess-2.0.5
+    contrib/crates/percent-encoding-2.3.2
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-util-0.7.20
+    contrib/crates/tracing-0.1.44
+)
+
+CRATE_SOURCES(
+    src/add_extension.rs
+    src/auth/add_authorization.rs
+    src/auth/async_require_authorization.rs
+    src/auth/mod.rs
+    src/auth/require_authorization.rs
+    src/body.rs
+    src/builder.rs
+    src/catch_panic.rs
+    src/classify/grpc_errors_as_failures.rs
+    src/classify/map_failure_class.rs
+    src/classify/mod.rs
+    src/classify/status_in_range_is_error.rs
+    src/compression/body.rs
+    src/compression/future.rs
+    src/compression/layer.rs
+    src/compression/mod.rs
+    src/compression/pin_project_cfg.rs
+    src/compression/predicate.rs
+    src/compression/service.rs
+    src/compression_utils.rs
+    src/content_encoding.rs
+    src/cors/allow_credentials.rs
+    src/cors/allow_headers.rs
+    src/cors/allow_methods.rs
+    src/cors/allow_origin.rs
+    src/cors/allow_private_network.rs
+    src/cors/expose_headers.rs
+    src/cors/max_age.rs
+    src/cors/mod.rs
+    src/cors/tests.rs
+    src/cors/vary.rs
+    src/decompression/body.rs
+    src/decompression/future.rs
+    src/decompression/layer.rs
+    src/decompression/mod.rs
+    src/decompression/request/future.rs
+    src/decompression/request/layer.rs
+    src/decompression/request/mod.rs
+    src/decompression/request/service.rs
+    src/decompression/service.rs
+    src/follow_redirect/mod.rs
+    src/follow_redirect/policy/and.rs
+    src/follow_redirect/policy/clone_body_fn.rs
+    src/follow_redirect/policy/filter_credentials.rs
+    src/follow_redirect/policy/limited.rs
+    src/follow_redirect/policy/mod.rs
+    src/follow_redirect/policy/or.rs
+    src/follow_redirect/policy/redirect_fn.rs
+    src/follow_redirect/policy/same_origin.rs
+    src/lib.rs
+    src/limit/body.rs
+    src/limit/future.rs
+    src/limit/layer.rs
+    src/limit/mod.rs
+    src/limit/service.rs
+    src/macros.rs
+    src/map_request_body.rs
+    src/map_response_body.rs
+    src/metrics/in_flight_requests.rs
+    src/metrics/mod.rs
+    src/normalize_path.rs
+    src/on_early_drop/body.rs
+    src/on_early_drop/early_drops_as_failures.rs
+    src/on_early_drop/failure.rs
+    src/on_early_drop/future.rs
+    src/on_early_drop/guard.rs
+    src/on_early_drop/layer.rs
+    src/on_early_drop/mod.rs
+    src/on_early_drop/service.rs
+    src/on_early_drop/traits.rs
+    src/propagate_header.rs
+    src/request_id.rs
+    src/sensitive_headers.rs
+    src/service_ext.rs
+    src/services/fs/mod.rs
+    src/services/fs/serve_dir/future.rs
+    src/services/fs/serve_dir/headers.rs
+    src/services/fs/serve_dir/mod.rs
+    src/services/fs/serve_dir/open_file.rs
+    src/services/fs/serve_dir/tests.rs
+    src/services/fs/serve_file.rs
+    src/services/mod.rs
+    src/services/redirect.rs
+    src/set_header/mod.rs
+    src/set_header/request/mod.rs
+    src/set_header/request/multiple_headers.rs
+    src/set_header/request/single_header.rs
+    src/set_header/response/mod.rs
+    src/set_header/response/multiple_headers.rs
+    src/set_header/response/single_header.rs
+    src/set_status.rs
+    src/test_helpers.rs
+    src/timeout/body.rs
+    src/timeout/mod.rs
+    src/timeout/service.rs
+    src/trace/body.rs
+    src/trace/future.rs
+    src/trace/layer.rs
+    src/trace/make_span.rs
+    src/trace/mod.rs
+    src/trace/on_body_chunk.rs
+    src/trace/on_eos.rs
+    src/trace/on_failure.rs
+    src/trace/on_request.rs
+    src/trace/on_response.rs
+    src/trace/service.rs
+    src/validate_request.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
+)
+
+END()

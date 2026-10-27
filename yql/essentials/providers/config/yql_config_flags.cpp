@@ -463,6 +463,17 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
+    AddFlag("PositionalUnionAll", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (!args.empty()) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+            return false;
+        }
+        Types_.PositionalUnionAll = true;
+        Types_.OrderedColumns = true;
+        Types_.DeriveColumnOrder = true;
+        return true;
+    });
+
     AddFlag("ShowLinksInPlan", "DisableShowLinksInPlan", /*system=*/false,
             ToggleHandler(&Types_.ShowLinksInPlan, "ShowLinksInPlan"));
 

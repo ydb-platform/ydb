@@ -1,0 +1,154 @@
+# Native Rust build POC; host build script.
+
+RUST_BUILD_SCRIPT(build_script_build)
+
+CRATE_VERSION(2.62.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(../build.rs)
+CRATE_MANIFEST(../Cargo.toml)
+VERSION(2.62.0)
+LICENSE("LGPL-2.1-or-later")
+CRATE_MANIFEST_DIR(..)
+
+CRATE_SOURCES(
+    ../benches/box_blur.rs
+    ../benches/composite.rs
+    ../benches/lighting.rs
+    ../benches/path_parser.rs
+    ../benches/pixel_iterators.rs
+    ../benches/pixel_ops.rs
+    ../benches/srgb.rs
+    ../src/accept_language.rs
+    ../src/angle.rs
+    ../src/api.rs
+    ../src/aspect_ratio.rs
+    ../src/bbox.rs
+    ../src/cairo_path.rs
+    ../src/color.rs
+    ../src/cond.rs
+    ../src/coord_units.rs
+    ../src/css.rs
+    ../src/dasharray.rs
+    ../src/document.rs
+    ../src/dpi.rs
+    ../src/drawing_ctx.rs
+    ../src/element.rs
+    ../src/error.rs
+    ../src/filter.rs
+    ../src/filter_func.rs
+    ../src/filters/blend.rs
+    ../src/filters/bounds.rs
+    ../src/filters/color_matrix.rs
+    ../src/filters/component_transfer.rs
+    ../src/filters/composite.rs
+    ../src/filters/context.rs
+    ../src/filters/convolve_matrix.rs
+    ../src/filters/displacement_map.rs
+    ../src/filters/drop_shadow.rs
+    ../src/filters/error.rs
+    ../src/filters/flood.rs
+    ../src/filters/gaussian_blur.rs
+    ../src/filters/image.rs
+    ../src/filters/lighting.rs
+    ../src/filters/merge.rs
+    ../src/filters/mod.rs
+    ../src/filters/morphology.rs
+    ../src/filters/offset.rs
+    ../src/filters/tile.rs
+    ../src/filters/turbulence.rs
+    ../src/float_eq_cairo.rs
+    ../src/font_props.rs
+    ../src/gradient.rs
+    ../src/href.rs
+    ../src/image.rs
+    ../src/io.rs
+    ../src/iri.rs
+    ../src/layout.rs
+    ../src/length.rs
+    ../src/lib.rs
+    ../src/limits.rs
+    ../src/log.rs
+    ../src/marker.rs
+    ../src/node.rs
+    ../src/paint_server.rs
+    ../src/parsers.rs
+    ../src/path_builder.rs
+    ../src/path_parser.rs
+    ../src/pattern.rs
+    ../src/properties.rs
+    ../src/property_defs.rs
+    ../src/property_macros.rs
+    ../src/rect.rs
+    ../src/session.rs
+    ../src/shapes.rs
+    ../src/space.rs
+    ../src/structure.rs
+    ../src/style.rs
+    ../src/surface_utils/iterators.rs
+    ../src/surface_utils/mod.rs
+    ../src/surface_utils/shared_surface.rs
+    ../src/surface_utils/srgb.rs
+    ../src/test_utils/compare_surfaces.rs
+    ../src/test_utils/mod.rs
+    ../src/test_utils/reference_utils.rs
+    ../src/text.rs
+    ../src/text2.rs
+    ../src/transform.rs
+    ../src/unit_interval.rs
+    ../src/url_resolver.rs
+    ../src/util.rs
+    ../src/viewbox.rs
+    ../src/xml/attributes.rs
+    ../src/xml/mod.rs
+    ../src/xml/xml2.rs
+    ../src/xml/xml2_load.rs
+)
+
+CRATE_INPUTS(
+    ../COPYING.LIB
+    ../README.md
+    ../example.svg
+    ../meson.build
+    ../src/filters/test_input_requirements.svg
+    ../src/ua.css
+)
+
+CRATE_ENV(
+    SYSTEM_DEPS_CAIRO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_LIB=cairo
+    SYSTEM_DEPS_CAIRO_GOBJECT_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_GOBJECT_LIB=cairo-gobject
+    SYSTEM_DEPS_CAIRO_PDF_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PDF_LIB=cairo-pdf
+    SYSTEM_DEPS_CAIRO_PNG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PNG_LIB=cairo-png
+    SYSTEM_DEPS_CAIRO_PS_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PS_LIB=cairo-ps
+    SYSTEM_DEPS_CAIRO_SVG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_SVG_LIB=cairo-svg
+    SYSTEM_DEPS_FONTCONFIG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_FONTCONFIG_LIB=fontconfig
+    SYSTEM_DEPS_FREETYPE2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_FREETYPE2_LIB=freetype2
+    SYSTEM_DEPS_GIO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GIO_LIB=gio
+    SYSTEM_DEPS_GLIB_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GLIB_LIB=glib
+    SYSTEM_DEPS_HARFBUZZ_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_HARFBUZZ_LIB=harfbuzz
+    SYSTEM_DEPS_LIBXML2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_LIBXML2_LIB=libxml2
+    SYSTEM_DEPS_PANGOCAIRO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_PANGOCAIRO_LIB=pangocairo
+    SYSTEM_DEPS_PANGOFT2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_PANGOFT2_LIB=pangoft2
+)
+
+CRATE_FEATURES(capi)
+PEERDIR(contrib/crates/system-deps-7.0.7)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

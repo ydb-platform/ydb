@@ -1,0 +1,94 @@
+[workspace.package]
+version = "2.62.0"
+authors = ["Federico Mena Quintero <federico@gnome.org>", "Many others"]
+description = """
+A library to render SVG images to Cairo surfaces. GNOME uses this to
+render SVG icons. Outside of GNOME, other desktop environments use it
+for similar purposes. Wikimedia uses it for Wikipedia's SVG diagrams.
+"""
+license = "LGPL-2.1-or-later"
+homepage = "https://wiki.gnome.org/Projects/LibRsvg"
+repository = "https://gitlab.gnome.org/GNOME/librsvg/"
+categories = ["graphics", "multimedia::images", "rendering::data-formats"]
+keywords = ["svg", "cairo"]
+edition = "2024"
+rust-version = "1.92.0"
+
+[profile.overflow]
+inherits = "release"
+overflow-checks = true
+
+[profile.release]
+debug = true
+panic = "abort"
+
+[workspace]
+members = [
+    "librsvg-c",
+    "rsvg",
+]
+default-members = ["rsvg"]
+exclude = ["afl-fuzz", "librsvg-rebind/gir", "fuzz"]
+resolver = "3"
+
+[workspace.dependencies]
+afl = "*"
+assert_cmd = "2.1.1"
+bitflags = "2.0"
+cairo-rs = "0.22.0"
+cairo-sys-rs = "0.22.0"
+cast = "0.3.0"
+chrono = { version = "0.4.23", default-features = false }
+clap = "4.0.17"
+clap_complete = "4.0.5"
+criterion = "0.7"
+cssparser = "0.35.0"
+cssparser-color = "0.3.0"
+data-url = "0.3.0"
+encoding_rs = "0.8.32"
+float-cmp = "0.10.0"
+gdk-pixbuf = "0.22.0"
+gdk-pixbuf-sys = "0.22.0"
+gio = "0.22.0"
+gio-unix = "0.22.0"
+gio-win32 = "0.22.0"
+gio-sys = "0.22.0"
+glib = "0.22.0"
+glib-sys = "0.22.0"
+gobject-sys = "0.22.0"
+image = { version = "0.25.0", default-features = false }
+itertools = "0.14.0"
+language-tags = "0.3.1"
+libc = "0.2"
+librsvg = { path = "rsvg" }
+librsvg-c = { path = "librsvg-c" }
+locale_config = "0.3.0"                                   # not "*" as per the documentation, since crates.io doesn't accept wildcards
+lopdf = "0.38"
+markup5ever = "0.35.0"
+matches = "0.1"
+mutants = "0.0.3"
+nalgebra = "0.34.0"
+num-traits = "0.2"
+pango = "0.22.0"
+pangocairo = "0.22.0"
+png = "0.18.0"
+precomputed-hash = "0.1.1"
+predicates = "3.0.3"
+pretty_assertions = "1.4.1"
+proptest = "1.0.0"
+quick-error = "2.0.0"
+rayon = "1"
+rctree = "0.6.0"
+regex = "1.7.1"
+rgb = "0.8"
+selectors = "0.31.0"
+serde = "1.0"
+serde_json = "1.0"
+shell-words = "1.1"
+string_cache = "0.9.0"
+system-deps = "7.0.0"
+tempfile = "3"
+tinyvec = "1.2.0"
+url = "2"
+xml5ever = "0.35.0"
+yeslogic-fontconfig-sys = "6.0.0"

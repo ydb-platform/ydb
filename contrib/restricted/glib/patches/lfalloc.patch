@@ -1,0 +1,13 @@
+LFAlloc aborts if the requsted alignment is higher than the page size, and glib
+does seem to have a use for large alignments anyway.
+
+--- a/glib/gslice.c
++++ b/glib/gslice.c
+@@ -1261,6 +1261,7 @@ allocator_aligned_page_size (Allocator *allocator,
+ {
+   gsize val = (gsize) 1 << g_bit_storage (n_bytes - 1);
+   val = MAX (val, local_allocator->min_page_size);
++  val = MIN (val, sys_page_size);
+   return val;
+ }
+ 

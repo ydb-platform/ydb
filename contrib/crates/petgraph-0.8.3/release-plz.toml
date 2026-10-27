@@ -1,0 +1,39 @@
+[workspace]
+pr_draft = true
+git_tag_name = "{{ package }}@v{{ version }}"
+
+# Include a list of contributors in the release body
+git_release_body = """
+{{ changelog }}
+{% if remote.contributors %}
+### Contributors
+{% for contributor in remote.contributors %}
+* @{{ contributor.username }}
+{% endfor %}
+{% endif %}
+"""
+
+[changelog]
+sort_commits = "oldest"
+protect_breaking_commits = true
+
+header = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+"""
+
+commit_parsers = [
+    { message = "^feat", group = "New Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^style", group = "Styling" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^perf", group = "Performance" },
+    { message = "^test", group = "Testing" },
+    { message = "^chore", group = "Miscellaneous Tasks", skip = true },
+    { message = "^revert", group = "Reverted changes", skip = true },
+    { message = "^ci", group = "CI", skip = true },
+    # Keep all the untagged commits
+    { message = "^.*", group = "Other changes" },
+]

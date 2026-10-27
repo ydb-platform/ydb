@@ -1,0 +1,105 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(pango)
+
+CRATE_VERSION(0.22.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.22.0)
+LICENSE("MIT")
+
+CRATE_SOURCES(
+    src/analysis.rs
+    src/attr_class.rs
+    src/attr_color.rs
+    src/attr_float.rs
+    src/attr_font_desc.rs
+    src/attr_font_features.rs
+    src/attr_int.rs
+    src/attr_iterator.rs
+    src/attr_language.rs
+    src/attr_list.rs
+    src/attr_shape.rs
+    src/attr_size.rs
+    src/attr_string.rs
+    src/attribute.rs
+    src/auto/alias.rs
+    src/auto/attr_list.rs
+    src/auto/attribute.rs
+    src/auto/color.rs
+    src/auto/context.rs
+    src/auto/enums.rs
+    src/auto/flags.rs
+    src/auto/font.rs
+    src/auto/font_description.rs
+    src/auto/font_face.rs
+    src/auto/font_family.rs
+    src/auto/font_map.rs
+    src/auto/font_metrics.rs
+    src/auto/fontset.rs
+    src/auto/fontset_simple.rs
+    src/auto/functions.rs
+    src/auto/glyph_item.rs
+    src/auto/glyph_string.rs
+    src/auto/item.rs
+    src/auto/language.rs
+    src/auto/layout.rs
+    src/auto/layout_iter.rs
+    src/auto/layout_line.rs
+    src/auto/matrix.rs
+    src/auto/mod.rs
+    src/auto/renderer.rs
+    src/auto/tab_array.rs
+    src/color.rs
+    src/coverage.rs
+    src/enums.rs
+    src/functions.rs
+    src/glyph_geometry.rs
+    src/glyph_info.rs
+    src/glyph_item.rs
+    src/glyph_item_iter.rs
+    src/glyph_string.rs
+    src/item.rs
+    src/language.rs
+    src/layout.rs
+    src/matrix.rs
+    src/prelude.rs
+    src/rectangle.rs
+    src/script_iter.rs
+    src/tab_array.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    COPYRIGHT
+    Cargo.lock
+    Gir.toml
+    LICENSE
+    README.md
+    src/auto/versions.txt
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    v1_42
+    v1_44
+    v1_46
+)
+PEERDIR(
+    contrib/crates/gio-0.22.1
+    contrib/crates/glib-0.22.0
+    contrib/crates/libc-0.2.191
+    contrib/crates/pango-sys-0.22.0
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

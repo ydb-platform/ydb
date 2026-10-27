@@ -1,0 +1,392 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(ring)
+
+CRATE_VERSION(0.17.14)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/aead.rs
+    src/aead/aes.rs
+    src/aead/aes/bs.rs
+    src/aead/aes/fallback.rs
+    src/aead/aes/ffi.rs
+    src/aead/aes/hw.rs
+    src/aead/aes/vp.rs
+    src/aead/aes_gcm.rs
+    src/aead/aes_gcm/aarch64.rs
+    src/aead/aes_gcm/aeshwclmulmovbe.rs
+    src/aead/aes_gcm/vaesclmulavx2.rs
+    src/aead/algorithm.rs
+    src/aead/chacha.rs
+    src/aead/chacha/fallback.rs
+    src/aead/chacha/ffi.rs
+    src/aead/chacha20_poly1305/integrated.rs
+    src/aead/chacha20_poly1305/mod.rs
+    src/aead/chacha20_poly1305_openssh.rs
+    src/aead/gcm.rs
+    src/aead/gcm/clmul.rs
+    src/aead/gcm/clmulavxmovbe.rs
+    src/aead/gcm/fallback.rs
+    src/aead/gcm/ffi.rs
+    src/aead/gcm/neon.rs
+    src/aead/gcm/vclmulavx2.rs
+    src/aead/less_safe_key.rs
+    src/aead/nonce.rs
+    src/aead/opening_key.rs
+    src/aead/overlapping/array.rs
+    src/aead/overlapping/base.rs
+    src/aead/overlapping/mod.rs
+    src/aead/overlapping/partial_block.rs
+    src/aead/poly1305.rs
+    src/aead/poly1305/ffi_arm_neon.rs
+    src/aead/poly1305/ffi_fallback.rs
+    src/aead/quic.rs
+    src/aead/sealing_key.rs
+    src/aead/shift.rs
+    src/aead/unbound_key.rs
+    src/agreement.rs
+    src/arithmetic.rs
+    src/arithmetic/bigint.rs
+    src/arithmetic/bigint/boxed_limbs.rs
+    src/arithmetic/bigint/modulus.rs
+    src/arithmetic/bigint/modulusvalue.rs
+    src/arithmetic/bigint/private_exponent.rs
+    src/arithmetic/constant.rs
+    src/arithmetic/ffi.rs
+    src/arithmetic/inout.rs
+    src/arithmetic/limbs/aarch64/mod.rs
+    src/arithmetic/limbs/aarch64/mont.rs
+    src/arithmetic/limbs/mod.rs
+    src/arithmetic/limbs/x86_64/mod.rs
+    src/arithmetic/limbs/x86_64/mont.rs
+    src/arithmetic/limbs512/mod.rs
+    src/arithmetic/limbs512/storage.rs
+    src/arithmetic/montgomery.rs
+    src/arithmetic/n0.rs
+    src/bb/boolmask.rs
+    src/bb/leaky.rs
+    src/bb/mod.rs
+    src/bb/word.rs
+    src/bits.rs
+    src/bssl.rs
+    src/c.rs
+    src/cpu.rs
+    src/cpu/arm.rs
+    src/cpu/arm/darwin.rs
+    src/cpu/arm/fuchsia.rs
+    src/cpu/arm/linux.rs
+    src/cpu/arm/windows.rs
+    src/cpu/intel.rs
+    src/debug.rs
+    src/deprecated_constant_time.rs
+    src/deprecated_test.rs
+    src/digest.rs
+    src/digest/dynstate.rs
+    src/digest/sha1.rs
+    src/digest/sha2/fallback.rs
+    src/digest/sha2/ffi.rs
+    src/digest/sha2/mod.rs
+    src/digest/sha2/sha2_32.rs
+    src/digest/sha2/sha2_64.rs
+    src/ec.rs
+    src/ec/curve25519.rs
+    src/ec/curve25519/ed25519.rs
+    src/ec/curve25519/ed25519/signing.rs
+    src/ec/curve25519/ed25519/verification.rs
+    src/ec/curve25519/ops.rs
+    src/ec/curve25519/scalar.rs
+    src/ec/curve25519/x25519.rs
+    src/ec/keys.rs
+    src/ec/suite_b.rs
+    src/ec/suite_b/curve.rs
+    src/ec/suite_b/ecdh.rs
+    src/ec/suite_b/ecdsa.rs
+    src/ec/suite_b/ecdsa/digest_scalar.rs
+    src/ec/suite_b/ecdsa/signing.rs
+    src/ec/suite_b/ecdsa/verification.rs
+    src/ec/suite_b/ops.rs
+    src/ec/suite_b/ops/elem.rs
+    src/ec/suite_b/ops/p256.rs
+    src/ec/suite_b/ops/p384.rs
+    src/ec/suite_b/private_key.rs
+    src/ec/suite_b/public_key.rs
+    src/error/input_too_long.rs
+    src/error/into_unspecified.rs
+    src/error/key_rejected.rs
+    src/error/mod.rs
+    src/error/unspecified.rs
+    src/hkdf.rs
+    src/hmac.rs
+    src/io.rs
+    src/io/der.rs
+    src/io/der_writer.rs
+    src/io/positive.rs
+    src/io/writer.rs
+    src/limb.rs
+    src/pbkdf2.rs
+    src/pkcs8.rs
+    src/polyfill.rs
+    src/polyfill/array_flat_map.rs
+    src/polyfill/array_split_map.rs
+    src/polyfill/cold_error.rs
+    src/polyfill/cstr.rs
+    src/polyfill/leading_zeros_skipped.rs
+    src/polyfill/notsend.rs
+    src/polyfill/once_cell/race.rs
+    src/polyfill/ptr.rs
+    src/polyfill/slice.rs
+    src/polyfill/slice/as_chunks.rs
+    src/polyfill/slice/as_chunks_mut.rs
+    src/polyfill/sliceutil.rs
+    src/polyfill/test.rs
+    src/polyfill/unwrap_const.rs
+    src/prefixed.rs
+    src/rand.rs
+    src/rsa.rs
+    src/rsa/keypair.rs
+    src/rsa/keypair_components.rs
+    src/rsa/padding.rs
+    src/rsa/padding/pkcs1.rs
+    src/rsa/padding/pss.rs
+    src/rsa/public_exponent.rs
+    src/rsa/public_key.rs
+    src/rsa/public_key_components.rs
+    src/rsa/public_modulus.rs
+    src/rsa/verification.rs
+    src/signature.rs
+    src/tests/bits_tests.rs
+    src/tests/mod.rs
+    src/testutil.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE
+    LICENSE-BoringSSL
+    LICENSE-other-bits
+    README.md
+    src/aead/poly1305_test.txt
+    src/data/alg-rsa-encryption.der
+    src/ec/curve25519/ed25519/ed25519_pkcs8_v2_template.der
+    src/ec/suite_b/ecdsa/ecPublicKey_p256_pkcs8_v1_template.der
+    src/ec/suite_b/ecdsa/ecPublicKey_p384_pkcs8_v1_template.der
+    src/polyfill/once_cell/LICENSE-APACHE
+    src/polyfill/once_cell/LICENSE-MIT
+    src/rsa/signature_rsa_example_private_key.der
+    src/rsa/signature_rsa_example_public_key.der
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    default
+    dev_urandom_fallback
+)
+
+PEERDIR(
+    contrib/crates/cfg-if-1.0.5
+    contrib/crates/getrandom-0.2.17
+    contrib/crates/untrusted-0.9.0
+)
+
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL)
+    PEERDIR(
+    contrib/crates/libc-0.2.191
+)
+
+ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
+ENDIF()
+
+PEERDIR(
+    contrib/crates/ring-0.17.14/native
+)
+
+LICENSE("Apache-2.0 AND ISC")
+VERSION(0.17.14)
+ORIGINAL_SOURCE(https://static.crates.io/crates/ring/ring-0.17.14.crate)
+
+CRATE_FEATURES(
+    std
+)
+
+CRATE_INPUTS(
+    src/data/alg-rsa-encryption.der
+    src/ec/curve25519/ed25519/ed25519_pkcs8_v2_template.der
+    src/ec/suite_b/ecdsa/ecPublicKey_p256_pkcs8_v1_template.der
+    src/ec/suite_b/ecdsa/ecPublicKey_p384_pkcs8_v1_template.der
+)
+
+CRATE_SOURCES(
+    src/aead.rs
+    src/aead/aes.rs
+    src/aead/aes/bs.rs
+    src/aead/aes/fallback.rs
+    src/aead/aes/ffi.rs
+    src/aead/aes/hw.rs
+    src/aead/aes/vp.rs
+    src/aead/aes_gcm.rs
+    src/aead/aes_gcm/aarch64.rs
+    src/aead/aes_gcm/aeshwclmulmovbe.rs
+    src/aead/aes_gcm/vaesclmulavx2.rs
+    src/aead/algorithm.rs
+    src/aead/chacha.rs
+    src/aead/chacha/fallback.rs
+    src/aead/chacha/ffi.rs
+    src/aead/chacha20_poly1305/integrated.rs
+    src/aead/chacha20_poly1305/mod.rs
+    src/aead/chacha20_poly1305_openssh.rs
+    src/aead/gcm.rs
+    src/aead/gcm/clmul.rs
+    src/aead/gcm/clmulavxmovbe.rs
+    src/aead/gcm/fallback.rs
+    src/aead/gcm/ffi.rs
+    src/aead/gcm/neon.rs
+    src/aead/gcm/vclmulavx2.rs
+    src/aead/less_safe_key.rs
+    src/aead/nonce.rs
+    src/aead/opening_key.rs
+    src/aead/overlapping/array.rs
+    src/aead/overlapping/base.rs
+    src/aead/overlapping/mod.rs
+    src/aead/overlapping/partial_block.rs
+    src/aead/poly1305.rs
+    src/aead/poly1305/ffi_arm_neon.rs
+    src/aead/poly1305/ffi_fallback.rs
+    src/aead/quic.rs
+    src/aead/sealing_key.rs
+    src/aead/shift.rs
+    src/aead/unbound_key.rs
+    src/agreement.rs
+    src/arithmetic.rs
+    src/arithmetic/bigint.rs
+    src/arithmetic/bigint/boxed_limbs.rs
+    src/arithmetic/bigint/modulus.rs
+    src/arithmetic/bigint/modulusvalue.rs
+    src/arithmetic/bigint/private_exponent.rs
+    src/arithmetic/constant.rs
+    src/arithmetic/ffi.rs
+    src/arithmetic/inout.rs
+    src/arithmetic/limbs/aarch64/mod.rs
+    src/arithmetic/limbs/aarch64/mont.rs
+    src/arithmetic/limbs/mod.rs
+    src/arithmetic/limbs/x86_64/mod.rs
+    src/arithmetic/limbs/x86_64/mont.rs
+    src/arithmetic/limbs512/mod.rs
+    src/arithmetic/limbs512/storage.rs
+    src/arithmetic/montgomery.rs
+    src/arithmetic/n0.rs
+    src/bb/boolmask.rs
+    src/bb/leaky.rs
+    src/bb/mod.rs
+    src/bb/word.rs
+    src/bits.rs
+    src/bssl.rs
+    src/c.rs
+    src/cpu.rs
+    src/cpu/arm.rs
+    src/cpu/arm/darwin.rs
+    src/cpu/arm/fuchsia.rs
+    src/cpu/arm/linux.rs
+    src/cpu/arm/windows.rs
+    src/cpu/intel.rs
+    src/debug.rs
+    src/deprecated_constant_time.rs
+    src/deprecated_test.rs
+    src/digest.rs
+    src/digest/dynstate.rs
+    src/digest/sha1.rs
+    src/digest/sha2/fallback.rs
+    src/digest/sha2/ffi.rs
+    src/digest/sha2/mod.rs
+    src/digest/sha2/sha2_32.rs
+    src/digest/sha2/sha2_64.rs
+    src/ec.rs
+    src/ec/curve25519.rs
+    src/ec/curve25519/ed25519.rs
+    src/ec/curve25519/ed25519/signing.rs
+    src/ec/curve25519/ed25519/verification.rs
+    src/ec/curve25519/ops.rs
+    src/ec/curve25519/scalar.rs
+    src/ec/curve25519/x25519.rs
+    src/ec/keys.rs
+    src/ec/suite_b.rs
+    src/ec/suite_b/curve.rs
+    src/ec/suite_b/ecdh.rs
+    src/ec/suite_b/ecdsa.rs
+    src/ec/suite_b/ecdsa/digest_scalar.rs
+    src/ec/suite_b/ecdsa/signing.rs
+    src/ec/suite_b/ecdsa/verification.rs
+    src/ec/suite_b/ops.rs
+    src/ec/suite_b/ops/elem.rs
+    src/ec/suite_b/ops/p256.rs
+    src/ec/suite_b/ops/p384.rs
+    src/ec/suite_b/private_key.rs
+    src/ec/suite_b/public_key.rs
+    src/error/input_too_long.rs
+    src/error/into_unspecified.rs
+    src/error/key_rejected.rs
+    src/error/mod.rs
+    src/error/unspecified.rs
+    src/hkdf.rs
+    src/hmac.rs
+    src/io.rs
+    src/io/der.rs
+    src/io/der_writer.rs
+    src/io/positive.rs
+    src/io/writer.rs
+    src/lib.rs
+    src/limb.rs
+    src/pbkdf2.rs
+    src/pkcs8.rs
+    src/polyfill.rs
+    src/polyfill/array_flat_map.rs
+    src/polyfill/array_split_map.rs
+    src/polyfill/cold_error.rs
+    src/polyfill/cstr.rs
+    src/polyfill/leading_zeros_skipped.rs
+    src/polyfill/notsend.rs
+    src/polyfill/once_cell/race.rs
+    src/polyfill/ptr.rs
+    src/polyfill/slice.rs
+    src/polyfill/slice/as_chunks.rs
+    src/polyfill/slice/as_chunks_mut.rs
+    src/polyfill/sliceutil.rs
+    src/polyfill/test.rs
+    src/polyfill/unwrap_const.rs
+    src/prefixed.rs
+    src/rand.rs
+    src/rsa.rs
+    src/rsa/keypair.rs
+    src/rsa/keypair_components.rs
+    src/rsa/padding.rs
+    src/rsa/padding/pkcs1.rs
+    src/rsa/padding/pss.rs
+    src/rsa/public_exponent.rs
+    src/rsa/public_key.rs
+    src/rsa/public_key_components.rs
+    src/rsa/public_modulus.rs
+    src/rsa/verification.rs
+    src/signature.rs
+    src/tests/bits_tests.rs
+    src/tests/mod.rs
+    src/testutil.rs
+)
+
+CRATE_INPUTS(
+    src/aead/poly1305_test.txt
+    src/polyfill/once_cell/LICENSE-APACHE
+    src/polyfill/once_cell/LICENSE-MIT
+    src/rsa/signature_rsa_example_private_key.der
+    src/rsa/signature_rsa_example_public_key.der
+)
+
+END()
+
+RECURSE(native)

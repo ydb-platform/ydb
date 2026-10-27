@@ -1,0 +1,193 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(petgraph)
+
+CRATE_VERSION(0.8.3)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/acyclic.rs
+    src/acyclic/order_map.rs
+    src/adj.rs
+    src/algo/articulation_points.rs
+    src/algo/astar.rs
+    src/algo/bellman_ford.rs
+    src/algo/bridges.rs
+    src/algo/coloring.rs
+    src/algo/dijkstra.rs
+    src/algo/dominators.rs
+    src/algo/feedback_arc_set.rs
+    src/algo/floyd_warshall.rs
+    src/algo/ford_fulkerson.rs
+    src/algo/isomorphism.rs
+    src/algo/johnson.rs
+    src/algo/k_shortest_path.rs
+    src/algo/matching.rs
+    src/algo/maximal_cliques.rs
+    src/algo/maximum_flow/dinics.rs
+    src/algo/maximum_flow/ford_fulkerson.rs
+    src/algo/maximum_flow/mod.rs
+    src/algo/min_spanning_tree.rs
+    src/algo/mod.rs
+    src/algo/page_rank.rs
+    src/algo/scc/kosaraju_scc.rs
+    src/algo/scc/mod.rs
+    src/algo/scc/tarjan_scc.rs
+    src/algo/simple_paths.rs
+    src/algo/spfa.rs
+    src/algo/steiner_tree.rs
+    src/algo/tred.rs
+    src/csr.rs
+    src/data.rs
+    src/dot/dot_parser.rs
+    src/dot/mod.rs
+    src/generate.rs
+    src/graph6/graph6_decoder.rs
+    src/graph6/graph6_encoder.rs
+    src/graph6/mod.rs
+    src/graph_impl/frozen.rs
+    src/graph_impl/mod.rs
+    src/graph_impl/serialization.rs
+    src/graph_impl/stable_graph/mod.rs
+    src/graph_impl/stable_graph/serialization.rs
+    src/graphmap.rs
+    src/iter_format.rs
+    src/iter_utils.rs
+    src/macros.rs
+    src/matrix_graph.rs
+    src/operator.rs
+    src/prelude.rs
+    src/quickcheck.rs
+    src/scored.rs
+    src/serde_utils.rs
+    src/traits_graph.rs
+    src/unionfind.rs
+    src/visit/dfsvisit.rs
+    src/visit/filter.rs
+    src/visit/macros.rs
+    src/visit/mod.rs
+    src/visit/reversed.rs
+    src/visit/traversal.rs
+    src/visit/undirected_adaptor.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    .gitignore
+    CHANGELOG.md
+    CONTRIBUTING.md
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+    assets/examples/graph-example.dot
+    assets/guide/algodocs.md
+    assets/images/LICENSE.md
+    assets/images/graphosaurus-128.png
+    assets/images/graphosaurus-256.png
+    assets/images/graphosaurus-512.png
+    assets/images/graphosaurus-64.png
+    assets/images/graphosaurus.svg
+    assets/images/pridosaurus-128.png
+    assets/images/pridosaurus-256.png
+    assets/images/pridosaurus-512.png
+    assets/images/pridosaurus-64.png
+    assets/images/pridosaurus.svg
+    justfile
+    release-plz.toml
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    std
+)
+
+PEERDIR(
+    contrib/crates/fixedbitset-0.5.7
+    contrib/crates/hashbrown-0.17.1
+    contrib/crates/indexmap-2.14.2
+)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.8.3)
+ORIGINAL_SOURCE(https://static.crates.io/crates/petgraph/petgraph-0.8.3.crate)
+
+CRATE_FEATURES(
+    default
+    graphmap
+    matrix_graph
+    stable_graph
+)
+
+CRATE_SOURCES(
+    src/acyclic.rs
+    src/acyclic/order_map.rs
+    src/adj.rs
+    src/algo/articulation_points.rs
+    src/algo/astar.rs
+    src/algo/bellman_ford.rs
+    src/algo/bridges.rs
+    src/algo/coloring.rs
+    src/algo/dijkstra.rs
+    src/algo/dominators.rs
+    src/algo/feedback_arc_set.rs
+    src/algo/floyd_warshall.rs
+    src/algo/ford_fulkerson.rs
+    src/algo/isomorphism.rs
+    src/algo/johnson.rs
+    src/algo/k_shortest_path.rs
+    src/algo/matching.rs
+    src/algo/maximal_cliques.rs
+    src/algo/maximum_flow/dinics.rs
+    src/algo/maximum_flow/ford_fulkerson.rs
+    src/algo/maximum_flow/mod.rs
+    src/algo/min_spanning_tree.rs
+    src/algo/mod.rs
+    src/algo/page_rank.rs
+    src/algo/scc/kosaraju_scc.rs
+    src/algo/scc/mod.rs
+    src/algo/scc/tarjan_scc.rs
+    src/algo/simple_paths.rs
+    src/algo/spfa.rs
+    src/algo/steiner_tree.rs
+    src/algo/tred.rs
+    src/csr.rs
+    src/data.rs
+    src/dot/dot_parser.rs
+    src/dot/mod.rs
+    src/generate.rs
+    src/graph6/graph6_decoder.rs
+    src/graph6/graph6_encoder.rs
+    src/graph6/mod.rs
+    src/graph_impl/frozen.rs
+    src/graph_impl/mod.rs
+    src/graph_impl/serialization.rs
+    src/graph_impl/stable_graph/mod.rs
+    src/graph_impl/stable_graph/serialization.rs
+    src/graphmap.rs
+    src/iter_format.rs
+    src/iter_utils.rs
+    src/lib.rs
+    src/macros.rs
+    src/matrix_graph.rs
+    src/operator.rs
+    src/prelude.rs
+    src/quickcheck.rs
+    src/scored.rs
+    src/serde_utils.rs
+    src/traits_graph.rs
+    src/unionfind.rs
+    src/visit/dfsvisit.rs
+    src/visit/filter.rs
+    src/visit/macros.rs
+    src/visit/mod.rs
+    src/visit/reversed.rs
+    src/visit/traversal.rs
+    src/visit/undirected_adaptor.rs
+)
+
+END()

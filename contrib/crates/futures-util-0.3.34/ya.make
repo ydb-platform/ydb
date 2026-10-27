@@ -1,0 +1,242 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(futures_util)
+
+CRATE_VERSION(0.3.34)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/abortable.rs
+    src/async_await/join_mod.rs
+    src/async_await/mod.rs
+    src/async_await/pending.rs
+    src/async_await/poll.rs
+    src/async_await/random.rs
+    src/async_await/select_mod.rs
+    src/async_await/stream_select_mod.rs
+    src/compat/compat01as03.rs
+    src/compat/compat03as01.rs
+    src/compat/executor.rs
+    src/compat/mod.rs
+    src/fns.rs
+    src/future/abortable.rs
+    src/future/always_ready.rs
+    src/future/either.rs
+    src/future/future/catch_unwind.rs
+    src/future/future/flatten.rs
+    src/future/future/fuse.rs
+    src/future/future/map.rs
+    src/future/future/mod.rs
+    src/future/future/remote_handle.rs
+    src/future/future/shared.rs
+    src/future/join.rs
+    src/future/join_all.rs
+    src/future/lazy.rs
+    src/future/maybe_done.rs
+    src/future/mod.rs
+    src/future/option.rs
+    src/future/pending.rs
+    src/future/poll_fn.rs
+    src/future/poll_immediate.rs
+    src/future/ready.rs
+    src/future/select.rs
+    src/future/select_all.rs
+    src/future/select_ok.rs
+    src/future/try_future/into_future.rs
+    src/future/try_future/mod.rs
+    src/future/try_future/try_flatten.rs
+    src/future/try_future/try_flatten_err.rs
+    src/future/try_join.rs
+    src/future/try_join_all.rs
+    src/future/try_maybe_done.rs
+    src/future/try_select.rs
+    src/io/allow_std.rs
+    src/io/buf_reader.rs
+    src/io/buf_writer.rs
+    src/io/chain.rs
+    src/io/close.rs
+    src/io/copy.rs
+    src/io/copy_buf.rs
+    src/io/copy_buf_abortable.rs
+    src/io/cursor.rs
+    src/io/empty.rs
+    src/io/fill_buf.rs
+    src/io/flush.rs
+    src/io/into_sink.rs
+    src/io/line_writer.rs
+    src/io/lines.rs
+    src/io/mod.rs
+    src/io/read.rs
+    src/io/read_exact.rs
+    src/io/read_line.rs
+    src/io/read_to_end.rs
+    src/io/read_to_string.rs
+    src/io/read_until.rs
+    src/io/read_vectored.rs
+    src/io/repeat.rs
+    src/io/seek.rs
+    src/io/sink.rs
+    src/io/split.rs
+    src/io/take.rs
+    src/io/window.rs
+    src/io/write.rs
+    src/io/write_all.rs
+    src/io/write_all_vectored.rs
+    src/io/write_vectored.rs
+    src/lock/bilock.rs
+    src/lock/mod.rs
+    src/lock/mutex.rs
+    src/macros.rs
+    src/never.rs
+    src/sink/buffer.rs
+    src/sink/close.rs
+    src/sink/drain.rs
+    src/sink/err_into.rs
+    src/sink/fanout.rs
+    src/sink/feed.rs
+    src/sink/flush.rs
+    src/sink/map_err.rs
+    src/sink/mod.rs
+    src/sink/send.rs
+    src/sink/send_all.rs
+    src/sink/unfold.rs
+    src/sink/with.rs
+    src/sink/with_flat_map.rs
+    src/stream/abortable.rs
+    src/stream/empty.rs
+    src/stream/futures_ordered.rs
+    src/stream/futures_unordered/abort.rs
+    src/stream/futures_unordered/iter.rs
+    src/stream/futures_unordered/mod.rs
+    src/stream/futures_unordered/ready_to_run_queue.rs
+    src/stream/futures_unordered/task.rs
+    src/stream/iter.rs
+    src/stream/mod.rs
+    src/stream/once.rs
+    src/stream/pending.rs
+    src/stream/poll_fn.rs
+    src/stream/poll_immediate.rs
+    src/stream/repeat.rs
+    src/stream/repeat_with.rs
+    src/stream/select.rs
+    src/stream/select_all.rs
+    src/stream/select_with_strategy.rs
+    src/stream/stream/all.rs
+    src/stream/stream/any.rs
+    src/stream/stream/buffer_unordered.rs
+    src/stream/stream/buffered.rs
+    src/stream/stream/catch_unwind.rs
+    src/stream/stream/chain.rs
+    src/stream/stream/chunks.rs
+    src/stream/stream/collect.rs
+    src/stream/stream/concat.rs
+    src/stream/stream/count.rs
+    src/stream/stream/cycle.rs
+    src/stream/stream/enumerate.rs
+    src/stream/stream/filter.rs
+    src/stream/stream/filter_map.rs
+    src/stream/stream/flatten.rs
+    src/stream/stream/flatten_unordered.rs
+    src/stream/stream/fold.rs
+    src/stream/stream/for_each.rs
+    src/stream/stream/for_each_concurrent.rs
+    src/stream/stream/forward.rs
+    src/stream/stream/fuse.rs
+    src/stream/stream/into_future.rs
+    src/stream/stream/map.rs
+    src/stream/stream/mod.rs
+    src/stream/stream/next.rs
+    src/stream/stream/peek.rs
+    src/stream/stream/ready_chunks.rs
+    src/stream/stream/scan.rs
+    src/stream/stream/select_next_some.rs
+    src/stream/stream/skip.rs
+    src/stream/stream/skip_while.rs
+    src/stream/stream/split.rs
+    src/stream/stream/take.rs
+    src/stream/stream/take_until.rs
+    src/stream/stream/take_while.rs
+    src/stream/stream/then.rs
+    src/stream/stream/unzip.rs
+    src/stream/stream/zip.rs
+    src/stream/try_stream/and_then.rs
+    src/stream/try_stream/into_async_read.rs
+    src/stream/try_stream/into_stream.rs
+    src/stream/try_stream/mod.rs
+    src/stream/try_stream/or_else.rs
+    src/stream/try_stream/try_all.rs
+    src/stream/try_stream/try_any.rs
+    src/stream/try_stream/try_buffer_unordered.rs
+    src/stream/try_stream/try_buffered.rs
+    src/stream/try_stream/try_chunks.rs
+    src/stream/try_stream/try_collect.rs
+    src/stream/try_stream/try_concat.rs
+    src/stream/try_stream/try_filter.rs
+    src/stream/try_stream/try_filter_map.rs
+    src/stream/try_stream/try_flatten.rs
+    src/stream/try_stream/try_flatten_unordered.rs
+    src/stream/try_stream/try_fold.rs
+    src/stream/try_stream/try_for_each.rs
+    src/stream/try_stream/try_for_each_concurrent.rs
+    src/stream/try_stream/try_next.rs
+    src/stream/try_stream/try_ready_chunks.rs
+    src/stream/try_stream/try_skip_while.rs
+    src/stream/try_stream/try_take_while.rs
+    src/stream/try_stream/try_unfold.rs
+    src/stream/unfold.rs
+    src/task/mod.rs
+    src/task/spawn.rs
+    src/unfold_state.rs
+)
+
+CRATE_INPUTS(
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    async-await
+    async-await-macro
+    channel
+    futures-channel
+    futures-io
+    futures-macro
+    futures-sink
+    io
+    memchr
+    sink
+    slab
+    std
+)
+
+PEERDIR(
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-io-0.3.34
+    contrib/crates/futures-sink-0.3.34
+    contrib/crates/futures-task-0.3.34
+    contrib/crates/memchr-2.8.3
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/slab-0.4.12
+)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.3.34)
+ORIGINAL_SOURCE(https://static.crates.io/crates/futures-util/futures-util-0.3.34.crate)
+
+CRATE_FEATURES(
+    default
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/futures-macro-0.3.34
+)
+
+END()

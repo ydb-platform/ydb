@@ -1,0 +1,182 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(libm)
+
+CRATE_VERSION(0.2.16)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    configure.rs
+    src/libm_helper.rs
+    src/math/acos.rs
+    src/math/acosf.rs
+    src/math/acosh.rs
+    src/math/acoshf.rs
+    src/math/arch/aarch64.rs
+    src/math/arch/i586.rs
+    src/math/arch/mod.rs
+    src/math/arch/wasm32.rs
+    src/math/arch/x86.rs
+    src/math/arch/x86/detect.rs
+    src/math/arch/x86/fma.rs
+    src/math/asin.rs
+    src/math/asinf.rs
+    src/math/asinh.rs
+    src/math/asinhf.rs
+    src/math/atan.rs
+    src/math/atan2.rs
+    src/math/atan2f.rs
+    src/math/atanf.rs
+    src/math/atanh.rs
+    src/math/atanhf.rs
+    src/math/cbrt.rs
+    src/math/cbrtf.rs
+    src/math/ceil.rs
+    src/math/copysign.rs
+    src/math/cos.rs
+    src/math/cosf.rs
+    src/math/cosh.rs
+    src/math/coshf.rs
+    src/math/erf.rs
+    src/math/erff.rs
+    src/math/exp.rs
+    src/math/exp10.rs
+    src/math/exp10f.rs
+    src/math/exp2.rs
+    src/math/exp2f.rs
+    src/math/expf.rs
+    src/math/expm1.rs
+    src/math/expm1f.rs
+    src/math/expo2.rs
+    src/math/fabs.rs
+    src/math/fdim.rs
+    src/math/floor.rs
+    src/math/fma.rs
+    src/math/fmin_fmax.rs
+    src/math/fminimum_fmaximum.rs
+    src/math/fminimum_fmaximum_num.rs
+    src/math/fmod.rs
+    src/math/frexp.rs
+    src/math/frexpf.rs
+    src/math/generic/ceil.rs
+    src/math/generic/copysign.rs
+    src/math/generic/fabs.rs
+    src/math/generic/fdim.rs
+    src/math/generic/floor.rs
+    src/math/generic/fma.rs
+    src/math/generic/fma_wide.rs
+    src/math/generic/fmax.rs
+    src/math/generic/fmaximum.rs
+    src/math/generic/fmaximum_num.rs
+    src/math/generic/fmin.rs
+    src/math/generic/fminimum.rs
+    src/math/generic/fminimum_num.rs
+    src/math/generic/fmod.rs
+    src/math/generic/mod.rs
+    src/math/generic/rint.rs
+    src/math/generic/round.rs
+    src/math/generic/scalbn.rs
+    src/math/generic/sqrt.rs
+    src/math/generic/trunc.rs
+    src/math/hypot.rs
+    src/math/hypotf.rs
+    src/math/ilogb.rs
+    src/math/ilogbf.rs
+    src/math/j0.rs
+    src/math/j0f.rs
+    src/math/j1.rs
+    src/math/j1f.rs
+    src/math/jn.rs
+    src/math/jnf.rs
+    src/math/k_cos.rs
+    src/math/k_cosf.rs
+    src/math/k_expo2.rs
+    src/math/k_expo2f.rs
+    src/math/k_sin.rs
+    src/math/k_sinf.rs
+    src/math/k_tan.rs
+    src/math/k_tanf.rs
+    src/math/ldexp.rs
+    src/math/lgamma.rs
+    src/math/lgamma_r.rs
+    src/math/lgammaf.rs
+    src/math/lgammaf_r.rs
+    src/math/log.rs
+    src/math/log10.rs
+    src/math/log10f.rs
+    src/math/log1p.rs
+    src/math/log1pf.rs
+    src/math/log2.rs
+    src/math/log2f.rs
+    src/math/logf.rs
+    src/math/mod.rs
+    src/math/modf.rs
+    src/math/modff.rs
+    src/math/nextafter.rs
+    src/math/nextafterf.rs
+    src/math/pow.rs
+    src/math/powf.rs
+    src/math/rem_pio2.rs
+    src/math/rem_pio2_large.rs
+    src/math/rem_pio2f.rs
+    src/math/remainder.rs
+    src/math/remainderf.rs
+    src/math/remquo.rs
+    src/math/remquof.rs
+    src/math/rint.rs
+    src/math/round.rs
+    src/math/roundeven.rs
+    src/math/scalbn.rs
+    src/math/sin.rs
+    src/math/sincos.rs
+    src/math/sincosf.rs
+    src/math/sinf.rs
+    src/math/sinh.rs
+    src/math/sinhf.rs
+    src/math/sqrt.rs
+    src/math/support/big.rs
+    src/math/support/big/tests.rs
+    src/math/support/env.rs
+    src/math/support/feature_detect.rs
+    src/math/support/float_traits.rs
+    src/math/support/hex_float.rs
+    src/math/support/int_traits.rs
+    src/math/support/int_traits/narrowing_div.rs
+    src/math/support/macros.rs
+    src/math/support/mod.rs
+    src/math/support/modular.rs
+    src/math/tan.rs
+    src/math/tanf.rs
+    src/math/tanh.rs
+    src/math/tanhf.rs
+    src/math/tgamma.rs
+    src/math/tgammaf.rs
+    src/math/trunc.rs
+)
+
+CRATE_INPUTS(
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE.txt
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    arch
+    default
+)
+
+CRATE_BUILD_SCRIPT(contrib/crates/libm-0.2.16/build_script)
+
+LICENSE("MIT")
+VERSION(0.2.16)
+ORIGINAL_SOURCE(https://static.crates.io/crates/libm/libm-0.2.16.crate)
+
+END()
+
+RECURSE(build_script)

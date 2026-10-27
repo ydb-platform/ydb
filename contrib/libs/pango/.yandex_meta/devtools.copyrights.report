@@ -1,0 +1,701 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0722ca6b4d268828f570d1e7c4d6b7ac
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2001 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-fontset-simple.c [4:4]
+        pango/pango-fontset-simple.h [4:4]
+        pango/pango-fontset.c [4:4]
+        pango/pango-fontset.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c0cf30faf92b614dd34827ecf11f1c1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-break-table.h [10:13]
+        pango/pango-break-table.h [18:21]
+        pango/pango-break-table.h [71:74]
+        pango/pango-break-table.h [112:115]
+        pango/pango-emoji-table.h [10:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e3146049f4ee8305713d793e5a93cb1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000-2002 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-attributes.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a00237f53a2571cece9571efcfa2a7e
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002, 2006 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-matrix.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1edd095fd0c4ab4277f9e4b2fec2c1c1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000-2003 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangofc-fontmap.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a167dcf6e38387efed2210ec8f2ee9a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/ellipsize.c [4:4]
+        pango/pango-context-private.h [4:4]
+        pango/pango-layout-private.h [4:4]
+        pango/pango-ot-buffer.c [4:4]
+        pango/pangofc-decoder.c [4:4]
+        pango/pangofc-decoder.h [4:4]
+        pango/pangoft2-render.c [4:5]
+        pango/pangoxft-render.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 385fba535f909cbaa441419ac419602b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2005 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo-fc-private.h [4:4]
+        pango/pangocairo-fc.h [4:4]
+        pango/pangocairo-win32.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3abc3d7066722805ae84c6d99d2324b2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006 Red Hat Software
+         * Copyright (C) 2006 Sharif FarsiWeb, Inc.
+         * Authors: Behdad Esfahbod <besfahbo@redhat.com>
+         *          Roozbeh Pournader <roozbeh@farsiweb.info>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/break-arabic.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 40697db461712258cbde41aae2fd553d
+BELONGS ya.make
+    License text:
+         * // Copyright 2015 The Chromium Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-emoji.c [43:43]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4618f23565d7a3354871013dbe225d68
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2005 Imendio AB
+         * Copyright (C) 2010  Kristian Rietveld  <kris@gtk.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo-coretext.h [4:5]
+        pango/pangocairo-coretextfont.h [4:5]
+        pango/pangocoretext.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c3e4e3d666d58f6807f537d3e75f233
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-color.c [108:110]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50fb206ae3042292d98073d03877a692
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+         * Copyright (C) 2012 Ryan Lortie, Matthias Clasen and Emmanuele Bassi
+         * Copyright (C) 2016 Chun-wei Fan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-version-macros.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 612a55e7ed11894521a1420a67905b9f
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+         * Copyright (C) 2000-2002 Tor Lillqvist
+         * Copyright (C) 2001 Alexander Larsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangowin32-private.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63b478bb1a60791aec0e502e4147d3bd
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2018 Matthias Clasen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-direction.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6565f2aee304be3103ebabbcfe3ff16e
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/break.c [4:4]
+        pango/fonts.c [4:4]
+        pango/glyphstring.c [4:4]
+        pango/modules.c [4:4]
+        pango/pango-break.h [4:4]
+        pango/pango-language.h [4:4]
+        pango/pango-modules.h [4:4]
+        pango/pango-types.h [4:4]
+        pango/pango-version-macros.h [2:4]
+        pango/pango.h [4:4]
+        pango/pangoft2-private.h [4:5]
+        pango/pangoft2.c [4:5]
+        pango/pangoft2.h [4:5]
+        pango/pangowin32-private.h [4:6]
+        pango/pangowin32.h [4:6]
+        pango/pangoxft.h [4:5]
+        pango/reorder-items.c [4:4]
+        pango/shape.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66870d7cf4671daec33d50a1462c3102
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2017 Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-emoji-private.h [4:4]
+        pango/pango-emoji.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77ccdf700bc232f8c77cd235989b87b9
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+         * Copyright (C) 2000 SuSE Linux Ltd
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangoxft.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79be833ebe256c70e6049bdc4fc31999
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006 Red Hat Software
+         * Copyright (C) 2006 Sharif FarsiWeb, Inc.
+         * Authors: Behdad Esfahbod <besfahbo@redhat.com>
+         *          Roozbeh Pournader <roozbeh@farsiweb.info>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/break-arabic.c [4:7]
+        pango/break-indic.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8034dc1eb2d450064bb8154774115b6b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2006, 2007 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-gravity.c [4:4]
+        pango/pango-gravity.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 80adb79cb9ed10c87e0664402584fd7a
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/serializer.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 814bb5c25fa6866dbff560a24ecfb801
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2002 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-glyph-item.c [4:4]
+        pango/pango-glyph-item.h [4:4]
+        pango/pango-script-private.h [4:4]
+        pango/pango-script.c [4:4]
+        pango/pango-script.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85f01196787841ee930c7d9e9afe5891
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991 Free Software Foundation, Inc.
+            		    59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bc69a2f4f1b06a437ca94e490d839c4
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-attributes.h [4:4]
+        pango/pango-color.c [4:4]
+        pango/pango-color.h [4:4]
+        pango/pango-context.h [4:4]
+        pango/pango-coverage-private.h [4:4]
+        pango/pango-coverage.c [4:4]
+        pango/pango-coverage.h [4:4]
+        pango/pango-font-private.h [4:4]
+        pango/pango-font.h [4:4]
+        pango/pango-fontmap-private.h [4:4]
+        pango/pango-fontmap.c [4:4]
+        pango/pango-fontmap.h [4:4]
+        pango/pango-fontset-simple-private.h [4:4]
+        pango/pango-glyph.h [4:4]
+        pango/pango-item.c [4:4]
+        pango/pango-item.h [4:4]
+        pango/pango-language.c [4:4]
+        pango/pango-layout.h [4:4]
+        pango/pango-markup.c [4:4]
+        pango/pango-markup.h [4:4]
+        pango/pango-ot-info.c [4:4]
+        pango/pango-ot-private.h [4:4]
+        pango/pango-ot-ruleset.c [4:4]
+        pango/pango-tabs.c [4:4]
+        pango/pango-tabs.h [4:4]
+        pango/pango-utils-internal.h [4:4]
+        pango/pango-utils-private.h [4:4]
+        pango/pango-utils.c [4:4]
+        pango/pango-utils.h [4:4]
+        pango/pangoft2-fontmap.c [4:5]
+        pango/pangoxft-private.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d1311a8bf735a6578df78b0f1f211f2
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+         * Copyright (C) 2012 Ryan Lortie, Matthias Clasen and Emmanuele Bassi
+         * Copyright (C) 2016 Chun-wei Fan
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-version-macros.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 95630c5402f8816db65137e60ae65384
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2008 Jürg Billeter <j@bitron.ch>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-bidi-type.c [4:4]
+        pango/pango-bidi-type.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ce91dde8bf7dfe21b98c4b34924ba11
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999, 2004 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f146fd78312b7336460659c6e7a75a0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2005 Imendio AB
+         * Copyright (C) 2010  Kristian Rietveld  <kris@gtk.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo-coretext.h [4:5]
+        pango/pangocairo-coretextfont.h [4:5]
+        pango/pangocoretext-private.h [4:6]
+        pango/pangocoretext.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a166aa4a87d4439dad42c77be70477af
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000,2003 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-engine.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a27fc6d12e0fa74b71aa38d8fd8e4fb1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000, 2001, 2006 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-layout.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3111388dad5fbf5181543d1dc5634dc
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2007 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-ot-tag.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9a23e316fbb5e5014882031630a33d6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004, Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-renderer.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac7a49297cf669bf6fdaf5ad4d4374f5
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000, 2006 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/itemize.c [4:4]
+        pango/pango-context.c [4:4]
+        pango/pango-matrix.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1366c116da0b3af8f037c81248334cf
+BELONGS ya.make
+    License text:
+        // Copyright 2018 The Chromium Authors. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/emoji_presentation_scanner.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b74ccf815edca504b2e3c11ec43e09c3
+BELONGS ya.make
+    License text:
+         * Copyright © 2021 Benjamin Otte
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/json/gtkjsonparser.c [2:2]
+        pango/json/gtkjsonparserprivate.h [2:2]
+        pango/json/gtkjsonprinter.c [2:2]
+        pango/json/gtkjsonprinterprivate.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0912d20493f7b194e26f46cfc570631
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 Jordi Mas i Hernàndez <jmas@softcatala.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/break-latin.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [407:412]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c47357924ed91cbf5065564bdf9f5b44
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1999 Red Hat Software
+         * Copyright (C) 2000-2002 Tor Lillqvist
+         * Copyright (C) 2001 Alexander Larsson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangowin32-private.h [4:6]
+        pango/pangowin32.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c75320cae9cd7af2780e553a1c32dce7
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000-2005 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo-context.c [4:4]
+        pango/pangocairo-fcfont.c [4:4]
+        pango/pangocairo-fcfontmap.c [4:4]
+        pango/pangocairo-font.c [4:4]
+        pango/pangocairo-fontmap.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c83b01210e9652e6de5e70fb75fd3d53
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003 Theppitak Karoonboonyanan <thep@linux.thai.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/break-thai.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9f94cf0a81837da68d24363d87863b0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000,2007 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-ot.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d230e3466c66b3f948df8b557dc9c7b6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000 Red Hat Software
+         * Copyright (C) 2000 Tor Lillqvist
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangoft2-fontmap.c [4:5]
+        pango/pangoft2-private.h [4:5]
+        pango/pangoft2-render.c [4:5]
+        pango/pangoft2.c [4:5]
+        pango/pangoft2.h [4:5]
+        pango/pangowin32.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d82d8eb930f3c845042b704da5b60c84
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2000,2004 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocairo-private.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dad35176705d93ce9ff26ceb19ed144f
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2004 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-renderer.c [4:4]
+        pango/pangocairo-render.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ddb7f34912ec35233164568e79b7895b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003 Red Hat Software
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-engine.c [4:4]
+        pango/pango-impl-utils.h [5:5]
+        pango/pangocoretext-private.h [4:6]
+        pango/pangofc-font-private.h [4:4]
+        pango/pangofc-font.c [4:4]
+        pango/pangofc-font.h [4:4]
+        pango/pangofc-fontmap-private.h [4:4]
+        pango/pangofc-fontmap.h [4:4]
+        pango/pangofc-private.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e16283a63600656469689b028f4b9aee
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2003 Red Hat Software
+         * Copyright (C) 2005-2007 Imendio AB
+         * Copyright (C) 2010  Kristian Rietveld  <kris@gtk.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangocoretext-private.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec5302cae0540bf947635397ae34f0b9
+BELONGS ya.make
+    License text:
+         * Copyright 2000 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pangofc-font.c [354:354]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eda114f4ea7facc168ee8cb2a023c6c6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 Matthias Clasen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-item-private.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8268a332fab151f0fa4cee454817b8d
+BELONGS ya.make
+    License text:
+         * Copyright 2005, Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-matrix.c [233:233]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb40f6f8eefb5c9496499524ca61ff61
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020 Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-trace-private.h [4:4]
+        pango/pango-trace.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb9da3cf905244b7481e593c343bf367
+BELONGS ya.make
+    License text:
+         *   Copyright (C) 1999-2002, International Business Machines
+         *   Corporation and others.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pango/pango-script.c [26:27]

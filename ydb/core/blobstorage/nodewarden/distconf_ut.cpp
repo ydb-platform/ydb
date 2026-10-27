@@ -1979,6 +1979,56 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(!NStorage::ValidateConfig(config));
     }
 
+    // conversion of storage pools may be skipped, then there is nothing for BSC to convert, and the cluster supports
+    // both kinds of storage from the very beginning; static groups become inline piles anyway
+    Y_UNIT_TEST(ConvertStorageConfigSkippingStoragePools) {
+        auto initial = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+
+        NKikimrConfig::TBridgeConfig bridgeConfig;
+        bridgeConfig.AddPiles()->SetName("pile0");
+        auto copy = initial;
+        auto error = NStorage::ConvertStorageConfigToBridge(&copy, bridgeConfig, true);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "requires bridge_config.enable_non_uniform_storage");
+
+        bridgeConfig.SetEnableNonUniformStorage(true);
+        copy = initial;
+        error = NStorage::ConvertStorageConfigToBridge(&copy, bridgeConfig);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "only after BSC conversion completes");
+
+        auto config = initial;
+        error = NStorage::ConvertStorageConfigToBridge(&config, bridgeConfig, true);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+        config.SetGeneration(initial.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        error = NStorage::ValidateConfigUpdate(initial, config);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+
+        const auto& details = config.GetClusterStateDetails();
+        UNIT_ASSERT(!details.GetBscConversionPending());
+        UNIT_ASSERT(details.GetNonUniformStorageEnabled());
+        UNIT_ASSERT_GE(NStorage::GetRequiredBridgeFeatureLevel(config), NStorage::BridgeFeatureLevelNonUniformStorage);
+        const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeProxyGroupId(), group.GetGroupID());
+        UNIT_ASSERT_EQUAL(group.GetBridgeGroupState().GetPile(0).GetStage(), NKikimrBridge::TGroupState::SYNCED);
+
+        // the activation persists in the config replaced later, and piles may be added right away
+        bool pileListChanged = false;
+        error = NStorage::UpdatePileRegistry(bridgeConfig, &config, &bridgeConfig, &bridgeConfig, &pileListChanged);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+        auto disabled = bridgeConfig;
+        disabled.SetEnableNonUniformStorage(false);
+        error = NStorage::UpdatePileRegistry(disabled, &config, &bridgeConfig, &bridgeConfig, &pileListChanged);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "can't be disabled");
+        config.MutableClusterState()->AddPerPileState(NKikimrBridge::TClusterState::INACTIVE);
+        config.MutableClusterStateDetails()->MutablePileRegistry()->AddPiles()->SetName("pile1");
+        error = NStorage::ValidateConfig(config);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+    }
+
     // removal of the pile drops parts of bridged static groups in the pile (their VDisks are destroyed by the nodes) and
     // its state storage replicas; the inline pile of the converted cluster makes its group the pure bridge proxy one
     Y_UNIT_TEST(RemoveBridgePileFromConfig) {
@@ -3631,6 +3681,56 @@ selector_config: []
             return true;
         }
         return false;
+    }
+
+    Y_UNIT_TEST(ReassignStateStorageNodePreservesRingQuorum) {
+        TCommitConfirmationFixture fixture;
+        auto *config = fixture.Config.MutableStateStorageConfig();
+        config->SetSSId(1);
+        auto *group = config->MutableRing();
+        group->SetNToSelect(3);
+        for (ui32 nodeId : {1, 2, 3}) {
+            auto *ring = group->AddRing();
+            ring->AddNode(nodeId);
+            ring->SetIsDisabled(nodeId == 1);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            return true;
+        };
+        const auto disable = [&](ui32 nodeId) {
+            response.reset();
+            edge = fixture.Runtime.AllocateEdgeActor(1);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableReassignStateStorageNode();
+            command->SetFrom(nodeId);
+            command->SetStateStorage(true);
+            command->SetDisableRing(true);
+            fixture.Runtime.Send(new IEventHandle(fixture.Root(), edge, request.release()), 1);
+            UNIT_ASSERT_C(SimUntil(fixture.Runtime, [&] { return response.has_value(); }),
+                "ReassignStateStorageNode did not finish");
+        };
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto accepted = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT(accepted.GetStateStorageConfig().GetRing().GetRing(0).GetIsDisabled());
+
+        disable(2);
+        UNIT_ASSERT_C(response->GetStatus() != TResult::OK, response->DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "configuration disabled too many rings");
+        const auto rejected = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetFingerprint(), accepted.GetFingerprint());
+        UNIT_ASSERT(!rejected.GetStateStorageConfig().GetRing().GetRing(1).GetIsDisabled());
     }
 
     void StartZeroGenerationRoot(TCommitConfirmationFixture& fixture) {

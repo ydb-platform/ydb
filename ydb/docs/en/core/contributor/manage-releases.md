@@ -42,7 +42,7 @@ Version compatibility {{ ydb-short-name }} guarantees that the cluster can opera
 
 To ensure such compatibility, major releases are released in pairs:
 
-* In odd-numbered versions, new functionality is added, disabled via feature flags.
+* In odd-numbered versions, new functionality is added, disabled via [feature flags](../reference/configuration/feature_flags.md).
 * In even versions, this functionality is enabled by default.
 
 For example, version `25.1` ships with new functionality disabled, and can be gradually deployed on a cluster running `24.4` without stopping the cluster. Once `25.1` is running on all cluster nodes, the cluster can be further updated to `25.2` to use the new features.

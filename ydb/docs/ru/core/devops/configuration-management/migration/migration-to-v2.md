@@ -66,7 +66,7 @@
     - `channel_profile_config`;
     - другие связанные параметры storage-конфигурации, например `static_erasure`.
 
-4. Добавить в проверенный и дополненный файл `config.yaml` следующее поле:
+4. Включить [фича-флаг](../../../reference/configuration/feature_flags.md) `switch_to_config_v2` в проверенном и дополненном файле `config.yaml`:
 
     ```yaml
     feature_flags:

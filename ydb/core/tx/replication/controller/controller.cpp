@@ -983,7 +983,6 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
         {"workerId", id});
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
-    auto& session = Sessions[nodeId];
 
     auto ev = MakeHolder<TEvService::TEvStopWorker>();
     auto& record = ev->Record;
@@ -994,7 +993,8 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     id.Serialize(*record.MutableWorker());
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
-    session.DetachWorker(id);
+    // Keep ownership until STATUS_STOPPED, so a disconnect before the
+    // acknowledgement clears the worker's session and allows it to recover.
 }
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {

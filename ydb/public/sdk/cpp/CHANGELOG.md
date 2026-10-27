@@ -1,3 +1,5 @@
+* Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
+
 ## v3.25.0
 
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.

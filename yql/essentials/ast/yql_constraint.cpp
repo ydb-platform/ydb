@@ -2162,7 +2162,7 @@ NYT::TNode TStreamingConstraintNode::ToYson() const {
 
     auto res = NYT::TNode::CreateMap();
     res["event_time"] = PathToNode(*EventTime_);
-    res["aliases"] = SetToNode(EventTimePaths_, false);
+    res["aliases"] = SetToNode(EventTimePaths_, /*withShortcut=*/false);
     return res;
 }
 
@@ -2226,8 +2226,8 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprC
     const auto canonicalPaths = reduce(*EventTime_);
     TSetType paths;
     for (const auto& path : EventTimePaths_) {
-        for (auto& renamed : reduce(path)) {
-            paths.insert_unique(std::move(renamed));
+        for (const auto& renamed : reduce(path)) {
+            paths.insert_unique(renamed);
         }
     }
     if (paths.empty()) {

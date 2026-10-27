@@ -93,6 +93,18 @@ TExprNode::TPtr TPhysicalSourceBuilder::AddOlapAggregate(TExprNode::TPtr process
     return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(olapAgg));
 }
 
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const {
+    const auto column = Registry.Get(OlapDistinct->Key).GetColumnName();
+    outputFields.push_back(column);
+    // clang-format off
+    auto olapDistinct = Build<TKqpOlapDistinct>(Ctx, Pos)
+        .Input(TCoLambda(processLambda).Body())
+        .Key().Build(column)
+    .Done().Ptr();
+    // clang-format on
+    return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(olapDistinct));
+}
+
 TExprBase TPhysicalSourceBuilder::BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const {
     const TVector<const TItemExprType*> rowItems{Ctx.MakeType<TItemExprType>(column, &columnType)};
     const auto* rowType = Ctx.MakeType<TStructExprType>(rowItems);
@@ -172,7 +184,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggrega
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
+NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
     TVector<TString> storageColumns;
     TVector<std::pair<TString, TString>> renames;
@@ -284,6 +296,8 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             TVector<TString> outputFields;
             if (OlapAggregate) {
                 processLambda = AddOlapAggregate(processLambda, outputFields);
+            } else if (OlapDistinct) {
+                processLambda = AddOlapDistinct(processLambda, outputFields);
             } else {
                 outputFields = storageColumns;
             }
@@ -291,6 +305,15 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             TKqpReadTableSettings settings;
             if (Read.Limit) {
                 settings.SetItemsLimit(Read.Limit);
+            } else if (OlapDistinctLimit) {
+                // Column shards count distinct keys, not rows, against this limit.
+                // clang-format off
+                settings.SetItemsLimit(Build<TCoUint64>(Ctx, Pos)
+                    .Literal<TCoAtom>()
+                        .Value(ToString(OlapDistinctLimit))
+                    .Build()
+                .Done().Ptr());
+                // clang-format on
             }
 
             if (Read.SortDir != ESortDir::None) {
@@ -321,6 +344,27 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
+            // When each program field holds exactly one output, the block read already is the
+            // wide body: its slots are the outputs, in program field order.
+            // A DISTINCT program yields only its key column, so it qualifies only when the key
+            // is the only output.
+            const THashMap<TString, TString> outputNames(renames.begin(), renames.end());
+            bool wide = !OlapAggregate && renames.size() == outputFields.size();
+            TVector<TString> layout;
+            layout.reserve(outputFields.size());
+            for (const auto& field : outputFields) {
+                const auto* name = outputNames.FindPtr(field);
+                if (!wide || !name) {
+                    wide = false;
+                    break;
+                }
+                layout.push_back(*name);
+            }
+            if (wide) {
+                YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(flowNonBlockRead), Ctx);
+                return NPhysicalConvertionUtils::TStageBody::Wide(flowNonBlockRead, std::move(layout));
+            }
+
             TExprNode::TListType args;
             TProgramFields fieldArgs;
             for (ui32 i = 0; i < outputFields.size(); ++i) {
@@ -333,6 +377,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             } else {
                 TExprNode::TListType fields;
                 for (const auto& [column, name] : renames) {
+                    // A DISTINCT program yields only its key column.
+                    if (OlapDistinct && !fieldArgs.contains(column)) {
+                        continue;
+                    }
                     fields.push_back(Ctx.NewList(Pos, {Ctx.NewAtom(Pos, name), fieldArgs.at(column)}));
                 }
                 row = Ctx.NewCallable(Pos, "AsStruct", std::move(fields));
@@ -353,5 +401,5 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
 
-    return source;
+    return NPhysicalConvertionUtils::TStageBody::Narrow(source);
 }

@@ -1859,8 +1859,15 @@ namespace NActors {
             setup->Interconnect.ProxyActors[peerNodeId] = {proxyActor, TMailboxType::ReadAsFilled, InterconnectPoolId()};
         }
 
-        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(),
-            UseRealInterconnect ? nullptr : &InterconnectMock);
+        if (UseRealInterconnect) {
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId());
+        } else {
+            auto proxyCreator = [this](const ui32 nodeId, TInterconnectProxyCommon::TPtr common, IActor** self) {
+                *self = InterconnectMock.CreateProxyMock(TActivationContext::ActorSystem()->NodeId, nodeId, common);
+                return *self;
+            };
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), std::move(proxyCreator));
+        }
 
         setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
             NActors::TMailboxType::Simple, InterconnectPoolId()));

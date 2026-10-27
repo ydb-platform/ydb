@@ -758,8 +758,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (GetTableTruncateSettings(tx)) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
         queryProto.SetDisablePessimisticLocks(
             Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
@@ -2593,7 +2603,14 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (IsTableSink(dataSinkCategory)) {
+        if (dataSinkCategory == KqpTableTruncateSinkName) {
+            const auto settings = sink.Settings().Cast<TKqpTableTruncateSettings>();
+            NKikimrKqp::TKqpTableTruncateSettings settingsProto;
+            settingsProto.SetTablePath(settings.TablePath().StringValue());
+            auto& internalSink = *protoSink->MutableInternalSink();
+            internalSink.SetType(TString(KqpTableTruncateSinkName));
+            internalSink.MutableSettings()->PackFrom(settingsProto);
+        } else if (IsTableSink(dataSinkCategory)) {
             auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>();
             YQL_ENSURE(settings, "Unsupported sink type");
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();

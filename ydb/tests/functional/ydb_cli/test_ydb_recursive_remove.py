@@ -1,4 +1,4 @@
-from hamcrest import assert_that, only_contains
+from hamcrest import assert_that, contains_inanyorder, only_contains
 import pytest
 
 import yatest
@@ -7,6 +7,7 @@ from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_external_data_sources", "enable_schema_secrets"],
+    disabled_feature_flags=["enable_system_names_protection"],
     query_service_config=dict(
         available_external_data_sources=["ObjectStorage"]
     ))
@@ -93,6 +94,50 @@ class TestRecursiveRemove:
                 [child.name for child in driver.scheme_client.list_directory(database_path).children],
                 only_contains(".metadata", ".sys"),
             )
+
+    @pytest.mark.parametrize(
+        "path", [".", "~backup_root"], ids=["database_root", "backup_directory"],
+    )
+    def test_tilde_names(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, path):
+        database_path = ydb_database
+        driver = ydb_client(database_path)
+        session_pool = ydb_client_session(database_path)
+        prefix = "" if path == "." else f"{path}/"
+        with session_pool.checkout() as session:
+            create_table(session, f"{prefix}~table")
+            create_table(session, f"{prefix}~dir/~nested/~table")
+            create_table(session, f"{prefix}~backup_12345/~nested/~table")
+            create_table(session, f"{prefix}export-12345/nested/table")
+            driver.scheme_client.make_directory(f"{database_path}/{prefix}~empty")
+            driver.scheme_client.make_directory(f"{database_path}/{prefix}~backup_empty")
+            driver.scheme_client.make_directory(f"{database_path}/{prefix}export-empty")
+            execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path, ["scheme", "rmdir", "--recursive", "--force", path]
+            )
+            assert_that(
+                [child.name for child in driver.scheme_client.list_directory(database_path).children],
+                only_contains(".metadata", ".sys"),
+            )
+
+    def test_system_name_prefixes(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session):
+        database_path = ydb_database
+        driver = ydb_client(database_path)
+        session_pool = ydb_client_session(database_path)
+        system_directories = [".sys_health", ".metadata_user", ".tmp_user", ".backups_user"]
+        with session_pool.checkout() as session:
+            for directory in system_directories:
+                create_table(session, f"{directory}/table")
+            expected_entries = [child.name for child in driver.scheme_client.list_directory(database_path).children]
+            create_table(session, "ordinary/nested/table")
+            execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path, ["scheme", "rmdir", "--recursive", "--force", "."]
+            )
+            assert_that(
+                [child.name for child in driver.scheme_client.list_directory(database_path).children],
+                contains_inanyorder(*expected_entries),
+            )
+            for directory in system_directories:
+                session.describe_table(f"{database_path}/{directory}/table")
 
     def test_various_scheme_objects(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session):
         database_path = ydb_database

@@ -1,18 +1,19 @@
+ydb/apps/bridge_skipper/ydbd_mock/tests test_replication.py.StaleReplicaTest.test_disconnected_pile_is_not_pulled_to_and_rejoin_brings_it_back
+ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
-ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
+ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleIndexesStayConsistentWithOneGeneratedColumn
-ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
-ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactAccessDenied-UseQueryService
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
@@ -25,19 +26,41 @@ ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithre
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
-ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
-ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
+ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone+ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.UnresponsiveProxyReturnsPartialStats
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement+DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement-DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement+DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapCredentialRetry
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion-Deferred
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.CurrentFailureAndRetry
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery+NewFirst
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
+ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-3-1_to_stable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-strict]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-lax]
@@ -60,12 +83,14 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-4-1_to_stable-26-3-1-True]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-4-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
+ydb/tests/compatibility/workloads test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Uint8]
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
-ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
@@ -75,11 +100,29 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpc
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[18]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[33]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[34]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[35]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[37]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[38]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[39]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[3]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[40]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[41]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[42]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[43]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[44]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[45]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[46]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[47]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[48]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[49]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[4]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[50]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[51]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[52]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[53]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[54]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[55]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[56]
@@ -92,6 +135,15 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[61]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[62]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[63]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[65]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[66]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[68]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[69]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[6]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[70]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[71]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[72]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[73]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[74]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[75]
@@ -102,6 +154,26 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[79]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[7]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[80]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[81]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[82]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[83]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[84]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[85]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[87]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[88]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[89]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[8]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[90]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[91]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[92]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[93]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[94]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[95]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[96]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[97]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[98]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[99]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[11]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[12]
@@ -124,7 +196,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
-ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
@@ -139,6 +210,5 @@ ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPa
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[scale_aware_sdk]
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test

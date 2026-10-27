@@ -10688,5 +10688,88 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveData) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Tiering) {
+
+    static constexpr ui32 TableId = 101;
+    static constexpr ui32 KeyColumnId = 1;
+    static constexpr ui32 TimeColumnId = 2;
+    static constexpr ui32 ColdTierId = 1;
+
+    NTable::TTieringPolicy MakeTieringPolicy() {
+        NTable::TTieringPolicy policy;
+        policy.ColumnTag = TimeColumnId;
+        policy.Rules.push_back(NTable::TTierRule{
+            .TierId = ColdTierId,
+            .Ranges = { NTable::TTierRange{ .To = NTable::TTierRelativeBound{ TDuration::Days(1) }, .ToInclusive = true } },
+        });
+        return policy;
+    }
+
+    struct TTxInitTieredSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            if (txc.DB.GetScheme().GetTableInfo(TableId)) {
+                return true;
+            }
+
+            txc.DB.Alter()
+                .AddTable("tiered", TableId)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TUint64::TypeId, false, false)
+                .AddColumn(TableId, "created_at", TimeColumnId, NScheme::NTypeIds::Timestamp, false, false)
+                .AddColumnToKey(TableId, KeyColumnId)
+                .AddFamily(TableId, ColdTierId, NTable::TScheme::DefaultRoom)
+                .SetFamilyCompression(TableId, ColdTierId, NTable::NPage::ECodec::LZ4)
+                .SetTieringPolicy(TableId, MakeTieringPolicy());
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxCheckTieredSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            const auto* table = txc.DB.GetScheme().GetTableInfo(TableId);
+            UNIT_ASSERT(table);
+            const auto* tier = table->Families.FindPtr(ColdTierId);
+            UNIT_ASSERT(tier);
+            UNIT_ASSERT(tier->Room == NTable::TScheme::DefaultRoom);
+            UNIT_ASSERT(tier->Codec == NTable::NPage::ECodec::LZ4);
+            UNIT_ASSERT(table->TieringPolicy);
+            UNIT_ASSERT(*table->TieringPolicy == MakeTieringPolicy());
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TiersAndPolicySurviveRestart) {
+        TMyEnvBase env;
+
+        auto boot = [&env]() {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        boot();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitTieredSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckTieredSchema });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        boot();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckTieredSchema });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+}
+
 }
 }

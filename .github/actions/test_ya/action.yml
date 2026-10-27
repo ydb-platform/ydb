@@ -22,7 +22,7 @@ inputs:
     description: "Test threads count"
   link_threads:
     required: false
-    default: "12"
+    default: "2"
     description: "link threads count"
   additional_ya_make_args:
     type: string
@@ -172,6 +172,18 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
         analytics end init --conclusion success
+        if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
+          chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
+          if [ "${GH_PROXY_USED}" = true ]; then
+            chosen_mbps="${GH_PROXY_PROXY_MBPS}"
+          fi
+          analytics track github_proxy --kind info --source ya_phase \
+            --value "$chosen_mbps" --unit "MB/s" \
+            --label "use_proxy=${GH_PROXY_USED}" \
+            --label "direct_mbps=${GH_PROXY_DIRECT_MBPS}" \
+            --label "proxy_mbps=${GH_PROXY_PROXY_MBPS}"
+          analytics flush
+        fi
 
     - name: Clean ya cache
       id: clean_ya_cache
@@ -335,6 +347,8 @@ runs:
 
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          # Keep chunk archives separate to avoid merging and repacking them.
+          --dont-merge-split-tests
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
         )
@@ -611,7 +625,6 @@ runs:
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
-          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
           analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then

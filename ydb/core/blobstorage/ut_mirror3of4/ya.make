@@ -9,7 +9,6 @@ REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/apps/version
-    ydb/library/actors/interconnect/mock
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base

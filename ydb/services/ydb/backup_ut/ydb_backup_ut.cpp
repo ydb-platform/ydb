@@ -4333,7 +4333,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     ) {
         const auto listSettings = NConsoleClient::TRecursiveListSettings()
             .Filter(FilterSupportedSchemeObjects)
-            .SkipSys(false);
+            .SkipMode(NConsoleClient::ERecursiveListSkipMode::None);
 
         const auto sourceListing = NConsoleClient::RecursiveList(schemeClient, source, listSettings);
         UNIT_ASSERT_C(sourceListing.Status.IsSuccess(), sourceListing.Status.GetIssues());

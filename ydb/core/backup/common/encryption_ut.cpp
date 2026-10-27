@@ -177,15 +177,15 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
             TEncryptedFileSerializer serializer("AES-256-GCM", Key32, iv);
             TBuffer fileData;
             {
-                TBuffer part = serializer.AddBlock("", false);
+                TBuffer part = serializer.AddData("", false);
                 fileData.Append(part.Data(), part.Size());
             }
             {
-                TBuffer part = serializer.AddBlock("", false);
+                TBuffer part = serializer.AddData("", false);
                 UNIT_ASSERT_C(part.Size() == 0, part.Size());
             }
             {
-                TBuffer part = serializer.AddBlock("", true);
+                TBuffer part = serializer.AddData("", true);
                 fileData.Append(part.Data(), part.Size());
             }
             TEncryptedFileDeserializer deserializer(Key32);

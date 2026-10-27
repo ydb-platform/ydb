@@ -199,6 +199,10 @@ public:
     // because whole block must be read before usage.
     TBuffer AddBlock(TStringBuf data, bool last);
 
+    // Appends data in blocks of at most MAX_BLOCK_SIZE. last finishes the file,
+    // including when data is empty.
+    TBuffer AddData(TStringBuf data, bool last);
+
     // Helper that serializes the whole file at one time, splitting it into blocks up to MAX_BLOCK_SIZE.
     static TBuffer EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
 

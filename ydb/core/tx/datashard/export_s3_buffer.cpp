@@ -317,11 +317,8 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     }
     UncompressedBytes = 0;
 
-    // Compression finishes compression frame during Flush
-    // so that last table row borders equal to compression frame borders.
-    // This full finished block must then be encrypted so that encryption frame
-    // has the same borders.
-    // It allows to import data in batches and save its state during import.
+    // Finish compression at a row boundary so import can checkpoint at the end
+    // of this batch. Encryption may split the batch into several blocks.
 
     if (Compression) {
         TMaybe<TBuffer> compressedBuffer = Compression->Flush();
@@ -334,7 +331,7 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
 
     if (Encryption) {
         try {
-            TBuffer encryptedBlock = Encryption->AddBlock(TStringBuf(Buffer.Data(), Buffer.Size()), last);
+            TBuffer encryptedBlock = Encryption->AddData(TStringBuf(Buffer.Data(), Buffer.Size()), last);
             Buffer = std::move(encryptedBlock);
         } catch (const std::exception& ex) {
             ErrorString = ex.what();

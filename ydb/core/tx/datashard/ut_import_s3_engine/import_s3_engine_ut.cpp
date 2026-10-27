@@ -2,6 +2,7 @@
 
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 #include <ydb/core/tx/datashard/import_s3_engine.h>
@@ -1449,6 +1450,162 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                     UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k1");
                     UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "v1");
                 }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EncryptedCsvAcceptsBlocksInsideRowsAndFrames) {
+        const TString largeValue = MakePseudoRandomAscii(256_KB);
+        // Both frames must exceed a 128 KiB zstd block: smaller frames may emit
+        // all rows only at frame completion, leaving no intermediate batch to restart from.
+        const TString lastValue = MakePseudoRandomAscii(192_KB);
+        const TString batches[] = {
+            TStringBuilder() << "\"k0\",\"v0\"\n\"k1\",\"" << largeValue << "\"\n",
+            TStringBuilder() << "\"k2\",\"v2\"\n\"k3\",\"" << lastValue << "\"\n",
+        };
+        const TString csv = batches[0] + batches[1];
+        const NBackup::TEncryptionKey key(TString(32, 'k'));
+        const auto iv = NBackup::TEncryptionIV::Generate();
+        const TEngineFixture fixture;
+
+        for (const auto codec : {ECompressionCodec::None, ECompressionCodec::Zstd}) {
+            NBackup::TEncryptedFileSerializer serializer("AES-256-GCM", key, iv);
+            TString source;
+            ui64 firstBatchEnd = 0;
+            for (const TString& batch : batches) {
+                const TString payload = codec == ECompressionCodec::Zstd ? ZstdCompress(batch) : batch;
+                // Use small encryption blocks to exercise the same boundaries as
+                // AddData() splitting a large batch, without a 50 MiB test fixture.
+                UNIT_ASSERT_GT(payload.size(), 4_KB);
+                TStringBuf remaining = payload;
+                while (remaining) {
+                    const size_t size = Min(remaining.size(), 4_KB);
+                    const auto block = serializer.AddBlock(remaining.Head(size), false);
+                    source.append(block.Data(), block.Size());
+                    remaining.Skip(size);
+                }
+                if (!firstBatchEnd) {
+                    firstBatchEnd = source.size();
+                }
+            }
+            const auto terminator = serializer.AddBlock(TStringBuf(), true);
+            source.append(terminator.Data(), terminator.Size());
+
+            TImportS3EngineSettings settings;
+            settings.DataFormat = EDataFormat::YdbDump;
+            settings.CompressionCodec = codec;
+            settings.ContentLength = source.size();
+            settings.ReadBatchSize = 1_KB;
+            settings.BufferSizeLimit = 1_MB;
+            settings.ValidateChecksum = true;
+            settings.EncryptionKey = key;
+            settings.EncryptionIV = iv;
+            const auto makeEngine = [&]() {
+                return ExtractValue(CreateImportS3Engine(settings, fixture.TableInfo, fixture.Scheme));
+            };
+
+            enum class ERestart {
+                None,
+                AtCheckpoint,
+                InsideBatch,
+            };
+            for (const auto restart : {ERestart::None, ERestart::AtCheckpoint, ERestart::InsideBatch}) {
+                auto engine = makeEngine();
+                TMemoryPool pool(256);
+                TVector<TDecodedRow> rows;
+                const auto addRow = CaptureRows(rows);
+                TString checksumInput;
+                NBackup::IChecksum::TPtr checksum(NBackup::CreateChecksum());
+                auto checkpointChecksum = checksum->GetState();
+                size_t checkpointCsvSize = 0;
+                const auto addChecksum = [&](TStringBuf data) {
+                    checksumInput.append(data.data(), data.size());
+                    checksum->AddData(data);
+                };
+                ui64 processedBytes = 0;
+                ui64 committedRows = 0;
+                ui64 committedDataBytes = 0;
+                TMaybe<ui64> lastRestartedOffset;
+                ui32 deferredRestarts = 0;
+                bool sawDeferredBatch = false;
+                bool sawBatchCheckpoint = false;
+                bool finished = false;
+                for (ui32 step = 0; step < 4096 && !finished; ++step) {
+                    const auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
+                    switch (data.Status) {
+                    case IImportS3Engine::EDataStatus::NeedInput: {
+                        const auto range = ExtractValue(engine->NextRange());
+                        UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                        AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+                        break;
+                    }
+                    case IImportS3Engine::EDataStatus::Ready: {
+                        committedRows += data.Batch.Rows;
+                        committedDataBytes += data.Batch.DataBytes;
+                        if (!data.Batch.Checkpoint) {
+                            sawDeferredBatch = true;
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.DataBytes, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, processedBytes);
+                        } else {
+                            checkpointChecksum = checksum->GetState();
+                            checkpointCsvSize = checksumInput.size();
+                            if (data.Batch.ProcessedBytesAfter == firstBatchEnd) {
+                                sawBatchCheckpoint = true;
+                                UNIT_ASSERT_VALUES_EQUAL(committedRows, 2);
+                            }
+                        }
+                        processedBytes = data.Batch.ProcessedBytesAfter;
+                        AssertSuccess(engine->Commit(data.Batch.Id));
+                        const bool restartInsideBatch = restart == ERestart::InsideBatch
+                            && !data.Batch.Checkpoint
+                            && (!lastRestartedOffset || *lastRestartedOffset != processedBytes);
+                        if (restartInsideBatch
+                            || (restart == ERestart::AtCheckpoint && data.Batch.Checkpoint && processedBytes < source.size())) {
+                            if (restartInsideBatch) {
+                                UNIT_ASSERT_VALUES_EQUAL(processedBytes, deferredRestarts == 0 ? 0 : firstBatchEnd);
+                                ++deferredRestarts;
+                                lastRestartedOffset = processedBytes;
+                                UNIT_ASSERT_GT(rows.size(), committedRows);
+                            }
+                            // Callbacks beyond the durable checkpoint are replayed after a restart.
+                            rows.resize(committedRows);
+                            checksumInput.resize(checkpointCsvSize);
+                            checksum->SetState(checkpointChecksum);
+                            engine = makeEngine();
+                            // Use the state returned by this batch, including a non-checkpoint batch:
+                            // this is what the downloader persists together with ProcessedBytesAfter.
+                            AssertSuccess(engine->RestoreFromState(processedBytes, data.Batch.DownloadStateAfter));
+                        }
+                        break;
+                    }
+                    case IImportS3Engine::EDataStatus::Finished:
+                        finished = true;
+                        break;
+                    case IImportS3Engine::EDataStatus::WaitingForCommit:
+                        UNIT_FAIL("unexpected batch waiting for commit");
+                    }
+                }
+
+                UNIT_ASSERT_C(finished, "import did not finish with split encryption blocks");
+                UNIT_ASSERT(sawDeferredBatch);
+                UNIT_ASSERT(sawBatchCheckpoint);
+                UNIT_ASSERT_VALUES_EQUAL(processedBytes, source.size());
+                UNIT_ASSERT_VALUES_EQUAL(committedRows, 4);
+                UNIT_ASSERT_VALUES_EQUAL(committedDataBytes, largeValue.size() + lastValue.size() + 12);
+                UNIT_ASSERT_VALUES_EQUAL(checksumInput, csv);
+                UNIT_ASSERT_VALUES_EQUAL(checksum->Finalize(), NBackup::ComputeChecksum(csv));
+                UNIT_ASSERT_VALUES_EQUAL_C(deferredRestarts, restart == ERestart::InsideBatch ? 2 : 0,
+                    "codec: " << (codec == ECompressionCodec::Zstd ? "zstd" : "none"));
+                UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k0");
+                UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "v0");
+                UNIT_ASSERT_VALUES_EQUAL(rows[1].Key, "k1");
+                UNIT_ASSERT_VALUES_EQUAL(rows[1].Value, largeValue);
+                UNIT_ASSERT_VALUES_EQUAL(rows[2].Key, "k2");
+                UNIT_ASSERT_VALUES_EQUAL(rows[2].Value, "v2");
+                UNIT_ASSERT_VALUES_EQUAL(rows[3].Key, "k3");
+                UNIT_ASSERT_VALUES_EQUAL(rows[3].Value, lastValue);
             }
         }
     }

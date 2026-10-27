@@ -424,20 +424,24 @@ TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
     return Impl->AddBlock(data, last);
 }
 
-TBuffer TEncryptedFileSerializer::EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
-    TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
-    const size_t firstBlockSize = Min(data.size(), MAX_BLOCK_SIZE);
-    TBuffer result = serializer.AddBlock(data.Head(firstBlockSize), data.size() == firstBlockSize);
-    data.Skip(firstBlockSize);
+TBuffer TEncryptedFileSerializer::AddData(TStringBuf data, bool last) {
+    if (data.size() <= MAX_BLOCK_SIZE) {
+        return AddBlock(data, last);
+    }
 
+    TBuffer result;
     while (data) {
         const size_t blockSize = Min(data.size(), MAX_BLOCK_SIZE);
-        TBuffer block = serializer.AddBlock(data.Head(blockSize), data.size() == blockSize);
+        TBuffer block = AddBlock(data.Head(blockSize), last && data.size() == blockSize);
         result.Append(block.Data(), block.Size());
         data.Skip(blockSize);
     }
-
     return result;
+}
+
+TBuffer TEncryptedFileSerializer::EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
+    TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
+    return serializer.AddData(data, true);
 }
 
 

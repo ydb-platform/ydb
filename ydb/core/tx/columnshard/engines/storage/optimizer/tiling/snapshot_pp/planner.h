@@ -122,6 +122,9 @@ struct TTask {
     ui8 TargetLevel = 0;
     TOptimizationPriority Priority = TOptimizationPriority::Zero();
     ui64 Bytes = 0;
+    /// For an advance merge, the bytes the task would have had without the budget: the window swept on past the cut
+    /// (2026-10-26); equal to Bytes when the window was complete, zero for other kinds and reasons.
+    ui64 IdealBytes = 0;
 };
 
 /// The leveled interval planner of design.md: one class owning the accumulator, the tree levels and the line.
@@ -239,6 +242,7 @@ public:
         Counters.GeneratedTasksPriorityLevel->Collect(best->Priority.GetLevel());
         if (advanceTarget) {
             RaisePlacementThreshold(advanceTarget->RecordSnapshotMin());
+            RecordAdvance(*best);
         }
         HandOut(*best);
         return best;
@@ -255,8 +259,24 @@ public:
             return std::nullopt;
         }
         RaisePlacementThreshold(advance->second->RecordSnapshotMin());
+        RecordAdvance(advance->first);
         HandOut(advance->first);
         return std::move(advance->first);
+    }
+
+    /// The memory shortage of the advance (2026-10-26): what an uncut window would have cost, as a histogram over every
+    /// advance merge, with the shortfall against the budget and the number of cut windows as counters.
+    void RecordAdvance(const TTask& task) const {
+        if (task.Kind != ETaskKind::Merge) {
+            return;
+        }
+        Counters.AdvanceIdealTaskBytes->Collect(static_cast<i64>(task.IdealBytes));
+        if (task.IdealBytes > task.Bytes) {
+            Counters.AdvanceBudgetCuts->Inc();
+            if (task.IdealBytes > Settings.TaskBytes) {
+                Counters.AdvanceMemoryShortageBytes->Add(task.IdealBytes - Settings.TaskBytes);
+            }
+        }
     }
 
     /// Whether the advance has a settled target at all, whatever the lag of S.
@@ -266,15 +286,7 @@ public:
 
     /// The same against a clock the caller supplies: the priority read is const and must not touch the core's clock.
     bool HasAdvanceTarget(const TSnapshot& settledBefore) const {
-        for (const auto& p : Outside) {
-            if (settledBefore < p->RecordSnapshotMin()) {
-                return false;
-            }
-            if (!Registry.at(p->GetPortionId()).HandedOut) {
-                return true;
-            }
-        }
-        return false;
+        return !OutsideUnlocked.empty() && !(settledBefore < (*OutsideUnlocked.begin())->RecordSnapshotMin());
     }
 
     /// The highest priority among the sources at or above their triggers, the lag of S included; nothing when none is
@@ -362,12 +374,10 @@ public:
     /// S for the queue key and the age buckets (decision 6): the oldest portion outside the line that no task holds;
     /// nothing when there is none, and the adapter supplies the node's clock minus L as the fallback.
     std::optional<TSnapshot> GetSchedulingCompactedSnapshot() const {
-        for (const auto& p : Outside) {
-            if (!Registry.at(p->GetPortionId()).HandedOut) {
-                return p->RecordSnapshotMin();
-            }
+        if (OutsideUnlocked.empty()) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return (*OutsideUnlocked.begin())->RecordSnapshotMin();
     }
 
     /// The lag of the scheduling reading of S behind the clock, in seconds (decision 18): zero when nothing unlocked is
@@ -438,6 +448,7 @@ public:
         }
         ui64 handedOutOffStructures = 0;
         ui64 outsideExpected = 0;
+        ui64 outsideUnlockedExpected = 0;
         for (const auto& [id, entry] : Registry) {
             if (!entry.Portion || entry.Portion->GetPortionId() != id) {
                 return TConclusionStatus::Fail(TStringBuilder() << "registry entry " << id << " holds another portion");
@@ -453,6 +464,14 @@ public:
                 ++outsideExpected;
                 if (!Outside.contains(entry.Portion)) {
                     return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " is outside the line but not in the S set");
+                }
+                if (!entry.HandedOut) {
+                    ++outsideUnlockedExpected;
+                    if (!OutsideUnlocked.contains(entry.Portion)) {
+                        return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " is unlocked outside the line but not in the unlocked S set");
+                    }
+                } else if (OutsideUnlocked.contains(entry.Portion)) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "handed-out portion " << id << " is still in the unlocked S set");
                 }
             }
             bool found = false;
@@ -481,6 +500,10 @@ public:
         }
         if (outsideExpected != Outside.size()) {
             return TConclusionStatus::Fail(TStringBuilder() << "S set holds " << Outside.size() << " portions, expected " << outsideExpected);
+        }
+        if (outsideUnlockedExpected != OutsideUnlocked.size()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "unlocked S set holds " << OutsideUnlocked.size() << " portions, expected "
+                                                            << outsideUnlockedExpected);
         }
         if (PendingPriority.has_value() != !HandedOut.empty()) {
             return TConclusionStatus::Fail(TStringBuilder() << "remembered priority and handed-out set disagree: " << HandedOut.size()
@@ -535,8 +558,11 @@ private:
     TEndSorted Line;
     TEndSorted Accumulator;
     std::vector<TTreeLevel> TreeLevels;
-    /// Every portion outside the line, ordered by (RecordSnapshotMin, end key, id): S and the advance targets.
+    /// Every portion outside the line, ordered by (RecordSnapshotMin, end key, id): the forced reading of S (decision 1).
     TSnapshotSorted Outside;
+    /// The same without the inputs of running tasks: the scheduling reading of S, the delay and the advance targets
+    /// (decision 14). Kept apart so that no reader walks past a handed-out prefix (2026-10-27).
+    TSnapshotSorted OutsideUnlocked;
     /// Inputs of running tasks, by id (decision 14).
     THashMap<ui64, TConstPtr> HandedOut;
     /// The highest priority among the tasks whose inputs are still handed out, at least level 0 with weight 1, the floor
@@ -735,15 +761,14 @@ private:
     /// The advance task and its target, not yet handed out: the first settled, unlocked portion of the set that no task
     /// holds and whose composition succeeds (decisions 19 to 21).
     std::optional<std::pair<TTask, TConstPtr>> BuildAdvanceTask(TIsLocked isLocked) const {
-        for (const auto& candidate : Outside) {
+        for (const auto& candidate : OutsideUnlocked) {
             if (Clock.SettledBefore < candidate->RecordSnapshotMin()) {
                 break;   // ordered by snapshot: everything from here on is younger than L
             }
-            const auto& entry = Registry.at(candidate->GetPortionId());
-            if (entry.HandedOut || isLocked(candidate)) {
+            if (isLocked(candidate)) {
                 continue;
             }
-            if (auto task = ComposeAdvance(entry, isLocked)) {
+            if (auto task = ComposeAdvance(Registry.at(candidate->GetPortionId()), isLocked)) {
                 return std::make_pair(std::move(*task), candidate);
             }
         }
@@ -807,6 +832,8 @@ private:
         std::optional<TKey> Cut;
         bool Complete = true;
         bool LineTaken = false;
+        /// The bytes of the window swept on without the budget: the task's bytes when nothing was cut.
+        ui64 IdealBytes = 0;
     };
 
     struct TCandidate {
@@ -864,6 +891,7 @@ private:
         collect(window.Left, window.Right);
         bool neighbourTaken = false;
         std::optional<TKey> lineEnd;
+        std::optional<TCandidate> overBudget;
         while (!queue.empty()) {
             const auto next = std::min_element(queue.begin(), queue.end(), before);
             const TCandidate candidate = *next;
@@ -880,6 +908,7 @@ private:
             if (!TryAppend(task, p, neighbourTaken)) {
                 window.Cut = p->IndexKeyStart();
                 window.Complete = false;
+                overBudget = candidate;
                 break;
             }
             if (candidate.Line) {
@@ -892,6 +921,29 @@ private:
                 const TKey from = window.Right;
                 window.Right = p->IndexKeyEnd();
                 collect(from, window.Right);
+            }
+        }
+        // The memory shortage (2026-10-26): sweep on without taking anything, to learn what the uncut window would cost.
+        window.IdealBytes = task.Bytes;
+        if (overBudget) {
+            TKey dryRight = window.Right;
+            const auto consider = [&](const TCandidate& candidate) {
+                window.IdealBytes += candidate.Portion->GetTotalBlobBytes();
+                if (dryRight < candidate.Portion->IndexKeyEnd()) {
+                    const TKey from = dryRight;
+                    dryRight = candidate.Portion->IndexKeyEnd();
+                    collect(from, dryRight);
+                }
+            };
+            consider(*overBudget);
+            while (!queue.empty()) {
+                const auto next = std::min_element(queue.begin(), queue.end(), before);
+                const TCandidate candidate = *next;
+                queue.erase(next);
+                if (candidate.Line && !IsAvailable(candidate.Portion, isLocked)) {
+                    break;
+                }
+                consider(candidate);
             }
         }
         if (window.Cut && !(window.Left < *window.Cut)) {
@@ -976,6 +1028,7 @@ private:
         }
         ApplyWindow(task, *window);
         FinalizeCheckPoints(task);
+        task.IdealBytes = std::max(window->IdealBytes, task.Bytes);
         return task;
     }
 
@@ -1098,6 +1151,7 @@ private:
                 if (task.Portions.size() < 2) {
                     return std::nullopt;
                 }
+                task.IdealBytes = task.Bytes;
                 return task;
             }
         }
@@ -1126,6 +1180,7 @@ private:
             Append(task, p);
         }
         FinalizeCheckPoints(task);
+        task.IdealBytes = std::max(window->IdealBytes, task.Bytes);
         return task;
     }
 
@@ -1150,6 +1205,7 @@ private:
         entry.HandedOut = true;
         AFL_VERIFY(HandedOut.emplace(id, entry.Portion).second)("portion_id", id);
         if (entry.Level != LINE_LEVEL) {
+            AFL_VERIFY(OutsideUnlocked.erase(entry.Portion))("portion_id", id);
             Detach(entry.Portion, entry.Level);
         }
     }
@@ -1161,6 +1217,7 @@ private:
         AFL_VERIFY(HandedOut.erase(id))("portion_id", id);
         ForgetPendingPriorityWhenIdle();
         if (entry.Level != LINE_LEVEL) {
+            AFL_VERIFY(OutsideUnlocked.insert(entry.Portion).second)("portion_id", id);
             Attach(entry.Portion, entry.Level);
         }
     }
@@ -1395,6 +1452,7 @@ private:
         Attach(p, level);
         if (level != LINE_LEVEL) {
             AFL_VERIFY(Outside.insert(p).second)("portion_id", id);
+            AFL_VERIFY(OutsideUnlocked.insert(p).second)("portion_id", id);
         }
         if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
             LevelCounters(level).Portions->AddPortion(p);
@@ -1408,6 +1466,9 @@ private:
         const ui64 id = p->GetPortionId();
         if (entry.Level != LINE_LEVEL) {
             AFL_VERIFY(Outside.erase(p))("portion_id", id);
+            if (!entry.HandedOut) {
+                AFL_VERIFY(OutsideUnlocked.erase(p))("portion_id", id);
+            }
         }
         if (entry.HandedOut) {
             AFL_VERIFY(HandedOut.erase(id))("portion_id", id);

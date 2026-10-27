@@ -69,11 +69,22 @@ private:
     }
 
     /// The node-wide gauges of S (design.md, Observability): the forced-request reading, or the clock minus L when nothing
-    /// is outside the line (decision 6), so that a settled table shows a delay of exactly L.
+    /// is outside the line (decision 6), so that a settled table shows a delay of exactly L. At most once per second per
+    /// planner (2026-10-27): the registry behind the gauges is one mutex shared by every shard of the node, and taking it
+    /// on every portion change convoyed the shards' transaction Complete phases under a saturated CPU; the gauges are
+    /// scraped every few seconds, so a one-second staleness costs nothing.
+    static constexpr TDuration SnapshotsPublishPeriod = TDuration::Seconds(1);
+    mutable TInstant SnapshotsPublished = TInstant::Zero();
+
     void PublishSnapshots(const TCore::TClock& clock) const {
+        const TInstant now = TInstant::MilliSeconds(clock.Now.GetPlanStep());
+        if (now < SnapshotsPublished + SnapshotsPublishPeriod) {
+            return;
+        }
+        SnapshotsPublished = now;
         const auto s = Core.GetForcedCompactedSnapshot();
         const ui64 snapshotSeconds = (s ? *s : clock.SettledBefore).GetPlanStep() / 1000;
-        Counters.GetCompactedSnapshotCounters().Set(PlannerId, snapshotSeconds, clock.Now.GetPlanStep() / 1000);
+        Counters.GetCompactedSnapshotCounters().Set(PlannerId, snapshotSeconds, clock.Now.GetPlanStep() / 1000, /*settled=*/!s);
     }
 
     static bool IsLockedBy(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const TPortionInfo::TConstPtr& p) {
@@ -113,13 +124,30 @@ private:
             {"reason", (ui32)task.Reason},
             {"portions", task.Portions.size()},
             {"bytes", task.Bytes},
+            {"ideal_bytes", task.IdealBytes},
             {"target_level", (ui32)task.TargetLevel},
             {"cuts", task.CheckPoints.size()});
         return result;
     }
 
 protected:
+    /// Collects the wall time of one adapter call into its histogram, in microseconds (2026-10-27).
+    class TTimed {
+        const NMonitoring::THistogramPtr& Histogram;
+        const TMonotonic Start = TMonotonic::Now();
+
+    public:
+        explicit TTimed(const NMonitoring::THistogramPtr& histogram)
+            : Histogram(histogram)
+        {
+        }
+        ~TTimed() {
+            Histogram->Collect(static_cast<i64>((TMonotonic::Now() - Start).MicroSeconds()));
+        }
+    };
+
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+        TTimed timed(Counters.PlannerModifyPortionsUs);
         Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
         PublishSnapshots(BuildClock());
     }
@@ -134,6 +162,7 @@ protected:
 
     std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        TTimed timed(Counters.PlannerNextTaskUs);
         const auto isLocked = [&dataLocksManager](const TPortionInfo::TConstPtr& p) {
             return IsLockedBy(dataLocksManager, p);
         };
@@ -161,6 +190,7 @@ protected:
     /// Decisions 16 and 18: the highest source priority, the lag of S included, else the remembered priority of
     /// handed-out tasks (decision 14), else nothing: below the delay trigger the table asks for no compaction.
     TOptimizationPriority DoGetUsefulMetric() const override {
+        TTimed timed(Counters.PlannerUsefulMetricUs);
         const auto clock = BuildClock();
         Core.UpdateClock(clock);
         PublishSnapshots(clock);
@@ -174,6 +204,7 @@ protected:
     }
 
     bool DoIsOverloaded() const override {
+        TTimed timed(Counters.PlannerOverloadedUs);
         return Core.IsOverloaded();
     }
 

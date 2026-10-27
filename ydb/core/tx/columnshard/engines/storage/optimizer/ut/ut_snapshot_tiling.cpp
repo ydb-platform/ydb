@@ -863,6 +863,22 @@ Y_UNIT_TEST_SUITE(SnapshotTilingCounters) {
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 0);
     }
 
+    Y_UNIT_TEST(SettledPlannerKeepsItsDelayBetweenReports) {
+        NTiling::TCounters counters;
+        auto& snapshots = counters.GetCompactedSnapshotCounters();
+        // A settled planner reports the clock minus L = 10 and then goes quiet; a planner with data outside reports once too.
+        snapshots.Set(1, 1'090, 1'100, /*settled=*/true);
+        snapshots.Set(2, 1'000, 1'100, /*settled=*/false);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 100);
+        // A minute later another planner publishes: the settled one still shows a delay of L, the other one has aged.
+        snapshots.Set(3, 1'150, 1'160, /*settled=*/true);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 160);
+        snapshots.Remove(2, 1'160);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'150);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 10);
+    }
+
     Y_UNIT_TEST(TaskCountersPerReason) {
         using NChanges::TGeneralCompactionCounters;
         const auto& move = TGeneralCompactionCounters::ForReason("snapshot_move");
@@ -986,6 +1002,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[150 ");
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetHandedOutSize(), 16);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetLineSize(), 20);
+        // The memory shortage: the uncut window would have taken the target and all twenty line portions.
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 84'000);
     }
 
     Y_UNIT_TEST(EveryIntersectingPortionOfTheLevelJoins) {
@@ -1033,6 +1051,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 13);
         UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "");
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, task->Bytes);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 0);
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL + 1), 0);
         f.Finish(*task, { LinePortion(40, 0, 109, 11) });
@@ -1071,6 +1090,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         // The sixteenth sibling starts at 150: the slice below it is absorbed whole, the rest stays for the next advance.
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "[150 ");
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetTreeLevelSize(FIRST_TREE_LEVEL), 5);
+        // The uncut window: the target and all twenty siblings.
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 84'000);
     }
 
     Y_UNIT_TEST(HeldLinePortionBeyondTheLeftBorderCutsTheWindow) {
@@ -1103,6 +1124,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(task->TargetLevel, LINE_LEVEL);
         // Every sibling covers key 0, so no cut at a start key works; the window closes at the line portion's end.
         UNIT_ASSERT_VALUES_EQUAL(f.Cuts(*task), "]9 ");
+        UNIT_ASSERT_VALUES_EQUAL(task->IdealBytes, 72'000);
     }
 
     Y_UNIT_TEST(TargetAboveAnEmptiedLevelReachesTheLine) {
@@ -1236,6 +1258,215 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT(task);
         UNIT_ASSERT_EQUAL(f.Ids(*task), (std::vector<ui64>{ 1, 2, 3 }));
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 1);
+    }
+}
+
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NSnapshotTiling
+
+#include <ydb/core/formats/arrow/rows/view.h>
+
+#include <util/system/hp_timer.h>
+
+namespace NKikimr::NOlap::NStorageOptimizer::NSnapshotTiling {
+
+namespace {
+
+/// A portion with the engine's key representation: serialized primary keys rebuilt as NArrow::TSimpleRow on every access.
+struct TRowPortion {
+    using TPtr = std::shared_ptr<TRowPortion>;
+    using TConstPtr = std::shared_ptr<const TRowPortion>;
+
+    ui64 PortionId;
+    NArrow::TSimpleRow Start;
+    NArrow::TSimpleRow End;
+    ui64 BlobBytes;
+    ui64 Snapshot;
+    ui32 CompactionLevel;
+
+    ui64 GetPortionId() const {
+        return PortionId;
+    }
+    NArrow::TSimpleRow IndexKeyStart() const {
+        return Start;
+    }
+    NArrow::TSimpleRow IndexKeyEnd() const {
+        return End;
+    }
+    ui64 GetTotalBlobBytes() const {
+        return BlobBytes;
+    }
+    ui64 RecordSnapshotMin() const {
+        return Snapshot;
+    }
+    NPortion::EProduced GetProduced() const {
+        return NPortion::INSERTED;
+    }
+    ui32 GetCompactionLevel() const {
+        return CompactionLevel;
+    }
+};
+
+using TRowCore = TSnapshotTiling<NArrow::TSimpleRow, TRowPortion, ui64>;
+
+std::shared_ptr<arrow::Schema> BenchSchema() {
+    static std::shared_ptr<arrow::Schema> schema = arrow::schema({ arrow::field("resource_id", arrow::uint64()),
+        arrow::field("timestamp", arrow::uint64()), arrow::field("uid", arrow::utf8()) });
+    return schema;
+}
+
+NArrow::TSimpleRow BenchKey(const ui64 resource, const ui64 ts, const TString& uid) {
+    NArrow::TSimpleRowViewV0::TWriter writer(64);
+    writer.Append<ui64>(resource);
+    writer.Append<ui64>(ts);
+    writer.Append<ui8>(1, false);
+    writer.Append<ui32>(uid.size(), false);
+    writer.Append(uid.data(), uid.size(), false);
+    return NArrow::TSimpleRow(writer.Finish(), BenchSchema());
+}
+
+TRowPortion::TPtr RowPortion(const ui64 id, const ui64 tsStart, const ui64 tsEnd, const ui64 snapshot, const ui64 bytes, const ui32 level = 0) {
+    return std::make_shared<TRowPortion>(TRowPortion{ .PortionId = id, .Start = BenchKey(7, tsStart, "aaaaaaaa-start"),
+        .End = BenchKey(7, tsEnd, "zzzzzzzz-end"), .BlobBytes = bytes, .Snapshot = snapshot, .CompactionLevel = level });
+}
+
+double Micros(const THPTimer& timer, const ui64 ops) {
+    return timer.Passed() * 1e6 / ops;
+}
+
+}   // namespace
+
+Y_UNIT_TEST_SUITE(SnapshotTilingBench) {
+    /// Per-call costs of the core on a shard-sized structure with the engine's key type; prints, asserts nothing tight.
+    Y_UNIT_TEST(PortionChangeCostWithSimpleRowKeys) {
+        NTiling::TCounters counters;
+        auto settings = TestSettings();
+        // The advance is live from the start: everything loaded is far older than one second.
+        settings.DelayTrigger = TDuration::Seconds(1);
+        TRowCore core(std::move(settings), counters);
+        core.UpdateClock({ .Now = 1'000, .SettledBefore = 990 });
+        ui64 nextId = 1;
+        std::vector<TRowPortion::TPtr> load;
+        // The line: 2000 disjoint portions over the key space.
+        for (ui64 i = 0; i < 2'000; ++i) {
+            load.push_back(RowPortion(nextId++, i * 1'000, i * 1'000 + 999, 10, LARGE, LINE_LEVEL));
+        }
+        // Level 2: 400 normal-size portions in stacks of 9 below the level trigger, each spanning about 5 line portions.
+        for (ui64 i = 0; i < 400; ++i) {
+            const ui64 base = 1'500'000 + (i / 9) * 6'000;
+            load.push_back(RowPortion(nextId++, base + (i % 9) * 100, base + 4'900 + (i % 9) * 100, 11, LARGE));
+        }
+        // The accumulator: 5600 small portions near the frontier.
+        for (ui64 i = 0; i < 5'600; ++i) {
+            const ui64 ts = 1'900'000 + (i * 7'919) % 100'000;
+            load.push_back(RowPortion(nextId++, ts, ts + 3, 12, SMALL));
+        }
+        {
+            THPTimer timer;
+            core.ModifyPortions(load, {});
+            Cerr << "bootstrap of " << load.size() << " portions: " << timer.Passed() * 1e3 << " ms" << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(core.GetLineSize(), 2'000);
+        UNIT_ASSERT_VALUES_EQUAL(core.GetAccumulatorSize(), 5'600);
+        THashSet<ui64> locked;
+        const auto isLocked = [&locked](const TRowPortion::TConstPtr& p) { return locked.contains(p->GetPortionId()); };
+        const auto take = [&]() {
+            auto task = core.TakeNextTask(isLocked);
+            if (task) {
+                for (const auto& p : task->Portions) {
+                    locked.insert(p->GetPortionId());
+                }
+            }
+            return task;
+        };
+
+        const auto measure = [&](const TString& name) {
+            std::vector<TRowPortion::TPtr> added;
+            {
+                THPTimer timer;
+                for (ui64 i = 0; i < 1'000; ++i) {
+                    const ui64 ts = 1'950'000 + (i * 7'919) % 100'000;
+                    added.push_back(RowPortion(nextId++, ts, ts + 3, 12, SMALL));
+                    core.ModifyPortions({ added.back() }, {});
+                }
+                Cerr << name << ": add small portion " << Micros(timer, 1'000) << " us";
+            }
+            {
+                THPTimer timer;
+                for (const auto& p : added) {
+                    core.ModifyPortions({}, { p });
+                }
+                Cerr << ", remove small " << Micros(timer, 1'000) << " us";
+            }
+            {
+                std::vector<TRowPortion::TPtr> normal;
+                THPTimer timer;
+                for (ui64 i = 0; i < 200; ++i) {
+                    const ui64 base = 1'600'000 + i * 400;
+                    normal.push_back(RowPortion(nextId++, base, base + 60'000, 12, LARGE));
+                    core.ModifyPortions({ normal.back() }, {});
+                }
+                Cerr << ", add normal-size " << Micros(timer, 200) << " us";
+                timer.Reset();
+                for (const auto& p : normal) {
+                    core.ModifyPortions({}, { p });
+                }
+                Cerr << ", remove normal-size " << Micros(timer, 200) << " us";
+            }
+            {
+                THPTimer timer;
+                ui64 sum = 0;
+                for (ui64 i = 0; i < 1'000; ++i) {
+                    core.UpdateClock({ .Now = 1'000 + i, .SettledBefore = 990 + i });
+                    sum += core.GetSchedulingPriority().has_value();
+                    sum += core.GetDelaySeconds();
+                }
+                Cerr << ", clock + priority " << Micros(timer, 1'000) << " us (" << sum << ")" << Endl;
+            }
+        };
+
+        measure("idle");
+        {
+            THPTimer timer;
+            ui64 accumulatorTasks = 0;
+            ui64 inputs = 0;
+            while (true) {
+                const auto task = take();
+                if (!task || task->Reason != ETaskReason::Accumulator) {
+                    break;
+                }
+                ++accumulatorTasks;
+                inputs += task->Portions.size();
+            }
+            Cerr << "TakeNextTask: " << accumulatorTasks << " accumulator tasks of " << inputs / std::max<ui64>(1, accumulatorTasks)
+                 << " portions, " << Micros(timer, accumulatorTasks + 1) << " us each" << Endl;
+        }
+        measure("accumulator handed out");
+        {
+            THPTimer timer;
+            ui64 advances = 0;
+            ui64 inputs = 0;
+            for (ui64 i = 0; i < 50; ++i) {
+                const auto task = take();
+                if (!task) {
+                    break;
+                }
+                UNIT_ASSERT(task->Reason == ETaskReason::AdvanceMerge || task->Reason == ETaskReason::AdvancePrefix ||
+                            task->Reason == ETaskReason::AdvanceMove);
+                ++advances;
+                inputs += task->Portions.size();
+            }
+            Cerr << "TakeNextTask: " << advances << " advance tasks of " << inputs / std::max<ui64>(1, advances) << " portions, "
+                 << Micros(timer, std::max<ui64>(1, advances)) << " us each" << Endl;
+        }
+        measure("advances handed out at the front of the set");
+        {
+            THPTimer timer;
+            ui64 found = 0;
+            for (ui64 i = 0; i < 100; ++i) {
+                found += take().has_value();
+            }
+            Cerr << "TakeNextTask x100 more: " << Micros(timer, 100) << " us each, found " << found << Endl;
+        }
     }
 }
 

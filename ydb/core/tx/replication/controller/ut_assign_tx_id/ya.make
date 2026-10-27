@@ -16,6 +16,7 @@ PEERDIR(
 SRCS(
     assign_tx_id_ut.cpp
     apply_progress_ut.cpp
+    registration_page_fault_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

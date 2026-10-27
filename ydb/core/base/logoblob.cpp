@@ -1,5 +1,6 @@
 #include "logoblob.h"
 #include <ydb/core/protos/base.pb.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 
@@ -73,6 +74,20 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
     str = SkipSpaces(str + 1);
     if (!(str && *str == '\0')) {
         errorExplanation = "Garbage after ']'";
+        return false;
+    }
+
+    auto checkRange = [&](ui64 value, ui64 maxValue, const char* field) {
+        if (value <= maxValue) {
+            return true;
+        }
+        errorExplanation = TString("BlobId out of range: ") + field + " must be <= " + ::ToString(maxValue);
+        return false;
+    };
+    if (!checkRange(channel, MaxChannel, "channel")
+            || !checkRange(cookie, MaxCookie, "cookie")
+            || !checkRange(blobSize, MaxBlobSize, "blobsize")
+            || !checkRange(partid, MaxPartId, "partid")) {
         return false;
     }
 

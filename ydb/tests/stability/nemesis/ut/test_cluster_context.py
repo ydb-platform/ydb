@@ -47,6 +47,12 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
                     process_type
                 )
             )
+        assert (
+            "dedicated non-default-kind spare PDisk per node"
+            in cluster_context.scheduled_nemesis_rejection_reason(
+                "SafelyBreakDiskNemesis"
+            )
+        )
         reason = cluster_context.nemesis_rejection_reason("NetworkNemesis")
         assert reason is not None
         assert "not enabled for local harness execution" in reason
@@ -71,12 +77,35 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
                 "KillSlotDaemonNemesis"
             )
         )
+        assert (
+            "dedicated non-default-kind spare PDisk per node"
+            in cluster_context.scheduled_nemesis_rejection_reason(
+                "SafelyBreakDiskNemesis"
+            )
+        )
 
     safe_cluster.slots = {1: object(), 2: object()}
     with cluster_context.use_cluster(safe_cluster):
         assert (
             cluster_context.scheduled_nemesis_rejection_reason(
                 "KillSlotDaemonNemesis"
+            )
+            is None
+        )
+
+    safe_cluster.config.pdisks_info = [
+        {
+            "node_id": node_id,
+            "pdisk_id": pdisk_id,
+            "pdisk_user_kind": user_kind,
+        }
+        for node_id in safe_cluster.nodes
+        for pdisk_id, user_kind in ((1, 0), (2, 1))
+    ]
+    with cluster_context.use_cluster(safe_cluster):
+        assert (
+            cluster_context.scheduled_nemesis_rejection_reason(
+                "SafelyBreakDiskNemesis"
             )
             is None
         )

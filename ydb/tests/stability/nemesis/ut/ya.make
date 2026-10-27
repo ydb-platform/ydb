@@ -18,6 +18,7 @@ TEST_SRCS(
     test_healthcheck_endpoints.py
     test_local_cluster_view.py
     test_local_harness_controller.py
+    test_local_disk_runner.py
 )
 
 PEERDIR(

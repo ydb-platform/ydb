@@ -12,7 +12,11 @@ from ydb.tests.library.common.msgbus_types import EDriveStatus
 from ydb.tests.library.predicates import blobstorage
 from ydb.core.protos.blobstorage_config_pb2 import TConfigResponse
 
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    local_harness_mode,
+    require_cluster,
+    require_external_cluster,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
@@ -159,8 +163,7 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
 
     def __init__(self) -> None:
         super().__init__(scope="disk")
-        self._states: dict = {}
-        self._broken_drives: set = set()
+        self._changed_drives: dict[str, set[tuple[int, str]]] = {}
 
     def _state_ready(self, cluster) -> bool:
         if len(cluster.nodes.values()) < 8:
@@ -168,18 +171,50 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
             return False
         return blobstorage.cluster_has_no_unreplicated_vdisks(cluster, 1, self._logger)
 
-    def _refresh_drive_states_for_node(self, cluster, node_id: int) -> None:
+    def _drive_states_for_node(self, cluster, node_id: int) -> dict[str, EDriveStatus]:
         node = cluster.nodes.get(node_id)
         if node is None:
-            return
-        self._broken_drives = {(nid, p) for nid, p in self._broken_drives if nid != node_id}
-        self._states[node_id] = {}
+            return {}
+        states = {}
         drives = cluster.client.read_drive_status(node.host, node.ic_port).BlobStorageConfigResponse
         for status in drives.Status:
             for drive in status.DriveStatus:
-                self._states[node_id][drive.Path] = drive.Status
-                if drive.Status != EDriveStatus.ACTIVE:
-                    self._broken_drives.add((node_id, drive.Path))
+                states[drive.Path] = drive.Status
+        return states
+
+    def _local_spare_paths(
+        self,
+        cluster,
+        node_id: int,
+        active_paths: list[str],
+    ) -> list[str]:
+        base = cluster.client.query_base_config().BaseConfig
+        paths_by_pdisk = {
+            (pdisk.NodeId, pdisk.PDiskId): pdisk.Path
+            for pdisk in base.PDisk
+            if pdisk.NodeId == node_id
+        }
+        occupied = {
+            (vslot.VSlotId.NodeId, vslot.VSlotId.PDiskId)
+            for vslot in base.VSlot
+            if vslot.VSlotId.NodeId == node_id
+        }
+        occupied_paths = {
+            paths_by_pdisk[pdisk]
+            for pdisk in occupied
+            if pdisk in paths_by_pdisk
+        }
+        dedicated_spare_paths = {
+            pdisk.get("pdisk_path")
+            for pdisk in getattr(cluster.config, "pdisks_info", ()) or ()
+            if (
+                pdisk.get("node_id") == node_id
+                and pdisk.get("pdisk_user_kind", 0) != 0
+            )
+        }
+        return sorted(
+            set(active_paths) & dedicated_spare_paths - occupied_paths
+        )
 
     def _change_drive_status(self, cluster, node_id, path, status) -> bool:
         node = cluster.nodes[node_id]
@@ -201,7 +236,7 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
 
     def inject_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
-        cluster = require_external_cluster()
+        cluster = require_cluster()
         if not self._state_ready(cluster):
             return
         target = target_from_payload(payload)
@@ -215,19 +250,94 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
                 node_id_hint,
             )
             return
-        self.extract_fault(payload)
-        self._refresh_drive_states_for_node(cluster, node_id)
-        paths = self._states.get(node_id) or {}
-        if paths:
-            path = random.choice(list(paths.keys()))
-            if self._change_drive_status(cluster, node_id, path, EDriveStatus.BROKEN):
-                self.on_success_inject_fault()
-        self._refresh_drive_states_for_node(cluster, node_id)
+        states = self._drive_states_for_node(cluster, node_id)
+        active_paths = [
+            path
+            for path, status in states.items()
+            if status == EDriveStatus.ACTIVE
+        ]
+        if local_harness_mode():
+            active_paths = self._local_spare_paths(
+                cluster,
+                node_id,
+                active_paths,
+            )
+        if not active_paths:
+            raise RuntimeError(
+                f"SafelyBreakDisk: node_id={node_id} has no eligible ACTIVE drive"
+            )
+        path = random.choice(active_paths)
+        identity = (
+            target.identity_key()
+            if target is not None
+            else f"disk:{node_id}:{host or ''}"
+        )
+        if self._changed_drives.get(identity):
+            raise RuntimeError(
+                f"SafelyBreakDisk: target {identity} already owns a changed drive"
+            )
+        changed = self._changed_drives.setdefault(identity, set())
+        changed.add((node_id, path))
+        if not self._change_drive_status(
+            cluster,
+            node_id,
+            path,
+            EDriveStatus.BROKEN,
+        ):
+            states_after_failure = self._drive_states_for_node(cluster, node_id)
+            restored = states_after_failure.get(path) == EDriveStatus.ACTIVE
+            if not restored:
+                restored = self._change_drive_status(
+                    cluster,
+                    node_id,
+                    path,
+                    EDriveStatus.ACTIVE,
+                )
+            if restored:
+                changed.discard((node_id, path))
+                if not changed:
+                    self._changed_drives.pop(identity, None)
+            raise RuntimeError(
+                "SafelyBreakDisk: failed to mark "
+                f"node_id={node_id} path={path} BROKEN; "
+                f"compensating_restore={'succeeded' if restored else 'failed'}"
+            )
+        self.on_success_inject_fault()
 
     def extract_fault(self, payload=None) -> None:
-        del payload
-        cluster = require_external_cluster()
-        for node_id, path in list(self._broken_drives):
-            self._change_drive_status(cluster, node_id, path, EDriveStatus.ACTIVE)
-        self._broken_drives.clear()
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_cluster()
+        target = target_from_payload(payload)
+        identities = (
+            [target.identity_key()]
+            if target is not None
+            else list(self._changed_drives)
+        )
+        failures = []
+        for identity in identities:
+            changed = self._changed_drives.get(identity, set())
+            restored = set()
+            for node_id, path in list(changed):
+                if self._change_drive_status(
+                    cluster,
+                    node_id,
+                    path,
+                    EDriveStatus.ACTIVE,
+                ):
+                    restored.add((node_id, path))
+                else:
+                    failures.append((node_id, path))
+            changed.difference_update(restored)
+            if not changed:
+                self._changed_drives.pop(identity, None)
+        if failures:
+            raise RuntimeError(
+                f"SafelyBreakDisk: failed to restore drives: {failures}"
+            )
         self.on_success_extract_fault()
+
+    def changed_drives(self) -> dict[str, tuple[tuple[int, str], ...]]:
+        return {
+            identity: tuple(sorted(drives))
+            for identity, drives in self._changed_drives.items()
+        }

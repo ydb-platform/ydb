@@ -21,6 +21,7 @@ LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillNodeNemesis",
     "KillSchemeShardNemesis",
     "KillSlotDaemonNemesis",
+    "SafelyBreakDiskNemesis",
     "StopStartNodeNemesis",
     "SuspendNodeNemesis",
 })
@@ -29,11 +30,12 @@ LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
     "KillNodeNemesis",
     "KillSlotDaemonNemesis",
+    "SafelyBreakDiskNemesis",
     "StopStartNodeNemesis",
     "SuspendNodeNemesis",
 })
 
-LOCAL_HARNESS_NODE_FAULT_TYPES = frozenset({
+LOCAL_HARNESS_BLOCK_4_2_PROCESS_FAULT_TYPES = frozenset({
     "KillNodeNemesis",
     "KillSlotDaemonNemesis",
     "StopStartNodeNemesis",
@@ -97,7 +99,7 @@ def scheduled_nemesis_rejection_reason(nemesis_type: str) -> str | None:
         return rejection
     if (
         local_harness_mode()
-        and nemesis_type in LOCAL_HARNESS_NODE_FAULT_TYPES
+        and nemesis_type in LOCAL_HARNESS_BLOCK_4_2_PROCESS_FAULT_TYPES
     ):
         nodes = getattr(_cluster_override, "nodes", {}) or {}
         erasure = str(
@@ -107,6 +109,37 @@ def scheduled_nemesis_rejection_reason(nemesis_type: str) -> str | None:
             return (
                 f"{nemesis_type} requires at least 8 block-4-2 nodes in local "
                 f"harness mode; got erasure={erasure or 'unknown'}, nodes={len(nodes)}"
+            )
+    if local_harness_mode() and nemesis_type == "SafelyBreakDiskNemesis":
+        nodes = getattr(_cluster_override, "nodes", {}) or {}
+        config = getattr(_cluster_override, "config", None)
+        erasure = str(getattr(config, "static_erasure", "")).lower()
+        pdisks_per_node = {}
+        dedicated_spares_per_node = {}
+        for pdisk in getattr(config, "pdisks_info", ()) or ():
+            node_id = pdisk.get("node_id")
+            pdisks_per_node[node_id] = pdisks_per_node.get(node_id, 0) + 1
+            if pdisk.get("pdisk_user_kind", 0) != 0:
+                dedicated_spares_per_node[node_id] = (
+                    dedicated_spares_per_node.get(node_id, 0) + 1
+                )
+        has_spare_in_each_domain = bool(nodes) and all(
+            pdisks_per_node.get(node_id, 0) >= 2
+            and dedicated_spares_per_node.get(node_id, 0) >= 1
+            for node_id in nodes
+        )
+        if (
+            erasure != "block-4-2"
+            or len(nodes) < 8
+            or not has_spare_in_each_domain
+        ):
+            return (
+                "SafelyBreakDiskNemesis requires at least 8 block-4-2 nodes "
+                "and a dedicated non-default-kind spare PDisk per node in "
+                "local harness mode; "
+                f"got erasure={erasure or 'unknown'}, nodes={len(nodes)}, "
+                f"pdisks_per_node={pdisks_per_node}, "
+                f"dedicated_spares_per_node={dedicated_spares_per_node}"
             )
     if local_harness_mode() and nemesis_type == "KillSlotDaemonNemesis":
         slots = getattr(_cluster_override, "slots", {}) or {}

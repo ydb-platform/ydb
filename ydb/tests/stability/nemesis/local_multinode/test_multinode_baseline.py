@@ -11,6 +11,7 @@ import ydb
 import yaml
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.msgbus_types import EDriveStatus
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.predicates import blobstorage
@@ -61,6 +62,9 @@ class _NoopSensor:
     def inc(self):
         pass
 
+    def add(self, value):
+        del value
+
 
 class _NoopMonitor:
     def int_gauge(self, name, labels):
@@ -78,6 +82,7 @@ def local_multinode_cluster():
         KikimrConfigGenerator(
             erasure=Erasure.BLOCK_4_2,
             nodes=8,
+            dynamic_pdisks=[{"user_kind": 1}],
             use_in_memory_pdisks=True,
         )
     )
@@ -88,7 +93,7 @@ def local_multinode_cluster():
         cluster.stop()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def local_tenant(local_multinode_cluster):
     database = "/Root/local_nemesis_tenant"
     local_multinode_cluster.create_database(database, {"hdd": 1})
@@ -204,7 +209,7 @@ def test_all_allocated_endpoints_stay_sighted_for_five_idle_ticks(
         max_hc_age_sec=5,
     )
 
-    expected_hosts = {f"node-{node_id}" for node_id in range(1, 9)}
+    expected_hosts = {node.logical_host for node in view.nodes.values()}
     ticks = []
     last_update = None
     reporter.start_healthchecks()
@@ -256,13 +261,13 @@ def test_scheduled_kill_restarts_only_one_node_and_releases_its_budget(
         store_results=True,
         publish_results=False,
     )
-    # Eight large CLI processes per tick are intentionally paced: a sub-second
+    # One large CLI process per endpoint is intentionally paced: a sub-second
     # period starves the workload and measures client-launch pressure, not recovery.
     reporter.hc_period_seconds = 2
     reporter.hc_request_timeout_seconds = 30
     reporter.start_healthchecks()
 
-    expected_hosts = {f"node-{node_id}" for node_id in range(1, 9)}
+    expected_hosts = {node.logical_host for node in view.nodes.values()}
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         if (
@@ -474,7 +479,7 @@ def test_stop_start_holds_ports_rotates_log_and_recovers_exact_node(
     local_multinode_model,
 ):
     view, _, inventory, guard = local_multinode_model
-    expected_hosts = {f"node-{node_id}" for node_id in range(1, 9)}
+    expected_hosts = {node.logical_host for node in view.nodes.values()}
     reporter = HealthCheckReporter(
         [
             HealthCheckEndpoint(
@@ -732,7 +737,7 @@ def test_suspend_preserves_pid_stops_progress_and_resumes_exact_node(
     local_multinode_model,
 ):
     view, _, inventory, guard = local_multinode_model
-    expected_hosts = {f"node-{node_id}" for node_id in range(1, 9)}
+    expected_hosts = {node.logical_host for node in view.nodes.values()}
     reporter = HealthCheckReporter(
         [
             HealthCheckEndpoint(
@@ -1180,6 +1185,262 @@ def test_slot_kill_restarts_one_compute_process_and_releases_slot_budget(
         assert acquired[0]["target"]["slot_idx"] == changed_slot
         assert released[0]["reason"] == "recovered"
     finally:
+        scheduler.stop()
+        probe.stop()
+        reporter.stop_healthchecks()
+        driver.stop()
+
+
+def test_disk_status_break_restores_only_selected_drive_without_process_restart(
+    local_multinode_cluster,
+    local_multinode_model,
+):
+    view, _, inventory, guard = local_multinode_model
+    expected_hosts = {node.logical_host for node in view.nodes.values()}
+    reporter = HealthCheckReporter(
+        [
+            HealthCheckEndpoint(
+                logical_host=node.logical_host,
+                connect_host=node.connect_host,
+                grpc_port=node.grpc_port,
+                database="/Root",
+            )
+            for node in view.nodes.values()
+        ],
+        store_results=True,
+        publish_results=False,
+    )
+    reporter.hc_period_seconds = 2
+    reporter.hc_request_timeout_seconds = 30
+    reporter.start_healthchecks()
+
+    metrics = NemesisMetrics(
+        run_id="local-multinode-disk-status",
+        mon=_NoopMonitor(),
+    )
+    guard.set_metrics(metrics)
+    stuck_faults = []
+    probe = RecoveryProbe(
+        guard=guard,
+        hc_source=reporter,
+        on_stuck=stuck_faults.append,
+        poll_interval=0.1,
+        min_hold_sec=1,
+        max_hc_age_sec=90,
+        metrics=metrics,
+    )
+
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        snapshot = probe.snapshot_now()
+        if (
+            snapshot.fresh
+            and snapshot.good == expected_hosts
+            and snapshot.storage_by_node
+        ):
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("Verbose healthcheck did not expose healthy storage")
+    probe.start()
+
+    chaos_store = ChaosOrchestratorStore(
+        failure_guard=guard,
+        inventory=inventory,
+        planner_types=["SafelyBreakDiskNemesis"],
+    )
+    schedule = OrchestratorNemesisSchedule(
+        chaos_store=chaos_store,
+        get_hosts=lambda: list(expected_hosts),
+        is_local_host=lambda host: host in expected_hosts,
+        get_app_port=lambda: 0,
+        failure_guard=guard,
+        recovery_probe=probe,
+        inventory=inventory,
+        metrics=metrics,
+    )
+    scheduler = BoundaryNemesisScheduler(
+        guard=guard,
+        inventory=inventory,
+        plan_inject=chaos_store.plan_inject_target,
+        plan_extract=chaos_store.plan_extract_target,
+        dispatch=lambda command: schedule.dispatch_command(
+            command,
+            track_history=True,
+        ),
+        recovery_probe=probe,
+        enabled_types=["SafelyBreakDiskNemesis"],
+        recovery_sec_for=lambda nemesis_type: 10,
+        base_interval=15,
+        jitter=0,
+        max_per_tick=1,
+        max_bypass_per_tick=1,
+        rng=random.Random(5),
+    )
+    runner = NEMESIS_TYPES["SafelyBreakDiskNemesis"]["runner"]
+
+    def drive_states(node_id):
+        node = local_multinode_cluster.nodes[node_id]
+        response = local_multinode_cluster.client.read_drive_status(
+            node.host,
+            node.ic_port,
+        ).BlobStorageConfigResponse
+        return {
+            drive.Path: drive.Status
+            for status in response.Status
+            for drive in status.DriveStatus
+        }
+
+    all_drive_states_before = {
+        node_id: drive_states(node_id)
+        for node_id in local_multinode_cluster.nodes
+    }
+    base_config_before = local_multinode_cluster.client.query_base_config().BaseConfig
+    node_pids_before = {
+        node_id: node.pid
+        for node_id, node in local_multinode_cluster.nodes.items()
+    }
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database="/Root",
+            endpoint=local_multinode_cluster.nodes[1].endpoint,
+        )
+    )
+    driver.wait(timeout=60)
+    process_offset = len(agent_router.manager.get_all())
+    workload_progress = 0
+    try:
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries(
+                """
+                CREATE TABLE `local_nemesis_disk_status` (
+                    id Uint64 NOT NULL,
+                    value Uint64,
+                    PRIMARY KEY (id)
+                )
+                """
+            )
+            with use_cluster(local_multinode_cluster):
+                assert scheduler.status()["enabled_types"] == [
+                    "SafelyBreakDiskNemesis"
+                ]
+                assert scheduler.tick() == 1
+                assert guard.snapshot()["tracked_executions"] == 1
+                agent_router.wait_for_local_processes()
+
+                executions = agent_router.manager.get_all()[process_offset:]
+                assert executions
+                assert executions[0]["type"] == "SafelyBreakDiskNemesis"
+                assert executions[0]["status"] == "finished", executions[0]["logs"]
+                assert executions[0]["ret_code"] == 0
+
+                changed = runner.changed_drives()
+                assert len(changed) == 1
+                identity, drives = next(iter(changed.items()))
+                assert len(drives) == 1
+                changed_node_id, changed_path = drives[0]
+                changed_pdisks = {
+                    (pdisk.NodeId, pdisk.PDiskId)
+                    for pdisk in base_config_before.PDisk
+                    if (
+                        pdisk.NodeId == changed_node_id
+                        and pdisk.Path == changed_path
+                    )
+                }
+                occupied_pdisks = {
+                    (vslot.VSlotId.NodeId, vslot.VSlotId.PDiskId)
+                    for vslot in base_config_before.VSlot
+                }
+                assert len(changed_pdisks) == 1
+                assert changed_pdisks.isdisjoint(occupied_pdisks)
+                assert (
+                    all_drive_states_before[changed_node_id][changed_path]
+                    == EDriveStatus.ACTIVE
+                )
+                assert (
+                    drive_states(changed_node_id)[changed_path]
+                    == EDriveStatus.BROKEN
+                )
+
+                deadline = time.monotonic() + 180
+                while time.monotonic() < deadline:
+                    try:
+                        pool.execute_with_retries(
+                            f"""
+                            UPSERT INTO `local_nemesis_disk_status` (id, value)
+                            VALUES (1, {workload_progress})
+                            """
+                        )
+                        result = pool.execute_with_retries(
+                            """
+                            SELECT value
+                            FROM `local_nemesis_disk_status`
+                            WHERE id = 1
+                            """
+                        )
+                        assert result[0].rows[0]["value"] == workload_progress
+                        workload_progress += 1
+                    except ydb.Error:
+                        pass
+                    if (
+                        workload_progress > 0
+                        and guard.snapshot()["tracked_executions"] == 0
+                    ):
+                        break
+                    time.sleep(0.1)
+
+        assert workload_progress > 0
+        assert runner.changed_drives() == {}
+        assert guard.snapshot()["tracked_executions"] == 0
+        assert probe.pending() == []
+        assert stuck_faults == []
+        assert drive_states(changed_node_id)[changed_path] == EDriveStatus.ACTIVE
+        assert all(
+            node.pid == node_pids_before[node_id]
+            for node_id, node in local_multinode_cluster.nodes.items()
+        )
+        deadline = time.monotonic() + 180
+        storage_recovered = False
+        while time.monotonic() < deadline:
+            if (
+                blobstorage.cluster_has_no_unreplicated_vdisks(
+                    local_multinode_cluster,
+                    max_count=0,
+                )
+                and blobstorage.cluster_has_no_unsynced_vdisks(
+                    local_multinode_cluster
+                )
+            ):
+                storage_recovered = True
+                break
+            time.sleep(1)
+        assert storage_recovered
+
+        for node_id, states_before in all_drive_states_before.items():
+            states_after = drive_states(node_id)
+            for path, status_before in states_before.items():
+                if (node_id, path) != (changed_node_id, changed_path):
+                    assert states_after[path] == status_before
+
+        events = metrics.recent_events(100)
+        acquired = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_ACQUIRED
+        ]
+        released = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_RELEASED
+        ]
+        assert len(acquired) == 1
+        assert len(released) == 1
+        assert acquired[0]["lease_id"] == released[0]["lease_id"]
+        assert acquired[0]["target"]["identity_key"] == identity
+        assert released[0]["reason"] == "recovered"
+    finally:
+        with use_cluster(local_multinode_cluster):
+            runner.extract_fault()
         scheduler.stop()
         probe.stop()
         reporter.stop_healthchecks()

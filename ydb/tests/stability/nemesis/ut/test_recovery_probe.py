@@ -185,6 +185,39 @@ class TestSnapshot:
             host, kind=TargetKind.HOST, scope=ImpactScope.NODE, nemesis_type="NetworkNemesis"
         )(skew_bad)
 
+        disk = ChaosTarget.for_disk("h1", node_id=1)
+        disk_recovered = hc_predicate_for(
+            disk,
+            kind=TargetKind.DISK,
+            scope=ImpactScope.DISK,
+        )
+        globally_degraded = build_snapshot(
+            {
+                "h1": _hc("h1", vdisks=[_vdisk("1-1-0")]),
+                "h2": _hc("h2", vdisks=[_vdisk("2-1-0", "BLUE")]),
+            },
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
+        )
+        assert not disk_recovered(globally_degraded)
+        assert disk_recovered(
+            build_snapshot(
+                _healthy_results(),
+                now=10.0,
+                last_update=10.0,
+                max_age_sec=180.0,
+            )
+        )
+        assert not disk_recovered(
+            build_snapshot(
+                {"h1": _hc("h1")},
+                now=10.0,
+                last_update=10.0,
+                max_age_sec=180.0,
+            )
+        )
+
 
 class TestNodeAndSlotRecovery:
     def test_node_prefault_blue_stuck_then_green(self):

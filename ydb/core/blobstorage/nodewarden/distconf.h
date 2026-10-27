@@ -997,10 +997,11 @@ namespace NKikimr::NStorage {
         // the bridged cluster may be rolled back: groups lose their bridge state while nodes run, the cluster state goes
         // away
         BridgeFeatureLevelRollback = 5,
+        BridgeFeatureLevelHotStandby = 6,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRollback;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelHotStandby;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

@@ -1238,6 +1238,7 @@ namespace NKikimr {
             // decide which piles get the request with the group state and the cluster state we have now
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
+            std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> backgroundWrites;
             bool hasTrustedPile = false;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
@@ -1245,6 +1246,13 @@ namespace NKikimr {
                     // no data quorum needed from this pile; when it is not known at all, it has left the cluster, as
                     // bridge info is not older than group info (or the group state comes from the version not telling
                     // its cluster state, and then the pile is just added and holds no data)
+                    const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
+                    if (pile && pile->State == TClusterState::HOT_STANDBY && bridgePileId != authorityPileId &&
+                            IsFencedWrite(*ev->Get())) {
+                        if (auto event = PrepareEvent(groupPileInfo, *ev->Get(), bridgePileId, true)) {
+                            backgroundWrites.emplace_back(bridgePileId, std::move(event));
+                        }
+                    }
                     return;
                 }
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
@@ -1298,10 +1306,13 @@ namespace NKikimr {
             for (auto& [bridgePileId, eventToSend] : subrequests) {
                 SendQuery(request, bridgePileId, std::move(eventToSend));
             }
+            for (auto& [bridgePileId, eventToSend] : backgroundWrites) {
+                SendQuery(request, bridgePileId, std::move(eventToSend), {}, false);
+            }
         }
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
-                TRequestPayload&& payload = {}) {
+                TRequestPayload&& payload = {}, bool waitForResponse = true) {
             const auto *groupPileInfo = NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
                 bridgePileId);
             Y_ABORT_UNLESS(groupPileInfo);
@@ -1317,11 +1328,16 @@ namespace NKikimr {
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
-            const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, request->BridgeInfo,
-                request->BridgeInfo->GetPile(bridgePileId), groupId, std::move(payload));
-            Y_DEBUG_ABORT_UNLESS(inserted);
-            const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
-            Y_DEBUG_ABORT_UNLESS(inserted1);
+            if (waitForResponse) {
+                const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, request->BridgeInfo,
+                    request->BridgeInfo->GetPile(bridgePileId), groupId, std::move(payload));
+                Y_DEBUG_ABORT_UNLESS(inserted);
+                const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
+                Y_DEBUG_ABORT_UNLESS(inserted1);
+                ++request->ResponsesPending;
+            }
+            // Background writes have no entry in RequestsInFlight: even an early error or RACE is ignored, and an
+            // unavailable standby cannot retain the client request after the required piles have replied.
 
             // send event; inline pile is served by inner proxy, as the service id of this group points to us
             if (groupId == GroupId && !InnerProxyId) {
@@ -1334,21 +1350,27 @@ namespace NKikimr {
             } else {
                 SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
             }
-            ++request->ResponsesPending;
         }
 
         template<typename TEvent>
         std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev,
-                TBridgePileId bridgePileId) {
+                TBridgePileId bridgePileId, bool background = false) {
             std::unique_ptr<TEvent> res;
 
+            // Standby accepts data before its synchronization starts. Keep flags may arrive asynchronously too, so
+            // forwarding collection barriers could erase data before its keep flags arrive. Defer collection to rejoin.
+            const auto stage = background
+                ? (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>
+                    ? NKikimrBridge::TGroupState::WRITE_KEEP : NKikimrBridge::TGroupState::SYNCED)
+                : pile.GetStage();
+
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
-                if (!NBridge::GroupPartTakesPuts(pile.GetStage())) {
+                if (!NBridge::GroupPartTakesPuts(stage)) {
                     return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
                 }
             }
 
-            switch (pile.GetStage()) {
+            switch (stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         if (!ev.Keep) {

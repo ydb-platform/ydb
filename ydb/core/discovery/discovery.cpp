@@ -136,6 +136,9 @@ namespace NDiscovery {
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     pileInfo->set_state(Ydb::Bridge::PileState::SUSPENDED);
                     break;
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    pileInfo->set_state(Ydb::Bridge::PileState::HOT_STANDBY);
+                    break;
                 case NKikimrBridge::TClusterState::INACTIVE:
                     pileInfo->set_state(Ydb::Bridge::PileState::INACTIVE);
                     break;

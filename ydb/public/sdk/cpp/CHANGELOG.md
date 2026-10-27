@@ -1,3 +1,5 @@
+* Added the experimental `HOT_STANDBY` Bridge pile state for best-effort replication outside read and write quorums.
+
 ## v3.27.0
 
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.

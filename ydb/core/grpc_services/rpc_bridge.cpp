@@ -243,6 +243,9 @@ private:
                 case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::SUSPENDED;
                     break;
+                case Ydb::Bridge::PileState::HOT_STANDBY:
+                    internalState = NKikimrBridge::TClusterState::HOT_STANDBY;
+                    break;
                 case Ydb::Bridge::PileState::INACTIVE:
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, "Pile can't be switched to INACTIVE state, it has to be"
                         " removed from the cluster instead", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());

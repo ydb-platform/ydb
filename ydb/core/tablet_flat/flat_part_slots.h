@@ -16,11 +16,13 @@ namespace NTable {
     struct TPartLayout {
         bool SeparateDescriptorCollection = false;
 
-        // With a separate descriptor collection, keep the main group index in it
-        bool HotPKIndex = false;
+        // Keep the main group index in the descriptor collection, otherwise with the group data
+        // (only with a separate descriptor collection)
+        bool KeyIndexInDescriptor = true;
 
-        // With a separate descriptor collection, keep indexes of other groups in it
-        bool HotFamilyIndexes = false;
+        // Keep indexes of other groups in the descriptor collection, otherwise with the group data
+        // (only with a separate descriptor collection)
+        bool GroupIndexesInDescriptor = true;
 
         bool operator==(const TPartLayout&) const = default;
     };
@@ -74,8 +76,8 @@ namespace NTable {
             if (!Layout.SeparateDescriptorCollection) {
                 return 0;
             }
-            const bool hot = groupId.Index == 0 ? Layout.HotPKIndex : Layout.HotFamilyIndexes;
-            return hot ? DescriptorSlot() : DataSlot(groupId);
+            const bool inDescriptor = groupId.Index == 0 ? Layout.KeyIndexInDescriptor : Layout.GroupIndexesInDescriptor;
+            return inDescriptor ? DescriptorSlot() : DataSlot(groupId);
         }
 
         /**

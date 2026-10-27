@@ -61,8 +61,9 @@ message TLayout {
     // Descriptor pages (root, bloom, frames, globs, stats) are in a separate page collection 0,
     // data pages of group G with its index are in page collection G + 1
     optional bool SeparateDescriptorCollection = 15;
-    optional bool HotPKIndex = 16; // Main group index is kept in the descriptor page collection
-    optional bool HotFamilyIndexes = 17; // Other groups indexes are kept in the descriptor page collection
+    // Indexes are in the descriptor page collection, otherwise with data of their group
+    optional bool KeyIndexInDescriptor = 16 [default = true]; // Main group index
+    optional bool GroupIndexesInDescriptor = 17 [default = true]; // Other groups indexes
 }
 
 message TStat {

@@ -92,8 +92,8 @@ void TLoader::StageParseMeta()
         TxIdStatsId = layout.HasTxIdStats() ? layout.GetTxIdStats() : TxIdStatsId;
 
         PartLayout.SeparateDescriptorCollection = layout.GetSeparateDescriptorCollection();
-        PartLayout.HotPKIndex = layout.GetHotPKIndex();
-        PartLayout.HotFamilyIndexes = layout.GetHotFamilyIndexes();
+        PartLayout.KeyIndexInDescriptor = layout.GetKeyIndexInDescriptor();
+        PartLayout.GroupIndexesInDescriptor = layout.GetGroupIndexesInDescriptor();
 
         FlatGroupIndexes.clear();
         FlatHistoricIndexes.clear();
@@ -256,7 +256,7 @@ void TLoader::StageParseMeta()
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
         || (slots.OuterSlot() + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size()
-        || (!PartLayout.SeparateDescriptorCollection && (PartLayout.HotPKIndex || PartLayout.HotFamilyIndexes)))
+        || (!PartLayout.SeparateDescriptorCollection && !(PartLayout.KeyIndexInDescriptor && PartLayout.GroupIndexesInDescriptor)))
     {
         Y_TABLET_ERROR("Part " << PageCollections[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
@@ -269,8 +269,8 @@ void TLoader::StageParseMeta()
             << ", Garbage " << GarbageStatsId
             << ", TxIdStats " << TxIdStatsId
             << ", SeparateDescriptor " << PartLayout.SeparateDescriptorCollection
-            << ", HotPKIndex " << PartLayout.HotPKIndex
-            << ", HotFamilyIndexes " << PartLayout.HotFamilyIndexes);
+            << ", KeyIndexInDescriptor " << PartLayout.KeyIndexInDescriptor
+            << ", GroupIndexesInDescriptor " << PartLayout.GroupIndexesInDescriptor);
     }
 
     // Shared cache skips dead V1 b-tree pages of the page collections with stripped V1 shadows

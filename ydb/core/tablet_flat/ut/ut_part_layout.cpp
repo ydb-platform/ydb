@@ -23,10 +23,10 @@ namespace {
     };
 
     const TVector<TPartLayout> SeparateLayouts = {
+        { .SeparateDescriptorCollection = true, .KeyIndexInDescriptor = false, .GroupIndexesInDescriptor = false },
+        { .SeparateDescriptorCollection = true, .GroupIndexesInDescriptor = false },
+        { .SeparateDescriptorCollection = true, .KeyIndexInDescriptor = false },
         { .SeparateDescriptorCollection = true },
-        { .SeparateDescriptorCollection = true, .HotPKIndex = true },
-        { .SeparateDescriptorCollection = true, .HotFamilyIndexes = true },
-        { .SeparateDescriptorCollection = true, .HotPKIndex = true, .HotFamilyIndexes = true },
     };
 
     TString Describe(const TPartLayout& layout, EIndex index) {
@@ -35,11 +35,11 @@ namespace {
         if (layout.SeparateDescriptorCollection) {
             out << " SeparateDescriptorCollection";
         }
-        if (layout.HotPKIndex) {
-            out << " HotPKIndex";
+        if (!layout.KeyIndexInDescriptor) {
+            out << " !KeyIndexInDescriptor";
         }
-        if (layout.HotFamilyIndexes) {
-            out << " HotFamilyIndexes";
+        if (!layout.GroupIndexesInDescriptor) {
+            out << " !GroupIndexesInDescriptor";
         }
         out << " } " << (index == EIndex::V1 ? "V1" : index == EIndex::V2 ? "V2" : "V2WithV1Shadow");
         return out;
@@ -170,34 +170,34 @@ namespace {
         const auto rooms = CountRoomPages(part);
         const auto oldRooms = CountRoomPages(oldPart);
 
-        // Descriptor pages are only in the first page collection, along with hot indexes
+        // Descriptor pages are only in the first page collection, along with indexes kept in it
         UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Data, 0, message);
         UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Descriptor, oldRooms[0].Descriptor, message);
         UNIT_ASSERT_VALUES_EQUAL_C(part.Store->GetPageType(0, part.Store->PageCollectionPagesCount(0) - 1), EPage::Schem2, message);
 
         ui32 indexPages = rooms[0].Index;
-        bool hasHotIndexLevels = false;
+        bool hasDescriptorIndexLevels = false;
         for (ui32 group : xrange(part.GroupsCount)) {
             const auto& room = rooms[group + 1];
-            const bool hot = group == 0 ? layout.HotPKIndex : layout.HotFamilyIndexes;
+            const bool inDescriptor = group == 0 ? layout.KeyIndexInDescriptor : layout.GroupIndexesInDescriptor;
             const bool hasLevels = HasIndexLevels(part, NPage::TGroupId(group)) || HasIndexLevels(part, NPage::TGroupId(group, true));
 
             UNIT_ASSERT_VALUES_EQUAL_C(part.DataSlot(NPage::TGroupId(group)), group + 1, message);
             UNIT_ASSERT_VALUES_EQUAL_C(part.DataSlot(NPage::TGroupId(group, true)), group + 1, message);
-            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexSlot(NPage::TGroupId(group)), hot ? 0 : group + 1, message);
-            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexSlot(NPage::TGroupId(group, true)), hot ? 0 : group + 1, message);
+            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexSlot(NPage::TGroupId(group)), inDescriptor ? 0 : group + 1, message);
+            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexSlot(NPage::TGroupId(group, true)), inDescriptor ? 0 : group + 1, message);
 
             UNIT_ASSERT_VALUES_EQUAL_C(room.Data, oldRooms[group].Data, message << " group " << group);
             UNIT_ASSERT_VALUES_EQUAL_C(room.Descriptor, 0, message << " group " << group);
-            if (hot) {
+            if (inDescriptor) {
                 UNIT_ASSERT_VALUES_EQUAL_C(room.Index, 0, message << " group " << group);
-                hasHotIndexLevels |= hasLevels;
+                hasDescriptorIndexLevels |= hasLevels;
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(room.Index > 0, hasLevels, message << " group " << group);
             }
             indexPages += room.Index;
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Index > 0, hasHotIndexLevels, message);
+        UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Index > 0, hasDescriptorIndexLevels, message);
         UNIT_ASSERT_VALUES_EQUAL_C(indexPages, oldRooms[0].Index, message);
 
         // Parts with a separate descriptor page collection cannot be read by older versions
@@ -272,10 +272,10 @@ Y_UNIT_TEST_SUITE(TPartLayout) {
         }
     }
 
-    Y_UNIT_TEST(HotIndexesRequireSeparateDescriptor) {
-        for (TPartLayout layout : { TPartLayout{ .HotPKIndex = true }, TPartLayout{ .HotFamilyIndexes = true } }) {
+    Y_UNIT_TEST(IndexesOutOfDescriptorRequireSeparateDescriptor) {
+        for (TPartLayout layout : { TPartLayout{ .KeyIndexInDescriptor = false }, TPartLayout{ .GroupIndexesInDescriptor = false } }) {
             UNIT_ASSERT_EXCEPTION_CONTAINS(MassEggs(layout, EIndex::V1), yexception,
-                "Hot indexes require a separate descriptor page collection");
+                "Indexes out of the descriptor require a separate descriptor page collection");
         }
     }
 
@@ -495,8 +495,11 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
             UNIT_ASSERT(root.ParseFromArray(inplace.data(), inplace.size()));
             UNIT_ASSERT_VALUES_EQUAL(root.GetEvol().GetTail(), 31);
             UNIT_ASSERT(root.GetLayout().GetSeparateDescriptorCollection());
-            UNIT_ASSERT_VALUES_EQUAL(root.GetLayout().GetHotPKIndex(), layout.HotPKIndex);
-            UNIT_ASSERT_VALUES_EQUAL(root.GetLayout().GetHotFamilyIndexes(), layout.HotFamilyIndexes);
+            // Written explicitly, so that the default of the proto is not relied upon
+            UNIT_ASSERT(root.GetLayout().HasKeyIndexInDescriptor());
+            UNIT_ASSERT(root.GetLayout().HasGroupIndexesInDescriptor());
+            UNIT_ASSERT_VALUES_EQUAL(root.GetLayout().GetKeyIndexInDescriptor(), layout.KeyIndexInDescriptor);
+            UNIT_ASSERT_VALUES_EQUAL(root.GetLayout().GetGroupIndexesInDescriptor(), layout.GroupIndexesInDescriptor);
         }
 
         const auto oldPart = WriteBundlePart({ }, EIndex::V2);
@@ -507,6 +510,8 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
         UNIT_ASSERT(root.ParseFromArray(inplace.data(), inplace.size()));
         UNIT_ASSERT_LT(root.GetEvol().GetTail(), 31);
         UNIT_ASSERT(!root.GetLayout().HasSeparateDescriptorCollection());
+        UNIT_ASSERT(!root.GetLayout().HasKeyIndexInDescriptor());
+        UNIT_ASSERT(!root.GetLayout().HasGroupIndexesInDescriptor());
     }
 
     Y_UNIT_TEST(WrongPageCollectionsCount) {

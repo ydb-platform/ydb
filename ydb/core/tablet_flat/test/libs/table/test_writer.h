@@ -76,8 +76,8 @@ namespace NTest {
             TPartLayout layout;
             if (root.HasLayout()) {
                 layout.SeparateDescriptorCollection = root.GetLayout().GetSeparateDescriptorCollection();
-                layout.HotPKIndex = root.GetLayout().GetHotPKIndex();
-                layout.HotFamilyIndexes = root.GetLayout().GetHotFamilyIndexes();
+                layout.KeyIndexInDescriptor = root.GetLayout().GetKeyIndexInDescriptor();
+                layout.GroupIndexesInDescriptor = root.GetLayout().GetGroupIndexesInDescriptor();
             }
             const TPartSlots slots(Max(eggs.BTreeGroupIndexes.size(), eggs.FlatGroupIndexes.size()), layout);
             Y_ENSURE(Store->GetOuterRoom() == slots.OuterSlot(), "Store has " << Store->GetOuterRoom() << " rooms for " << slots.OuterSlot() << " slots");

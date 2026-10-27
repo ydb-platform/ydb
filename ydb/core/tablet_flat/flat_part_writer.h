@@ -68,8 +68,8 @@ namespace NTable {
                 Y_ENSURE(WriteBTreeIndex && !WriteFlatIndex,
                     "Separate descriptor page collection requires b-tree index only");
             } else {
-                Y_ENSURE(!conf.Layout.HotPKIndex && !conf.Layout.HotFamilyIndexes,
-                    "Hot indexes require a separate descriptor page collection");
+                Y_ENSURE(conf.Layout.KeyIndexInDescriptor && conf.Layout.GroupIndexesInDescriptor,
+                    "Indexes out of the descriptor require a separate descriptor page collection");
             }
             for (ui32 group : xrange(conf.Groups.size())) {
                 Groups.emplace_back(scheme, conf, tags, NPage::TGroupId(group), Slots);
@@ -773,12 +773,8 @@ namespace NTable {
                 }
                 if (const auto& layout = Slots.GetLayout(); layout.SeparateDescriptorCollection) {
                     lay->SetSeparateDescriptorCollection(true);
-                    if (layout.HotPKIndex) {
-                        lay->SetHotPKIndex(true);
-                    }
-                    if (layout.HotFamilyIndexes) {
-                        lay->SetHotFamilyIndexes(true);
-                    }
+                    lay->SetKeyIndexInDescriptor(layout.KeyIndexInDescriptor);
+                    lay->SetGroupIndexesInDescriptor(layout.GroupIndexesInDescriptor);
                 }
 
                 if (WriteBTreeIndex) {

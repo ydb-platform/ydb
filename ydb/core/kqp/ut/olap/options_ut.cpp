@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapOptions) {
-    NKikimrSchemeOp::TColumnTableSchemeOptions DescribeStoreOptions(TKikimrRunner& kikimr, const TString& storePath) {
+    NKikimrSchemeOp::TColumnTableSchemeOptions DescribeStoreOptions(TKikimrRunner & kikimr, const TString& storePath) {
         auto* runtime = kikimr.GetTestServer().GetRuntime();
         const auto describe = DescribeTable(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), storePath);
         const auto& presets = describe.GetPathDescription().GetColumnStoreDescription().GetSchemaPresets();
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptions) {
         return presets[0].GetSchema().GetOptions();
     }
 
-    void ExecuteScheme(TKikimrRunner& kikimr, const TString& query, const NYdb::EStatus expected = NYdb::EStatus::SUCCESS) {
+    void ExecuteScheme(TKikimrRunner & kikimr, const TString& query, const NYdb::EStatus expected = NYdb::EStatus::SUCCESS) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
@@ -45,14 +45,16 @@ Y_UNIT_TEST_SUITE(KqpOlapOptions) {
         }
 
         // options not mentioned in UPSERT_OPTIONS keep their values
-        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCAN_READER_POLICY_NAME=`PLAIN`);)");
+        ExecuteScheme(
+            kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCAN_READER_POLICY_NAME=`PLAIN`);)");
         {
             const auto options = DescribeStoreOptions(kikimr, store);
             UNIT_ASSERT(options.GetSchemeNeedActualization());
             UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "PLAIN");
         }
 
-        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS, NAME=`SCHEME_NEED_ACTUALIZATION, DEDUPLICATION_ENABLED`);)");
+        ExecuteScheme(kikimr,
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS, NAME=`SCHEME_NEED_ACTUALIZATION, DEDUPLICATION_ENABLED`);)");
         {
             const auto options = DescribeStoreOptions(kikimr, store);
             UNIT_ASSERT(!options.GetSchemeNeedActualization());
@@ -74,9 +76,43 @@ Y_UNIT_TEST_SUITE(KqpOlapOptions) {
 
         ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS, NAME=`UNKNOWN`);)",
             NYdb::EStatus::GENERIC_ERROR);
-        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS);)",
-            NYdb::EStatus::GENERIC_ERROR);
+        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS);)", NYdb::EStatus::GENERIC_ERROR);
+    }
+
+    Y_UNIT_TEST(ResetOptionsClassNameAliases) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        const TString store = "/Root/olapStore";
+
+        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS,
+            SCAN_READER_POLICY_NAME=`SIMPLE`, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`,
+            `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+            `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size": 1024}`);)");
+        {
+            const auto options = DescribeStoreOptions(kikimr, store);
+            UNIT_ASSERT(options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetMetadataManagerConstructor().GetLocalDB().GetMemoryCacheSize(), 1024u);
+        }
+
+        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS,
+            NAME=`COMPACTION_PLANNER.CLASS_NAME`);)");
+        {
+            const auto options = DescribeStoreOptions(kikimr, store);
+            UNIT_ASSERT(!options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetMetadataManagerConstructor().GetLocalDB().GetMemoryCacheSize(), 1024u);
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "SIMPLE");
+        }
+
+        // An alias clears the whole constructor, including its features.
+        ExecuteScheme(kikimr, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=RESET_OPTIONS,
+            NAME=`METADATA_MEMORY_MANAGER.CLASS_NAME`);)");
+        {
+            const auto options = DescribeStoreOptions(kikimr, store);
+            UNIT_ASSERT(!options.HasMetadataManagerConstructor());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "SIMPLE");
+        }
     }
 }
 
-}
+}   // namespace NKikimr::NKqp

@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
@@ -27,26 +26,6 @@ private:
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
     YDB_READONLY_DEF(std::set<EOption>, ResetOptions);
 
-    bool IsOptionSet(const EOption option) const {
-        switch (option) {
-            case TRequestedOptions::SCHEME_NEED_ACTUALIZATION:
-                return !!SchemeNeedActualization;
-            case TRequestedOptions::COMPACTION_PLANNER:
-                return CompactionPlannerConstructor.HasObject();
-            case TRequestedOptions::METADATA_MEMORY_MANAGER:
-                return MetadataManagerConstructor.HasObject();
-            case TRequestedOptions::SCAN_READER_POLICY_NAME:
-                return !!ScanReaderPolicyName;
-            case TRequestedOptions::DEDUPLICATION_ENABLED:
-                return !!DeduplicationEnabled;
-            case TRequestedOptions::INSERT_OPTIONS:
-                return !!InsertOptionsBuildIndexesEnabled || !!InsertOptionsBuildIndexesMinBlobBytes;
-            case TRequestedOptions::CACHE_BLOBS_AFTER_WRITE:
-                return !!CacheBlobsAfterWrite;
-        }
-        return false;
-    }
-
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         if (!alterRequest.HasOptions()) {
@@ -65,7 +44,8 @@ public:
             CacheBlobsAfterWrite = alterRequest.GetOptions().GetCacheBlobsAfterWrite();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
-            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
+            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(
+                alterRequest.GetOptions().GetMetadataManagerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
@@ -73,7 +53,8 @@ public:
             MetadataManagerConstructor = container.DetachResult();
         }
         if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
-            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
+            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(
+                alterRequest.GetOptions().GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
@@ -94,16 +75,11 @@ public:
                 errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "unknown option to reset: " << rawOption);
                 return false;
             }
-            const auto option = static_cast<EOption>(rawOption);
-            if (IsOptionSet(option)) {
-                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                    << "option " << TRequestedOptions::EOption_Name(option) << " is both set and reset");
-                return false;
-            }
-            ResetOptions.emplace(option);
+            ResetOptions.emplace(static_cast<EOption>(rawOption));
         }
         return true;
     }
+
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
         if (SchemeNeedActualization) {
             alterRequest.MutableOptions()->SetSchemeNeedActualization(*SchemeNeedActualization);
@@ -137,4 +113,4 @@ public:
         }
     }
 };
-}
+}   // namespace NKikimr::NSchemeShard

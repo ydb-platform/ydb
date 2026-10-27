@@ -176,8 +176,8 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
         bytesIn += p->GetTotalBlobBytes();
     }
     // A metadata move reads nothing: its moved portions count as inputs with zero bytes.
-    NChanges::TGeneralCompactionCounters::ForReason(GetTaskReason())
-        .OnStart(SwitchedPortions.size() + GetPortionsToMove().GetSize(), bytesIn, StartMonotonic - CreationMonotonic);
+    NChanges::TGeneralCompactionCounters::ForReason(GetTaskReason()).OnStart(SwitchedPortions.size() + GetPortionsToMove().GetSize(), bytesIn,
+        StartMonotonic - CreationMonotonic);
 }
 
 void TGeneralCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

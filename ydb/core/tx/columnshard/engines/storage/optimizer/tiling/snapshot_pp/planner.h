@@ -12,7 +12,6 @@
 #include <ydb/library/intersection_tree/intersection_tree.h>
 
 #include <library/cpp/json/writer/json_value.h>
-
 #include <util/generic/function_ref.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -79,14 +78,14 @@ struct TClock {
     TSnapshot SettledBefore = Origin();
 };
 
-enum class ETaskKind : ui8 {
+enum class ETaskKind: ui8 {
     /// Read the inputs, merge them, write new portions.
     Merge,
     /// Change the inputs' level to the line without rewriting them (decision 26).
     MetadataMove,
 };
 
-enum class ETaskReason : ui8 {
+enum class ETaskReason: ui8 {
     Accumulator,
     Level,
     AdvanceMerge,
@@ -172,6 +171,7 @@ public:
 
     /// Engine entry point: one batch of removals and additions. The first batch is the bootstrap load (decisions 11 to 13).
     void ModifyPortions(const std::vector<TPtr>& add, const std::vector<TConstPtr>& remove) {
+        UnstallAdvance();
         for (const auto& p : remove) {
             RemovePortion(p);
         }
@@ -205,6 +205,9 @@ public:
         for (const ui64 id : restore) {
             Restore(id);
         }
+        if (!restore.empty()) {
+            UnstallAdvance();
+        }
     }
 
     /// The next task from the accumulator, a tree level or, once S lags the clock by the delay trigger, the advance as a
@@ -229,6 +232,8 @@ public:
                 advance->first.Priority = *delayPriority;
                 best = std::move(advance->first);
                 advanceTarget = advance->second;
+            } else {
+                StallAdvance();
             }
         }
         if (!best) {
@@ -256,6 +261,7 @@ public:
         Resync(isLocked);
         auto advance = BuildAdvanceTask(isLocked);
         if (!advance) {
+            StallAdvance();
             return std::nullopt;
         }
         RaisePlacementThreshold(advance->second->RecordSnapshotMin());
@@ -286,7 +292,29 @@ public:
 
     /// The same against a clock the caller supplies: the priority read is const and must not touch the core's clock.
     bool HasAdvanceTarget(const TSnapshot& settledBefore) const {
-        return !OutsideUnlocked.empty() && !(settledBefore < (*OutsideUnlocked.begin())->RecordSnapshotMin());
+        return !IsLoneSmallTable() && !OutsideUnlocked.empty() && !(settledBefore < (*OutsideUnlocked.begin())->RecordSnapshotMin());
+    }
+
+    /// Decision 18, completed 2026-10-28: a delay source that was asked for a task and could compose none, every settled
+    /// target blocked by held inputs, stops counting as a source and as overload until the set or the locks change;
+    /// otherwise the lag it cannot act on would keep the node's critical bucket raised and the gap rule would hold back
+    /// every other shard on the node. The gauges keep showing the real lag.
+    void StallAdvance() {
+        if (!AdvanceStalled) {
+            AdvanceStalled = true;
+            PublishHighestLevel();
+        }
+    }
+
+    void UnstallAdvance() {
+        if (AdvanceStalled) {
+            AdvanceStalled = false;
+            PublishHighestLevel();
+        }
+    }
+
+    bool IsAdvanceStalled() const {
+        return AdvanceStalled;
     }
 
     /// The highest priority among the sources at or above their triggers, the lag of S included; nothing when none is
@@ -324,7 +352,7 @@ public:
         if (Accumulator.size() >= Settings.AccumulatorOverloadPortions) {
             return true;
         }
-        if (GetDelaySeconds() >= Settings.DelayOverload.Seconds()) {
+        if (!AdvanceStalled && GetDelaySeconds() >= Settings.DelayOverload.Seconds()) {
             return true;
         }
         for (ui8 level = FIRST_TREE_LEVEL; level <= Settings.TopLevel(); ++level) {
@@ -365,16 +393,29 @@ public:
     /// S for forced requests (decision 1): the oldest portion outside the line, in-flight inputs included; nothing when
     /// there is nothing to count, and the reader supplies the fallback, the shard its outdated step minus L (decision 6).
     std::optional<TSnapshot> GetForcedCompactedSnapshot() const {
-        if (Outside.empty()) {
+        if (IsSettledForForcedRequest()) {
             return std::nullopt;
         }
         return (*Outside.begin())->RecordSnapshotMin();
     }
 
+    /// Decision 21, completed 2026-10-28: a table whose only portion is small has nothing to merge it with. It is settled
+    /// for both readings of S: a forced request gets NOT_NEEDED and no delay accrues. Otherwise its lag grows without
+    /// bound, marks the shard overloaded and, through the node's buckets and the gap rule, holds back every other shard
+    /// on the node, which is what the tiny TPC-H tables did for five hours on 2026-10-27.
+    bool IsLoneSmallTable() const {
+        return Line.empty() && Registry.size() == 1 && IsSmall(*Registry.begin()->second.Portion);
+    }
+
+    /// The completion rule of PR 1 for a forced request: nothing outside the line, or a lone small table.
+    bool IsSettledForForcedRequest() const {
+        return Outside.empty() || IsLoneSmallTable();
+    }
+
     /// S for the queue key and the age buckets (decision 6): the oldest portion outside the line that no task holds;
     /// nothing when there is none, and the adapter supplies the node's clock minus L as the fallback.
     std::optional<TSnapshot> GetSchedulingCompactedSnapshot() const {
-        if (OutsideUnlocked.empty()) {
+        if (OutsideUnlocked.empty() || IsLoneSmallTable()) {
             return std::nullopt;
         }
         return (*OutsideUnlocked.begin())->RecordSnapshotMin();
@@ -468,7 +509,8 @@ public:
                 if (!entry.HandedOut) {
                     ++outsideUnlockedExpected;
                     if (!OutsideUnlocked.contains(entry.Portion)) {
-                        return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " is unlocked outside the line but not in the unlocked S set");
+                        return TConclusionStatus::Fail(
+                            TStringBuilder() << "portion " << id << " is unlocked outside the line but not in the unlocked S set");
                     }
                 } else if (OutsideUnlocked.contains(entry.Portion)) {
                     return TConclusionStatus::Fail(TStringBuilder() << "handed-out portion " << id << " is still in the unlocked S set");
@@ -490,30 +532,31 @@ public:
                     break;
             }
             if (found != expectedInStructure) {
-                return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " membership in level " << (ui32)entry.Level
-                                                                << " is " << found << ", expected " << expectedInStructure);
+                return TConclusionStatus::Fail(TStringBuilder() << "portion " << id << " membership in level " << (ui32)entry.Level << " is "
+                                                                << found << ", expected " << expectedInStructure);
             }
         }
         if (inStructures + handedOutOffStructures != Registry.size()) {
-            return TConclusionStatus::Fail(TStringBuilder() << "structures hold " << inStructures << " portions plus "
-                                                            << handedOutOffStructures << " handed out, registry " << Registry.size());
+            return TConclusionStatus::Fail(TStringBuilder() << "structures hold " << inStructures << " portions plus " << handedOutOffStructures
+                                                            << " handed out, registry " << Registry.size());
         }
         if (outsideExpected != Outside.size()) {
             return TConclusionStatus::Fail(TStringBuilder() << "S set holds " << Outside.size() << " portions, expected " << outsideExpected);
         }
         if (outsideUnlockedExpected != OutsideUnlocked.size()) {
-            return TConclusionStatus::Fail(TStringBuilder() << "unlocked S set holds " << OutsideUnlocked.size() << " portions, expected "
-                                                            << outsideUnlockedExpected);
+            return TConclusionStatus::Fail(
+                TStringBuilder() << "unlocked S set holds " << OutsideUnlocked.size() << " portions, expected " << outsideUnlockedExpected);
         }
         if (PendingPriority.has_value() != !HandedOut.empty()) {
-            return TConclusionStatus::Fail(TStringBuilder() << "remembered priority and handed-out set disagree: " << HandedOut.size()
-                                                            << " handed out, priority " << (PendingPriority ? PendingPriority->DebugString() : "none"));
+            return TConclusionStatus::Fail(TStringBuilder()
+                                           << "remembered priority and handed-out set disagree: " << HandedOut.size() << " handed out, priority "
+                                           << (PendingPriority ? PendingPriority->DebugString() : "none"));
         }
         const TPortion* previous = nullptr;
         for (const auto& p : Line) {
             if (previous && !(previous->IndexKeyEnd() < p->IndexKeyStart())) {
-                return TConclusionStatus::Fail(TStringBuilder() << "line portions " << previous->GetPortionId() << " and "
-                                                                << p->GetPortionId() << " intersect");
+                return TConclusionStatus::Fail(
+                    TStringBuilder() << "line portions " << previous->GetPortionId() << " and " << p->GetPortionId() << " intersect");
             }
             previous = p.get();
         }
@@ -571,6 +614,9 @@ private:
     std::optional<TSnapshot> Y;
     TClock Clock;
     bool FirstLoad = true;
+    /// Decision 18 (2026-10-28): set when the advance was asked and composed nothing, cleared by any portion change or
+    /// restored input.
+    bool AdvanceStalled = false;
 
     static bool IsTracked(const TPortion& p) {
         switch (p.GetProduced()) {
@@ -645,6 +691,9 @@ private:
     /// Decision 18, revised 2026-10-21: from the delay trigger the advance is a prioritized source, level 1 at the trigger
     /// rising linearly to critical at the delay overload edge, like a level between its trigger and overload heights.
     std::optional<TOptimizationPriority> DelayPriority() const {
+        if (AdvanceStalled) {
+            return std::nullopt;
+        }
         const ui64 delay = GetDelaySeconds();
         if (delay < Settings.DelayTrigger.Seconds()) {
             return std::nullopt;
@@ -871,8 +920,7 @@ private:
                 return;
             }
             const TKey& portionStart = p->IndexKeyStart();
-            queue.push_back(TCandidate{
-                .Portion = p, .EffectiveStart = portionStart < window.Left ? window.Left : portionStart, .Line = line });
+            queue.push_back(TCandidate{ .Portion = p, .EffectiveStart = portionStart < window.Left ? window.Left : portionStart, .Line = line });
         };
         const auto collect = [&](const TKey& from, const TKey& to) {
             for (auto it = Line.lower_bound(from); it != Line.end() && !(to < (*it)->IndexKeyStart()); ++it) {

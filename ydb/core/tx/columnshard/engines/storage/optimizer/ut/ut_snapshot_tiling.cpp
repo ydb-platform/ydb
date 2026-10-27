@@ -139,7 +139,9 @@ struct TFixture {
 
     /// A task request as the engine makes it: the inputs of running tasks are locked, the task taken gets locked.
     std::optional<TCore::TTask> Take() {
-        auto task = Core.TakeNextTask([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
+        auto task = Core.TakeNextTask([this](const TTestPortion::TConstPtr& p) {
+            return IsLocked(p);
+        });
         if (task) {
             Lock(*task);
         }
@@ -148,7 +150,9 @@ struct TFixture {
     }
 
     std::optional<TCore::TTask> TakeAdvance() {
-        auto task = Core.TakeAdvanceTask([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
+        auto task = Core.TakeAdvanceTask([this](const TTestPortion::TConstPtr& p) {
+            return IsLocked(p);
+        });
         if (task) {
             Lock(*task);
         }
@@ -179,7 +183,9 @@ struct TFixture {
     /// The task aborted: its locks are gone, and the next task request's first step puts the inputs back.
     void Abort(const TCore::TTask& task) {
         ReleaseLocks(task);
-        Core.Resync([this](const TTestPortion::TConstPtr& p) { return IsLocked(p); });
+        Core.Resync([this](const TTestPortion::TConstPtr& p) {
+            return IsLocked(p);
+        });
         Check();
     }
 
@@ -335,10 +341,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrap) {
     Y_UNIT_TEST(SweepsLineInSnapshotOrderAndStopsAtFirstFailure) {
         TFixture f;
         f.Load({
-            Portion(4, 40, 49, 4),
-            Portion(3, 5, 9, 3),
-            Portion(1, 0, 9, 1),
-            Portion(2, 20, 29, 2),
+            Portion(4, 40, 49, 4), Portion(3, 5, 9, 3), Portion(1, 0, 9, 1), Portion(2, 20, 29, 2),
         });
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(1), LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), LINE_LEVEL);
@@ -352,9 +355,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrap) {
     Y_UNIT_TEST(DerivesSnapshotFromAccumulatorToo) {
         TFixture f;
         f.Load({
-            Portion(1, 100, 101, 10, SMALL),
-            Portion(2, 0, 9, 20),
-            Portion(3, 5, 9, 30),
+            Portion(1, 100, 101, 10, SMALL), Portion(2, 0, 9, 20), Portion(3, 5, 9, 30),
         });
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(1), ACCUMULATOR_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), LINE_LEVEL);
@@ -499,11 +500,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrapLevels) {
         settings.WidthThreshold = 2;
         TFixture f(settings);
         f.Load({
-            Portion(1, 0, 9, 0),
-            Portion(2, 0, 4, 1),
-            Portion(3, 0, 9, 2),
-            Portion(4, 5, 6, 3),
-            Portion(5, 7, 8, 4),
+            Portion(1, 0, 9, 0), Portion(2, 0, 4, 1), Portion(3, 0, 9, 2), Portion(4, 5, 6, 3), Portion(5, 7, 8, 4),
         });
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(1), LINE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), FIRST_TREE_LEVEL);
@@ -521,11 +518,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBootstrapLevels) {
         settings.TreeLevelsCount = 1;
         TFixture f(settings);
         f.Load({
-            Portion(1, 0, 99, 0),
-            Portion(2, 0, 1, 1),
-            Portion(3, 2, 3, 2),
-            Portion(4, 4, 5, 3),
-            Portion(5, 0, 5, 4),
+            Portion(1, 0, 99, 0), Portion(2, 0, 1, 1), Portion(3, 2, 3, 2), Portion(4, 4, 5, 3), Portion(5, 0, 5, 4),
         });
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSettings().TopLevel(), FIRST_TREE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(5), FIRST_TREE_LEVEL);
@@ -825,6 +818,36 @@ Y_UNIT_TEST_SUITE(SnapshotTilingDelay) {
         UNIT_ASSERT(!f.Core.IsOverloaded());
         UNIT_ASSERT(!f.Core.GetTaskPriority());
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetSchedulingPriority()->GetLevel(), 10);
+    }
+
+    Y_UNIT_TEST(StalledAdvanceStopsCountingUntilPortionsChange) {
+        auto settings = TestSettings();
+        settings.DelayTrigger = TDuration::Seconds(1);
+        settings.DelayOverload = TDuration::Seconds(2);
+        TFixture f(std::move(settings));
+        f.Load({ Portion(1, 0, 9, 10) });
+        f.Add(Portion(2, 5, 6, 11));
+        UNIT_ASSERT(f.Core.IsOverloaded());
+        const auto first = f.Take();
+        UNIT_ASSERT(first);
+        UNIT_ASSERT_EQUAL(f.Ids(*first), (std::vector<ui64>{ 1, 2 }));
+        // A second target needs the line portion the first task holds: the advance can compose nothing for it.
+        f.Add(Portion(3, 7, 8, 12));
+        UNIT_ASSERT(f.Core.GetTaskPriority());
+        UNIT_ASSERT(f.Core.IsOverloaded());
+        UNIT_ASSERT(!f.Take());
+        // Stalled: the lag still shows, but it is neither a source nor an overload until something changes.
+        UNIT_ASSERT(f.Core.IsAdvanceStalled());
+        UNIT_ASSERT(f.Core.GetDelaySeconds() > 0);
+        UNIT_ASSERT(!f.Core.GetTaskPriority());
+        UNIT_ASSERT(!f.Core.IsOverloaded());
+        // The first task finishes: its outputs arrive, the source counts again, and the blocked target goes through.
+        f.Finish(*first, { LinePortion(5, 0, 9, 10) });
+        UNIT_ASSERT(!f.Core.IsAdvanceStalled());
+        UNIT_ASSERT(f.Core.GetTaskPriority());
+        const auto second = f.Take();
+        UNIT_ASSERT(second);
+        UNIT_ASSERT_EQUAL(f.Ids(*second), (std::vector<ui64>{ 3, 5 }));
     }
 
     Y_UNIT_TEST(LevelTaskStillWinsOverALowerDelayPriority) {
@@ -1208,13 +1231,24 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT_VALUES_EQUAL(f.Core.GetAccumulatorSize(), 0);
     }
 
-    Y_UNIT_TEST(LoneSmallPortionYieldsNoTask) {
+    Y_UNIT_TEST(LoneSmallTableIsSettled) {
         TFixture f;
         f.Load({});
         f.Add(Portion(1, 0, 1, 11, SMALL));
-        UNIT_ASSERT(f.Core.HasAdvanceTarget());
+        // Nothing to merge the portion with: no target, no S in either reading, no delay, complete for a forced request.
+        UNIT_ASSERT(f.Core.IsLoneSmallTable());
+        UNIT_ASSERT(!f.Core.HasAdvanceTarget());
         UNIT_ASSERT(!f.TakeAdvance());
+        UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
+        UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(f.Core.GetDelaySeconds(), 0);
+        UNIT_ASSERT(f.Core.IsSettledForForcedRequest());
+        // A second small portion makes a table with work again.
+        f.Add(Portion(2, 10, 11, 12, SMALL));
+        UNIT_ASSERT(!f.Core.IsLoneSmallTable());
+        UNIT_ASSERT(f.Core.HasAdvanceTarget());
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+        UNIT_ASSERT(!f.Core.IsSettledForForcedRequest());
     }
 
     Y_UNIT_TEST(BlockedTargetIsSkippedAndRetried) {
@@ -1286,21 +1320,27 @@ struct TRowPortion {
     ui64 GetPortionId() const {
         return PortionId;
     }
+
     NArrow::TSimpleRow IndexKeyStart() const {
         return Start;
     }
+
     NArrow::TSimpleRow IndexKeyEnd() const {
         return End;
     }
+
     ui64 GetTotalBlobBytes() const {
         return BlobBytes;
     }
+
     ui64 RecordSnapshotMin() const {
         return Snapshot;
     }
+
     NPortion::EProduced GetProduced() const {
         return NPortion::INSERTED;
     }
+
     ui32 GetCompactionLevel() const {
         return CompactionLevel;
     }
@@ -1309,8 +1349,8 @@ struct TRowPortion {
 using TRowCore = TSnapshotTiling<NArrow::TSimpleRow, TRowPortion, ui64>;
 
 std::shared_ptr<arrow::Schema> BenchSchema() {
-    static std::shared_ptr<arrow::Schema> schema = arrow::schema({ arrow::field("resource_id", arrow::uint64()),
-        arrow::field("timestamp", arrow::uint64()), arrow::field("uid", arrow::utf8()) });
+    static std::shared_ptr<arrow::Schema> schema = arrow::schema(
+        { arrow::field("resource_id", arrow::uint64()), arrow::field("timestamp", arrow::uint64()), arrow::field("uid", arrow::utf8()) });
     return schema;
 }
 
@@ -1325,8 +1365,10 @@ NArrow::TSimpleRow BenchKey(const ui64 resource, const ui64 ts, const TString& u
 }
 
 TRowPortion::TPtr RowPortion(const ui64 id, const ui64 tsStart, const ui64 tsEnd, const ui64 snapshot, const ui64 bytes, const ui32 level = 0) {
-    return std::make_shared<TRowPortion>(TRowPortion{ .PortionId = id, .Start = BenchKey(7, tsStart, "aaaaaaaa-start"),
-        .End = BenchKey(7, tsEnd, "zzzzzzzz-end"), .BlobBytes = bytes, .Snapshot = snapshot, .CompactionLevel = level });
+    return std::make_shared<TRowPortion>(TRowPortion{
+        .PortionId = id, .Start = BenchKey(7, tsStart, "aaaaaaaa-start"), .End = BenchKey(7, tsEnd, "zzzzzzzz-end"), .BlobBytes = bytes,
+        .Snapshot = snapshot,
+        .CompactionLevel = level });
 }
 
 double Micros(const THPTimer& timer, const ui64 ops) {
@@ -1368,7 +1410,9 @@ Y_UNIT_TEST_SUITE(SnapshotTilingBench) {
         UNIT_ASSERT_VALUES_EQUAL(core.GetLineSize(), 2'000);
         UNIT_ASSERT_VALUES_EQUAL(core.GetAccumulatorSize(), 5'600);
         THashSet<ui64> locked;
-        const auto isLocked = [&locked](const TRowPortion::TConstPtr& p) { return locked.contains(p->GetPortionId()); };
+        const auto isLocked = [&locked](const TRowPortion::TConstPtr& p) {
+            return locked.contains(p->GetPortionId());
+        };
         const auto take = [&]() {
             auto task = core.TakeNextTask(isLocked);
             if (task) {

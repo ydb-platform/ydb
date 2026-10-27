@@ -2532,7 +2532,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // and a forced compaction completes again after exactly one more task.
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 110 * 1000 }, schema), schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 100 * 1000, 110 * 1000 }, schema), schema, true, &writeIds));
             auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
             ++txId;

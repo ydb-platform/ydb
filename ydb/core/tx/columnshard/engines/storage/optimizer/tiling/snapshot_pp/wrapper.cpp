@@ -141,6 +141,7 @@ protected:
             : Histogram(histogram)
         {
         }
+
         ~TTimed() {
             Histogram->Collect(static_cast<i64>((TMonotonic::Now() - Start).MicroSeconds()));
         }
@@ -200,7 +201,7 @@ protected:
     /// PR 1 keeps the engine's rule for a forced compaction, every portion in the line, with the inputs of running tasks
     /// still counted as outside; PR 2 replaces it with S against R (design.md, "ALTER TABLE COMPACT").
     TConclusion<bool> DoCheckNoIntersections() const override {
-        return Core.GetOutsideSize() == 0;
+        return Core.IsSettledForForcedRequest();
     }
 
     bool DoIsOverloaded() const override {

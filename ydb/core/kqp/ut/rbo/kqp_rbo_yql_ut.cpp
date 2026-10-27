@@ -8597,7 +8597,7 @@ FROM (
         const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
         auto build = [&](bool blocks) {
             return TPhysicalJoinBuilder(*joined, f.ExprCtx, f.Pos, names).BuildPhysicalOp(
-                f.ExprCtx.NewArgument(f.Pos, "left"), f.ExprCtx.NewArgument(f.Pos, "right"), blocks, f.TypeCtx);
+                f.ExprCtx.NewArgument(f.Pos, "left"), f.ExprCtx.NewArgument(f.Pos, "right"), blocks, f.TypeCtx).AsNarrow(f.ExprCtx);
         };
         auto physical = build(false);
         TExprNode::TListType cores;
@@ -8637,7 +8637,8 @@ FROM (
         UNIT_ASSERT(GetLiveOut(agg) == TUnorderedIUs{sum});
         const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
         auto physical = TPhysicalAggregationBuilder(*agg, f.ExprCtx, f.Pos, names, true)
-            .BuildPhysicalOp(f.ExprCtx.NewArgument(f.Pos, "input"), std::nullopt);
+            .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(f.ExprCtx.NewArgument(f.Pos, "input")), std::nullopt)
+            .AsNarrow(f.ExprCtx);
         TExprNode::TListType narrowMaps;
         CollectCallableNodes(physical, "NarrowMap", narrowMaps);
         UNIT_ASSERT_VALUES_EQUAL(narrowMaps.size(), 1);

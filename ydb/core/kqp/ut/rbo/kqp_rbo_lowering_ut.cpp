@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {row, condition});
                 read.OlapFilterLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(filter));
             }
-            const auto result = TPhysicalSourceBuilder(read, ctx, pos, names, registry, "stage").BuildPhysicalOp();
+            const auto result = TPhysicalSourceBuilder(read, ctx, pos, names, registry, "stage").BuildPhysicalOp().AsNarrow(ctx);
             TExprNode::TPtr storageRead;
             VisitExpr(result, [&](const TExprNode::TPtr& node) {
                 if (TKqpReadRangesSourceSettings::Match(node.Get()) || TKqpBlockReadOlapTableRanges::Match(node.Get())) {
@@ -556,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
-            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp();
+            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);
         const auto source = FindNode(ast, [](const auto& node) {
             return TKqpBlockReadOlapTableRanges::Match(node.Get());
         });
@@ -593,7 +593,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 ComputePlanLiveness(*root);
                 const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
                 const auto ast = TPhysicalAggregationBuilder(*op, f.ExprCtx, f.Pos, names, prune)
-                    .BuildPhysicalOp(f.ExprCtx.NewArgument(f.Pos, "input"), std::nullopt);
+                    .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(f.ExprCtx.NewArgument(f.Pos, "input")), std::nullopt)
+                    .AsNarrow(f.ExprCtx);
                 const auto combiner = FindNode(ast, [](const auto& node) {
                     return node->IsCallable("DqPhyHashCombine");
                 });
@@ -769,7 +770,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 f.SetType(partial);
                 const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
                 auto stage = TPhysicalSourceBuilder(*read, f.ExprCtx, f.Pos, names,
-                    root->PlanProps.InfoUnitRegistry, "stage").BuildPhysicalOp();
+                    root->PlanProps.InfoUnitRegistry, "stage").BuildPhysicalOp().AsNarrow(f.ExprCtx);
                 stage = NPhysicalConvertionUtils::BuildSwitch(stage, *hub, names, f.ExprCtx);
                 // A sibling consumer may have adapted its branch before this
                 // aggregate is visited in the normal postorder traversal.
@@ -782,7 +783,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                     ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
                 stage = NPhysicalConvertionUtils::TransformStageOutput(stage, [&](TExprNode::TPtr body) {
                     return TPhysicalAggregationBuilder(partial, f.ExprCtx, f.Pos, names)
-                        .BuildPhysicalOp(body, std::nullopt);
+                        .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(body), std::nullopt)
+                        .AsNarrow(f.ExprCtx);
                 }, GetReplicateOutputIndex(partial), f.ExprCtx);
                 const auto body = storage == NYql::EStorageType::RowStorage
                     ? TDqPhyStage(stage).Program().Body().Ptr() : stage;

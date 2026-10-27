@@ -36,7 +36,7 @@ public:
         return *this;
     }
 
-    TExprNode::TPtr BuildPhysicalOp() override;
+    NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() override;
 
 private:
     // Program row fields by name.

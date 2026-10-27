@@ -10,11 +10,11 @@ TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
     : Query(query)
 {
     Y_ENSURE(query);
-    ++Query->CpuDemand;
+    ++Query->CpuMaxDemand;
 }
 
 TSchedulableTask::~TSchedulableTask() {
-    --Query->CpuDemand;
+    --Query->CpuMaxDemand;
 }
 
 void TSchedulableTask::RegisterForResume(const TActorId& actorId) {
@@ -33,17 +33,17 @@ bool TSchedulableTask::TryIncreaseUsage() {
     NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
     if (const auto snapshot = Query->GetSnapshot()) {
-        fairShare = snapshot->FairShare;
+        fairShare = snapshot->CpuFairShare;
         poolOrQuery = Query->GetParent();
 
-        // Special case for zero demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
-        if (fairShare == 0 && snapshot->CpuDemand == 0) {
-            auto prevDemand = snapshot->CpuDemand.fetch_add(1);
-            if (prevDemand == 0) {
+        // Special case for zero max demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
+        if (fairShare == 0 && snapshot->CpuMaxDemand == 0) {
+            auto prevMaxDemand = snapshot->CpuMaxDemand.fetch_add(1);
+            if (prevMaxDemand == 0) {
                 fairShare = Query->AllowMinFairShare;
             }
         }
-    } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
+    } else { // The pool of the query is not in the snapshot yet - see TQuery::InitSnapshot().
         fairShare = Query->AllowMinFairShare;
         poolOrQuery = Query.get();
     }
@@ -65,8 +65,6 @@ bool TSchedulableTask::TryIncreaseUsage() {
         }
     }
 
-    Query->UpdateActualDemand();
-
     return true;
 }
 
@@ -76,7 +74,7 @@ void TSchedulableTask::IncreaseUsage() {
     }
 }
 
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usageType) {
+void TSchedulableTask::DecreaseUsage(TDuration burstUsage, EUsageType usageType) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->CpuUsage;
         switch(usageType) {
@@ -96,14 +94,14 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usa
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
         auto usage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);
-        auto fairShare = snapshot->FairShare;
+        auto fairShare = snapshot->CpuFairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }
 
     return 0;
 }
 
-void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
+void TSchedulableTask::IncreaseBurstThrottle(TDuration burstThrottle) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         parent->CpuBurstThrottle += burstThrottle.MicroSeconds();
     }
@@ -113,8 +111,6 @@ void TSchedulableTask::IncreaseThrottle() {
     if (Iterator) {
         (*Iterator)->second = true;
     }
-
-    Query->UpdateActualDemand();
 
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->CpuThrottle;

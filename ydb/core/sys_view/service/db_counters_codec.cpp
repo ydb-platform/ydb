@@ -2,10 +2,31 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/hash.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr {
 namespace NSysView {
+
+static void CopyHistogram(NKikimrSysView::TDbCounters::THistogram* histogram,
+    const NKikimrSysView::TDbCounters::THistogram& current)
+{
+    auto bucketCount = current.BucketsSize();
+    histogram->MutableBuckets()->Reserve(bucketCount);
+    histogram->SetBucketsCount(bucketCount);
+    if (current.GetNonDerivative()) {
+        histogram->SetNonDerivative(true);
+    }
+    for (size_t b = 0; b < bucketCount; ++b) {
+        auto value = current.GetBuckets(b);
+        if (!value) {
+            continue;
+        }
+        histogram->AddBuckets(b);
+        histogram->AddBuckets(value);
+    }
+}
 
 void CopyCounters(NKikimrSysView::TDbCounters* diff,
     const NKikimrSysView::TDbCounters& current)
@@ -33,20 +54,7 @@ void CopyCounters(NKikimrSysView::TDbCounters* diff,
     }
 
     for (size_t i = 0; i < histogramSize; ++i) {
-        const auto& currentH = current.GetHistogram(i);
-        auto bucketCount = currentH.BucketsSize();
-
-        auto* histogram = diff->AddHistogram();
-        histogram->MutableBuckets()->Reserve(bucketCount);
-        histogram->SetBucketsCount(bucketCount);
-        for (size_t b = 0; b < bucketCount; ++b) {
-            auto value = currentH.GetBuckets(b);
-            if (!value) {
-                continue;
-            }
-            histogram->AddBuckets(b);
-            histogram->AddBuckets(value);
-        }
+        CopyHistogram(diff->AddHistogram(), current.GetHistogram(i));
     }
 }
 
@@ -102,6 +110,10 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
 
     for (size_t i = 0; i < histogramSize; ++i) {
         const auto& currentH = current.GetHistogram(i);
+        if (currentH.GetNonDerivative()) {
+            CopyHistogram(diff->AddHistogram(), currentH);
+            continue;
+        }
         auto& prevH = *prev.MutableHistogram(i);
         auto bucketCount = currentH.BucketsSize();
         if (prevH.BucketsSize() != bucketCount) {
@@ -154,6 +166,14 @@ void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>
     }
 }
 
+void MarkHistogramsNonDerivative(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
+    for (ui32 i : indices) {
+        if (i < (ui32)dst->HistogramSize()) {
+            dst->MutableHistogram(i)->SetNonDerivative(true);
+        }
+    }
+}
+
 void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     const NKikimrSysView::TDbCounters& current,
     NKikimrSysView::TDbCounters* prev)
@@ -187,7 +207,24 @@ void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
     TAggregateCumulative<false>::Apply(&combined, pending);
     TAggregateCumulative<false>::Apply(&combined, current);
     combined.MutableSimple()->Swap(current.MutableSimple());
+
+    // The combined counters carry no non-derivative histograms, set them aside: the latest wins
+    THashMap<size_t, NKikimrSysView::TDbCounters::THistogram> nonDerivative;
+    for (size_t i = 0; i < pending.HistogramSize(); ++i) {
+        if (pending.GetHistogram(i).GetNonDerivative()) {
+            nonDerivative[i] = pending.GetHistogram(i);
+        }
+    }
+    for (size_t i = 0; i < current.HistogramSize(); ++i) {
+        if (current.GetHistogram(i).GetNonDerivative()) {
+            nonDerivative[i].Swap(current.MutableHistogram(i));
+        }
+    }
+
     CalculateCountersDiff(&current, combined);
+    for (auto& [i, histogram] : nonDerivative) {
+        current.MutableHistogram(i)->Swap(&histogram);
+    }
 }
 
 void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,

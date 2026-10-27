@@ -26,9 +26,12 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-          # CPython 3.13 final is scheduled for October 2024:
-          # https://peps.python.org/pep-0719/
           - "3.13"
+          - "3.13t"
+          # CPython 3.14 final is scheduled for October 2025:
+          # https://peps.python.org/pep-0719/
+          - "3.14"
+          - "3.14t"
 
           # PyPy versions:
           # - https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md
@@ -41,6 +44,7 @@ jobs:
           - "pypy3.8"
           - "pypy3.9"
           - "pypy3.10"
+          - "pypy3.11"
 
           # Old PyPy versions
           # See https://foss.heptapod.net/pypy/pypy/-/issues/3991
@@ -49,22 +53,45 @@ jobs:
           - "pypy3.7-v7.3.2"
 
         include:
-          # Windows: test old and new Python
+          # Windows
           - os: windows-latest
-            python: 3.6
+            python: "3.6"
           - os: windows-latest
-            python: 3.13
+            python: "3.7"
+          - os: windows-latest
+            python: "3.8"
+          - os: windows-latest
+            python: "3.9"
+          - os: windows-latest
+            python: "3.10"
+          - os: windows-latest
+            python: "3.11"
+          - os: windows-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.13t"
 
-          # macOS: test only new Python
+          # macOS
+          # Python 3.9 is the oldest version available on macOS/arm64.
           - os: macos-latest
-            python: 3.12
+            python: "3.9"
+          - os: macos-latest
+            python: "3.10"
+          - os: macos-latest
+            python: "3.11"
+          - os: macos-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.13"
+          - os: macos-latest
+            python: "3.13t"
 
           # Ubuntu: test deadsnakes Python versions which are not supported by
           # GHA python-versions.
-          - os: ubuntu-20.04
-            python: 3.6
           - os: ubuntu-22.04
-            python: 3.7
+            python: "3.7"
 
     steps:
         # https://github.com/actions/checkout

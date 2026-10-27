@@ -43,6 +43,9 @@ public:
                      nodeIds.end(),
                      (TNodeId)0,
                      TlsActivationContext->ActorSystem()->NodeId);
+        // Deduplicate after resolving aliases for the current node (0 and '.').
+        std::sort(nodeIds.begin(), nodeIds.end());
+        nodeIds.erase(std::unique(nodeIds.begin(), nodeIds.end()), nodeIds.end());
         return nodeIds;
     }
 

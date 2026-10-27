@@ -39,7 +39,7 @@ Unlike traditional secondary indexes, which optimize equality or range search, v
 
 [Full-text index](../../dev/fulltext-indexes.md) is a special type of secondary index.
 
-Unlike traditional secondary indexes, which optimize search by equality or range, full-text indexes allow scalable text search for words and phrases (and when using [N-grams](https://en.wikipedia.org/wiki/N-gram), also for substrings). See also: [Full-text search](../query_execution/fulltext_search.md).
+Unlike traditional secondary indexes, which optimize search by equality or range, full-text indexes allow scalable text search for words and combinations of words (and when using [N-grams](https://en.wikipedia.org/wiki/N-gram), also for substrings). See also: [Full-text search](../query_execution/fulltext_search.md).
 
 ## JSON-index {#json}
 

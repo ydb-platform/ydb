@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
@@ -6,45 +6,42 @@ SRCS(
     kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
     kqp_full_text_source.cpp
-    kqp_sys_view_source.cpp
     kqp_fulltext_analyze.cpp
-    kqp_stream_enumerate.cpp
-    kqp_program_builder.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
     kqp_read_table.cpp
     kqp_runtime_impl.h
     kqp_scan_data.cpp
+    kqp_scan_data_meta.cpp
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
-    kqp_scan_data_meta.cpp
-    kqp_stream_lookup_join_helpers.cpp
+    kqp_stream_enumerate.cpp
+    kqp_stream_lock_worker.cpp
+    kqp_stream_lock_worker.h
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp
     kqp_stream_lookup_factory.h
+    kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_worker.cpp
     kqp_stream_lookup_worker.h
-    kqp_stream_lock_worker.cpp
-    kqp_stream_lock_worker.h
+    kqp_sys_view_source.cpp
     kqp_transport.cpp
+    kqp_vector_actor.cpp
     kqp_vector_index_levels_cache.cpp
     kqp_vector_index_levels_cache.h
-    kqp_vector_actor.cpp
     kqp_vector_search_actor.cpp
-    kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
+    kqp_write_actor_settings.cpp
     kqp_write_table.cpp
-
     scheduler/kqp_compute_scheduler_service.cpp
-    scheduler/kqp_schedulable_work_factory.cpp
     scheduler/kqp_schedulable_base.cpp
+    scheduler/kqp_schedulable_memory.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp
+    scheduler/kqp_schedulable_work_factory.cpp
     scheduler/tree/dynamic.cpp
     scheduler/tree/snapshot.cpp
-
-    streaming/kqp_streaming_aggregation.cpp
 )
 
 PEERDIR(
@@ -60,6 +57,9 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/runtime/common
+    ydb/core/kqp/runtime/streaming
+    ydb/core/kqp/tracing
     ydb/core/mon
     ydb/core/persqueue/events
     ydb/core/persqueue/public
@@ -71,8 +71,10 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/json_index
+    ydb/library/mkql_proto
     ydb/library/query_actor
     ydb/library/yql/dq/actors
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
@@ -84,9 +86,12 @@ PEERDIR(
     yql/essentials/utils
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
+
+RECURSE(
+    common
+    streaming
+)
 
 RECURSE_FOR_TESTS(
     ut

@@ -674,7 +674,7 @@ void TClientResponse::TraceResponse()
     }
 }
 
-const IInvokerPtr& TClientResponse::GetInvoker()
+IInvokerPtr TClientResponse::GetInvoker()
 {
     return ClientContext_->GetResponseHeavy()
         ? TDispatcher::Get()->GetHeavyInvoker()
@@ -874,6 +874,18 @@ TMethodDescriptor& TMethodDescriptor::SetMultiplexingBand(EMultiplexingBand valu
 TMethodDescriptor& TMethodDescriptor::SetStreamingEnabled(bool value)
 {
     StreamingEnabled = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetRequestHeavy(bool value)
+{
+    RequestHeavy = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetResponseHeavy(bool value)
+{
+    ResponseHeavy = value;
     return *this;
 }
 

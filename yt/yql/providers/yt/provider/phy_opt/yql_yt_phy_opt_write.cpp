@@ -484,16 +484,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 useExplicitColumns = useExplicitColumns || AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) { return path->Table->RowSpec->HasAuxColumns(); });
             }
             else {
-                if (useNativeDescSort) {
-                    const bool hasOldDescSort = AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
-                        return path->Table->RowSpec && path->Table->RowSpec->HasNonNativeDescendingSort();
-                    });
-                    const bool hasNativeDescSort = AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
-                        return path->Table->RowSpec && path->Table->RowSpec->HasNativeDescendingSort();
-                    });
-                    Y_ENSURE(!(hasOldDescSort && hasNativeDescSort), "Unexpected different desc sort types");
-                }
-
                 const bool exactCopySort = inputPaths.size() == 1 && !inputPaths.front()->HasColumns();
                 bool hasAux = inputPaths.front()->Table->RowSpec->HasAuxColumns();
                 bool sortIsChanged = inputPaths.front()->Table->IsUnordered
@@ -510,6 +500,21 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                         useExplicitColumns = true;
                     }
                 }
+
+                if (useNativeDescSort) {
+                    TYqlRowSpecInfo commonRowSpec = *inputPaths.front()->Table->RowSpec;
+                    for (size_t i = 1; i < inputPaths.size(); ++i) {
+                        commonRowSpec.MakeCommonSortness(ctx, *inputPaths[i]->Table->RowSpec, true);
+                    }
+
+                    TYqlRowSpecInfo commonPrefixRowSpec = *inputPaths.front()->Table->RowSpec;
+                    commonPrefixRowSpec.ClearSortness(ctx, commonRowSpec.SortMembers.size());
+                    for (size_t i = 1; i < inputPaths.size(); ++i) {
+                        YQL_ENSURE(!commonPrefixRowSpec.HasDifferentDescendingSortRepresentation(*inputPaths[i]->Table->RowSpec),
+                            "Unexpected different desc sort types");
+                    }
+                }
+
                 useExplicitColumns = useExplicitColumns || (sortIsChanged && hasAux);
             }
 
@@ -588,12 +593,32 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     }
 
     auto publishSettings = write.Settings();
+
+    TSyncMap syncList;
+
+    auto maybeUserAttrs = TMaybeNode<TExprBase>(NYql::GetSetting(publishSettings.Ref(), EYtSettingType::UserAttrs));
+    if (maybeUserAttrs && !State_->PassiveExecution) {
+        auto userAttrs = maybeUserAttrs.Cast();
+
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        if (!cluster || !IsYtCompleteIsolatedLambda(userAttrs.Ref(), syncList, cluster, false, selectionMode)) {
+            return node;
+        }
+
+        auto newUserAttrs = CleanupWorld(userAttrs, ctx);
+        if (!newUserAttrs) {
+            return {};
+        }
+
+        publishSettings = TCoNameValueTupleList(NYql::ReplaceSetting(publishSettings.Ref(), newUserAttrs.Cast().Ptr(), ctx));
+    }
     if (transactionalOverrideTarget) {
         publishSettings = TCoNameValueTupleList(NYql::RemoveSetting(publishSettings.Ref(), EYtSettingType::Mode, ctx));
     }
 
     return Build<TYtPublish>(ctx, write.Pos())
-        .World(write.World())
+        .World(ApplySyncListToWorld(write.World().Ptr(), syncList, ctx))
         .DataSink(write.DataSink())
         .Input()
             .Add(publishInput)
@@ -844,6 +869,24 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
         && !flush && (renew || !pubTableInfo->Meta->DoesExist);
 
     auto publishSettings = write.Settings();
+    auto maybeUserAttrs = TMaybeNode<TExprBase>(NYql::GetSetting(publishSettings.Ref(), EYtSettingType::UserAttrs));
+    TSyncMap attrsSyncList;
+    if (maybeUserAttrs && !State_->PassiveExecution) {
+        auto userAttrs = maybeUserAttrs.Cast();
+
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        if (!cluster || !IsYtCompleteIsolatedLambda(userAttrs.Ref(), attrsSyncList, cluster, false, selectionMode)) {
+            return node;
+        }
+
+        auto newUserAttrs = CleanupWorld(userAttrs, ctx);
+        if (!newUserAttrs) {
+            return {};
+        }
+
+        publishSettings = TCoNameValueTupleList(NYql::ReplaceSetting(publishSettings.Ref(), newUserAttrs.Cast().Ptr(), ctx));
+    }
     if (transactionalOverrideTarget) {
         publishSettings = TCoNameValueTupleList(NYql::RemoveSetting(publishSettings.Ref(), EYtSettingType::Mode, ctx));
     }
@@ -859,7 +902,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
     auto fillWorld = keepWorld ? write.World().Ptr() : ctx.NewWorld(write.Pos());
 
     return Build<TYtPublish>(ctx, write.Pos())
-        .World(write.World())
+        .World(ApplySyncListToWorld(write.World().Ptr(), attrsSyncList, ctx))
         .DataSink(write.DataSink())
         .Input()
             .Add()

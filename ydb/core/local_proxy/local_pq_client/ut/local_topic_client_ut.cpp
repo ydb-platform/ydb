@@ -1,9 +1,32 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client.h>
+
 #include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NKqp::NLocalTopicTests {
+
+using NYdb::NTopic::TDeferredCommit;
+
+namespace {
+
+class TPathAliasingLocalTopicClientFixture: public TLocalTopicClientFixture {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false).SetAuthToken(BUILTIN_ACL_ROOT).SetEnableTopicDeferredPublish(true);
+        auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/Root/topic");
+        rule->SetDst("/Root/missing-topic");
+
+        Kikimr = std::make_unique<TKikimrRunner>(settings);
+        TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());
+        CreateTopic("topic");
+    }
+};
+
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     Y_UNIT_TEST_F(DescribeTopic, TLocalTopicClientFixture) {
@@ -19,10 +42,10 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     }
 
     Y_UNIT_TEST_F(DescribeRelativePathWithStatsAndLocation, TLocalTopicClientFixture) {
-        WriteTopicMessages({"one", "two"});
+        WriteTopicMessages({ "one", "two" });
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
-        const auto result = client->DescribeTopic("topic", TDescribeTopicSettings()
-            .IncludeStats(true).IncludeLocation(true)).GetValue(TEST_TIMEOUT);
+        const auto result =
+            client->DescribeTopic("topic", TDescribeTopicSettings().IncludeStats(true).IncludeLocation(true)).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         const auto& partitions = result.GetTopicDescription().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -56,13 +79,14 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     }
 
     Y_UNIT_TEST_QUAD_F(DescribeConsumerRelativePath, Stats, Location, TLocalTopicClientFixture) {
-        WriteTopicMessages({"committed", "remaining-1", "remaining-2"});
+        WriteTopicMessages({ "committed", "remaining-1", "remaining-2" });
         const auto committed = TopicClient->CommitOffset(TOPIC_PATH, 0, CONSUMER, 1).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(committed.GetStatus(), EStatus::SUCCESS, committed.GetIssues().ToString());
 
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
-        const auto result = client->DescribeConsumer("topic", CONSUMER, TDescribeConsumerSettings()
-            .IncludeStats(Stats).IncludeLocation(Location)).GetValue(TEST_TIMEOUT);
+        const auto result =
+            client->DescribeConsumer("topic", CONSUMER, TDescribeConsumerSettings().IncludeStats(Stats).IncludeLocation(Location))
+                .GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         const auto& description = result.GetConsumerDescription();
         UNIT_ASSERT_VALUES_EQUAL(description.GetConsumer().GetConsumerName(), CONSUMER);
@@ -85,9 +109,8 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
 
     Y_UNIT_TEST_TWIN_F(DescribeConsumerMissingResource, MissingTopic, TLocalTopicClientFixture) {
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
-        const auto result = client->DescribeConsumer(
-            MissingTopic ? "missing-topic" : TOPIC_PATH,
-            MissingTopic ? CONSUMER : "missing-consumer").GetValue(TEST_TIMEOUT);
+        const auto result = client->DescribeConsumer(MissingTopic ? "missing-topic" : TOPIC_PATH, MissingTopic ? CONSUMER : "missing-consumer")
+                                .GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         UNIT_ASSERT(!result.GetIssues().Empty());
     }
@@ -95,24 +118,22 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     Y_UNIT_TEST_TWIN_F(CommitOffsetAndResumeConsumer, RelativePath, TLocalTopicClientFixture) {
         constexpr char topic[] = "/Root/partitioned-topic";
         CreateTopic(topic, 2);
-        WriteTopicMessages({"partition-0"}, WriteSettings(topic).MessageGroupId("").PartitionId(0));
-        WriteTopicMessages({"committed", "remaining"}, WriteSettings(topic).MessageGroupId("").PartitionId(1));
+        WriteTopicMessages({ "partition-0" }, WriteSettings(topic).MessageGroupId("").PartitionId(0));
+        WriteTopicMessages({ "committed", "remaining" }, WriteSettings(topic).MessageGroupId("").PartitionId(1));
 
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
-        const auto result = client->CommitOffset(RelativePath ? "partitioned-topic" : topic, 1, CONSUMER, 1)
-            .GetValue(TEST_TIMEOUT);
+        const auto result = client->CommitOffset(RelativePath ? "partitioned-topic" : topic, 1, CONSUMER, 1).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // Check persistence and partition selection through the regular SDK.
-        const auto described = TopicClient->DescribeConsumer(topic, CONSUMER, TDescribeConsumerSettings()
-            .IncludeStats(true)).GetValue(TEST_TIMEOUT);
+        const auto described =
+            TopicClient->DescribeConsumer(topic, CONSUMER, TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(described.GetStatus(), EStatus::SUCCESS, described.GetIssues().ToString());
         const auto& partitions = described.GetConsumerDescription().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
         for (const auto& partition : partitions) {
             UNIT_ASSERT(partition.GetPartitionConsumerStats());
-            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionConsumerStats()->GetCommittedOffset(),
-                partition.GetPartitionId() == 1 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionConsumerStats()->GetCommittedOffset(), partition.GetPartitionId() == 1 ? 1 : 0);
         }
 
         auto settings = ReadSettings(topic);
@@ -126,23 +147,23 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     }
 
     Y_UNIT_TEST_F(CommitOffsetWithReadSessionId, TLocalTopicClientFixture) {
-        WriteTopicMessages({"first", "second"});
+        WriteTopicMessages({ "first", "second" });
         auto session = TopicClient->CreateReadSession(ReadSettings());
         const auto messages = ReadMessages(*session, 2);
         const auto sessionId = messages[0].GetPartitionSession()->GetReadSessionId();
         UNIT_ASSERT(!sessionId.empty());
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
 
-        const auto committed = client->CommitOffset(TOPIC_PATH, 0, CONSUMER, 1,
-            TCommitOffsetSettings().ReadSessionId(sessionId)).GetValue(TEST_TIMEOUT);
+        const auto committed =
+            client->CommitOffset(TOPIC_PATH, 0, CONSUMER, 1, TCommitOffsetSettings().ReadSessionId(sessionId)).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(committed.GetStatus(), EStatus::SUCCESS, committed.GetIssues().ToString());
-        const auto rejected = client->CommitOffset(TOPIC_PATH, 0, CONSUMER, 2,
-            TCommitOffsetSettings().ReadSessionId("invalid-session")).GetValue(TEST_TIMEOUT);
+        const auto rejected =
+            client->CommitOffset(TOPIC_PATH, 0, CONSUMER, 2, TCommitOffsetSettings().ReadSessionId("invalid-session")).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(rejected.GetStatus(), EStatus::SESSION_EXPIRED);
         UNIT_ASSERT(!rejected.GetIssues().Empty());
 
-        const auto described = TopicClient->DescribeConsumer(TOPIC_PATH, CONSUMER, TDescribeConsumerSettings()
-            .IncludeStats(true)).GetValue(TEST_TIMEOUT);
+        const auto described =
+            TopicClient->DescribeConsumer(TOPIC_PATH, CONSUMER, TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(described.GetStatus(), EStatus::SUCCESS, described.GetIssues().ToString());
         const auto& partitions = described.GetConsumerDescription().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -163,8 +184,9 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     }
 
     Y_UNIT_TEST_F(CommitOffsetErrors, TLocalTopicClientFixture) {
-        WriteTopicMessages({"uncommitted"});
+        WriteTopicMessages({ "uncommitted" });
         auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
+
         const struct {
             const char* Path;
             ui64 Partition;
@@ -172,18 +194,18 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
             ui64 Offset;
             EStatus Status;
         } cases[] = {
-            {"missing-topic", 0, CONSUMER, 1, EStatus::SCHEME_ERROR},
-            {TOPIC_PATH, 0, "missing-consumer", 1, EStatus::BAD_REQUEST},
-            {TOPIC_PATH, 1, CONSUMER, 1, EStatus::SCHEME_ERROR},
-            {TOPIC_PATH, 0, CONSUMER, 2, EStatus::BAD_REQUEST},
+            { "missing-topic", 0, CONSUMER, 1, EStatus::SCHEME_ERROR },
+            { TOPIC_PATH, 0, "missing-consumer", 1, EStatus::BAD_REQUEST },
+            { TOPIC_PATH, 1, CONSUMER, 1, EStatus::SCHEME_ERROR },
+            { TOPIC_PATH, 0, CONSUMER, 2, EStatus::BAD_REQUEST },
         };
+
         for (const auto& test : cases) {
-            const auto result = client->CommitOffset(test.Path, test.Partition, test.Consumer, test.Offset)
-                .GetValue(TEST_TIMEOUT);
+            const auto result = client->CommitOffset(test.Path, test.Partition, test.Consumer, test.Offset).GetValue(TEST_TIMEOUT);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), test.Status, result.GetIssues().ToString());
             UNIT_ASSERT(!result.GetIssues().Empty());
         }
-        AssertTopicMessages({"uncommitted"});
+        AssertTopicMessages({ "uncommitted" });
     }
 
     Y_UNIT_TEST_F(CreateReadAndWriteSessions, TLocalTopicClientFixture) {
@@ -198,8 +220,26 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
         UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "client message");
         UNIT_ASSERT_VALUES_EQUAL(messages[0].GetOffset(), 0);
         CloseSession(*readSession);
-        AssertTopicMessages({"client message"});
+        AssertTopicMessages({ "client message" });
+    }
+
+    Y_UNIT_TEST_F(LocalStreamsBypassPhysicalPathAliasing, TPathAliasingLocalTopicClientFixture) {
+        auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
+        auto writeSession = client->CreateWriteSession(WriteSettings(TOPIC_PATH));
+        TTestWriter writer(writeSession);
+        AssertAck(writer.Write(TWriteMessage("path alias bypass")), 1, 0);
+        CloseSession(*writeSession);
+
+        auto readSession = client->CreateReadSession(ReadSettings(TOPIC_PATH));
+        const auto messages = ReadMessages(*readSession, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "path alias bypass");
+        TDeferredCommit deferred;
+        deferred.Add(messages[0]);
+        deferred.Commit();
+        const auto ack = WaitForReadEvent<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*readSession);
+        UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 1);
+        CloseSession(*readSession);
     }
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

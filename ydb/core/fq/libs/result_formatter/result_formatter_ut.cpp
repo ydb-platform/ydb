@@ -39,7 +39,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
 
             // Cerr << stream.Str() << Endl;
 
-            TString expected = R"___({"data":[{"column0":"31337","column1":"1000000001"},{"column0":"31338","column1":"1000000002"}],"columns":[{"name":"column0","type":["DataType","Int32"]},{"name":"column1","type":["DataType","Int64"]}]})___";
+            TString expected =
+                R"___({"data":[{"column0":"31337","column1":"1000000001"},{"column0":"31338","column1":"1000000002"}],"columns":[{"name":"column0","type":["DataType","Int32"]},{"name":"column1","type":["DataType","Int64"]}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -54,7 +55,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
 
             // Cerr << stream.Str() << Endl;
 
-            TString expected = R"___({"data":[[31337,1000000001],[31338,1000000002]],"columns":[{"name":"column0","type":"Int32"},{"name":"column1","type":"Int64"}]})___";
+            TString expected =
+                R"___({"data":[[31337,1000000001],[31338,1000000002]],"columns":[{"name":"column0","type":"Int32"},{"name":"column1","type":"Int64"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -159,7 +161,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
 
             //Cerr << stream.Str() << Endl;
 
-            TString expected = R"___({"data":[{"column0":["31337","1000000001"]}],"columns":[{"name":"column0","type":["ListType",["DataType","Int32"]]}]})___";
+            TString expected =
+                R"___({"data":[{"column0":["31337","1000000001"]}],"columns":[{"name":"column0","type":["ListType",["DataType","Int32"]]}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -205,7 +208,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[{"column0":["31337"]},{"column0":null}],"columns":[{"name":"column0","type":["OptionalType",["DataType","Int32"]]}]})___";
+            TString expected =
+                R"___({"data":[{"column0":["31337"]},{"column0":null}],"columns":[{"name":"column0","type":["OptionalType",["DataType","Int32"]]}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -243,8 +247,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         {
             auto& value = *rs.add_rows();
             auto& cell = *value.add_items();
-            cell.add_items()->set_int32_value(31337); // k1
-            cell.add_items()->set_int64_value(113370); // k2
+            cell.add_items()->set_int32_value(31337);   // k1
+            cell.add_items()->set_int64_value(113370);   // k2
         }
 
         {
@@ -255,7 +259,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":["StructType",[["k1",["DataType","Int32"]],["k2",["DataType","Int64"]]]]}]})___";
+            TString expected =
+                R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":["StructType",[["k1",["DataType","Int32"]],["k2",["DataType","Int64"]]]]}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -269,7 +274,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             NJson::WriteJson(&stream, &root);
 
             //Cerr << stream.Str() << Endl;
-            TString expected = R"___({"data":[[{"k2":113370,"k1":31337}]],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
+            TString expected =
+                R"___({"data":[[{"k2":113370,"k1":31337}]],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
 
             UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
         }
@@ -333,8 +339,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         {
             auto& value = *rs.add_rows();
             auto& cell = *value.add_items();
-            cell.add_items()->set_int32_value(31337); // k1
-            cell.add_items()->set_int64_value(113370); // k2
+            cell.add_items()->set_int32_value(31337);   // k1
+            cell.add_items()->set_int64_value(113370);   // k2
         }
 
         NJson::TJsonValue root;
@@ -344,7 +350,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         NJson::WriteJson(&stream, &root);
 
         //Cerr << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
+        TString expected =
+            R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
 
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
@@ -457,8 +464,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         {
             auto& value = *rs.add_rows();
             auto& cell = *value.add_items();
-            cell.add_items()->set_int32_value(31337); // k1
-            cell.add_items()->set_int64_value(113370); // k2
+            cell.add_items()->set_int32_value(31337);   // k1
+            cell.add_items()->set_int64_value(113370);   // k2
         }
 
         NJson::TJsonValue root;
@@ -468,7 +475,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         NJson::WriteJson(&stream, &root);
 
         //Cerr << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":["TupleType",[["DataType","Int32"],["DataType","Int64"]]]}]})___";
+        TString expected =
+            R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":["TupleType",[["DataType","Int32"],["DataType","Int64"]]]}]})___";
 
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
@@ -525,13 +533,14 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         NJson::WriteJson(&stream, &root);
 
         //Cerr << stream.Str() << Endl;
-        TString expected1 = R"___({"data":[{"column0":[["31337","113370"],["113370","31337"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
-        TString expected2 = R"___({"data":[{"column0":[["113370","31337"],["31337","113370"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
+        TString expected1 =
+            R"___({"data":[{"column0":[["31337","113370"],["113370","31337"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
+        TString expected2 =
+            R"___({"data":[{"column0":[["113370","31337"],["31337","113370"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
 
         auto actual = stream.Str();
 
-        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected either " << expected1 << " or " << expected2
-            << ", got " << actual);
+        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected either " << expected1 << " or " << expected2 << ", got " << actual);
     }
 
     Y_UNIT_TEST(VariantTuple) {
@@ -563,7 +572,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         TStringStream stream;
         NJson::WriteJson(&stream, &root);
         // Cerr << "Stream >> " << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":["0","31337"]},{"column0":["1","131337"]}],"columns":[{"name":"column0","type":["VariantType",["TupleType",[["DataType","Int32"],["DataType","Int64"]]]]}]})___";
+        TString expected =
+            R"___({"data":[{"column0":["0","31337"]},{"column0":["1","131337"]}],"columns":[{"name":"column0","type":["VariantType",["TupleType",[["DataType","Int32"],["DataType","Int64"]]]]}]})___";
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
@@ -628,7 +638,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         TStringStream stream;
         NJson::WriteJson(&stream, &root);
         //Cerr << "Stream >> " << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":"my_text_value"},{"column0":""},{"column0":null}],"columns":[{"name":"column0","type":["PgType","bool"]}]})___";
+        TString expected =
+            R"___({"data":[{"column0":"my_text_value"},{"column0":""},{"column0":null}],"columns":[{"name":"column0","type":["PgType","bool"]}]})___";
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
@@ -668,7 +679,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         TStringStream stream;
         NJson::WriteJson(&stream, &root);
         //Cerr << "Stream >> " << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":["0","31337"]},{"column0":["1","131337"]}],"columns":[{"name":"column0","type":["VariantType",["StructType",[["k1",["DataType","Int32"]],["k2",["DataType","Int64"]]]]]}]})___";
+        TString expected =
+            R"___({"data":[{"column0":["0","31337"]},{"column0":["1","131337"]}],"columns":[{"name":"column0","type":["VariantType",["StructType",[["k1",["DataType","Int32"]],["k2",["DataType","Int64"]]]]]}]})___";
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
@@ -693,7 +705,8 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         TStringStream stream;
         NJson::WriteJson(&stream, &root);
         // Cerr << "Stream >> " << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":"31337"}],"columns":[{"name":"column0","type":["TaggedType","tag",["DataType","Int32"]]}]})___";
+        TString expected =
+            R"___({"data":[{"column0":"31337"}],"columns":[{"name":"column0","type":["TaggedType","tag",["DataType","Int32"]]}]})___";
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 

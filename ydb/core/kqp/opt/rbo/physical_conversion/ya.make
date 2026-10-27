@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_rbo_convert_to_physical.cpp
@@ -22,7 +22,5 @@ PEERDIR(
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/peephole
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

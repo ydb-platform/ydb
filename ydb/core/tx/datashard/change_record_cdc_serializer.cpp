@@ -108,12 +108,6 @@ class TJsonSerializer: public TBaseSerializer {
     friend class TChangeRecord; // used in GetPartitionKey()
 
 protected:
-    static auto ParseBody(const TString& protoBody) {
-        NKikimrChangeExchange::TDataChange body;
-        Y_ENSURE(body.ParseFromArray(protoBody.data(), protoBody.size()));
-        return body;
-    }
-
     static NJson::TJsonValue StringToJson(TStringBuf in) {
         NJson::TJsonValue result;
         Y_ENSURE(NJson::ReadJsonTree(in, &result));
@@ -282,7 +276,10 @@ public:
 
     TString DebugString(const TChangeRecord& record) override {
         NJson::TJsonValue json;
-        SerializeToJson(json, record);
+        // Debug output may be generated before persistence. Parsing a copy keeps
+        // the original serialized body available for the database write.
+        TChangeRecord copy = record;
+        SerializeToJson(json, copy);
 
         if (record.GetLockId()) {
             json["lock"]["id"] = record.GetLockId();
@@ -303,7 +300,7 @@ class TYdbJsonSerializer: public TJsonSerializer {
 protected:
     void SerializeDataChange(NJson::TJsonValue& json, const TChangeRecord& record) {
         Y_ENSURE(record.GetSchema());
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
 
         if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
             SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
@@ -364,6 +361,9 @@ protected:
         Y_ENSURE(record.GetSchema());
         auto schema = record.GetSchema();
 
+        NKikimrSchemeOp::TTableDescription fullSchema;
+        schema->GetSchema(fullSchema);
+
         for (const auto tag : schema->KeyColumnIds) {
             auto it = schema->Columns.find(tag);
             Y_ENSURE(it != schema->Columns.end());
@@ -371,7 +371,60 @@ protected:
         }
 
         for (const auto& [tag, column] : schema->Columns) {
-            table["columns"][column.Name] = NScheme::TypeName(column.Type, column.TypeMod);
+            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
+            if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
+                table["columns"][column.Name]["family"] = family->second.GetName();
+            } else {
+                Y_ENSURE(column.Family == 0, "Unknown column family: " << column.Family);
+                table["columns"][column.Name]["family"] = "default";
+            }
+        }
+
+        auto& families = table["columnFamilies"];
+        families.SetType(NJson::JSON_MAP);
+        if (!schema->Families.contains(0)) {
+            families["default"]["compression"] = "off";
+            families["default"]["cacheMode"] = "regular";
+        }
+        for (const auto& [id, family] : schema->Families) {
+            const auto name = family.GetName();
+            Y_ENSURE(id == 0 || name != "default",
+                "Cannot serialize unnamed non-default column family: " << id);
+            auto& definition = families[name];
+            const auto& data = family.StorageConfig.GetData();
+            if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
+                definition["data"]["media"] = data.GetPreferredPoolKind();
+            }
+            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
+                ? "regular" : "in_memory";
+        }
+
+        auto& indexes = table["indexes"];
+        indexes.SetType(NJson::JSON_MAP);
+        for (const auto& index : fullSchema.GetTableIndexes()) {
+            if (index.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                continue;
+            }
+
+            auto& value = indexes[index.GetName()];
+            const auto type = index.GetType();
+            const TString typeName = NKikimrSchemeOp::EIndexType_Name(type);
+            TStringBuf typeSuffix(typeName);
+            Y_ENSURE(type != NKikimrSchemeOp::EIndexTypeInvalid && typeSuffix.SkipPrefix("EIndexType"),
+                "Unknown index type: " << type);
+            value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
+                ? "GlobalSync" : TString(typeSuffix);
+            auto& indexColumns = value["indexColumns"];
+            indexColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetKeyColumnNames()) {
+                indexColumns.AppendValue(column);
+            }
+            auto& dataColumns = value["dataColumns"];
+            dataColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetDataColumnNames()) {
+                dataColumns.AppendValue(column);
+            }
         }
 
         SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});
@@ -482,7 +535,7 @@ protected:
         });
 
         auto& dynamodb = json["dynamodb"];
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
 
         bool keysOnly = false;
         bool newAndOldImages = false;
@@ -559,7 +612,7 @@ protected:
         Y_ENSURE(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
         Y_ENSURE(record.GetSchema());
 
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
         auto& keyJson = json["key"];
         auto& valueJson = json["value"];
 
@@ -675,7 +728,7 @@ TString TChangeRecord::GetPartitionKey() const {
     Y_ENSURE(Kind == EKind::CdcDataChange);
     Y_ENSURE(Schema);
 
-    const auto body = TJsonSerializer::ParseBody(Body);
+    const auto& body = GetDataChange();
 
     NJson::TJsonValue key;
     TJsonSerializer::SerializeJsonKey(Schema, key, body.GetKey());

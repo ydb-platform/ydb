@@ -149,15 +149,6 @@ std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
     return x5c;
 }
 
-// this is copy-paste from Base64DecodeUneven except it uses Base64StrictDecode
-TString Base64StrictDecodeUneven(const TStringBuf s) {
-    const size_t tail = s.length() % 4;
-    if (tail == 0) {
-        return Base64StrictDecode(s);
-    }
-    return Base64StrictDecode(TString(s) + TString(4 - tail, '='));
-}
-
 // Return std::nullopt if the thumbprint is present but malformed.
 std::optional<std::string> ParseThumbprint(
     const NJson::TJsonValue& jwk, const std::string_view name, size_t expectedLength)

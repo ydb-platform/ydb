@@ -368,7 +368,9 @@ public:
 
     i64 GetMemoryUsage() const override
     {
-        return ZSTD_sizeof_DDict(DigestedDictionary_);
+        // NB: Correct only for ZSTD_initStaticDDict over own Storage with ZSTD_dlm_byCopy,
+        // with ZSTD_dlm_byRef dictionary content lives outside of Storage and is not accounted.
+        return Storage_.size();
     }
 
     const ZSTD_DDict* GetDigestedDictionary() const

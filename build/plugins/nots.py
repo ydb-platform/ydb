@@ -310,7 +310,7 @@ def _create_erm_json(unit: ymake.Unit):
 
 
 def _get_source_path(unit: ymake.Unit) -> str:
-    sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
+    sources_path = unit.get("TS_FOR_DIR") if unit.get("TS_FOR") else unit.path()
     return sources_path
 
 
@@ -318,16 +318,13 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
     from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
-    module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
+    module_path = unit.get("TS_FOR_PATH") if unit.get("TS_FOR") else unit.get("MODDIR")
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
-        nodejs_bin_path=None,
-        script_path=None,
         module_path=module_path,
-        inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
 
 
@@ -335,13 +332,10 @@ def _use_hermetic_node_modules(unit: ymake.Unit) -> bool:
     # Only supported TS module and check macros set the capability flag.
     # Deprecated builders keep their legacy node_modules installation flow.
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-    injects_peers = unit.get("_INJECT_PEERS") == "yes"
     module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
     hermetic_node_modules_disabled = unit.get("TS_DISABLE_HERMETIC_NODE_MODULES") == "yes"
 
-    return (
-        not local_cli and injects_peers and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
-    )
+    return not local_cli and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
 
 
 def _configure_hermetic_node_modules(unit: ymake.Unit) -> None:
@@ -409,6 +403,11 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     _check_nodejs_version(unit, nodejs_version.major)
     for tool in resources:
+        if tool == "pnpm":
+            dirs.append("build/external_resources/pnpm")
+            unit.set(["PNPM_ROOT", "$PNPM_RESOURCE_GLOBAL"])
+            unit.set(["PNPM-ROOT-VAR-NAME", "PNPM_RESOURCE_GLOBAL"])
+            continue
         dir_name = erm_json.canonize_name(tool)
         if erm_json.use_resource_directly(tool):
             # These tools are installed with the project dependencies, not as build resources.
@@ -417,9 +416,15 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
-            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
-                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+            if nodejs_version.major >= 25:
+                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
+                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
+                if target_needs_libatomic or host_needs_libatomic:
+                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                if target_needs_libatomic:
+                    unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
+                if host_needs_libatomic:
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -439,6 +444,43 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     if dirs:
         unit.onpeerdir(dirs)
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bool = False) -> None:
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"NODEJS_BINARY_FOR should be for another module but got path '{for_mod}'")
+        return
+
+    if not RELATIVE and for_mod.startswith("."):
+        ymake.report_configure_error(
+            "You are using a relative path for a module. "
+            f"You have to add RELATIVE key, like NODEJS_BINARY_FOR(RELATIVE {for_mod})"
+        )
+        return
+
+    root = unit.path() if RELATIVE else "$S"
+    _SET_TS_FOR_VARS(unit, f"{root}/{for_mod}")
+
+    package_json_path = os.path.join(unit.resolve(unit.get("TS_FOR_DIR")), "package.json")
+    if not os.path.isfile(package_json_path):
+        ymake.report_configure_error(
+            f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
+        )
+        return
+
+    _PEERDIR_TS_RESOURCE(unit, "nodejs")
+
+    # _PEERDIR_TS_RESOURCE marks the target's libatomic requirement separately from the host environment.
+    # Use this marker to avoid duplicating its Node.js version and platform checks.
+    if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
+        unit.set(
+            [
+                "COPY_LIBATOMIC_CMD",
+                '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+            ]
+        )
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -751,6 +793,9 @@ def _set_resource_vars(
     unit.set(["{}_ROOT".format(resource_name), "${}".format(yamake_resource_var)])
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
 
+    if tool == "nodejs":
+        unit.set(["WITH_NODEJS_ROOT", "$WITH_{}".format(yamake_resource_var)])
+
 
 def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':
     try:
@@ -881,20 +926,17 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    from lib.nots.package_manager.common_config import load_common_config
-    from lib.nots.package_manager.utils import s_rooted
+    from lib.nots.package_manager.common_config import common_config_inputs
+    from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
-    common_config_path, _ = load_common_config(pj, pm.sources_root, pm.inject_peers)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
-    if common_config_path:
-        ins.append(s_rooted(common_config_path))
+    ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
-        from lib.nots.package_manager.utils import b_rooted, s_rooted
 
         _configure_hermetic_node_modules(unit)
         if pj.get_use_prebuilder():
@@ -906,13 +948,17 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
         )
         outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
 
-    if has_deps:
-        local_peers = pm.get_local_peers_from_package_json()
+    local_peers = pm.get_local_peers_from_package_json()
+    if local_peers:
         unit.onpeerdir(local_peers)
+        # build_workspace imports catalogs from prepared direct peer workspaces.
+        ins.extend(b_rooted(build_ws_config_path(peer)) for peer in local_peers)
         if use_hermetic_node_modules:
             # The cached injected snapshot must contain built workspace peers,
             # not their source/pre-build state.
             unit.ondepends(local_peers)
+            __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS_LATE_OUTS}")
+    if has_deps:
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
@@ -1043,6 +1089,25 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         unit.on_do_ts_yndexing()
 
 
+def _parse_ts_checks(checks_raw: str, check_separator: str) -> list[list[str]]:
+    ts_check_list = []
+    for check in checks_raw.removeprefix("$_TS_CHECK_LIST").split(check_separator):
+        fields = check.strip().split(maxsplit=3)
+        if fields:
+            if len(fields) == 3:
+                fields.append("")
+            ts_check_list.append(fields)
+    return ts_check_list
+
+
+def _ts_check_size(check_type: str, timeout_medium: str) -> str | None:
+    if timeout_medium == "yes":
+        return "MEDIUM"
+    if check_type == "lint":
+        return "SMALL"
+    return None
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
@@ -1052,15 +1117,7 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    checks_raw = unit.get("_TS_CHECK_LIST").removeprefix("$_TS_CHECK_LIST")
-    check_separator = unit.get("_TS_CHECK_SEPARATOR")
-    ts_check_list = []
-    for check in checks_raw.split(check_separator):
-        fields = check.strip().split(maxsplit=2)
-        if fields:
-            if len(fields) == 2:
-                fields.append("")
-            ts_check_list.append(fields)
+    ts_check_list = _parse_ts_checks(unit.get("_TS_CHECK_LIST"), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
         if validation_mode == "TS_TEST_FOR":
             ymake.report_configure_error(
@@ -1095,8 +1152,7 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 
-    for check in ts_check_list:
-        script_name, check_type, command = check
+    for script_name, check_type, timeout_medium, command in ts_check_list:
         cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
@@ -1106,8 +1162,9 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
             TS_CHECK_COMMAND=command,
             erm_json=_create_erm_json(unit),
         )
-        if check_type == "lint":
-            spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
+        size = _ts_check_size(check_type, timeout_medium)
+        if size:
+            spec_args["SIZE"] = size
 
         dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
 
@@ -1129,14 +1186,15 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
-    if prod_bundle and unit.get("_INJECT_PEERS") != "yes":
-        ymake.report_configure_error("WITH_NODE_MODULES(PROD) requires injected workspace dependencies")
-        return
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 
+    local_peers = pm.get_local_peers_from_package_json()
+    if local_peers:
+        unit.onpeerdir(local_peers)
+        __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
+
     if has_deps:
-        unit.onpeerdir(pm.get_local_peers_from_package_json())
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         if nm_bundle_needed:
             bundle_args = "--nm-bundle yes"
@@ -1156,6 +1214,9 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         ins = [path for path in ins if path not in source_manifests]
 
         if not _use_hermetic_node_modules(unit) or prod_bundle:
+            from lib.nots.package_manager.common_config import common_config_inputs
+
+            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
             # Legacy and production-bundle builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
@@ -1165,7 +1226,7 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
             )
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-        if not unit.get("TS_TEST_FOR"):
+        if not unit.get("TS_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
         lf = pm.load_lockfile_from_dir(pm.sources_path)
@@ -1196,7 +1257,12 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
                     )
             else:
                 requires_build_packages = lf.get_requires_build_packages()
-                is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
+                from lib.nots.package_manager.common_config import load_common_config
+
+                _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
+                is_valid, validation_messages = pj.validate_prebuilds(
+                    requires_build_packages, settings.get("overrides", {})
+                )
 
                 if not is_valid:
                     ymake.report_configure_error(
@@ -1255,7 +1321,7 @@ def _TS_TEST_FOR_CONFIGURE(unit: ymake.Unit, test_runner: str, default_config: s
     if deps:
         unit.ondepends(deps)
 
-    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+    flat_args = (test_runner, "TS_FOR_PATH")
     spec_args = {'erm_json': _create_erm_json(unit)}
 
     dart_record = create_dart_record(
@@ -1307,10 +1373,10 @@ def _VALIDATE_TS_TEST_FOR_ARGS(unit: ymake.Unit, for_mod: str, root: str) -> Non
 
 @ymake.macro
 @_with_report_configure_error
-def _SET_TS_TEST_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
-    unit.set(["TS_TEST_FOR", "yes"])
-    unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
-    unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
+def _SET_TS_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
+    unit.set(["TS_FOR", "yes"])
+    unit.set(["TS_FOR_DIR", unit.resolve_arc_path(for_mod)])
+    unit.set(["TS_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
 def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -> None:
@@ -1363,7 +1429,7 @@ def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
 @_with_report_configure_error
 def _DEPENDS_ON_MOD(unit: ymake.Unit) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
-        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        for_mod_path = unit.get("TS_FOR_PATH")
         unit.ondepends([for_mod_path])
 
 
@@ -1429,7 +1495,7 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
-    test_mod = unit.get("TS_TEST_FOR_PATH")
+    test_mod = unit.get("TS_FOR_PATH")
     unit.onpeerdir([test_mod])
 
 

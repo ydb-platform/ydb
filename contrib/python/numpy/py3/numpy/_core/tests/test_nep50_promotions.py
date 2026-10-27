@@ -5,16 +5,13 @@ is adopted in the main test suite.  A few may be moved elsewhere.
 """
 
 import operator
-import threading
-import warnings
 
-import numpy as np
-
-import pytest
 import hypothesis
+import pytest
 from hypothesis import strategies
 
-from numpy.testing import assert_array_equal, IS_WASM
+import numpy as np
+from numpy.testing import IS_WASM, assert_array_equal
 
 
 @pytest.mark.skip
@@ -116,7 +113,7 @@ def test_weak_promotion_scalar_path(op):
     # Integer path:
     res = op(np.uint8(3), 5)
     assert res == op(3, 5)
-    assert res.dtype == np.uint8 or res.dtype == bool
+    assert res.dtype == np.uint8 or res.dtype == bool  # noqa: PLR1714
 
     with pytest.raises(OverflowError):
         op(np.uint8(3), 1000)
@@ -124,7 +121,7 @@ def test_weak_promotion_scalar_path(op):
     # Float path:
     res = op(np.float32(3), 5.)
     assert res == op(3., 5.)
-    assert res.dtype == np.float32 or res.dtype == bool
+    assert res.dtype == np.float32 or res.dtype == bool  # noqa: PLR1714
 
 
 def test_nep50_complex_promotion():
@@ -216,7 +213,7 @@ def test_expected_promotion(expected, dtypes, optional_dtypes, data):
         [np.int8, np.int16, np.int32, np.int64,
          np.uint8, np.uint16, np.uint32, np.uint64])
 @pytest.mark.parametrize("other_val",
-        [-2*100, -1, 0, 9, 10, 11, 2**63, 2*100])
+        [-2 * 100, -1, 0, 9, 10, 11, 2**63, 2 * 100])
 @pytest.mark.parametrize("comp",
         [operator.eq, operator.ne, operator.le, operator.lt,
          operator.ge, operator.gt])

@@ -121,14 +121,27 @@ private:
     // config keeps it. In both cases the request is retried, otherwise the tier would stay inaccessible until the next
     // tablet restart or an ALTER of the external data source.
     void OnSchemaSecretsResolutionFailed(const NTiers::TExternalStorageId& tierId, const ERetryErrorClass errorClass) {
-        const auto* tier = Owner->GetTiers().FindPtr(tierId);
-        if (!tier) {
-            return;
+        bool found = false;
+        bool changed = false;
+        for (auto&& [id, tier] : Owner->Tiers) {
+            if (id.GetConfigPath() != tierId.GetConfigPath()) {
+                continue;
+            }
+
+            found = true;
+            if (tier.GetState() == TTiersManager::ETierState::REQUESTED) {
+                tier.ResetConfig();
+                changed = true;
+            }
         }
-        if (tier->GetState() == TTiersManager::ETierState::REQUESTED) {
-            Owner->UpdateTierConfig(std::nullopt, tierId);
+
+        if (changed) {
+            Owner->OnConfigsUpdated();
         }
-        RetryTierRequest(tierId, errorClass);
+
+        if (found) {
+            RetryTierRequest(tierId, errorClass);
+        }
     }
 
     void ResetRetryState(const NTiers::TExternalStorageId& tier) {
@@ -542,13 +555,21 @@ void TTiersManager::UpdateTierConfig(
         {"name", tierId},
         {"tablet", TabletId},
         {"hasConfig", !!config});
-    TTierGuard* findTier = Tiers.FindPtr(tierId);
-    AFL_VERIFY(findTier)("tier", tierId.ToString());
-    if (config) {
-        findTier->UpsertConfig(*config);
-    } else {
-        findTier->ResetConfig();
+    bool found = false;
+    for (auto&& [id, tier] : Tiers) {
+        if (id.GetConfigPath() != tierId.GetConfigPath()) {
+            continue;
+        }
+
+        found = true;
+        if (config) {
+            tier.UpsertConfig(*config);
+        } else {
+            tier.ResetConfig();
+        }
     }
+
+    AFL_VERIFY(found)("tier", tierId.ToString());
     OnConfigsUpdated(notifyShard);
 }
 

@@ -113,6 +113,11 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options) override;
 
+    TFilePartitions GetFilePartitions(
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options) override;
+
     TMaybe<TYPath> GetFileFromCache(
         const TString& md5Signature,
         const TYPath& cachePath,
@@ -127,6 +132,10 @@ public:
     IFileReaderPtr CreateFileReader(
         const TRichYPath& path,
         const TFileReaderOptions& options) override;
+
+    IFileReaderPtr CreateFilePartitionReader(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options) override;
 
     IFileWriterPtr CreateFileWriter(
         const TRichYPath& path,

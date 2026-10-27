@@ -133,7 +133,7 @@ Executes fulltext search queries against the indexed table. Queries can be gener
 |---|---|---|
 | `--model <path>` or `-m <path>` | Path to the Markov chain model file (`.tsv.gz`) for generating queries. Either `--model` or `--query-table` must be specified. | |
 | `--query-table <name>` | Name of the table containing pre-loaded queries. The table must have a `query` column. Either `--model` or `--query-table` must be specified. | |
-| `--index-name <name>` | Name of the fulltext index to use. | `index` |
+| `--index <name>` | Name of the fulltext index to use. | `index` |
 | `--min-query-len <value>` | Minimum number of words in a generated query. | `1` |
 | `--max-query-len <value>` | Maximum number of words in a generated query. | `5` |
 | `--top-size <value>` | Number of rows to sample from the table to build the query word set. | `1000` |
@@ -154,7 +154,7 @@ Continuously inserts new documents into the table using a Markov chain model to 
 | Name | Description | Default value |
 |---|---|---|
 | `--model <path>` or `-m <path>` | Path to the Markov chain model file (`.tsv.gz`). | Required |
-| `--index-name <name>` | Name of the fulltext index to use. | `index` |
+| `--index <name>` | Name of the fulltext index to use. | `index` |
 | `--bulk-size <value>` | Number of rows per upsert batch. | `100` |
 | `--min-sentence-len <value>` | Minimum number of words in a generated document. | `100` |
 | `--max-sentence-len <value>` | Maximum number of words in a generated document. | `1000` |

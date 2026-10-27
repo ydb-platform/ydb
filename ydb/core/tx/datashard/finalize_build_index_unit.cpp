@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
@@ -38,8 +39,14 @@ public:
         Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
+        bool indexBecameReady = false;
         if (params.HasOutcome() && params.GetOutcome().HasApply()) {
             const auto indexPathId = TPathId::FromProto(params.GetOutcome().GetApply().GetIndexPathId());
+
+            const auto oldTable = DataShard.FindUserTable(pathId);
+            if (const auto it = oldTable->Indexes.find(indexPathId); it != oldTable->Indexes.end()) {
+                indexBecameReady = it->second.State != NKikimrSchemeOp::EIndexStateReady;
+            }
 
             tableInfo = DataShard.AlterTableSwitchIndexState(ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady);
         } else if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
@@ -62,6 +69,10 @@ public:
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
+
+        if (indexBecameReady) {
+            PersistCdcSchemaChange(DataShard, txc, op, pathId, *tableInfo);
         }
 
         ui64 step = params.GetSnapshotStep();
@@ -92,7 +103,8 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
         if (RemoveSender) {
             ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
         }

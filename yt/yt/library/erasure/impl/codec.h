@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/library/erasure/codec_params.h>
+
 #include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/ref.h>
 
@@ -47,26 +49,8 @@ struct ICodec
      */
     virtual std::optional<TPartIndexList> GetRepairIndices(const TPartIndexList& erasedIndices) const = 0;
 
-    //! Returns the number of data blocks this codec can handle.
-    virtual int GetDataPartCount() const = 0;
-
-    //! Returns the number of parity blocks this codec can handle.
-    virtual int GetParityPartCount() const = 0;
-
-    //! Returns the maximum number of blocks that can always be repaired when missing.
-    virtual int GetGuaranteedRepairablePartCount() const = 0;
-
-    //! Every block passed to this codec must have size divisible by the result of #GetWordSize.
-    virtual int GetWordSize() const = 0;
-
-    //! Returns |true| if the codec is "bytewise", i.e. the i-th byte of any parity part depends only on
-    //! the i-th bytes of data parts.
-    virtual bool IsBytewise() const = 0;
-
-    // Extension methods.
-
-    //! Returns the sum of #GetDataPartCount and #GetParityPartCount.
-    int GetTotalPartCount() const;
+    //! Returns the codec's static properties.
+    virtual const TCodecParams& GetParams() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,7 +59,7 @@ struct ICodec
 ICodec* FindCodec(ECodec id);
 
 //! Finds an erasure codec by id. Throws an error if codec is not supported.
-ICodec* GetCodec(ECodec id);
+ICodec* GetCodecOrThrow(ECodec id);
 
 //! For a given codec id returns the id of most optimal erasure codec
 //! that has the same number of data and parity parts.

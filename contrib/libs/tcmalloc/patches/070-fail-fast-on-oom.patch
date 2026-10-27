@@ -1,8 +1,8 @@
 diff --git a/tcmalloc/internal/logging.cc b/tcmalloc/internal/logging.cc
-index 13aa0e1..2c1e3eb 100644
+index e8100ef..4f8a1c0 100644
 --- a/tcmalloc/internal/logging.cc
 +++ b/tcmalloc/internal/logging.cc
-@@ -38,6 +38,7 @@
+@@ -43,6 +43,7 @@
  #include "tcmalloc/internal/config.h"
  #include "tcmalloc/internal/environment.h"
  #include "tcmalloc/internal/parameter_accessors.h"
@@ -10,7 +10,7 @@ index 13aa0e1..2c1e3eb 100644
  
  GOOGLE_MALLOC_SECTION_BEGIN
  namespace tcmalloc {
-@@ -173,6 +174,12 @@ static void Crash(const char* filename, int line, const char* msg,
+@@ -184,6 +185,12 @@ static void Crash(const char* filename, int line, const char* msg,
  #endif  // __APPLE__
    }
  
@@ -24,10 +24,10 @@ index 13aa0e1..2c1e3eb 100644
  }
  
 diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
-index 40f2351..74bcdc3 100644
+index c061b54..c0a8a92 100644
 --- a/tcmalloc/malloc_extension.cc
 +++ b/tcmalloc/malloc_extension.cc
-@@ -818,6 +818,23 @@ MallocExtension::SoftMemoryLimitCallback* MallocExtension::GetSoftMemoryLimitHan
+@@ -851,6 +851,23 @@ MallocExtension::SoftMemoryLimitCallback* MallocExtension::GetSoftMemoryLimitHan
  #endif
  }
  
@@ -52,10 +52,10 @@ index 40f2351..74bcdc3 100644
      CreateSampleUserDataCallback create,
      CopySampleUserDataCallback copy,
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 345bf6a..3d218c5 100644
+index d104a9f..7d3f751 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
-@@ -671,6 +671,11 @@ class MallocExtension final {
+@@ -695,6 +695,11 @@ class MallocExtension final {
    static void SetSoftMemoryLimitHandler(SoftMemoryLimitCallback* handler);
    static SoftMemoryLimitCallback* GetSoftMemoryLimitHandler();
  

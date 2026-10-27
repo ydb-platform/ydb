@@ -31,6 +31,19 @@ from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 logger = logging.getLogger(__name__)
 
+# Same sentinel as TConfigState::CheckGeneration: cmdGen == Max<ui64>() skips the check.
+_ITEM_CONFIG_GENERATION_ANY = (1 << 64) - 1
+
+
+def _allow_applied_bs_config_retry(request):
+    for command in request.Command:
+        name = command.WhichOneof("Command")
+        if not name:
+            continue
+        submessage = getattr(command, name)
+        if "ItemConfigGeneration" in submessage.DESCRIPTOR.fields_by_name:
+            submessage.ItemConfigGeneration = _ITEM_CONFIG_GENERATION_ANY
+
 
 def get_unique_path_for_current_test(output_path, sub_folder):
     # TODO: remove current function, don't rely on test environment, use explicit paths
@@ -57,12 +70,13 @@ def ensure_path_exists(path):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, server, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):
+                 binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None, bridge_pile_name=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.server = server
         self.node_id = node_id
         self.data_center = data_center
+        self.bridge_pile_name = bridge_pile_name
         self.__config_path = config_path
         self.__cluster_name = cluster_name
         self.__configurator = configurator
@@ -101,7 +115,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.http_proxy_port = None
         self.kafka_api_port = None
         if configurator.kafka_proxy_enabled:
-            self.kafka_api_port = configurator.get_kafka_api_port(node_id)
+            self.kafka_api_port = configurator.get_kafka_api_port(node_id, port_allocator=port_allocator)
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
@@ -316,6 +330,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--data-center=%s" % self.data_center
             )
+
+        if self.bridge_pile_name is not None:
+            command.append("--bridge-pile-name=%s" % self.bridge_pile_name)
 
         if self.__configurator.module is not None:
             command.append(
@@ -726,11 +743,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def __register_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
-        return [self.__register_slot(database, encryption_key, seed_nodes_file=seed_nodes_file) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
+        return [self.__register_slot(database, encryption_key, seed_nodes_file=seed_nodes_file,
+                                     bridge_pile_name=bridge_pile_name) for _ in range(count)]
 
-    def register_and_start_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
-        slots = self.__register_slots(database, count, encryption_key, seed_nodes_file=seed_nodes_file)
+    def register_and_start_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
+        slots = self.__register_slots(database, count, encryption_key, seed_nodes_file=seed_nodes_file,
+                                      bridge_pile_name=bridge_pile_name)
         for slot in slots:
             slot.start()
         return slots
@@ -745,7 +764,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             writer.write('Keys { ContainerPath: "%s" Pin: "" Id: "%s" Version: 1 } ' % (secret_path, slug))
         return keyfile_path
 
-    def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None, bridge_pile_name=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -773,6 +792,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
             seed_nodes_file=seed_nodes_file,
+            bridge_pile_name=bridge_pile_name,
         )
         return self._slots[slot_index]
 
@@ -980,8 +1000,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         timeout = 240
         sleep = 5
         retries, success = timeout / sleep, False
+        attempt = 0
         while retries > 0 and not success:
             try:
+                # Each command in the request is its own BS controller transaction.
+                # The invoke may already have been committed when the CLI call fails,
+                # which bumps ItemConfigGeneration. Resending generation 0 is then
+                # rejected. Max<ui64> skips CheckGeneration and redefines the same item.
+                if attempt:
+                    logger.warning(
+                        "Retrying blobstorage config invoke with ItemConfigGeneration bypass; "
+                        "a previous attempt may already have been committed"
+                    )
+                    _allow_applied_bs_config_retry(request)
                 self.__call_kikimr_new_cli(
                     [
                         "admin",
@@ -996,6 +1027,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             except Exception as e:
                 logger.error("Failed to execute, %s", str(e))
                 retries -= 1
+                attempt += 1
                 time.sleep(sleep)
 
                 if retries == 0:

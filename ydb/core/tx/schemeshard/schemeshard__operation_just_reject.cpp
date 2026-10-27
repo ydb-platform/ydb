@@ -38,7 +38,7 @@ public:
         return fake;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         Y_ABORT_UNLESS(Response);
 
         Response->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -51,7 +51,7 @@ public:
         return std::move(Response);
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TReject");
     }
 

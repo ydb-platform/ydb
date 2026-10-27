@@ -733,6 +733,7 @@ namespace NSchemeShardUT_Private {
 
             TVector<NScheme::TTypeInfo> KeyColumnTypes;
             TVector<TBorder> Partitioning;
+            ui64 Version = 0;
 
             std::shared_ptr<const TPartitioning> ResolveKey(const TTableRange& range) const;
         };
@@ -795,6 +796,12 @@ namespace NSchemeShardUT_Private {
     TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
+
+    void CreateTestTable(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, bool isColumnTable);
+    void DropTestTable(TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString& tableName, bool isColumnTable, const TVector<TExpectedResult>& expectedResults);
+    void WriteTableData(TTestActorRuntime& runtime, ui64& txId, const TString& tablePath, bool isColumnTable);
+    ui64 CountTableRows(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep);
+    void VerifyTableEmpty(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep);
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
         ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {}, ui32 vectorDimension = 4);

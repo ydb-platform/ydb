@@ -18,6 +18,7 @@
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
@@ -463,6 +464,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
     FillKeyRange(read.Range(), *readProto.MutableKeyRange());
 
     auto settings = TKqpReadTableSettings::Parse(read);
+    YQL_ENSURE(!settings.Sampling, "Sampling requires a read ranges source");
 
     readProto.MutableSkipNullKeys()->Resize(tableMeta.KeyColumnNames.size(), false);
     for (const auto& key : settings.SkipNullKeys) {
@@ -500,6 +502,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
     }
 
     auto settings = TKqpReadTableSettings::Parse(read);
+    YQL_ENSURE(!settings.Sampling, "Sampling requires a read ranges source");
 
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
@@ -724,7 +727,7 @@ public:
         , Database(database)
         , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
-        , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+        , Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
         // kept as a literal to avoid a runtime PEERDIR from the compiler.
@@ -763,7 +766,15 @@ public:
         queryProto.SetDefaultTxMode(
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
-        queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
+        if (Config->DisableCheckpoints.Get().GetOrElse(false)) {
+            queryProto.SetDisableCheckpoints(true);
+
+            if (const auto userCtx = OptimizeCtx.UserRequestContext; userCtx && userCtx->StreamingDisposition && userCtx->StreamingDisposition->has_output_start_time()) {
+                ctx.AddError(TIssue(ctx.GetPosition(query.Pos()), "Cannot use setting OUTPUT_FROM without checkpoints, please remove PRAGMA ydb.DisableCheckpoints"));
+                return false;
+            }
+        }
+
         queryProto.SetMaxTasksPerStage(Config->MaxTasksPerStage.Get().GetOrElse(0));
         queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
@@ -1007,11 +1018,6 @@ private:
                 FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1022,11 +1028,6 @@ private:
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1040,11 +1041,6 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1059,11 +1055,6 @@ private:
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
@@ -1076,9 +1067,10 @@ private:
         });
 
         stageProto.SetStageCost(stageCost);
-        if (auto stats = OptimizeCtx.KqpStats.GetStats(stage.Program().Body().Raw())) {
-            stageProto.SetEstimatedRows(stats->Nrows);
-        }
+        // TODO: fill TKqpPhyStage::EstimatedRows and TKqpPhyTableOperation::EstimatedRows when:
+        //  - read estimates take key ranges into account: now a read by ranges, e.g. `key IN $param`,
+        //    is estimated as the whole table;
+        //  - TShardInfo::EstimatedRows gets a consumer, e.g. task placement in TMaxTasksGraph.
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 
@@ -1317,8 +1309,10 @@ private:
             if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
                 FillExternalSource(*tableMeta, *txProto.AddTables());
 
-                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
-                    FillExternalSource(*sourceMeta, *txProto.AddTables());
+                if (tableMeta->IsExternalTable()) {
+                    FillExternalSource(
+                        *tableMeta->ExternalTable().GetUnderlyingDataSourceMetadata(),
+                        *txProto.AddTables());
                 }
             }
         }
@@ -1354,6 +1348,14 @@ private:
                 FillColumns(columns, *tableMeta, readProto, allowSystemColumns);
             }
             auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
+
+            if (readSettings.Sampling) {
+                YQL_ENSURE(!readSettings.IsReverse(), "Sampling is not supported for reverse reads");
+                auto* sampling = readProto.MutableSampling();
+                sampling->SetRate(readSettings.Sampling->Rate);
+                sampling->SetSeed(readSettings.Sampling->Seed);
+                sampling->SetMemtableStride(readSettings.Sampling->MemtableStride);
+            }
 
             readProto.SetReverse(readSettings.IsReverse());
             readProto.SetSorted(readSettings.IsSorted());

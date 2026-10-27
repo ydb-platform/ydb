@@ -3,7 +3,6 @@
 #include <yt/yt/core/ytree/serialize.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
-#include <yt/yt/core/phoenix/load.h>
 #include <yt/yt/core/phoenix/schemas.h>
 #include <yt/yt/core/phoenix/type_registry.h>
 #include <yt/yt/core/phoenix/type_decl.h>
@@ -51,11 +50,14 @@ std::string MakeBuffer(F&& func)
 }
 
 template <class T>
-T Deserialize(const std::string& buffer, int version = 0)
+T Deserialize(const std::string& buffer, int version = 0, const TUniverseSchemaPtr& schema = nullptr)
 {
     T value;
     TMemoryInput input(buffer);
     TLoadContext context(&input);
+    if (schema) {
+        context.SetSchema(schema);
+    }
     context.SetVersion(version);
     context.ConfigureDump(ESerializationDumpMode::Content);
     Load(context, value);
@@ -312,6 +314,47 @@ TEST(TPhoenixTest, SinceVersionNew)
 
     auto s2 = Deserialize<S>(buffer, /*version*/ 200);
     EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NKeepWhenMissing {
+
+struct S
+{
+    int A = 0;
+    int B = 42;
+    int C = 42;
+
+    PHOENIX_DECLARE_TYPE(S, 0xcdf77a11)
+    {
+        PHOENIX_REGISTER_FIELD(1, A);
+        PHOENIX_REGISTER_FIELD(2, B,
+            .SinceVersion(100)
+            .KeepWhenMissing());
+        PHOENIX_REGISTER_FIELD(3, C,
+            .SinceVersion(100));
+    }
+};
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NKeepWhenMissing
+
+TEST(TPhoenixTest, KeepWhenMissing)
+{
+    using namespace NKeepWhenMissing;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto s = Deserialize<S>(buffer);
+    EXPECT_EQ(s.A, 123);
+    // Kept as is.
+    EXPECT_EQ(s.B, 42);
+    // Reset by default.
+    EXPECT_EQ(s.C, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -634,10 +677,9 @@ TEST(TPhoenixTest, CompatFieldSerializer)
             ];
         }
     )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(loadSchema));
 
-    auto s = Deserialize<S>(buffer);
+    auto s = Deserialize<S>(buffer, /*version*/ 0, loadSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 0);
 }
@@ -711,10 +753,9 @@ TEST(TPhoenixTest, AddFieldAfterDeletedField)
         }
     )""")));
 
-    TLoadSessionGuard guard(removeBSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(removeBSchema));
 
-    auto s = Deserialize<S>(buffer, RemoveB);
+    auto s = Deserialize<S>(buffer, RemoveB, removeBSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.C, 777);
 }
@@ -775,10 +816,9 @@ TEST(TPhoenixTest, CompatLoadPointFieldAdded)
         Save<int>(context, 123);
     });
 
-    TLoadSessionGuard guard(Schema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(Schema));
 
-    auto p = Deserialize<TPoint>(buffer);
+    auto p = Deserialize<TPoint>(buffer, /*version*/ 0, Schema);
     EXPECT_EQ(p.GetX(), 0);
     EXPECT_EQ(p.GetY(), 123);
 }
@@ -796,10 +836,9 @@ TEST(TPhoenixTest, CompatLoadPointsFieldAdded)
         }
     });
 
-    TLoadSessionGuard guard(ConvertTo<TUniverseSchemaPtr>(Schema));
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(Schema));
 
-    auto points = Deserialize<std::vector<TPoint>>(buffer);
+    auto points = Deserialize<std::vector<TPoint>>(buffer, /*version*/ 0, Schema);
     EXPECT_EQ(std::ssize(points), N);
     for (int i = 0; i < N; i++) {
         EXPECT_EQ(points[i].GetX(), 0);
@@ -811,9 +850,7 @@ TEST(TPhoenixTest, CompatLoadPointsFieldAdded)
 
 TEST(TPhoenixTest, NativeLoadWithIdenticalSchema)
 {
-    auto schema = ITypeRegistry::Get()->GetUniverseDescriptor().GetSchema();
-    TLoadSessionGuard guard(schema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(ITypeRegistry::Get()->GetUniverseDescriptor().GetSchema()));
 }
 
 TEST(TPhoenixTest, NativeLoadWithEquivalentSchema)
@@ -825,9 +862,7 @@ TEST(TPhoenixTest, NativeLoadWithEquivalentSchema)
         nameNode->SetValue("~" + nameNode->GetValue());
     }
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(schemaNode);
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(ConvertTo<TUniverseSchemaPtr>(schemaNode)));
 }
 
 TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
@@ -842,10 +877,9 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
             types = [];
         }
     )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(loadSchema));
 
-    auto s = Deserialize<TDerivedStruct>(buffer);
+    auto s = Deserialize<TDerivedStruct>(buffer, /*version*/ 0, loadSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 456);
 }
@@ -918,6 +952,442 @@ TEST(TPhoenixTest, SaveLoadVirtualField)
     s1.A = 123;
     auto s2 = Deserialize<S>(Serialize(s1));
     EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NInlineRegisterMetadata {
+
+struct TInline
+{
+    int A = 0;
+    std::string B;
+
+    PHOENIX_DECLARE_TYPE(TInline, 0x86932a96)
+    {
+        PHOENIX_REGISTER_FIELD(1, A);
+        PHOENIX_REGISTER_FIELD(2, B);
+    }
+
+    // Still private, as after an out-of-line declaration.
+    int Hidden = 0;
+};
+
+PHOENIX_DEFINE_TYPE(TInline);
+
+template <class T>
+concept CHasPublicHidden = requires (T t) { t.Hidden; };
+
+static_assert(!CHasPublicHidden<TInline>);
+
+template <class T1, class T2>
+struct TInlinePair
+{
+    T1 First;
+    T2 Second;
+
+    PHOENIX_DECLARE_TEMPLATE_TYPE(TInlinePair, 0x4ad80fea)
+    {
+        PHOENIX_REGISTER_FIELD(1, First);
+        PHOENIX_REGISTER_FIELD(2, Second);
+    }
+};
+
+PHOENIX_DEFINE_TEMPLATE_TYPE(TInlinePair, (_, _));
+
+} // namespace NInlineRegisterMetadata
+
+TEST(TPhoenixTest, InlineRegisterMetadata)
+{
+    using namespace NInlineRegisterMetadata;
+
+    TInline s1;
+    s1.A = 123;
+    s1.B = "hello";
+    auto s2 = Deserialize<TInline>(Serialize(s1));
+    EXPECT_EQ(s2.A, 123);
+    EXPECT_EQ(s2.B, "hello");
+
+    // Same bytes as the out-of-line TPair.
+    TInlinePair<int, std::string> p1{.First = 1, .Second = "x"};
+    auto buffer = Serialize(p1);
+    EXPECT_EQ((Serialize(TPair<int, std::string>{.First = 1, .Second = "x"})), buffer);
+    auto p2 = Deserialize<TInlinePair<int, std::string>>(buffer);
+    EXPECT_EQ(p2.First, 1);
+    EXPECT_EQ(p2.Second, "x");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NPropertyField {
+
+class TWithAccessors
+{
+public:
+    int GetA() const
+    {
+        return A_;
+    }
+
+    void SetA(int value)
+    {
+        A_ = value;
+        ++SetACount_;
+    }
+
+    const std::vector<std::string>& GetB() const
+    {
+        return B_;
+    }
+
+    void SetB(std::vector<std::string> value)
+    {
+        B_ = std::move(value);
+    }
+
+    int GetSetACount() const
+    {
+        return SetACount_;
+    }
+
+    // Persisted as its decimal representation.
+    int C = 0;
+
+private:
+    int A_ = 0;
+    std::vector<std::string> B_;
+    int SetACount_ = 0;
+
+    PHOENIX_DECLARE_TYPE(TWithAccessors, 0x7825e083);
+};
+
+void TWithAccessors::RegisterMetadata(auto&& registrar)
+{
+    registrar.template PropertyField<1, &TThis::GetA, &TThis::SetA>("A")();
+    registrar.template PropertyField<2, &TThis::GetB, &TThis::SetB>("B")();
+    registrar.template PropertyField<3,
+        [] (const TThis* this_) {
+            return std::to_string(this_->C);
+        },
+        [] (TThis* this_, std::string value) {
+            this_->C = std::stoi(value);
+        }>("C")();
+}
+
+PHOENIX_DEFINE_TYPE(TWithAccessors);
+
+struct TPlain
+{
+    int A = 0;
+    std::vector<std::string> B;
+    std::string C;
+
+    PHOENIX_DECLARE_TYPE(TPlain, 0x54b96d39);
+};
+
+void TPlain::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+    PHOENIX_REGISTER_FIELD(2, B);
+    PHOENIX_REGISTER_FIELD(3, C);
+}
+
+PHOENIX_DEFINE_TYPE(TPlain);
+
+} // namespace NPropertyField
+
+TEST(TPhoenixTest, PropertyField)
+{
+    using namespace NPropertyField;
+
+    TWithAccessors s1;
+    s1.SetA(123);
+    s1.SetB({"x", "y"});
+    s1.C = 456;
+
+    auto buffer = Serialize(s1);
+
+    // Persisted exactly as the plain fields of the deduced types.
+    TPlain plain;
+    plain.A = 123;
+    plain.B = {"x", "y"};
+    plain.C = "456";
+    EXPECT_EQ(Serialize(plain), buffer);
+
+    auto s2 = Deserialize<TWithAccessors>(buffer);
+    EXPECT_EQ(s2.GetA(), 123);
+    EXPECT_EQ(s2.GetB(), (std::vector<std::string>{"x", "y"}));
+    EXPECT_EQ(s2.C, 456);
+    EXPECT_EQ(s2.GetSetACount(), 1);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSaveVersionConstraints {
+
+struct TMarkedSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& value)
+    {
+        NYT::Save<bool>(context, true);
+        NYT::Save(context, value);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& value)
+    {
+        EXPECT_TRUE(NYT::Load<bool>(context));
+        NYT::Load(context, value);
+    }
+};
+
+enum EVersion
+{
+    Initial = 1,
+    RemoveBD = 2,
+};
+
+bool IsOddVersion(int version)
+{
+    return version % 2 == 1;
+}
+
+struct S
+{
+    int A = 0;
+    int B = 0;
+    int C = 0;
+    int D = 0;
+    int E = 0;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x5e1d7a93);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+    PHOENIX_REGISTER_FIELD(2, B,
+        .BeforeVersion(RemoveBD)
+        .template Serializer<TMarkedSerializer>());
+    PHOENIX_REGISTER_FIELD(3, C,
+        .InVersions(IsOddVersion)
+        .template Serializer<TMarkedSerializer>());
+
+    registrar.template VirtualField<4>("D", [] (TThis* this_, auto& context) {
+        this_->D = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->D);
+    })
+        .BeforeVersion(RemoveBD)();
+
+    registrar.template VirtualField<5>("E", [] (TThis* this_, auto& context) {
+        this_->E = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->E);
+    })
+        .InVersions(IsOddVersion)();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+S MakeS()
+{
+    return {
+        .A = 1,
+        .B = 2,
+        .C = 3,
+        .D = 4,
+        .E = 5,
+    };
+}
+
+} // namespace NSaveVersionConstraints
+
+TEST(TPhoenixTest, SaveAllFieldsInInitialVersion)
+{
+    using namespace NSaveVersionConstraints;
+
+    auto s1 = MakeS();
+    auto buffer = Serialize(s1, Initial);
+    EXPECT_EQ(buffer.length(), 5 * sizeof(int) + 2 * sizeof(bool));
+
+    auto s2 = Deserialize<S>(buffer, Initial);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, SaveHonorsBeforeVersionAndInVersions)
+{
+    using namespace NSaveVersionConstraints;
+
+    auto s1 = MakeS();
+
+    {
+        auto buffer = Serialize(s1, RemoveBD);
+        EXPECT_EQ(buffer.length(), sizeof(int));
+
+        auto s2 = Deserialize<S>(buffer, RemoveBD);
+        S expected;
+        expected.A = 1;
+        EXPECT_EQ(s2, expected);
+    }
+
+    {
+        auto buffer = Serialize(s1, RemoveBD + 1);
+        EXPECT_EQ(buffer.length(), 3 * sizeof(int) + sizeof(bool));
+
+        auto s2 = Deserialize<S>(buffer, RemoveBD + 1);
+        S expected;
+        expected.A = 1;
+        expected.C = 3;
+        expected.E = 5;
+        EXPECT_EQ(s2, expected);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NExternalType {
+
+// Mimics a class from a library that knows nothing of Phoenix.
+class S
+{
+public:
+    S() = default;
+
+    S(int a, std::string b)
+        : A_(a)
+        , B_(std::move(b))
+    { }
+
+    bool operator==(const S&) const = default;
+
+protected:
+    int A_ = 0;
+    std::string B_;
+};
+
+} // namespace NExternalType
+
+} // namespace
+} // namespace NYT::NPhoenix
+
+PHOENIX_DECLARE_EXTERNAL_TYPE(
+    NYT::NPhoenix::NExternalType::S,
+    0x1a7c3e95,
+    NYT::NPhoenix::TSaveContext,
+    NYT::NPhoenix::TLoadContext);
+
+PHOENIX_DEFINE_EXTERNAL_TYPE(NYT::NPhoenix::NExternalType::S)
+{
+    PHOENIX_REGISTER_FIELD(1, A_);
+    PHOENIX_REGISTER_FIELD(2, B_);
+}
+
+namespace NYT::NPhoenix {
+namespace {
+
+TEST(TPhoenixTest, ExternalType)
+{
+    using namespace NExternalType;
+
+    S s1(123, "hello");
+
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NExternalBaseType {
+
+// Mimics a class from a library that knows nothing of Phoenix.
+class TBase
+{
+public:
+    TBase() = default;
+
+    explicit TBase(int a)
+        : A_(a)
+    { }
+
+    bool operator==(const TBase&) const = default;
+
+protected:
+    int A_ = 0;
+};
+
+struct S
+    : public TBase
+{
+    std::string B;
+
+    S() = default;
+
+    S(int a, std::string b)
+        : TBase(a)
+        , B(std::move(b))
+    { }
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x3c9e50b7);
+    PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN(S);
+};
+
+} // namespace NExternalBaseType
+
+} // namespace
+} // namespace NYT::NPhoenix
+
+PHOENIX_DECLARE_EXTERNAL_TYPE(
+    NYT::NPhoenix::NExternalBaseType::TBase,
+    0x2b8d4fa6,
+    NYT::NPhoenix::TSaveContext,
+    NYT::NPhoenix::TLoadContext);
+
+PHOENIX_DEFINE_EXTERNAL_TYPE(NYT::NPhoenix::NExternalBaseType::TBase)
+{
+    PHOENIX_REGISTER_FIELD(1, A_);
+}
+
+namespace NYT::NPhoenix {
+namespace {
+
+namespace NExternalBaseType {
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+    PHOENIX_REGISTER_FIELD(1, B);
+}
+
+PHOENIX_DEFINE_TYPE(S);
+PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(S);
+
+} // namespace NExternalBaseType
+
+TEST(TPhoenixTest, ExternalBaseType)
+{
+    using namespace NExternalBaseType;
+
+    S s1(123, "hello");
+
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, YsonDumpableExternalBaseType)
+{
+    using namespace NExternalBaseType;
+
+    S s(123, "hello");
+
+    auto ysonStr = ConvertToYsonString(s);
+    auto canonicalYsonStr = TYsonString(std::string("{A_=123;B=hello}"));
+    EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1904,8 +2374,6 @@ public:
     }
 
 private:
-    PHOENIX_DECLARE_FRIEND();
-
     struct TInner
     {
         int A;
@@ -2076,6 +2544,167 @@ TEST(TPhoenixTest, FinalStructWithNullWeakAndNonNullStrong)
 }
 
 } // namespace NIntrusivePtrOnFinal
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NForeignContext {
+
+DEFINE_ENUM(EForeignVersion,
+    ((V1) (1))
+    ((V2) (2))
+);
+
+class TForeignSaveContext
+    : public TStreamSaveContext
+{
+public:
+    using TStreamSaveContext::TStreamSaveContext;
+
+    EForeignVersion GetVersion() const
+    {
+        return static_cast<EForeignVersion>(TStreamSaveContext::GetVersion());
+    }
+};
+
+class TForeignLoadContext
+    : public TStreamLoadContext
+{
+public:
+    using TStreamLoadContext::TStreamLoadContext;
+
+    EForeignVersion GetVersion() const
+    {
+        return static_cast<EForeignVersion>(TStreamLoadContext::GetVersion());
+    }
+};
+
+using TSaveContext = TForeignSaveContext;
+using TLoadContext = TForeignLoadContext;
+
+class TBase
+{
+public:
+    virtual ~TBase() = default;
+
+    int A = 0;
+
+    PHOENIX_DECLARE_VIRTUAL_TYPE(TBase, 0x6a1d0b37);
+};
+
+void TBase::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+}
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+class TDerived
+    : public TBase
+{
+public:
+    int B = 0;
+    int C = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TDerived, 0x3e94c2d1);
+};
+
+void TDerived::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+    PHOENIX_REGISTER_FIELD(1, B);
+    PHOENIX_REGISTER_FIELD(2, C,
+        .SinceVersion(EForeignVersion::V2));
+}
+
+PHOENIX_DEFINE_TYPE(TDerived);
+
+std::string SerializeViaBase(const TBase& value, EForeignVersion version)
+{
+    std::string buffer;
+    TStdStringOutput output(buffer);
+    TForeignSaveContext context(&output, ToUnderlying(version));
+    value.Save(context);
+    context.Finish();
+    return buffer;
+}
+
+void DeserializeViaBase(TBase* value, const std::string& buffer, EForeignVersion version)
+{
+    TMemoryInput input(buffer);
+    TForeignLoadContext context(&input);
+    context.SetVersion(ToUnderlying(version));
+    value->Load(context);
+}
+
+TEST(TPhoenixTest, ForeignContextVirtualType)
+{
+    TDerived derived1;
+    derived1.A = 1;
+    derived1.B = 2;
+    derived1.C = 3;
+
+    auto buffer = SerializeViaBase(derived1, EForeignVersion::V2);
+    EXPECT_EQ(buffer.size(), 3 * sizeof(int));
+
+    TDerived derived2;
+    DeserializeViaBase(&derived2, buffer, EForeignVersion::V2);
+    EXPECT_EQ(derived2.A, 1);
+    EXPECT_EQ(derived2.B, 2);
+    EXPECT_EQ(derived2.C, 3);
+}
+
+TEST(TPhoenixTest, ForeignContextSinceVersion)
+{
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 1);
+        Save<int>(context, 2);
+    });
+
+    TDerived derived;
+    derived.C = 3;
+    DeserializeViaBase(&derived, buffer, EForeignVersion::V1);
+    EXPECT_EQ(derived.A, 1);
+    EXPECT_EQ(derived.B, 2);
+    EXPECT_EQ(derived.C, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBeforeSaveStruct
+{
+    int A = 0;
+    mutable int SaveCount = 0;
+
+    PHOENIX_DECLARE_TYPE(TBeforeSaveStruct, 0x2f5c7e18);
+};
+
+void TBeforeSaveStruct::RegisterMetadata(auto&& registrar)
+{
+    registrar.BeforeSave([] (const TThis* this_, auto& /*context*/) {
+        ++this_->SaveCount;
+    });
+
+    PHOENIX_REGISTER_FIELD(1, A);
+}
+
+PHOENIX_DEFINE_TYPE(TBeforeSaveStruct);
+
+TEST(TPhoenixTest, BeforeSave)
+{
+    TBeforeSaveStruct value;
+    value.A = 123;
+
+    std::string buffer;
+    TStdStringOutput output(buffer);
+    TForeignSaveContext context(&output);
+    value.Save(context);
+    context.Finish();
+
+    EXPECT_EQ(value.SaveCount, 1);
+    EXPECT_EQ(buffer.size(), sizeof(int));
+}
+
+} // namespace NForeignContext
 
 ////////////////////////////////////////////////////////////////////////////////
 

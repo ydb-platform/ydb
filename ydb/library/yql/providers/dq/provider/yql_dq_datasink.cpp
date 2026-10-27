@@ -16,16 +16,50 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <util/string/subst.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
+
+TMaybe<TString> GetStageUdfName(const TExprNode& node) {
+    if (TCoUdf::Match(&node)) {
+        // MethodName is "Module.Func"; normalize to Module::Func like in sql query.
+        TString name(node.Head().Content());
+        SubstGlobal(name, ".", "::");
+        return name;
+    }
+
+    if (TCoScriptUdf::Match(&node)) {
+        return TStringBuilder() << node.Head().Content() << "::" << node.Child(1)->Content();
+    }
+
+    return Nothing();
+}
+
+constexpr size_t MaxStageUdfsInPlan = 20;
+
+TSet<TString> CollectStageUdfs(const TExprNode::TPtr& root) {
+    TSet<TString> udfs;
+    VisitExpr(root, [&udfs](const TExprNode::TPtr& node) {
+        if (udfs.size() >= MaxStageUdfsInPlan) {
+            return false;
+        }
+        if (auto name = GetStageUdfName(*node)) {
+            udfs.insert(std::move(*name));
+        }
+        return true;
+    });
+    return udfs;
+}
 
 class TDqDataProviderSink: public TDataProviderBase {
 public:
@@ -163,6 +197,12 @@ public:
         return DqProviderName;
     }
 
+    bool HasCustomPlan(const TExprNode& node) override {
+        return TDqStageBase::Match(&node)
+            || TDqQuery::Match(&node)
+            || TDqConnection::Match(&node);
+    }
+
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         Y_UNUSED(compact);
 
@@ -213,6 +253,28 @@ public:
         return TPlanFormatterBase::GetOperationDisplayName(node);
     }
 
+    TString GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) override {
+        if (!TDqStageBase::Match(&dest)) {
+            return TString();
+        }
+
+        auto inputs = dest.ChildPtr(TDqStageBase::idx_Inputs);
+        for (size_t i = 0; i < inputs->ChildrenSize(); ++i) {
+            auto conn = inputs->ChildPtr(i);
+            if (!TDqConnection::Match(conn.Get())) {
+                continue;
+            }
+
+            auto connOutput = conn->ChildPtr(TDqConnection::idx_Output);
+            auto connSourceStage = connOutput->ChildPtr(TDqOutput::idx_Stage);
+            if (connSourceStage.Get() == &source) {
+                return TString(conn->Content());
+            }
+        }
+
+        return TString();
+    }
+
     void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         Y_UNUSED(withLimits);
         if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
@@ -220,6 +282,19 @@ public:
             writer.OnBeginMap();
             NCommon::WriteStreams(writer, "Program", maybeStage.Cast().Program());
             writer.OnEndMap();
+
+            if (State->TypeCtx->ShowLinksInPlan) {
+                const auto udfs = CollectStageUdfs(maybeStage.Cast().Program().Ptr());
+                if (!udfs.empty()) {
+                    writer.OnKeyedItem("Udfs");
+                    writer.OnBeginList();
+                    for (const auto& udf : udfs) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(udf);
+                    }
+                    writer.OnEndList();
+                }
+            }
         }
     }
 

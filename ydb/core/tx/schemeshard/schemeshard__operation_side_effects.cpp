@@ -1194,9 +1194,8 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
             {"totalCount", operation->Parts.size()},
         );
 
-        TMemoryChanges memChanges;
         TStorageChanges dbChanges;
-        TOperationContext context{ss, txc, ctx, *this, memChanges, dbChanges};
+        TOperationContext context{ss, txc, ctx, *this, dbChanges};
 
         THolder<TEvPrivate::TEvCompleteBarrier> msg = MakeHolder<TEvPrivate::TEvCompleteBarrier>(txId, name);
         TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompleteBarrier>*) new IEventHandle(

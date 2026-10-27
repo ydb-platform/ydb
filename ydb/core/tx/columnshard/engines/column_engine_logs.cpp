@@ -20,10 +20,13 @@
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -241,8 +244,8 @@ private:
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-    const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema,
+    const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
@@ -319,7 +322,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) {
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(presetId);
     AFL_VERIFY(vIndex.IsEmpty() || schema.GetVersion() >= vIndex.GetLastSchema()->GetVersion())("empty", vIndex.IsEmpty())(
                                                           "current", schema.GetVersion())("last", vIndex.GetLastSchema()->GetVersion());
@@ -332,12 +335,11 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff() && !vIndex.IsEmpty()) {
-        AFL_VERIFY(!vIndex.IsEmpty());
+    if (schema.HasDiff() && !vIndex.IsEmpty()) {
         const auto& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
         AFL_VERIFY(presetId == lastIndexInfo.GetPresetId());
         TSchemaDiffView diffView;
-        diffView.DeserializeFromProto(*schema.GetDiff()).Validate();
+        diffView.DeserializeFromProto(schema.GetDiffVerified()).Validate();
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(diffView, lastIndexInfo, StoragesManager, SchemaObjectsCache);
         if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
             MutableVersionedIndex().AddIgnoreSchemaVersionTo(lastIndexInfo.GetVersion(), indexInfoOptional->GetVersion());
@@ -346,16 +348,16 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                 {"event", "schema_will_be_ignored"},
                 {"lastVersion", lastIndexInfo.GetVersion()},
                 {"toVersion", indexInfoOptional->GetVersion()},
-                {"diff", schema.GetDiff()->DebugString()});
+                {"diff", schema.GetDiffVerified().DebugString()});
         } else {
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "schema_will_not_be_ignored"},
                 {"lastVersion", lastIndexInfo.GetVersion()},
                 {"toVersion", indexInfoOptional->GetVersion()},
-                {"diff", schema.GetDiff()->DebugString()});
+                {"diff", schema.GetDiffVerified().DebugString()});
         }
     } else {
-        AFL_VERIFY(schema.GetSchema())("has_diff", !!schema.GetDiff())("is_empty", vIndex.IsEmpty());
+        AFL_VERIFY(schema.HasSchema())("has_diff", schema.HasDiff())("is_empty", vIndex.IsEmpty());
         //        AFL_VERIFY(vIndex.IsEmpty());
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
@@ -363,7 +365,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
 }
 
-void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) {
+void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) {
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(presetId);
     AFL_VERIFY(!vIndex.IsEmpty());
 
@@ -381,11 +383,11 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff()) {
+    if (schema.HasDiff()) {
         AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
         AFL_VERIFY(presetId == prevSchema->GetIndexInfo().GetPresetId());
         indexInfoOptional =
-            NOlap::TIndexInfo::BuildFromProto(*schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+            NOlap::TIndexInfo::BuildFromProto(schema.GetDiffVerified(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
@@ -688,7 +690,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     }
 
     if (ActualizationStarted) {
-        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
+        NActors::TLogContextGuard logGuard = TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size());
         for (auto&& i : GranulesStorage->GetTables()) {
             if (pathEviction.contains(i.first)) {
                 continue;
@@ -767,7 +769,9 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     auto p = spg.GetPortionOptional(portion);
 
     if (!p) {
-        LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
+        YDB_LOG_WARN("Portion erased already at tablet",
+            {"portionInfo", portionInfo},
+            {"tabletId", TabletId});
         return false;
     } else {
         if (updateStats) {

@@ -48,6 +48,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
+            auto databaseSpaceExhaustedPool = db.Table<Schema::DatabaseSpaceExhaustedPool>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -68,7 +69,8 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !bridgeSyncState.IsReady()) {
+                    || !bridgeSyncState.IsReady()
+                    || !databaseSpaceExhaustedPool.IsReady()) {
                 return false;
             }
         }
@@ -97,6 +99,8 @@ public:
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
+                Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
+                    state.GetValue<T::DatabaseSpaceUnblockColor>());
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -202,7 +206,6 @@ public:
         // Group
         Self->GroupMap.clear();
         Self->GroupLookup.clear();
-        Self->OwnerIdIdxToGroup.clear();
         Self->IndexGroupSpeciesToGroup.clear();
         {
             using T = Schema::Group;
@@ -270,7 +273,6 @@ public:
 
 #undef OPTIONAL
 
-                Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());
                 Self->IndexGroupSpeciesToGroup[group.GetGroupSpecies()].push_back(group.ID);
                 if (!groups.Next())
                     return false;
@@ -575,6 +577,40 @@ public:
             Self->StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), std::nullopt, group->StatusFlags);
         }
 
+        // database space state; the hysteresis latches are restored and evaluated against complete group counters
+        Self->DatabaseSpace.ResetState();
+        {
+            TDatabaseSpaceTracker::TBatch batch(Self->DatabaseSpace);
+            for (const auto& [id, info] : Self->StoragePools) {
+                Self->UpdateDatabaseSpacePool(id, info);
+            }
+            for (const auto& [groupId, group] : Self->GroupMap) {
+                Self->UpdateDatabaseSpaceGroup(*group);
+            }
+
+            using T = Schema::DatabaseSpaceExhaustedPool;
+            std::vector<TBoxStoragePoolId> gonePools;
+            auto table = db.Table<T>().Select();
+            if (!table.IsReady()) {
+                return false;
+            }
+            while (!table.EndOfSet()) {
+                const TBoxStoragePoolId poolId(table.GetValue<T::BoxId>(), table.GetValue<T::StoragePoolId>());
+                if (Self->StoragePools.contains(poolId)) {
+                    Self->DatabaseSpace.RestorePoolExhausted(poolId, true);
+                } else {
+                    gonePools.push_back(poolId); // must not happen, as the row is deleted along with the pool
+                }
+                if (!table.Next()) {
+                    return false;
+                }
+            }
+            for (const auto& [boxId, storagePoolId] : gonePools) {
+                db.Table<T>().Key(boxId, storagePoolId).Delete();
+            }
+        }
+        Self->CommitDatabaseSpaceChanges(db);
+
         // scrub state
         Self->ScrubState.Clear();
         {
@@ -618,20 +654,19 @@ public:
             }
         }
 
-        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
             if (proxyGroup->BridgeGroupInfo) {
-                const auto& state = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                for (size_t i = 0; i < state.PileSize(); ++i) {
-                    const auto& pile = state.GetPile(i);
+                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     Y_ABORT_UNLESS(group);
-                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
+                    Y_ABORT_UNLESS(group->BridgePileId == bridgePileId);
                     Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
                     group->BridgeProxyGroupId = proxyGroupId;
-                }
+                });
             }
         }
 
@@ -640,10 +675,11 @@ public:
             group->CalculateGroupStatus();
 
             group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
-                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            Self->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     } else {
                         Y_DEBUG_ABORT();
                     }
@@ -699,9 +735,12 @@ public:
 
                 groupState = &jt->second->BridgeGroupInfo->GetBridgeGroupState();
             } else if (const auto it = Self->StaticGroups.find(targetGroupId); it != Self->StaticGroups.end()) {
-                if (!it->second.Info || !it->second.Info->Group || !it->second.Info->Group->HasBridgeProxyGroupId() ||
-                        !it->second.Info->Group->HasBridgePileId()) {
+                if (!it->second.Info || !it->second.Info->Group) {
                     Y_DEBUG_ABORT();
+                    return {};
+                } else if (!it->second.Info->Group->HasBridgeProxyGroupId() || !it->second.Info->Group->HasBridgePileId()) {
+                    // the inline pile has been removed along with its pile, the group is the bridge proxy one only now;
+                    // the entry could have been left if BSC has restarted before forgetting it
                     return {};
                 }
                 bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
@@ -720,10 +759,10 @@ public:
                 return {}; // group deleted
             }
 
-            if (groupState->PileSize() <= bridgePileId.GetPileIndex()) {
-                return {};
+            if (const auto *pile = NBridge::GetGroupPile(*groupState, bridgePileId)) {
+                return pile->GetStage();
             }
-            return groupState->GetPile(bridgePileId.GetPileIndex()).GetStage();
+            return {};
         };
 
         std::vector<TGroupId> groupsToErase;
@@ -740,7 +779,8 @@ public:
         // start syncers for unsynced groups
         for (const auto& [groupId, group] : Self->GroupMap) {
             if (group->BridgeGroupInfo) {
-                for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                         const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
@@ -748,7 +788,7 @@ public:
                         Y_ABORT_UNLESS(inserted);
                         Self->SyncersRequiringAction.PushBack(&it->second);
                     }
-                }
+                });
             }
         }
 

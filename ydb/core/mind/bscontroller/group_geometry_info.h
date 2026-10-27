@@ -21,6 +21,7 @@ namespace NKikimr::NBsController {
         ui32 RealmLevelEnd = 0;
         ui32 DomainLevelBegin = 0;
         ui32 DomainLevelEnd = 0;
+        bool IgnoreBridgePile = false;
 
     public:
         explicit TGroupGeometryInfo() = default;
@@ -77,6 +78,14 @@ namespace NKikimr::NBsController {
             }
         }
 
+        static TGroupGeometryInfo FromStoragePool(TBlobStorageGroupType type,
+                const TBlobStorageController::TStoragePoolInfo& pool) {
+            TGroupGeometryInfo geometry(type, pool.GetGroupGeometry());
+            geometry.IgnoreBridgePile = !pool.BridgeMode && !pool.DDisk;
+            return geometry;
+        }
+
+        bool GetIgnoreBridgePile() const { return IgnoreBridgePile; }
         ui32 GetNumFailRealms() const { return NumFailRealms; }
         ui32 GetNumFailDomainsPerFailRealm() const { return NumFailDomainsPerFailRealm; }
         ui32 GetNumVDisksPerFailDomain() const { return NumVDisksPerFailDomain; }
@@ -88,11 +97,11 @@ namespace NKikimr::NBsController {
         void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
                 TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
+                ui32 groupSizeInUnits, i64 requiredSpace, TGroupMapper::TPileScope pileScope) const {
             TGroupMapperError error;
             for (const bool requireOperational : {true, false}) {
                 if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
-                        requireOperational, bridgePileId, error)) {
+                        requireOperational, pileScope, error)) {
                     return;
                 }
             };
@@ -102,11 +111,9 @@ namespace NKikimr::NBsController {
             throw errorException;
         }
 
-        // returns pair of previous VDisk and PDisk id's
-        std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId,
-                TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition&,
-                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid,
-                ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
+        TVDiskIdShort RepairGroupLayout(TGroupMapper &mapper, TGroupId groupId,
+                TGroupMapper::TGroupDefinition &group, TGroupMapper::TForbiddenPDisks forbid,
+                ui32 groupSizeInUnits, i64 requiredSpace, TGroupMapper::TPileScope pileScope) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group, groupSizeInUnits);
             if (misplacedVDisks.Disks.size() == 0) {
@@ -114,10 +121,9 @@ namespace NKikimr::NBsController {
             } else {
                 for (const bool requireOperational : {true, false}) {
                     for (const auto& replacedDisk : misplacedVDisks.Disks) {
-                        TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
                         if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, groupSizeInUnits, requiredSpace,
-                                requireOperational, bridgePileId, error)) {
-                            return {replacedDisk, pdiskId};
+                                requireOperational, pileScope, error)) {
+                            return replacedDisk;
                         }
                     }
                 }

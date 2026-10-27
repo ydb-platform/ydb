@@ -114,6 +114,7 @@ namespace NActors {
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread.reset(new TExecutorThread(i, actorSystem, this, PoolName));
+            Threads[i].Thread->Prepare();
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;

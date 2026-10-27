@@ -38,10 +38,19 @@ void TDynamicControlBoard::RestoreDefaults() {
 }
 
 void TDynamicControlBoard::RestoreDefault(TString name) {
+    TAtomicBase prevValue;
+    TAtomicBase newValue;
+    RestoreDefault(name, prevValue, newValue);
+}
+
+// Restore one registered control and leave both outputs untouched for an unknown name.
+bool TDynamicControlBoard::RestoreDefault(TString name, TAtomicBase& outPrevValue, TAtomicBase& outNewValue) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {
-        control->RestoreDefault();
+        control->RestoreDefault(outPrevValue, outNewValue);
+        return true;
     }
+    return false;
 }
 
 bool TDynamicControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {

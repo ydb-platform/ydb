@@ -13,6 +13,7 @@
 #include "util_fmt_abort.h"
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 
@@ -342,7 +343,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
     RequireForUpdate(table)->Update(rop, key, ModifiedOps, Annex->Current(), rowVersion);
 }
 
-void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
+void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId, ui32 savepointSeqNum)
 {
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
@@ -370,8 +371,8 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
         //        avoid creating large objects when they are in deltas
     }
 
-    Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId);
-    RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
+    Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId, savepointSeqNum);
+    RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId, savepointSeqNum);
 }
 
 void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
@@ -497,9 +498,10 @@ void TDatabase::RollbackChanges()
     TTxStamp stamp = Change->Stamp;
     IPages& env = *Env;
 
-    Commit(stamp, false, nullptr);
+    auto prod = Commit(stamp, false, nullptr);
     env.OnRollbackChanges();
     Begin(stamp, env);
+    Change->RollbackAffects = std::move(prod.Change->RollbackAffects);
 }
 
 TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
@@ -532,6 +534,10 @@ void TDatabase::EnumerateTxStatusParts(const std::function<void(const TIntrusive
 
 ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
     return Require(tableId)->GetMemSize(epoch);
+}
+
+ui64 TDatabase::GetTableMemAllocatedSize(ui32 tableId) const {
+    return Require(tableId)->GetMemAllocatedSize();
 }
 
 ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
@@ -778,7 +784,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         NRedo::TWriter prefix{ };
 
         {
-            const ui32 head = ui32(ECompatibility::Head);
+            // Chunks with events unknown to older versions require a newer evolution to read
+            const ui32 head = Max(ui32(ECompatibility::Head), Redo->RequiredEvolution());
             const ui32 edge = ui32(ECompatibility::Edge);
 
             prefix.EvBegin(head, edge, Change->Serial, Change->Stamp);
@@ -846,7 +853,9 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             Y_TABLET_ERROR(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
     } else {
-        DatabaseImpl->RollbackTransaction();
+        auto affects = DatabaseImpl->RollbackTransaction();
+        Change->RollbackAffects.insert(Change->RollbackAffects.end(), affects.begin(), affects.end());
+        SortUnique(Change->RollbackAffects);
     }
 
     DatabaseImpl->RunGC();

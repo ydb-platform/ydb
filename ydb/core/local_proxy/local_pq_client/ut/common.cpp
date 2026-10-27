@@ -10,7 +10,8 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 
 TTestWriter::TTestWriter(std::shared_ptr<IWriteSession> session)
     : Session(std::move(session))
-{}
+{
+}
 
 TWriteSessionEvent::TWriteAck TTestWriter::Write(TWriteMessage message, bool encoded) {
     if (!Token) {
@@ -45,10 +46,8 @@ TLocalTopicClientFixture::TLocalTopicClientFixture() = default;
 TLocalTopicClientFixture::~TLocalTopicClientFixture() = default;
 
 void TLocalTopicClientFixture::SetUp(NUnitTest::TTestContext&) {
-    Kikimr = std::make_unique<TKikimrRunner>(TKikimrSettings()
-        .SetWithSampleTables(false)
-        .SetAuthToken(BUILTIN_ACL_ROOT)
-        .SetEnableTopicDeferredPublish(true));
+    Kikimr = std::make_unique<TKikimrRunner>(
+        TKikimrSettings().SetWithSampleTables(false).SetAuthToken(BUILTIN_ACL_ROOT).SetEnableTopicDeferredPublish(true));
     TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());
     DeferredClient = std::make_unique<TDeferredPublishClient>(Kikimr->GetDriver());
     CreateTopic(TOPIC_PATH);
@@ -62,9 +61,7 @@ TLocalTopicClientSettings TLocalTopicClientFixture::LocalClientSettings() const 
 }
 
 TTopicClientSettings TLocalTopicClientFixture::ClientSettings() {
-    return TTopicClientSettings()
-        .Database("/Root")
-        .AuthToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
+    return TTopicClientSettings().Database("/Root").AuthToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
 }
 
 TLocalTopicSessionSettings TLocalTopicClientFixture::LocalSessionSettings() const {
@@ -76,11 +73,7 @@ TLocalTopicSessionSettings TLocalTopicClientFixture::LocalSessionSettings() cons
 }
 
 TWriteSessionSettings TLocalTopicClientFixture::WriteSettings(const std::string& path) {
-    return TWriteSessionSettings()
-        .Path(path)
-        .ProducerId("producer")
-        .MessageGroupId("producer")
-        .Codec(ECodec::RAW);
+    return TWriteSessionSettings().Path(path).ProducerId("producer").MessageGroupId("producer").Codec(ECodec::RAW);
 }
 
 TReadSessionSettings TLocalTopicClientFixture::ReadSettings(const std::string& path) {
@@ -88,10 +81,13 @@ TReadSessionSettings TLocalTopicClientFixture::ReadSettings(const std::string& p
 }
 
 void TLocalTopicClientFixture::CreateTopic(const std::string& path, ui32 partitions) {
-    const auto result = TopicClient->CreateTopic(path, TCreateTopicSettings()
-        .PartitioningSettings(partitions, partitions)
-        .BeginAddConsumer(CONSUMER).EndAddConsumer()
-        .ClientTimeout(TEST_TIMEOUT)).GetValueSync();
+    const auto result = TopicClient
+                            ->CreateTopic(path, TCreateTopicSettings()
+                                                    .PartitioningSettings(partitions, partitions)
+                                                    .BeginAddConsumer(CONSUMER)
+                                                    .EndAddConsumer()
+                                                    .ClientTimeout(TEST_TIMEOUT))
+                            .GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
@@ -129,8 +125,7 @@ void TLocalTopicClientFixture::AssertTopicMessages(const std::vector<std::string
 }
 
 void TLocalTopicClientFixture::AssertTopicEndOffset(ui64 expected, const std::string& path) {
-    const auto result = TopicClient->DescribeTopic(path, TDescribeTopicSettings()
-        .IncludeStats(true).ClientTimeout(TEST_TIMEOUT)).GetValueSync();
+    const auto result = TopicClient->DescribeTopic(path, TDescribeTopicSettings().IncludeStats(true).ClientTimeout(TEST_TIMEOUT)).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     const auto& partitions = result.GetTopicDescription().GetPartitions();
     UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -207,4 +202,4 @@ void TLocalTopicClientFixture::AssertAck(const TWriteSessionEvent::TWriteAck& ac
     UNIT_ASSERT_VALUES_EQUAL(ack.Details->PartitionId, partition);
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

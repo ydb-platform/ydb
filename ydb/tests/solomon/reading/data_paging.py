@@ -20,7 +20,9 @@ class TestDataPaging(SolomonReadingTestBase):
             rows.extend(result.rows)
 
         if len(rows) != self.data_paging_timeseries_size:
-            return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.data_paging_timeseries_size)
+            return False, "Result size differs from expected: have {}, should be {}".format(
+                len(rows), self.data_paging_timeseries_size
+            )
 
         values = []
         for row in rows:

@@ -20,7 +20,6 @@
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
-class IQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -380,14 +379,6 @@ public:
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
-        WmQueryClassifier = std::move(classifier);
-    }
-
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
-        return WmQueryClassifier;
-    }
-
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -517,7 +508,6 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,
@@ -538,10 +528,12 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
     using TBaseEv = TEventPBWithArena<TEvQueryResponse, NKikimrKqp::TEvQueryResponse, TKqpEvents::EvQueryResponse> ;
     using TBaseEv::TEventPBBase;
 
-    TEvQueryResponse() = default;
-    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-        : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
-    {}
+    TEvQueryResponse();
+    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena);
+    ~TEvQueryResponse() override;
+
+    // Local worker-to-session statistics when the client did not request them.
+    std::unique_ptr<NKqpProto::TKqpStatsQuery> WorkerStats;
 };
 
 } // namespace NKikimr::NKqp

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stddef.h>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>

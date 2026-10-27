@@ -197,7 +197,10 @@ void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where
         builder << "or you may increase TransformCycleDetector limit";
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(pos), builder));
+    ctx.AddError(YqlIssue(
+        ctx.GetPosition(pos),
+        TIssuesIds::CORE_REPEAT_TRANSFORM_LIMIT_EXCEEDED,
+        builder));
 }
 
 } // namespace

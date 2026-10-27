@@ -22,15 +22,11 @@ struct zmm_vector<_Float16> {
     using opmask_t = __mmask32;
     static const uint8_t numlanes = 32;
     static constexpr int network_sort_threshold = 128;
-    static constexpr int partition_unroll_factor = 0;
+    static constexpr int partition_unroll_factor = 8;
     static constexpr simd_type vec_type = simd_type::AVX512;
 
     using swizzle_ops = avx512_16bit_swizzle_ops;
 
-    static __m512i get_network(int index)
-    {
-        return _mm512_loadu_si512(&network[index - 1][0]);
-    }
     static type_t type_max()
     {
         Fp16Bits val;
@@ -143,12 +139,13 @@ struct zmm_vector<_Float16> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const auto rev_index = get_network(4);
+        constexpr static uint16_t arr[] = {NETWORK_REVERSE_32LANES};
+        const auto rev_index = _mm512_loadu_si512(arr);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_16bit<zmm_vector<type_t>>(x);
+        return sort_reg_32lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {

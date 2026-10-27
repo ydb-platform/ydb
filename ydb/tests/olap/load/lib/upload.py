@@ -3,12 +3,14 @@ from .conftest import LoadSuiteBase
 from .tpch import TpchSuiteBase
 from time import time, sleep
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.workload_result import Iteration, WorkloadRunResult
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 import allure
 import json
 import logging
 import os
+import shlex
 import pytest
 import yatest.common
 import ydb
@@ -17,7 +19,7 @@ import ydb.tests.olap.lib.remote_execution as re
 
 class UploadSuiteBase(LoadSuiteBase):
     query_name = 'Upload'
-    upload_result: YdbCliHelper.WorkloadRunResult = None
+    upload_result: WorkloadRunResult = None
 
     @classmethod
     def init(cls):
@@ -44,19 +46,18 @@ class UploadSuiteBase(LoadSuiteBase):
         pass
 
     @classmethod
-    def validate(cls, result: YdbCliHelper.WorkloadRunResult):
+    def validate(cls, result: WorkloadRunResult):
         pass
 
     @classmethod
-    def save_result_additional_info(cls, result: YdbCliHelper.WorkloadRunResult):
+    def save_result_additional_info(cls, result: WorkloadRunResult):
         pass
 
     @classmethod
     def do_setup_class(cls) -> None:
         start_time = time()
-        result = YdbCliHelper.WorkloadRunResult()
-        result.iterations[0] = YdbCliHelper.Iteration()
-        result.traceback = None
+        result = WorkloadRunResult()
+        result.iterations[0] = Iteration()
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(start_time - 600, first_node_start_time)
@@ -73,8 +74,6 @@ class UploadSuiteBase(LoadSuiteBase):
                 cls.after_compaction()
         except BaseException as e:
             logging.error(f'Error: {e}')
-            result.add_error(str(e))
-            result.traceback = e.__traceback__
             raise e
         result.iterations[0].time = time() - start_time
         cls.validate(result)
@@ -178,7 +177,7 @@ class UploadClusterBase(UploadSuiteBase):
         cls.__saved_metrics = metrics
 
     @classmethod
-    def save_result_additional_info(cls, result: YdbCliHelper.WorkloadRunResult):
+    def save_result_additional_info(cls, result: WorkloadRunResult):
         result.add_stat(cls.query_name, 'GrossTime', int(cls.__gross_time * 1000))
         result.add_stat(cls.query_name, 'time_with_compaction', int(cls.__gross_time * 1000))
         result.add_stat(cls.query_name, 'import_time', int(cls.__import_time * 1000))
@@ -234,16 +233,9 @@ class UploadTpchBase(UploadClusterBase):
     @classmethod
     def do_setup_class(cls) -> None:
         cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
-        results = re.deploy_binaries_to_hosts(
-            [YdbCliHelper.get_cli_path()],
-            [n.host for n in cls.__static_nodes],
-            cls.get_remote_tmpdir()
-        )
-        for host, host_results in results.items():
-            for bin, res in host_results.items():
-                assert res.get('success', False), f'host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}'
         for i in range(len(cls.__static_nodes)):
             node = cls.__static_nodes[i]
+            cli_path = YdbCliHelper.deploy_remote_cli(node.host, cls.get_remote_tmpdir())
             script_path = yatest.common.work_path('ydb_upload_tpch.sh')
             with open(script_path, 'w') as script_file:
                 script_file.write(f'''#!/bin/bash
@@ -252,7 +244,7 @@ class UploadTpchBase(UploadClusterBase):
                     RET_CODE=1
                     while [ $RET_CODE -ne 0 ]
                     do
-                        {cls.get_remote_tmpdir()}/ydb -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
+                        {shlex.quote(cli_path)} -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
                             workload tpch -p {YdbCluster.get_tables_path(cls.get_path())} \\
                             import --bulk-size 50000 \\
                             generator --scale {cls.scale} -i {i} -C {len(cls.__static_nodes)} --state {cls.get_remote_tmpdir()}/state.json

@@ -14,6 +14,7 @@
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
@@ -248,7 +249,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString userSpecifiedPath = CanonizePath(
+                this->Request->NormalizePath(item.source_path()));
             TString fullPath;
             if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
@@ -435,12 +437,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
                     if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         // Skip children that we don't want to export
-                        if (child.Name.StartsWith("~")
-                            || child.Name.StartsWith(".sys")
-                            || child.Name.StartsWith(".tmp")
-                            || child.Name.StartsWith(".metadata")
-                            || child.Name.StartsWith("export-"))
-                        {
+                        if (NNaming::IsInternalName(child.Name)) {
                             continue;
                         }
                     }
@@ -531,7 +528,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
+            // /Foo/Bar, but empty result for empty source_path
+            CommonSourcePath = CanonizePath(
+                this->Request->NormalizePath(settings.source_path()));
         }
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());

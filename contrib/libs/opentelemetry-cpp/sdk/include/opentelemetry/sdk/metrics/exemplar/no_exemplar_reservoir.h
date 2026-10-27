@@ -5,7 +5,7 @@
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
 
-#  include <stdint.h>
+#  include <cstdint>
 #  include <memory>
 #  include <vector>
 
@@ -26,20 +26,16 @@ class NoExemplarReservoir final : public ExemplarReservoir
 {
 
 public:
-  void OfferMeasurement(
-      int64_t /* value */,
-      const MetricAttributes & /* attributes */,
-      const opentelemetry::context::Context & /* context */,
-      const opentelemetry::common::SystemTimestamp & /* timestamp */) noexcept override
+  void OfferMeasurement(int64_t /* value */,
+                        const MetricAttributes & /* attributes */,
+                        const opentelemetry::context::Context & /* context */) noexcept override
   {
     // Stores nothing
   }
 
-  void OfferMeasurement(
-      double /* value */,
-      const MetricAttributes & /* attributes */,
-      const opentelemetry::context::Context & /* context */,
-      const opentelemetry::common::SystemTimestamp & /* timestamp */) noexcept override
+  void OfferMeasurement(double /* value */,
+                        const MetricAttributes & /* attributes */,
+                        const opentelemetry::context::Context & /* context */) noexcept override
   {
     // Stores nothing.
   }

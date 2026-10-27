@@ -5,7 +5,7 @@ namespace NKqp {
 
 bool TPushFilterUnderMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter &&
-        input->Children.front()->Kind == EOperator::Map;
+        input->GetChildren().front()->Kind == EOperator::Map;
 }
 
 TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -23,21 +23,14 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
 
     auto map = CastOperator<TOpMap>(filter->GetInput());
 
-    if (map->HasRenames()) {
-        return input;
-    }
-
     auto conjuncts = filter->GetFilterExpression().SplitConjunct();
     TVector<TExpression> pushedFilters;
     TVector<TExpression> remainingFilters;
 
-    TVector<TInfoUnit> newMapColumns;
-    for (const auto & mapEl : map->GetMapElements()) {
-        newMapColumns.push_back(mapEl.GetElementName());
-    }
+    const auto& newMapColumns = map->GetMapElements().Keys();
 
     for (const auto & c : conjuncts) {
-        if (!ReferencesUnresolvedSubplan(c, props) && IUSetIntersect(c.GetInputIUs(false,true), newMapColumns).empty()){
+        if (!ReferencesUnresolvedSubplan(c, props) && !c.GetInputIUs(false, true).HasAny(newMapColumns)) {
             pushedFilters.push_back(c);
         } else {
             remainingFilters.push_back(c);

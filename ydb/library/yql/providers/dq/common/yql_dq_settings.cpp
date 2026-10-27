@@ -1,9 +1,14 @@
 #include "yql_dq_settings.h"
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 #include <util/string/split.h>
 
 namespace NYql {
 
-TDqConfiguration::TDqConfiguration() {
+TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TDqSettings>(DqProviderName, TQContext(), strictConfigValidation)
+{
     REGISTER_SETTING(*this, DataSizePerJob);
     REGISTER_SETTING(*this, MaxDataSizePerJob);
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -65,10 +70,10 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, UseWideChannels);
     REGISTER_SETTING(*this, UseWideBlockChannels)
-        .ValueSetter([this](const TString&, bool value) {
-            UseWideBlockChannels = value;
+        .ValueSetter([](TDqSettings& settings, const TString&, bool value) {
+            settings.UseWideBlockChannels = value;
             if (value) {
-                UseWideChannels = true;
+                settings.UseWideChannels = true;
             }
         });
     REGISTER_SETTING(*this, UseFastPickleTransport);
@@ -86,11 +91,11 @@ TDqConfiguration::TDqConfiguration() {
         });
 
     REGISTER_SETTING(*this, EnableSpillingInChannels)
-        .ValueSetter([this](const TString&, bool value) {
-            EnableSpillingInChannels = value;
+        .ValueSetter([](TDqSettings& settings, const TString&, bool value) {
+            settings.EnableSpillingInChannels = value;
             if (value) {
-                SplitStageOnDqReplicate = false;
-                EnableDqReplicate = true;
+                settings.SplitStageOnDqReplicate = false;
+                settings.EnableDqReplicate = true;
             }
         });
     REGISTER_SETTING(*this, ValuePackerVersion).Parser([](const TString& v) {
@@ -99,10 +104,10 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, DisableLLVMForBlockStages);
     REGISTER_SETTING(*this, SplitStageOnDqReplicate)
-        .ValueSetter([this](const TString&, bool value) {
-            SplitStageOnDqReplicate = value;
+        .ValueSetter([](TDqSettings& settings, const TString&, bool value) {
+            settings.SplitStageOnDqReplicate = value;
             if (!value) {
-                EnableDqReplicate = true;
+                settings.EnableDqReplicate = true;
             }
         });
 
@@ -125,7 +130,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, Scheduler);
     REGISTER_SETTING(*this, Clique)
-        .Validator([this](const TString&, const TString& value) {
+        .Validator([this](const TDqSettings&, const TString&, const TString& value) {
             if (CliqueValidator) {
                 CliqueValidator(value);
             }

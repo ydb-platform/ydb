@@ -412,7 +412,7 @@ namespace NTable {
             SchemeRollbackState.Redo.reset();
         }
 
-        void RollbackTransaction()
+        TVector<ui32> RollbackTransaction()
         {
             for (ui32 tid : Prepared) {
                 auto& wrap = Tables.at(tid);
@@ -439,11 +439,10 @@ namespace NTable {
                     wrap.Serial = wrap.SerialBackup;
                 }
             }
-            Affects.clear();
-
             RollbackScheme();
             Serial_ = Begin_;
             InTransaction = false;
+            return std::exchange(Affects, {});
         }
 
         void RollbackScheme()
@@ -746,13 +745,13 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId)
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId, ui32 savepointSeqNum)
         {
             auto &wrap = Touch(tid);
 
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
-            wrap->UpdateTx(rop, key, ops, Annex, txId);
+            wrap->UpdateTx(rop, key, ops, Annex, txId, savepointSeqNum);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;

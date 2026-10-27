@@ -32,7 +32,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {
         std::atomic<ui64> CpuUsage = 0;
-        std::atomic<ui64> CpuDemand = 0;
+        std::atomic<ui64> CpuMaxDemand = 0;
         std::atomic<ui64> CpuThrottle = 0;
 
         std::atomic<ui64> CpuBurstUsage = 0;
@@ -40,7 +40,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuBurstThrottle = 0;
         std::atomic<ui64> ReadBurstUsage = 0;
 
-        std::atomic<ui64> CpuActualDemand = 0;
+        std::atomic<ui64> MemoryUsage = 0;
+        std::atomic<ui64> MemoryDemand = 0;
 
         // TODO: implement Read resource - for now it's only per datashard.
 
@@ -58,12 +59,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TQuery* TakeSnapshot() override;
 
+        // Gives the new query the fair-share of its pool right away - not to wait for its first snapshot.
+        // The initial snapshot is not attached to the snapshot tree, so it has no parent.
+        void InitSnapshot(const NSnapshot::TPool& pool);
+
         TFullPoolId GetFullPoolId() const;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         ui32 ResumeTasks(ui32 count);
-
-        void UpdateActualDemand();
 
     public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
@@ -74,7 +77,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const bool AllowMinFairShare; // tasks should look at this in case of missing snapshot
 
     private:
-        // used to calculate adjusted satisfaction between snapshots
+        // used to calculate adjusted satisfaction and actual demand between snapshots
         ui64 PrevCpuBurstUsage = 0;
         ui64 PrevCpuBurstThrottle = 0;
 
@@ -93,6 +96,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
                 Counters->Delay->Collect(microseconds);
             }
         }
+
+    protected:
+        virtual NSnapshot::TPool* CreateSnapshot() const;
+    };
+
+    // The memory of the default pool is accounted, but not limited by the pool itself
+    class TDefaultPool : public TPool {
+    public:
+        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+
+    protected:
+        NSnapshot::TPool* CreateSnapshot() const override;
     };
 
     class TDatabase : public TPool {
@@ -113,11 +128,13 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TRoot* TakeSnapshot() override;
 
     public:
-        ui64 TotalLimit = Infinity();
+        std::atomic<ui64> TotalCpuLimit = Infinity();
+        std::atomic<ui64> TotalMemoryLimit = Infinity();
 
     private:
         struct {
-            NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalCpuLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalMemoryLimit;
         } Counters;
     };
 

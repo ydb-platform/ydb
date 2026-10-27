@@ -123,6 +123,10 @@ public:
         if (!pool->GetKind()) {
             pool->SetKind(Pool->Kind);
         }
+        if (PoolId) {
+            // the mode of the existing pool is the one resolved at its creation, or set by BSC afterwards
+            pool->ClearBridgeMode();
+        }
 
         YDB_LOG_DEBUG("Send pool request",
             {"logPrefix", LogPrefix},
@@ -3877,7 +3881,14 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolDeleted::TPtr &ev, const TActorC
 {
     auto tenant = ev->Get()->Tenant;
     auto pool = ev->Get()->Pool;
-    Y_ABORT_UNLESS(pool->Worker == ev->Sender);
+
+    // Pool deletion may be retried while previous worker is still running.
+    if (pool->Worker != ev->Sender) {
+        YDB_LOG_ERROR_CTX(ctx, "Ignoring TEvPrivate::TEvPoolDeleted from outdated worker",
+            {"poolName", pool->Config.GetName()},
+            {"tenantPath", tenant->Path});
+        return;
+    }
 
     TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
                                                    TStoragePool::DELETED),

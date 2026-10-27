@@ -5,7 +5,6 @@ import string
 
 from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config, set_test_env
 
-
 logger = logging.getLogger(__name__)
 
 

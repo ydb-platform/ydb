@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     runtime_settings_configuration.cpp
@@ -15,8 +15,10 @@ PEERDIR(
     library/cpp/hyperloglog
 )
 
-YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    benchmark
+    ut
+)

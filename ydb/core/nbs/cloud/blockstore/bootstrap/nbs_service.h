@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
@@ -19,8 +20,6 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TNbsFrontendRuntime;
-
 struct TNbsService: public IStartable
 {
     ILoggingServicePtr Logging;
@@ -37,7 +36,7 @@ struct TNbsService: public IStartable
     const ITimerPtr Timer;
     // Single scheduler thread for the whole NBS service and all partitions.
     const ISchedulerPtr Scheduler;
-    std::unique_ptr<TNbsFrontendRuntime> Frontend;
+    INbsBlockStoreFacadePtr BlockStoreFacade;
 
     explicit TNbsService(const NKikimrConfig::TNbsConfig& config);
     ~TNbsService() override;

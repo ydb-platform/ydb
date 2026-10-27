@@ -205,11 +205,12 @@ class WebSocketApp:
         Close websocket connection.
         """
         self.keep_running = False
-        if self.sock:
-            self.sock.close(**kwargs)
+        sock = self.sock
+        if sock:
+            sock.close(**kwargs)
             # Capture the peer's close frame before clearing socket reference
-            if self.sock.close_frame is not None:
-                self.last_close_frame = self.sock.close_frame
+            if sock.close_frame is not None:
+                self.last_close_frame = sock.close_frame
             self.sock = None
 
     def _start_ping_thread(self) -> None:

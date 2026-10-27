@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/yql/dq/expr_nodes
@@ -11,7 +11,5 @@ PEERDIR(
 SRCS(
     dq_constraints.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

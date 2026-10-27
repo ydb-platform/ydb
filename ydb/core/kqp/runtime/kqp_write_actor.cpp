@@ -1,5 +1,6 @@
 #include "kqp_write_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lock_actor.h"
 #include "kqp_buffer_lookup_actor.h"
 #include "kqp_write_actor_settings.h"
@@ -13,6 +14,7 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -214,6 +216,7 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        AFL_ENSURE(txManager->HasShard(shardId));
         const auto& reattachState = txManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return std::nullopt;
@@ -243,6 +246,10 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        // Restarts are only signaled after PREPARE started, so the shard must
+        // still be registered: a reroute (which erases the shard) cannot happen
+        // past that point.
+        AFL_ENSURE(txManager->HasShard(shardId));
         switch (txManager->GetState(shardId)) {
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
             case NKikimr::NKqp::IKqpTransactionManager::EXECUTING: {
@@ -290,6 +297,12 @@ struct IKqpTableWriterCallbacks {
         Y_UNUSED(shardId);
         OnError(statusCode, std::move(issues));
     }
+
+    // ONLY FOR READ COMMITTED!
+    // A RefreshPartitioning() round (pre-prepare re-resolve) has finished for this
+    // actor: the resolve completed and all in-flight (re-routed) batches were
+    // acknowledged, so it is safe to switch the actor to PREPARE mode.
+    virtual void OnResolveCompleted() {}
 };
 
 struct TKqpTableWriterStatistics {
@@ -299,7 +312,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -320,7 +333,9 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
-            AffectedRows += tableAccessStats.GetAffectedRows();
+            if (tableAccessStats.HasAffectedRows()) {
+                AffectedRows = AffectedRows.value_or(0) + tableAccessStats.GetAffectedRows();
+            }
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -398,7 +413,9 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (AffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + *AffectedRows);
+        }
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -406,13 +423,55 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
-        AffectedRows = 0;
+        AffectedRows.reset();
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
         AffectedPartitions.clear();
     }
 };
+
+// Compute the shards of `newPartitioning` that now cover the key range of the removed
+// shard with `removedShardMeta` partitioning metadata. Used on split/merge: the removed
+// shard's pending batches are re-routed to these shards, and its TxManager participant
+// state (locks, flags) is moved to them. The range comes from the removed shard's
+// registered metadata (registered by the caller from the pre-update partitioning);
+// the intersection with the new partitioning yields exactly the covering shards.
+TVector<ui64> FindCoveringShards(
+        const TShardMeta& removedShardMeta,
+        const TPartitioning::TCPtr& newPartitioning,
+        const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+    AFL_ENSURE(newPartitioning);
+    // The removed shard's metadata must be filled: it is registered from the
+    // pre-update partitioning before the covering computation. A miss means a
+    // re-homing would silently break the commit — fail closed instead.
+    AFL_ENSURE(removedShardMeta.IsKnown());
+    AFL_ENSURE(!removedShardMeta.Borders.From.empty());
+
+    auto intersections = newPartitioning->GetIntersectionWithRange(
+        keyColumnTypes, removedShardMeta.Borders);
+    // The removed shard's range must remain covered by the new partitioning; an empty
+    // intersection means a desync — fail closed.
+    AFL_ENSURE(!intersections.empty());
+    TVector<ui64> result;
+    result.reserve(intersections.size());
+    for (const auto& intersection : intersections) {
+        result.push_back(intersection.ShardId);
+    }
+    return result;
+}
+
+// Whether writes of this transaction participate in the WriteSeqNum protocol —
+// the only user of the split/merge partitioning metadata
+// (FindCoveringShards/MoveShardTo), so shard metas are collected only then.
+// Shared by the table write actor (its AttachWriteSeqNum member) and the buffer
+// write actor (which serves tables with different schemas and becomes
+// InconsistentTx only with the first write task).
+bool ShouldAttachWriteSeqNum(bool inconsistentTx, bool isOlap) {
+    return AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
+        && !inconsistentTx
+        && !isOlap;
+}
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
@@ -483,10 +542,7 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
-        , AttachWriteSeqNum(
-              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
-              && !inconsistentTx
-              && !isOlap)
+        , AttachWriteSeqNum(ShouldAttachWriteSeqNum(inconsistentTx, isOlap))
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -530,7 +586,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
-            const auto partitioning = TxManager->GetPartitioning(TableId);
+            const auto partitioning = TxManager->GetTableMeta(TableId).InitialPartitioning;
             if (!partitioning) {
                 Resolve();
             } else {
@@ -715,7 +771,7 @@ public:
     void Resolve() {
         ResolvingInProgress = true;
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
-            "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+            "Resolve table", NWilson::EFlags::AUTO_END);
 
         if (IsOlap) {
             ResolveTable();
@@ -875,6 +931,15 @@ public:
     }
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
+        if (!ShardedWriteController->HasShard(shardId)) {
+            // The shard was removed by a reroute after a split/merge: a late
+            // TEvOverloadReady for the dead tablet (sent after an overload wait that
+            // outlived the reroute) is stale.
+            YDB_LOG_INFO("Ignoring TEvOverloadReady for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", shardId});
+            return;
+        }
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             YDB_LOG_DEBUG("Retry Overloaded",
@@ -922,6 +987,22 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
+        // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
+        AFL_ENSURE(ev->Cookie != 0);
+
+        if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
+            // TODO: in future don't ignore non-retryable errors and fail immediately
+            YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+            return;
+        }
+
+        // Only results of the last sent message are processed (see IsSupersededWriteResult).
+
+        const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
+
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
@@ -929,6 +1010,19 @@ public:
         } else {
             Counters->WriteActorRemoteShardWrites->Inc();
         }
+
+        AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
+        if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
+                && IsSupersededWriteResult(ev->Cookie, metadata)
+                && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
+            YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
@@ -940,17 +1034,19 @@ public:
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
 
-            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 YDB_LOG_INFO("Waiting for overloaded shard.",
                     {"logPrefix", this->LogPrefix},
                     {"tablePath", TablePath},
                     {"shardID", ev->Get()->Record.GetOrigin()},
                     {"sink", this->SelfId()});
-                // The shard acknowledged the wait: don't let resends burn the bounded
-                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
-                // will reset the attempts again right before the resend.
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
             }
             return;
         }
@@ -1011,7 +1107,7 @@ public:
             } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
                 // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
                 // Retries are bounded in RetryShard before the write re-resolves and then fails.
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1063,8 +1159,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // TODO: support waiting
-            if (!InconsistentTx)  {
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
@@ -1073,6 +1168,8 @@ public:
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1083,8 +1180,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // TODO: support waiting
-            if (!InconsistentTx)  {
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
@@ -1094,6 +1190,8 @@ public:
                         << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
                         << TablePath << "`.",
                     getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1210,11 +1308,9 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result) {
-            YQL_ENSURE(result->IsShardEmpty);
-            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
-            Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
-        }
+        AFL_ENSURE(result.IsShardEmpty);
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+        Callbacks->OnPrepared(std::move(preparedInfo), result.DataSize);
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -1242,14 +1338,6 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (!result) {
-            // A resent batch is answered twice, only the first result is taken
-            YDB_LOG_DEBUG("Ignored an already acknowledged result",
-                {"logPrefix", this->LogPrefix},
-                {"tabletId", ev->Get()->Record.GetOrigin()},
-                {"cookie", ev->Cookie});
-            return;
-        }
 
         RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
 
@@ -1266,13 +1354,13 @@ public:
             }
         }
 
-        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+        if (result.IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result.DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnMessageAcknowledged(result->DataSize);
+            Callbacks->OnMessageAcknowledged(result.DataSize);
         }
     }
 
@@ -1324,9 +1412,36 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+
+            // TxManager must know all shards that will participate in commit
+            // before Prepare/Commit is sent to them.
+            // The partitioning metadata is consumed only by the split/merge
+            // handling (FindCoveringShards/MoveShardTo), so it is filled only
+            // under the WriteSeqNum protocol; everywhere else shards are
+            // registered without metadata. A shard already registered with
+            // borders is left untouched: the shard never changes borders between
+            // resolves (a split/merge removes the tablet id entirely), so
+            // re-adding it would only rebuild and re-merge the same metadata. A
+            // shard registered without borders (e.g. a fresh MoveShardTo transfer
+            // target) still needs this UpdateShards pass — that is how it learns
+            // its exact borders.
+            if (AttachWriteSeqNum && (!TxManager->HasShard(shardInfo.ShardId)
+                    || TxManager->GetShardMeta(shardInfo.ShardId).Borders.From.empty())) {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
+            } else {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            }
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
+    }
+
+    // Borders/version of the shard in the partitioning this actor currently works
+    // with. Called only under the WriteSeqNum protocol (UpdateShards gates on
+    // AttachWriteSeqNum): row tables only, where the resolved partitioning always
+    // has representable per-shard key ranges.
+    TShardMeta MakeShardMeta(const ui64 shardId) const {
+        AFL_ENSURE(AttachWriteSeqNum);
+        return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 
     void FlushBuffer(const TWriteToken token) {
@@ -1352,12 +1467,12 @@ public:
     bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
-        const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        YQL_ENSURE(metadata);
+        const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
-        // (AttachWriteSeqNum) or when the write is inconsistent.
-        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
-        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
+        // without the flag a resend would break the write order, so fail loudly.
+        AFL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
             // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
@@ -1366,14 +1481,14 @@ public:
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryShard(shardId, metadata->Cookie);
+            RetryShard(shardId);
             return false;
         }
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
-        const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
-        const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+        const bool isPrepare = metadata.IsFinal && Mode == EMode::PREPARE;
+        const bool isImmediateCommit = metadata.IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
         // In-flight data batches carry the snapshot of the operation that produced
         // them, and all batches of one message must share it (enforced by
@@ -1419,19 +1534,19 @@ public:
 
         evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
 
-        evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
+        evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
-        YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+        YQL_ENSURE(isPrepare || isImmediateCommit || evWrite->Record.OperationsSize() > 0);
 
-        if (metadata->SendAttempts == 0) {
+        if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
                 Counters->WriteActorImmediateWrites->Inc();
             } else {
                 Counters->WriteActorPrepareWrites->Inc();
             }
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
-            Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
+            Counters->WriteActorWritesOperationsHistogram->Collect(metadata.OperationsCount);
 
             for (const auto& operation : evWrite->Record.GetOperations()) {
                 if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
@@ -1468,6 +1583,8 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
+        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
+
         TStringBuilder locks;
         for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
             locks << lock.ShortDebugString();
@@ -1482,29 +1599,29 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", metadata->Cookie},
+            {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
-            {"isFinal", metadata->IsFinal},
-            {"attempts", metadata->SendAttempts},
+            {"isFinal", metadata.IsFinal},
+            {"attempts", metadata.SendAttempts},
             {"mode", static_cast<int>(Mode)},
             {"bufferMemory", GetMemory()});
 
-        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+        AFL_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
         LinkedPipeCache = true;
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            metadata->Cookie,
+            cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
+        ShardedWriteController->OnMessageSent(shardId, cookie);
 
         return true;
     }
 
-    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+    void RetryShard(const ui64 shardId) {
         if (Mode != EMode::WRITE) {
             // At current time retries are only supported for WRITE mode.
             RuntimeError(
@@ -1518,11 +1635,10 @@ public:
 
         AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
-            YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
+        if (!metadata) {
+            YDB_LOG_INFO("Shard retry skipped because metadata was not found.",
                 {"logPrefix", this->LogPrefix},
-                {"shardID", shardId},
-                {"cookie", ifCookieEqual.value_or(0)});
+                {"shardID", shardId});
             return;
         }
 
@@ -1553,18 +1669,6 @@ public:
                         << " attempts. Table `" << TablePath << "`.");
                 return;
             }
-            if (!InconsistentTx) {
-                // TODO: support for resolve for inconsistent transactions
-                TxManager->SetError(shardId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder()
-                        << "Failed to deliver write to shard " << shardId
-                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
-                        << " attempts. Table `" << TablePath << "`.");
-                return;
-            }
             ++resolveCount;
             // Reset the send attempts so the pending batches are picked up again by the
             // next FlushToShards() once the re-resolve finishes (a same-shard-set resolve has
@@ -1578,7 +1682,7 @@ public:
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"cookie", ifCookieEqual.value_or(0)},
+            {"cookie", metadata->Cookie},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
 
@@ -1592,12 +1696,24 @@ public:
 
     void Handle(TEvPrivate::TEvShardRetry::TPtr& ev) {
         const auto& msg = ev->Get();
+
+        if (!ShardedWriteController->HasShard(msg->ShardId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late retry for the dead tablet is
+            // expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvShardRetry for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", msg->ShardId});
+            return;
+        }
+
         const auto metadata = ShardedWriteController->GetMessageMetadata(msg->ShardId);
         if (!metadata || metadata->Cookie != msg->Cookie) {
             // The batch was acknowledged (its cookie advanced) or is no longer
             // pending: nothing to resend.
             return;
         }
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         // The resend budget is enforced in SendDataToShard: once the attempts are
         // exhausted it routes to the re-resolve path instead of sending again.
         SendDataToShard(msg->ShardId);
@@ -1615,8 +1731,18 @@ public:
             return;
         }
 
+        if (!ShardedWriteController->HasShard(ev->Get()->TabletId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late delivery problem for the dead
+            // tablet is expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvDeliveryProblem for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->TabletId});
+            return;
+        }
+
         if (InconsistentTx) {
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1628,7 +1754,7 @@ public:
         // tablet generation restores the writer chain and answers once.
         if (AttachWriteSeqNum && Mode == EMode::WRITE) {
             // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1719,6 +1845,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -1728,7 +1856,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, NWilson::TTraceId(ParentTraceId));
     }
 
     void Prepare() {
@@ -1757,7 +1885,89 @@ public:
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
         } else {
             YQL_ENSURE(Partitioning);
+            // The controller's Partitioning member is overwritten by
+            // OnPartitioningChanged: it still holds the pre-update partitioning here,
+            // needed to register the partitioning metadata of the shards removed by
+            // the split/merge. Captured by value (with its shard index) so it
+            // survives the update below.
+            const TShardPartitionIndex oldPartitioning = ShardedWriteController->GetShardPartitionIndex();
             ShardedWriteController->OnPartitioningChanged(Partitioning);
+
+            const auto deletedShards = ShardedWriteController->GetDeletedShards();
+            if (!deletedShards.empty() && (InconsistentTx || AttachWriteSeqNum)) {
+                // A split/merge removed shards while this table had pending writes:
+                // re-route their batches to the shards now covering their key ranges
+                // (preserving WriteSeqNum / OriginalShard) and transfer the removed shards'
+                // TxManager participant state (locks, flags) to those shards so the
+                // commit survives. Row tables only: column tables can't change sharding.
+                AFL_ENSURE(!IsOlap);
+                AFL_ENSURE(oldPartitioning);
+                TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
+                if (AttachWriteSeqNum) {
+                    // The inconsistent-tx TxManager is collect-only: nothing to transfer.
+                    // The removed shards' partitioning metadata must be registered from
+                    // the pre-update partitioning before the covering computation: a
+                    // shard whose first batches were flushed by OnPartitioningChanged
+                    // above has no TxManager metadata yet (its shard update is only
+                    // consumed by the UpdateShards pass below, which runs against the
+                    // new partitioning). Removed shards are always a part of the
+                    // pre-update partitioning.
+                    for (const ui64 shardId : deletedShards) {
+                        TxManager->AddShard(shardId, IsOlap, TablePath, NKqp::MakeShardMeta(TableId, oldPartitioning, shardId, KeyColumnTypes.size()));
+                    }
+                    transferTargets.reserve(deletedShards.size());
+                    for (const ui64 shardId : deletedShards) {
+                        transferTargets.emplace_back(shardId, FindCoveringShards(TxManager->GetShardMeta(shardId), Partitioning, KeyColumnTypes));
+                    }
+                    THashMap<ui64, ui32> sourcesPerTarget;
+                    for (const auto& [shardId, targets] : transferTargets) {
+                        for (const ui64 target : targets) {
+                            ++sourcesPerTarget[target];
+                        }
+                    }
+                    for (const auto& [target, sources] : sourcesPerTarget) {
+                        if (sources > 1) {
+                            YDB_LOG_ERROR("Shard merge detected while re-routing consistent tx writes.",
+                                {"logPrefix", this->LogPrefix},
+                                {"targetShardId", target},
+                                {"mergedShards", sources},
+                                {"tablePath", TablePath});
+                            RuntimeError(
+                                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                TStringBuilder()
+                                    << "Shards of table `" << TablePath
+                                    << "` were merged to shard " << target
+                                    << " during the transaction; cannot preserve the write order.");
+                            return;
+                        }
+                    }
+                }
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards), transferTargets);
+                UpdateShards();
+                bool locksConsistent = true;
+                for (const auto& [shardId, targets] : transferTargets) {
+                    // Every covering shard must join the commit: it holds the
+                    // DataShard-side transferred chain of the removed shard even when
+                    // no rows/locks were transferred to it. The empty record guarantees a
+                    // covering prepare at commit time (without it such a target would
+                    // be an unreachable commit participant and the prepare would wait
+                    // for it forever).
+                    ShardedWriteController->EnsureShards(targets);
+                    locksConsistent &= TxManager->MoveShardTo(shardId, targets);
+                }
+                if (!locksConsistent) {
+                    // A transferred ancestor lock merged inconsistently with a lock
+                    // already stored on a target: the transaction cannot proceed.
+                    // Abort here — an earlier AddLock failure does the same, and
+                    // proceeding to prepare would hit the BrokenLocks assumption of
+                    // StartPrepare.
+                    AFL_ENSURE(TxManager->BrokenLocks());
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
+                    return;
+                }
+            }
+
             Partitioning.reset();
         }
 
@@ -1766,6 +1976,18 @@ public:
             YQL_ENSURE(ShardedWriteController);
             YQL_ENSURE(ShardedWriteController->IsAllWritesClosed());
             ShardedWriteController->Close();
+        }
+
+        if (std::exchange(PrePrepareResolve, false)) {
+            // A pre-prepare re-resolve round was requested for this actor. The round
+            // always starts with an empty controller (the Read Committed data executer
+            // flushes all its changes before the commit executer runs), and the
+            // round's reroute can only push fragments for dead shards with pending
+            // batches — none exist at commit time — so emptiness is preserved and the
+            // completion is immediate.
+            AFL_ENSURE(ShardedWriteController->IsEmpty());
+            AFL_ENSURE(ShardedWriteController->ExtractShardUpdates().empty());
+            Callbacks->OnResolveCompleted();
         }
 
         Callbacks->OnReady();
@@ -1818,6 +2040,32 @@ public:
         return NeedToFlushBeforeCommit;
     }
 
+    bool AttachesWriteSeqNum() const {
+        return AttachWriteSeqNum;
+    }
+
+    // ONLY READ COMMITTED!
+    // Entry of the pre-prepare re-resolve round (Read Committed): re-resolve the
+    // table's partitioning before the distributed commit starts, so a quiet
+    // split/merge that happened after all writes were acknowledged is observed and
+    // the removed shards' state is transferred (reroute + MoveShardTo) before prepare.
+    // Runs in the same reroute window (EMode::WRITE) as the regular resolve; if a
+    // resolve is already in flight (retry path), the completion fires after it.
+    void RefreshPartitioning() {
+        AFL_ENSURE(Mode == EMode::WRITE);
+        AFL_ENSURE(AttachWriteSeqNum && !IsOlap);
+        // All write data of the transaction is flushed and acknowledged by the time
+        // the round starts: the Read Committed data executer flushes per statement
+        // (sent and acknowledged before its result is returned), and the commit's
+        // Flush path drains the rest before OnFlushed. Otherwise echo locks could be
+        // lost on the mode switch to PREPARE.
+        AFL_ENSURE(ShardedWriteController->IsEmpty());
+        PrePrepareResolve = true;
+        if (!ResolvingInProgress) {
+            Resolve();
+        }
+    }
+
 private:
     void ClearMkqlData() {
         if (Alloc && ShardedWriteController) {
@@ -1863,6 +2111,10 @@ private:
     ui64 ResolveAttempts = 0;
     bool ResolvingInProgress = false;
     THashMap<ui64, ui32> RetryResolveByShard;
+
+    // ONLY READ COMMITTED!
+    // Pre-prepare re-resolve round: requested but not finished yet.
+    bool PrePrepareResolve = false;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
@@ -3050,7 +3302,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "TKqpDirectWriteActor")
+        , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "Write rows", NWilson::EFlags::AUTO_END)
         , UserCtx(userCtx)
     {
         EgressStats.Level = args.StatsLevel;
@@ -3293,6 +3545,7 @@ private:
             if (Closed && WriteTableActor->IsFinished()) {
                 YDB_LOG_DEBUG("Write actor finished",
                     {"logPrefix", this->LogPrefix});
+                EndQueryTraceSpan(DirectWriteActorSpan, Ydb::StatusIds::SUCCESS);
                 Callbacks->OnAsyncOutputFinished(GetOutputIndex());
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3541,12 +3794,11 @@ public:
             Alloc->Ref(), MemInfo, AppData()->FunctionRegistry))
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
-        , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
         , UserCtx(settings.UserCtx)
         , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
-        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
+        UpdateTracingState({"Write", "Write", "TKqpBufferWriteActor"}, std::move(settings.TraceId));
     }
 
     void Bootstrap() {
@@ -3583,6 +3835,28 @@ public:
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
                 AFL_ENSURE(false)("StateWaitTasks: unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitError();
+        } catch (...) {
+            ReplyCurrentExceptionError();
+        }
+    }
+
+    // TEMPORARY ONLY FOR READ COMMITTED!
+    // The pre-prepare resolve round (Read Committed): the distributed commit decision
+    // is already made, but the write actors are re-resolving partitionings (and
+    // possibly re-routing/reroute-draining) before StartPrepare. The round completes
+    // via OnResolveCompleted() callbacks; errors terminate the transaction through
+    // OnError as usual. Note: unlike StateWaitTasks there is no task-finish branch,
+    // so Process() must not re-enter OnAllTasksFinised during the round.
+    STFUNC(StateResolveRound) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
+            default:
+                AFL_ENSURE(false)("StateResolveRound: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3837,7 +4111,6 @@ public:
             .SessionActorId = SessionActorId,
             .Counters = Counters,
 
-            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
             .Database = settings.Database,
         });
 
@@ -3879,6 +4152,9 @@ public:
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
 
+            .CollectShardMetas = ShouldAttachWriteSeqNum(
+                settings.TransactionSettings.InconsistentTx, settings.IsOlap),
+
             .TxManager = TxManager,
             .Alloc = Alloc,
             .TypeEnv = *TypeEnv,
@@ -3886,7 +4162,6 @@ public:
             .SessionActorId = SessionActorId,
             .Counters = Counters,
 
-            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
         });
 
         TActorId id = RegisterWithSameMailbox(actor);
@@ -3938,48 +4213,24 @@ public:
             const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
             // Ensure write actor exists for this index table
-            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
-                    return false;
-                }
-            } else {
-                if (!CheckSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return false;
-                }
+            if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                return false;
             }
 
             // Fulltext relevance: ensure docs/dict/stats tables
             if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                        indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
                     return false;
                 }
                 if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
                 }
-                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                        indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
                     return false;
                 }
             }
@@ -4171,7 +4422,7 @@ public:
                         token.Cookie,
                         indexSettings.KeyColumns,
                         /* skipAbsent */ false,
-                        *settings.TransactionSettings.MvccSnapshot);
+                        *settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
                 }
 
                 {
@@ -4220,7 +4471,7 @@ public:
                         {},
                         settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                             ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                            : settings.TransactionSettings.MvccSnapshot);
+                            : settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
                 }
             }
         }
@@ -4286,7 +4537,7 @@ public:
                 token.Cookie,
                 settings.KeyColumns,
                 skipAbsent,
-                *settings.TransactionSettings.MvccSnapshot);
+                *settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
         }
 
         // Main table lookup
@@ -4310,7 +4561,7 @@ public:
                 settings.LookupColumns,
                 settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                     ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                    : settings.TransactionSettings.MvccSnapshot);
+                    : settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
         }
 
         // Returning info
@@ -4436,6 +4687,9 @@ public:
     }
 
     void Handle(TEvBufferWrite::TPtr& ev) {
+        if (ev->TraceId && !BufferWriteActorStateSpan.GetTraceId()) {
+            UpdateTracingState({"Write", "Write", "TKqpBufferWriteActor"}, NWilson::TTraceId(ev->TraceId));
+        }
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
         TWriteToken token;
         if (!ev->Get()->Token) {
@@ -4692,7 +4946,11 @@ public:
         Become(&TThis::StateFlush);
 
         Counters->BufferActorFlushes->Inc();
-        UpdateTracingState("Flush", std::move(traceId));
+        if (TxId) {
+            StartCommitPhase({"Flush effects", "FlushEffects", "TKqpBufferWriteActor"});
+        } else {
+            UpdateTracingState({"Flush effects", "FlushEffects", "TKqpBufferWriteActor"}, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+        }
         OperationStartTime = TInstant::Now();
 
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
@@ -4712,8 +4970,14 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
+            ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+                AFL_ENSURE(actor->IsEmpty());
+            });
             Rollback(std::move(traceId), /* waitForResult */ true);
-        } else if (TxManager->BrokenLocks()) {
+            return;
+        }
+        UpdateTracingState({"Commit", "Commit", "TKqpBufferWriteActor"}, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+        if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
             ReplyError(
@@ -4721,8 +4985,20 @@ public:
                 std::move(issues));
             return;
         } else if ((!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->CanUseImmediateCommit()) {
-            TxManager->StartExecute();
-            ImmediateCommit(std::move(traceId));
+            if (NeedResolveBeforeCommit()) {
+                // Read Committed single-shard commit: a quiet split since the last
+                // ack would otherwise land the commit message on the dead tablet
+                // (RetryShard refuses to re-resolve in commit mode). Re-resolve
+                // first; TxId is needed by the distributed Prepare fallback in
+                // OnResolveCompleted if the resolve round reveals a split.
+                AFL_ENSURE(txId);
+                TxId = txId;
+                PendingResolveRoundImmediateCommit = true;
+                StartResolveRound();
+            } else {
+                TxManager->StartExecute();
+                ImmediateCommit();
+            }
         } else {
             AFL_ENSURE(txId);
             TxId = txId;
@@ -4733,22 +5009,97 @@ public:
             });
 
             if (needToFlushBeforeCommit) {
-                Flush(std::move(traceId));
+                Flush({});
+            } else if (NeedResolveBeforeCommit()) {
+                StartResolveRound();
             } else {
                 TxManager->StartPrepare();
-                Prepare(std::move(traceId));
+                Prepare();
             }
         }
     }
 
-    bool Prepare(std::optional<NWilson::TTraceId> traceId) {
-        UpdateTracingState("Commit", std::move(traceId));
+    // Read Committed only: survive a quiet split/merge that happened after all writes
+    // were acknowledged but before the commit (no in-flight traffic would trigger the
+    // regular retry/reroute path).
+    //
+    // TODO: read-only participants are out of scope here. Shards registered via
+    // AddAction(READ) from read sets/lookups (no write-actor batches) participate in
+    // the commit (ParticipatesInCommit) but are never re-resolved: their tables have
+    // no write actor, so a quiet split/merge removing such a shard still fails the
+    // prepare with UNAVAILABLE. Transferring them needs a buffer-actor-driven
+    // re-resolve of the read tables' partitioning at commit time.
+    bool NeedResolveBeforeCommit() const {
+        if (TxManager->GetIsolationLevel() != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+            return false;
+        }
+        bool hasRowWriteActors = false;
+        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            hasRowWriteActors |= actor->AttachesWriteSeqNum();
+        });
+        return hasRowWriteActors;
+    }
+
+    // Pre-prepare re-resolve round: every row write actor of the transaction
+    // re-resolves its table's partitioning while still in WRITE mode, re-routes
+    // batches of shards removed by a split/merge and transfers their TxManager state.
+    // Completes when every actor reported OnResolveCompleted (resolve done and all
+    // in-flight batches acknowledged); only then does the commit proceed — either
+    // the distributed prepare, or the immediate commit if the round was started
+    // from the immediate-commit branch and the transaction is still single-shard.
+    void StartResolveRound() {
+        // ONLY READ COMMITTED
+        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+            || CurrentStateFunc() == &TThis::StateFlush);
+        YDB_LOG_DEBUG("Start pre-prepare resolve round",
+            {"logPrefix", this->LogPrefix});
+        Become(&TThis::StateResolveRound);
+        PendingResolveRoundActors = 0;
+        ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
+            if (actor->AttachesWriteSeqNum()) {
+                ++PendingResolveRoundActors;
+                actor->RefreshPartitioning();
+            }
+        });
+        AFL_ENSURE(PendingResolveRoundActors > 0);
+    }
+
+    void OnResolveCompleted() override {
+        // ONLY READ COMMITTED
+        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
+            YDB_LOG_WARN("Ignoring late OnResolveCompleted: the transaction has already failed.",
+                {"logPrefix", this->LogPrefix});
+            return;
+        }
+        AFL_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
+        AFL_ENSURE(PendingResolveRoundActors > 0);
+        if (--PendingResolveRoundActors == 0) {
+            const bool immediateCommit = std::exchange(PendingResolveRoundImmediateCommit, false);
+            if (immediateCommit && TxManager->CanUseImmediateCommit()) {
+                // The resolve round confirmed a still-single-shard transaction:
+                // commit immediately as before, just one resolve hop later. If the
+                // resolve revealed a split, CanUseImmediateCommit() is false and
+                // the distributed prepare path below takes over (TxId is set).
+                TxManager->StartExecute();
+                ImmediateCommit();
+            } else {
+                TxManager->StartPrepare();
+                Prepare();
+            }
+        }
+    }
+
+    bool Prepare() {
+        StartCommitPhase({"Prepare shards", "CommitPrepareShards", "TKqpBufferWriteActor", nullptr, "DataShard"});
         OperationStartTime = TInstant::Now();
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
         AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
-            || CurrentStateFunc() == &TThis::StateFlush);
+            || CurrentStateFunc() == &TThis::StateFlush
+            || CurrentStateFunc() == &TThis::StateResolveRound);
         Become(&TThis::StatePrepare);
 
         PendingPrepareShards = CountParticipatingShards();
@@ -4768,14 +5119,15 @@ public:
         return true;
     }
 
-    bool ImmediateCommit(NWilson::TTraceId traceId) {
+    bool ImmediateCommit() {
         Counters->BufferActorImmediateCommits->Inc();
-        UpdateTracingState("Commit", std::move(traceId));
+        StartCommitPhase({"Apply commit", "CommitApplyShards", "TKqpBufferWriteActor", nullptr, "DataShard"});
         OperationStartTime = TInstant::Now();
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
-        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+            || CurrentStateFunc() == &TThis::StateResolveRound);
         Become(&TThis::StateCommit);
         PendingCommitShards = CountParticipatingShards();
 
@@ -4794,6 +5146,7 @@ public:
     }
 
     void DistributedCommit() {
+        StartCommitPhase({"Coordinator", "CommitCoordinator", "TKqpBufferWriteActor", nullptr, "TxCoordinator"});
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
 
@@ -4816,7 +5169,9 @@ public:
         Become(&TThis::StateRollback);
         try {
             Counters->BufferActorRollbacks->Inc();
-            UpdateTracingState("RollBack", std::move(traceId));
+            CommitPhase.End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+            UpdateTracingState({"Rollback", "Rollback", "TKqpBufferWriteActor"}, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
 
             YDB_LOG_DEBUG("Start rollback",
                 {"logPrefix", this->LogPrefix});
@@ -4882,6 +5237,10 @@ public:
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            // Only write-actor shards are erased: their locks are attached
+            // when their prepare/immediate write is filled (via GetLocks).
+            // Shards that hold only locks are not write-actor shards — they
+            // are sent by the loop below, which requires non-empty locks.
             for (const auto& shardId : actor->GetShardsIds()) {
                 shards.erase(shardId);
             }
@@ -5105,6 +5464,8 @@ public:
     }
 
     void PassAway() override {
+        CommitPhase.End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Counters->BufferActorsCount->Dec();
         for (auto& [_, queue] : RequestQueues) {
             while (!queue.empty()) {
@@ -5163,6 +5524,8 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                CommitPhase.End(Ydb::StatusIds::SUCCESS);
+                StartCommitPhase({"Apply commit", "CommitApplyShards", "TKqpBufferWriteActor", nullptr, "DataShard"});
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5359,6 +5722,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -5368,7 +5733,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, BufferWriteActorStateSpan.GetTraceId());
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -5479,7 +5844,10 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (!TxManager->IsRollBack()) {
             CancelProposal();
-            Rollback(BufferWriteActorSpan.GetTraceId(), /* waitForResult */ false);
+            NWilson::TTraceId rollbackTraceId = BufferWriteActorStateSpan
+                ? NWilson::TTraceId(BufferWriteActorStateSpan.GetTraceId())
+                : NWilson::TTraceId(LastTraceId_);
+            Rollback(std::move(rollbackTraceId), /* waitForResult */ false);
         }
         PassAway();
     }
@@ -5491,7 +5859,7 @@ public:
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState({"Wait for writes", "WaitForWrites", "TKqpBufferWriteActor"}, NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = false,
@@ -5508,7 +5876,7 @@ public:
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState({"Wait for writes", "WaitForWrites", "TKqpBufferWriteActor"}, NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = true,
@@ -5969,10 +6337,14 @@ public:
                 "Unable to choose coordinator.");
             return;
         }
-        if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
+        const auto shardId = preparedInfo.ShardId;
+        const bool prepared = TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo));
+        CommitPhase.Acknowledge(shardId, prepared);
+        if (prepared) {
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
             AFL_ENSURE(GetTotalMemory() == 0);
+            CommitPhase.End(Ydb::StatusIds::SUCCESS);
             DistributedCommit();
             return;
         }
@@ -5995,7 +6367,9 @@ public:
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
-        if (TxManager->ConsumeCommitResult(shardId)) {
+        const bool committed = TxManager->ConsumeCommitResult(shardId);
+        CommitPhase.Acknowledge(shardId, committed);
+        if (committed) {
             if (FlushDeferredLocksBrokenIfPending()) return;
             if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                 AFL_ENSURE(CommitTimestamp.has_value());
@@ -6004,6 +6378,8 @@ public:
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
+            CommitPhase.End(Ydb::StatusIds::SUCCESS);
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
                 BuildStats(),
                 std::move(CommitTimestamp)
@@ -6033,6 +6409,7 @@ public:
             {"logPrefix", this->LogPrefix},
             {"txId", TxId.value_or(0)});
         OnOperationFinished(Counters->BufferActorRollbackLatencyHistogram);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
         });
@@ -6046,7 +6423,11 @@ public:
 
     void OnFlushed() {
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateFlush);
-        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
+        CommitPhase.End(Ydb::StatusIds::SUCCESS);
+        if (!TxId) {
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
+            BufferWriteActorStateSpan = {};
+        }
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -6056,14 +6437,24 @@ public:
             }
             if (!TxId) {
                 actor->Unlink();
+                actor->SetParentTraceId({});
             }
 
             AFL_ENSURE(!actor->FlushBeforeCommit());
         });
 
         if (TxId) {
+            if (NeedResolveBeforeCommit()) {
+                // The commit went through the Flush path (e.g. INSERT affected-rows
+                // flush): run the same pre-prepare re-resolve round as the direct
+                // path, so a split that happened while the flush was in flight (or
+                // between its last ack and this point) still transfers the removed
+                // shards before the distributed prepare.
+                StartResolveRound();
+                return;
+            }
             TxManager->StartPrepare();
-            Prepare(std::nullopt);
+            Prepare();
             return;
         }
         Become(&TKqpBufferWriteActor::StateWrite);
@@ -6253,24 +6644,29 @@ public:
         ReplyErrorImpl(statusCode, std::move(issues));
     }
 
-    void UpdateTracingState(const char* name, std::optional<NWilson::TTraceId> traceId) {
+    void StartCommitPhase(const TQueryTraceSpanDescription& description) {
+        CommitPhase.Start(BufferWriteActorStateSpan, description, [this] { return CountParticipatingShards(); });
+    }
+
+    void UpdateTracingState(const TQueryTraceSpanDescription& description, NWilson::TTraceId traceId,
+            ui8 verbosity = TWilsonKqp::BufferWriteActorState) {
         if (!traceId) {
             return;
         }
-        if (BufferWriteActorStateSpan) {
-            BufferWriteActorStateSpan.EndOk();
-        }
-        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(*traceId),
-            name, NWilson::EFlags::AUTO_END);
-        if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
-            BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
-        }
+        CommitPhase.End(Ydb::StatusIds::SUCCESS);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
+        BufferWriteActorStateSpan = MakeQueryPhaseTraceSpan(verbosity, std::move(traceId),
+            description, NWilson::EFlags::AUTO_END);
+        LastTraceId_ = BufferWriteActorStateSpan.GetTraceId();
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         });
     }
 
     void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
+        const auto ydbStatus = NYql::NDq::DqStatusToYdbStatus(statusCode);
+        CommitPhase.End(ydbStatus);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, ydbStatus);
         YDB_LOG_ERROR("Buffer write actor is replying with error to session.",
             {"logPrefix", this->LogPrefix},
             {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)},
@@ -6507,8 +6903,19 @@ private:
 
     std::optional<TAfterWaitTasksState> AfterWaitTasksState;
 
-    NWilson::TSpan BufferWriteActorSpan;
+    // ONLY READ COMMITTED
+    // Pre-prepare resolve round: how many actors have not reported
+    // OnResolveCompleted yet.
+    ui64 PendingResolveRoundActors = 0;
+    // Set when the resolve round was started from the immediate-commit branch of
+    // Commit(): OnResolveCompleted then commits immediately (if the transaction
+    // is still single-shard) instead of falling through to the distributed prepare.
+    bool PendingResolveRoundImmediateCommit = false;
+
+    // The buffer actor owns this phase span and closes it at phase transitions, success, or error.
     NWilson::TSpan BufferWriteActorStateSpan;
+    NWilson::TTraceId LastTraceId_;
+    TCommitTracePhase CommitPhase;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     ui64 QuerySpanId = 0;
 };
@@ -6536,7 +6943,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
+        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "Buffer rows",
                 NWilson::EFlags::AUTO_END)
         , TransformOutput(ExtractTransformOutput(args))
     {
@@ -6676,6 +7083,7 @@ private:
             if (TransformOutput) {
                 TransformOutput->Finish();
             }
+            EndQueryTraceSpan(ForwardWriteActorSpan, Ydb::StatusIds::SUCCESS);
             YDB_LOG_DEBUG("Finished",
                 {"logPrefix", this->LogPrefix});
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
@@ -6825,7 +7233,7 @@ private:
             {"data", DataSize},
             {"closed", Closed},
             {"bufferActorId", BufferActorId});
-        AFL_ENSURE(Send(BufferActorId, ev.release()));
+        AFL_ENSURE(Send(BufferActorId, ev.release(), 0, 0, ForwardWriteActorSpan.GetTraceId()));
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -6887,6 +7295,7 @@ private:
     }
 
     void PassAway() override {
+        EndQueryTraceSpan(ForwardWriteActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Counters->ForwardActorsCount->Dec();
 
         CleanupMiniKQLObjects();

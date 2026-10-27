@@ -4,6 +4,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
@@ -19,6 +20,29 @@ Y_UNIT_TEST_SUITE(AutoConfig) {
 
 using namespace NKikimr;
 using namespace NAutoConfigInitializer;
+
+Y_UNIT_TEST(AsyncFrameCacheBudgetSurvivesAutoConfig) {
+    NKikimrConfig::TActorSystemConfig defaults;
+    UNIT_ASSERT_VALUES_EQUAL(defaults.GetAsyncFrameCacheSizeBytes(), 4194304);
+    UNIT_ASSERT_VALUES_EQUAL(NActors::TAsyncFrameCache::DefaultSizeBytes,
+        defaults.GetAsyncFrameCacheSizeBytes());
+    for (ui64 budget : {ui64(0), ui64(8192), ui64(4194304)}) {
+        for (bool dynamic : {false, true}) {
+            for (bool tiny : {false, true}) {
+                NKikimrConfig::TActorSystemConfig config;
+                config.SetCpuCount(8);
+                config.SetUseAutoConfig(true);
+                config.SetAsyncFrameCacheSizeBytes(budget);
+                ApplyAutoConfig(&config, dynamic, tiny);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetAsyncFrameCacheSizeBytes(), budget);
+            }
+        }
+    }
+    defaults.SetCpuCount(8);
+    defaults.SetUseAutoConfig(true);
+    ApplyAutoConfig(&defaults, false, false);
+    UNIT_ASSERT_VALUES_EQUAL(defaults.GetAsyncFrameCacheSizeBytes(), 4194304);
+}
 
 namespace {
 
@@ -381,6 +405,37 @@ void TestAutoConfiguredAdjacentPoolActivationAfterIdle(
         UNIT_ASSERT_VALUES_EQUAL(pools.ICPoolId, ic); \
     } while (false) \
 // ASSERT_POOLS
+
+Y_UNIT_TEST(WakerAutoConfig) {
+    for (const ui32 cpuCount : {1, 3, 8}) {
+        for (const bool dynamicNode : {false, true}) {
+            for (const bool sharedThreads : {false, true}) {
+                for (const bool unitedPool : {false, true}) {
+                    if (unitedPool && !sharedThreads) {
+                        continue;
+                    }
+                    for (const int wakerSetting : {-1, 0, 1}) {
+                        NKikimrConfig::TActorSystemConfig config;
+                        config.SetCpuCount(cpuCount);
+                        config.SetUseSharedThreads(sharedThreads);
+                        config.SetUseUnitedPool(unitedPool);
+                        if (wakerSetting >= 0) {
+                            config.SetUseWaker(wakerSetting);
+                        }
+                        ApplyAutoConfig(&config, dynamicNode, false);
+                        for (const auto& executor : config.GetExecutor()) {
+                            if (executor.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC) {
+                                UNIT_ASSERT_VALUES_EQUAL(executor.GetEnableWaker(), wakerSetting == 1);
+                            } else {
+                                UNIT_ASSERT(!executor.HasEnableWaker());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 Y_UNIT_TEST(GetASPoolsith1CPU) {
     TASPools pools = GetASPools(1);

@@ -1,10 +1,14 @@
 #include "kqp_stream_lookup_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
@@ -103,14 +107,22 @@ public:
             args.TypeEnv,
             args.HolderFactory,
             args.InputDesc, vectorIndexLevelsCache))
+        , LookupTablePath(StreamLookupWorker ? TString(StreamLookupWorker->GetTablePath()) : TString())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , MaxInFlightLocks(MaxInFlightLocksStreamLookup())
         , Counters(counters)
+        , CollectShardMetas(
+            // The only consumer of the registered partitioning metadata is the
+            // split/merge handling (MoveShardTo), enabled only under the WriteSeqNum
+            // protocol (pessimistic ReadCommitted locks only): reuse the same
+            // feature flag as the write actor's AttachWriteSeqNum.
+            LockMode && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+            && AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum())
         , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
-        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
+        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "Lookup rows")
     {
         IngressStats.Level = args.StatsLevel;
     }
@@ -141,6 +153,7 @@ public:
     }
 
     void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
+        AddReadTraceStats(LookupActorSpan, *stats, TotalRetryAttempts);
         if (last) {
             NYql::NDqProto::TDqTableStats* tableStats = nullptr;
             for (auto& table : *stats->MutableTables()) {
@@ -186,16 +199,7 @@ public:
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
-            // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty()) {
-                NKqpProto::TKqpTaskExtraStats extraStats;
-                if (stats->HasExtra()) {
-                    stats->GetExtra().UnpackTo(&extraStats);
-                }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
-                stats->MutableExtra()->PackFrom(extraStats);
-            }
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -445,6 +449,7 @@ private:
     }
 
     void PassAway() final {
+        ShardReadTrace.Finish(LookupActorSpan);
         Counters->StreamLookupActorsCount->Dec();
 
         if (!LockSendTime.empty()) {
@@ -480,9 +485,11 @@ private:
         }
 
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        if (LookupActorSpan) {
+            AddReadTraceAttributes(LookupActorSpan, LookupTablePath, ReadRowsCount, TotalRetryAttempts);
+            LookupActorSpan.End();
+        }
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
-
-        LookupActorSpan.End();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& maybeWatermark, bool& finished, i64 freeSpace) final {
@@ -569,21 +576,14 @@ private:
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
+        auto info = LockInfo.GetExtraData();
+        for (const auto& [shardId, meta] : ShardMetas) {
+            if (meta.IsKnown()) {
+                FillShardPartitioningInfo(*info.AddShardPartitioningInfo(), shardId, meta);
+            }
+        }
         google::protobuf::Any result;
-        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
-        for (auto& lock : Locks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        for (auto& lock : BrokenLocks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        if (DeferredVictimQuerySpanId) {
-            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
-        }
-
-        result.PackFrom(resultInfo);
+        result.PackFrom(info);
         return result;
     }
 
@@ -641,7 +641,7 @@ private:
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-        Partitioning = resultSet[0].KeyDescription->Partitioning;
+        Partitioning = TShardPartitionIndex(resultSet[0].KeyDescription->Partitioning);
 
         ProcessInputRows();
 
@@ -663,6 +663,8 @@ private:
         }
 
         auto& read = readIt->second;
+        ShardReadTrace.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
+            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         ui64 shardId = read.ShardId;
 
         TStringBuilder txLocks;
@@ -687,20 +689,10 @@ private:
             {"locks", txLocks},
             {"brokenTxLocks", brokenTxLocks});
 
-        for (auto& lock : record.GetBrokenTxLocks()) {
-            BrokenLocks.push_back(lock);
-        }
-
-        for (auto& lock : record.GetTxLocks()) {
-            Locks.push_back(lock);
-        }
-
-        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
-            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
-        }
+        LockInfo.Add(record);
 
         if (UseFollowers) {
-            YQL_ENSURE(Locks.empty());
+            YQL_ENSURE(LockInfo.Locks.empty());
             if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
@@ -739,6 +731,7 @@ private:
                     {"logPrefix", this->LogPrefix},
                     {"tablet", read.ShardId},
                     {"issues", getIssues().ToOneLineString()});
+                ShardReadTrace.Retry(LookupActorSpan, read.ShardId, read.Id);
                 Reads.eraseRead(read);
                 return ResolveTableShards();
             }
@@ -898,6 +891,7 @@ private:
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
                 StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, OperationId);
+                ShardReadTrace.Retry(LookupActorSpan, read.ShardId, read.Id);
                 Reads.eraseRead(read);
                 ScheduleNextReads();
             } else {
@@ -968,7 +962,7 @@ private:
 
         auto guard = BindAllocator();
 
-        StreamLookupWorker->BuildRequests(Partitioning, OperationId);
+        StreamLookupWorker->BuildRequests(Partitioning.GetPartitioning(), OperationId);
         ScheduleNextReads();
     }
 
@@ -987,7 +981,7 @@ private:
                 && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                 && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
-            StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
+            StreamLockWorker->BuildLockRequests(Partitioning.GetPartitioning(), OperationId);
             DrainPendingLocks();
         }
     }
@@ -1024,6 +1018,25 @@ private:
             {"shard", shardId});
         Counters->SentLocks->Inc();
 
+        // Remember the partitioning metadata of every shard that received a lock
+        // request: it is shipped to the executer together with the collected locks.
+        // Note: only pessimistic (ReadCommitted) lock requests carry metas here.
+        // Optimistic locks ride inside EvRead requests and their shards are registered
+        // by the executer without metas, so repartitioning during an optimistic tx is
+        // not verified (not currently supported).
+        // The only consumer of the registered metadata is the split/merge handling
+        // (MoveShardTo), enabled only under the WriteSeqNum protocol, so it is
+        // collected only then.
+        // During a re-resolve Partitioning is reset until the scheme cache replies: a
+        // scheduled lock retry may fire here and compute a version-less (unknown) meta
+        // against the empty partitioning, clobbering the meta remembered at send time.
+        // Keep the first (correct) one — same pattern as the buffer lock actor.
+        if (CollectShardMetas && !ShardMetas.contains(shardId)) {
+            ShardMetas.emplace(shardId, MakeShardMeta(
+                StreamLookupWorker->GetTableId(), Partitioning, shardId,
+                StreamLookupWorker->GetKeyColumnTypes().size()));
+        }
+
         ui64 requestId = request->Record.GetRequestId();
 
         size_t requestBytes = StreamLockWorker ? StreamLockWorker->GetBatchBytes(requestId).value_or(0) : 0;
@@ -1043,7 +1056,7 @@ private:
                     .AutoConnect = needToCreatePipe,
                     .Subscribe = needToCreatePipe,
                 }),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
 
         Reads.SetPipeCreated(shardId);
         auto lockState = TLockState(requestId, shardId);
@@ -1149,7 +1162,7 @@ private:
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
-            Locks.push_back(lock);
+            LockInfo.Locks.push_back(lock);
         }
 
         StreamLockWorker->AddLockResult(requestId, ev->Get());
@@ -1208,7 +1221,7 @@ private:
             YQL_ENSURE(AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
         }
 
-        if (LockTxId && BrokenLocks.empty()) {
+        if (LockTxId && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
             if (LockMode) {
                 record.SetLockMode(*LockMode);
@@ -1263,7 +1276,7 @@ private:
                 }),
             IEventHandle::FlagTrackDelivery,
             0,
-            LookupActorSpan.GetTraceId());
+            ShardReadTrace.Start(LookupActorSpan, shardId, read.Id));
 
         Reads.SetPipeCreated(read.ShardId);
 
@@ -1302,6 +1315,7 @@ private:
 
             if (Reads.CheckShardRetriesExceeded(failedRead)) {
                 StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
+                ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedRead.Id);
                 Reads.eraseRead(failedRead);
                 return ResolveTableShards();
             }
@@ -1315,6 +1329,7 @@ private:
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
             StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, OperationId);
+            ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedRead.Id);
             Reads.eraseRead(failedRead);
             ScheduleNextReads();
         } else {
@@ -1382,7 +1397,7 @@ private:
             {"table", StreamLookupWorker->GetTablePath()});
         ResolveShardsInProgress = true;
 
-        Partitioning.reset();
+        Partitioning.Reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Database;
@@ -1398,9 +1413,9 @@ private:
 
         Counters->IteratorsShardResolve->Inc();
         LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            "Locate shards", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, LookupActorStateSpan.GetTraceId());
 
         SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));
@@ -1423,7 +1438,9 @@ private:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        ShardReadTrace.Finish(LookupActorSpan);
         if (LookupActorSpan) {
+            AddReadTraceAttributes(LookupActorSpan, LookupTablePath, ReadRowsCount, TotalRetryAttempts);
             LookupActorSpan.EndError(issues.ToOneLineString());
         }
 
@@ -1453,12 +1470,17 @@ private:
     THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     NYql::NDq::TDqComputeActorWatermarks* WatermarksTracker;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
-    TVector<NKikimrDataEvents::TLock> Locks;
-    TVector<NKikimrDataEvents::TLock> BrokenLocks;
-    ui64 DeferredVictimQuerySpanId = 0;
+    TReadLockInfo LockInfo;
+    // Partitioning metadata of every shard that received a pessimistic (ReadCommitted)
+    // lock request, shipped to the executer together with the collected locks via
+    // ExtraData(). Optimistic locks ride inside EvRead requests and are registered
+    // without metas: repartitioning is not verified for optimistic transactions
+    // (not currently supported). Collected only when CollectShardMetas is set (the
+    // metadata is consumed only by the WriteSeqNum split/merge handling).
+    THashMap<ui64, TShardMeta> ShardMetas;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
@@ -1469,6 +1491,7 @@ private:
     const TString Database;
     std::unique_ptr<TKqpStreamLockWorker> StreamLockWorker;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
+    const TString LookupTablePath;
 
     // stats
     ui64 ReadRowsCount = 0;
@@ -1484,8 +1507,10 @@ private:
     ui64 MaxInFlightLocks = 50;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    const bool CollectShardMetas;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
 
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
 

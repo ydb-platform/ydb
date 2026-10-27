@@ -20,6 +20,12 @@ If functionality is needed in both CLI and server:
 - `ydb/public/lib/` for public reusable libraries
 - `ydb/library/` for internal shared code
 
+## Command and option descriptions
+
+- Write clear descriptions for commands and options. Keep them as concise as possible without omitting information needed to use them correctly.
+- When an option accepts a predefined set of values, list the supported values in its description.
+- Add those values to the option's autocompletion suggestions with `ChoicesWithCompletion`. Keep the description, completion suggestions, and accepted values in sync.
+
 ## Changelog
 
 User-visible changes (new/changed commands, options, significant behavior changes) MUST be recorded in `ydb/apps/ydb/CHANGELOG.md`.

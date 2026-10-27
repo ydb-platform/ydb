@@ -12,6 +12,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+// O(1) ShardId-to-partition index over a resolved partitioning (kqp_shard_meta.h).
+// Only referenced (by reference) here to keep this header's dependency graph light.
+class TShardPartitionIndex;
+
 using TRowsRef = TConstArrayRef<TConstArrayRef<TCell>>;
 
 class IDataBatch : public TThrRefBase {
@@ -170,6 +174,39 @@ public:
     virtual void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) = 0;
 
+    // The partitioning the controller currently holds (the pre-update one while a new
+    // partitioning is being applied). Used by the write actor to compute the covering
+    // targets of shards removed by a split/merge.
+    virtual TPartitioning::TCPtr GetPartitioning() const = 0;
+
+    // The held partitioning with its O(1) shard lookup, used for repeated per-shard
+    // metadata registrations and for the covering computation of removed shards.
+    virtual const TShardPartitionIndex& GetShardPartitionIndex() const = 0;
+
+    // Shards present in ShardsInfo but absent from the current partitioning: their
+    // tablet ids were removed by a split/merge, their pending batches (if any) must be
+    // re-routed to the shards now covering their key ranges.
+    virtual TVector<ui64> GetDeletedShards() const = 0;
+
+    // Re-route the pending batches of shards removed by a split/merge to the shards
+    // now covering their key ranges, preserving the original WriteSeqNum and setting
+    // OriginalShard on the batches. coveringTargets maps every deleted shard to the
+    // shards now covering its key range (computed by the write actor from the removed
+    // shard's metadata): under the WriteSeqNum protocol a covering target that
+    // receives no rows still gets an empty batch carrying the chain position, so the
+    // datashard validates/advances the transferred ancestor chain on it and its
+    // commit-time prepare carries fresh echo locks. Only row-table (DataShard)
+    // controllers with EnableWriteSeqNum or Inconsistent; the caller must gate this.
+    virtual void ReRouteShards(TVector<ui64>&& deletedShards,
+        const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) = 0;
+
+    // Register empty shard records for the given shards so they receive covering
+    // messages (prepare) at commit time. Used for split/merge covering shards that
+    // received neither re-routed rows nor transferred TxManager locks: they still hold
+    // the DataShard-side transferred chain of the removed shard and must join the
+    // commit, or the distributed prepare would wait for them forever.
+    virtual void EnsureShards(const TVector<ui64>& shardIds) = 0;
+
     using TWriteToken = ui64;
 
     // Data ordering invariant:
@@ -221,6 +258,8 @@ public:
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 
+    virtual bool HasShard(ui64 shardId) const = 0;
+
     struct TMessageMetadata {
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
@@ -229,6 +268,10 @@ public:
         ui64 NextOverloadSeqNo = 0;
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
+
+    virtual TMessageMetadata PrepareMessageMetadata(ui64 shardId) = 0;
+
+    virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
 
     struct TSerializationResult {
         i64 TotalDataSize = 0;
@@ -242,7 +285,7 @@ public:
         bool IsShardEmpty = 0;
     };
 
-    virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
@@ -266,6 +309,10 @@ struct TShardedWriteControllerSettings {
     bool EnableWriteSeqNum = false;
     ui64 WriterIndex = 0;
 };
+
+bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
+
+bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,

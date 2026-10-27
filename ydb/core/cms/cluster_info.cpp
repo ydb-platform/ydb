@@ -464,6 +464,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
 
 void TClusterInfo::ClearNode(ui32 nodeId)
 {
+    DDiskStateInfo.erase(nodeId);
     if (!HasNode(nodeId))
         return;
 
@@ -506,6 +507,9 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
 
     TTabletInfo &tablet = Tablets[info.GetTabletId()];
     tablet.TabletId = info.GetTabletId();
+    if (info.HasNbsDiskId()) {
+        tablet.NbsDiskId = info.GetNbsDiskId();
+    }
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
     tablet.Leader = info.GetLeader();

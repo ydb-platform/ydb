@@ -624,6 +624,7 @@ void DestroyNode(TAstNode* node) {
         node->Destroy();
     }
 }
+
 } // namespace
 
 TAstParseResult::~TAstParseResult() {

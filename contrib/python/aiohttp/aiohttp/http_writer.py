@@ -1,6 +1,7 @@
 """Http related parsers and protocol."""
 
 import asyncio
+import re
 import sys
 from typing import (  # noqa
     TYPE_CHECKING,
@@ -11,7 +12,6 @@ from typing import (  # noqa
     List,
     NamedTuple,
     Optional,
-    Union,
 )
 
 from multidict import CIMultiDict
@@ -23,6 +23,13 @@ from .compression_utils import ZLibCompressor
 from .helpers import NO_EXTENSIONS
 
 __all__ = ("StreamWriter", "HttpVersion", "HttpVersion10", "HttpVersion11")
+
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    from typing import Union
+
+    Buffer = Union[bytes, bytearray, "memoryview[int]", "memoryview[bytes]"]
 
 
 MIN_PAYLOAD_FOR_WRITELINES = 2048
@@ -45,16 +52,16 @@ HttpVersion10 = HttpVersion(1, 0)
 HttpVersion11 = HttpVersion(1, 1)
 
 
-_T_OnChunkSent = Optional[Callable[[bytes], Awaitable[None]]]
+_T_OnChunkSent = Optional[Callable[[Buffer], Awaitable[None]]]
 _T_OnHeadersSent = Optional[Callable[["CIMultiDict[str]"], Awaitable[None]]]
 
 
 class StreamWriter(AbstractStreamWriter):
 
-    length: Optional[int] = None
+    length: int | None = None
     chunked: bool = False
     _eof: bool = False
-    _compress: Optional[ZLibCompressor] = None
+    _compress: ZLibCompressor | None = None
 
     def __init__(
         self,
@@ -67,11 +74,11 @@ class StreamWriter(AbstractStreamWriter):
         self.loop = loop
         self._on_chunk_sent: _T_OnChunkSent = on_chunk_sent
         self._on_headers_sent: _T_OnHeadersSent = on_headers_sent
-        self._headers_buf: Optional[bytes] = None
+        self._headers_buf: bytes | None = None
         self._headers_written: bool = False
 
     @property
-    def transport(self) -> Optional[asyncio.Transport]:
+    def transport(self) -> asyncio.Transport | None:
         return self._protocol.transport
 
     @property
@@ -82,11 +89,11 @@ class StreamWriter(AbstractStreamWriter):
         self.chunked = True
 
     def enable_compression(
-        self, encoding: str = "deflate", strategy: Optional[int] = None
+        self, encoding: str = "deflate", strategy: int | None = None
     ) -> None:
         self._compress = ZLibCompressor(encoding=encoding, strategy=strategy)
 
-    def _write(self, chunk: Union[bytes, bytearray, memoryview]) -> None:
+    def _write(self, chunk: Buffer) -> None:
         size = len(chunk)
         self.buffer_size += size
         self.output_size += size
@@ -95,7 +102,7 @@ class StreamWriter(AbstractStreamWriter):
             raise ClientConnectionResetError("Cannot write to closing transport")
         transport.write(chunk)
 
-    def _writelines(self, chunks: Iterable[bytes]) -> None:
+    def _writelines(self, chunks: Iterable[Buffer]) -> None:
         size = 0
         for chunk in chunks:
             size += len(chunk)
@@ -109,18 +116,12 @@ class StreamWriter(AbstractStreamWriter):
         else:
             transport.writelines(chunks)
 
-    def _write_chunked_payload(
-        self, chunk: Union[bytes, bytearray, "memoryview[int]", "memoryview[bytes]"]
-    ) -> None:
+    def _write_chunked_payload(self, chunk: Buffer) -> None:
         """Write a chunk with proper chunked encoding."""
         chunk_len_pre = f"{len(chunk):x}\r\n".encode("ascii")
         self._writelines((chunk_len_pre, chunk, b"\r\n"))
 
-    def _send_headers_with_payload(
-        self,
-        chunk: Union[bytes, bytearray, "memoryview[int]", "memoryview[bytes]"],
-        is_eof: bool,
-    ) -> None:
+    def _send_headers_with_payload(self, chunk: Buffer, is_eof: bool) -> None:
         """Send buffered headers with payload, coalescing into single write."""
         # Mark headers as written
         self._headers_written = True
@@ -153,11 +154,7 @@ class StreamWriter(AbstractStreamWriter):
             self._write(headers_buf)
 
     async def write(
-        self,
-        chunk: Union[bytes, bytearray, memoryview],
-        *,
-        drain: bool = True,
-        LIMIT: int = 0x10000,
+        self, chunk: Buffer, *, drain: bool = True, LIMIT: int = 0x10000
     ) -> None:
         """
         Writes chunk of data to a stream.
@@ -269,7 +266,7 @@ class StreamWriter(AbstractStreamWriter):
 
         # Handle body/compression
         if self._compress:
-            chunks: List[bytes] = []
+            chunks: list[bytes] = []
             chunks_len = 0
             if chunk and (compressed_chunk := await self._compress.compress(chunk)):
                 chunks_len = len(compressed_chunk)
@@ -351,16 +348,22 @@ class StreamWriter(AbstractStreamWriter):
             await protocol._drain_helper()
 
 
+# https://www.rfc-editor.org/info/rfc9110/#section-5.5-5
+# https://www.rfc-editor.org/info/rfc9112/#section-4-3
+_FORBIDDEN_HEADER_CHARS_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
+
+
 def _safe_header(string: str) -> str:
-    if "\r" in string or "\n" in string:
+    if _FORBIDDEN_HEADER_CHARS_RE.search(string) is not None:
         raise ValueError(
-            "Newline or carriage return detected in headers. "
+            "Forbidden control character detected in headers. "
             "Potential header injection attack."
         )
     return string
 
 
 def _py_serialize_headers(status_line: str, headers: "CIMultiDict[str]") -> bytes:
+    _safe_header(status_line)
     headers_gen = (_safe_header(k) + ": " + _safe_header(v) for k, v in headers.items())
     line = status_line + "\r\n" + "\r\n".join(headers_gen) + "\r\n\r\n"
     return line.encode("utf-8")

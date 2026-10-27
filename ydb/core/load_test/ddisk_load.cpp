@@ -6,6 +6,8 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/control/lib/dynamic_control_board_impl.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -19,6 +21,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <tuple>
 
 namespace NKikimr {
 
@@ -176,7 +179,11 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
         ui32 InitNextPosition = 0;
     };
     struct TRequestInfo {
+        TActorId Destination;
+        ui64 VChunkIndex = 0;
+        ui32 OffsetInChunk = 0;
         ui32 Size;
+        bool IsWrite = false;
         TInstant StartTime;
         bool IsInit = false;
         bool IsBackground = false;
@@ -188,7 +195,12 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
         TDuration Latency;
     };
 
-    THashMap<ui64, TRequestInfo> RequestInfo;
+    absl::flat_hash_map<ui64, TRequestInfo> RequestInfo;
+    using TLocation = std::tuple<TActorId, ui64>;
+    using TRequestCookies = absl::flat_hash_set<ui64>;
+    using TLocationIndex = absl::flat_hash_map<TLocation, TRequestCookies, THash<TLocation>>;
+    TLocationIndex ActiveByLocation;
+    TLocationIndex WritesByLocation;
     ui64 NextRequestIdx = 0;
 
     const TActorId Parent;
@@ -215,6 +227,8 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     bool Finished = false;
     bool Connected = false;
     bool DisconnectSent = false;
+    bool StopAdmission = false;
+    TString TerminalError;
     bool TestStarted = false;
 
     TVector<TAreaInfo> Areas;
@@ -529,6 +543,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
+        StopAdmission = true;
         MaxInFlight = 0;
         CheckDie(ctx);
     }
@@ -545,7 +560,7 @@ public:
     }
 
     void CheckDie(const TActorContext& ctx) {
-        if (!MaxInFlight && !InFlight) {
+        if ((StopAdmission || !MaxInFlight) && !InFlight) {
             if (Simulate) {
                 if (!SimulatedServiceStopped) {
                     SimulatedServiceStopped = true;
@@ -553,7 +568,7 @@ public:
                         ctx.Send(id, new TEvents::TEvPoisonPill);
                     }
                 }
-                FinishAndDie(ctx);
+                FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
                 return;
             }
             if (Connected && !DisconnectSent) {
@@ -561,14 +576,16 @@ public:
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 Credentials.SerializeForRequest(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
-            } else {
-                FinishAndDie(ctx);
+            } else if (!Connected) {
+                FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
             }
         }
     }
 
     void Handle(NDDisk::TEvDisconnectResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        FinishAndDie(ctx);
+        if (DisconnectSent) {
+            FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -600,8 +617,61 @@ public:
     // DDisk I/O
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    TActorId NextIoDestination() const {
+        return Simulate && !SimulatedServiceIds.empty()
+            ? SimulatedServiceIds[NextSimulatedServiceIdx % SimulatedServiceIds.size()]
+            : DDiskServiceId;
+    }
+
+    bool Conflicts(const TActorId& destination, ui64 vChunkIndex, ui32 offset,
+            ui32 size, bool isWrite) const
+    {
+        const auto& index = isWrite ? ActiveByLocation : WritesByLocation;
+        const auto bucket = index.find({destination, vChunkIndex});
+        if (bucket == index.end()) {
+            return false;
+        }
+        const ui64 end = ui64(offset) + size;
+        for (ui64 cookie : bucket->second) {
+            const auto request = RequestInfo.find(cookie);
+            Y_ABORT_UNLESS(request != RequestInfo.end());
+            const auto& range = request->second;
+            if (range.OffsetInChunk < end && ui64(range.OffsetInChunk) + range.Size > offset) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static void RemoveFromIndex(TLocationIndex& index,
+            const TRequestInfo& request, ui64 requestIdx)
+    {
+        const TLocation location{request.Destination, request.VChunkIndex};
+        auto bucket = index.find(location);
+        Y_ABORT_UNLESS(bucket != index.end());
+        Y_ABORT_UNLESS(bucket->second.erase(requestIdx), "missing admitted DDisk range");
+        if (bucket->second.empty()) {
+            index.erase(bucket);
+        }
+    }
+
+    template<typename TRequest>
+    void SendIoRequest(const TActorContext& ctx, const TActorId& destination,
+            std::unique_ptr<TRequest> request, ui64 cookie)
+    {
+        ctx.Send(destination, request.release(), 0, cookie);
+        if (Simulate && !SimulatedServiceIds.empty()) {
+            ++NextSimulatedServiceIdx;
+        }
+    }
+
     void SendRequests(const TActorContext& ctx) {
         if (!Connected) {
+            return;
+        }
+
+        if (StopAdmission) {
+            CheckDie(ctx);
             return;
         }
 
@@ -636,8 +706,6 @@ public:
                     ctx.Schedule(nextRequest - now, new TEvents::TEvWakeup);
                     break;
                 }
-                LastRequest = now;
-                IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
             const bool isBackgroundWrite = IsReadLoad
@@ -647,32 +715,56 @@ public:
                     < static_cast<double>(MeasuredReadsSent) * BackgroundWriteRatio;
             const ui32 size = isBackgroundWrite ? BackgroundWriteSizeBytes : IoSizeBytes;
 
-            TAreaInfo& area = PickAreaByWeight();
-            TDeque<ui32>& ioQueue = isBackgroundWrite ? area.BackgroundWriteIOQueue : area.IOQueue;
-            if (ioQueue.empty()) {
-                const ui32 positions = area.AreaSizeBytes / size;
-                Y_ABORT_UNLESS(positions, "request size must be smaller than AreaSizeBytes");
-                FillPositions(ioQueue, positions, area.Sequential);
+            const TActorId destination = NextIoDestination();
+            const ui32 startArea = &PickAreaByWeight() - Areas.data();
+            TDeque<ui32>* selectedQueue = nullptr;
+            size_t selectedPosition = 0;
+            ui64 vChunkIndex = 0;
+            ui32 offsetInChunk = 0;
+            // Search each candidate at most once. A fully occupied range waits for a
+            // completion to retry rather than spinning or reusing a submitted interval.
+            for (ui32 areaStep = 0; areaStep < Areas.size() && !selectedQueue; ++areaStep) {
+                auto& area = Areas[(startArea + areaStep) % Areas.size()];
+                auto& queue = isBackgroundWrite ? area.BackgroundWriteIOQueue : area.IOQueue;
+                if (queue.empty()) {
+                    const ui32 positions = area.AreaSizeBytes / size;
+                    Y_ABORT_UNLESS(positions, "request size must be smaller than AreaSizeBytes");
+                    FillPositions(queue, positions, area.Sequential);
+                }
+                for (size_t pos = 0; pos < queue.size(); ++pos) {
+                    const ui32 offset = queue[pos] * size;
+                    const ui64 chunk = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
+                    const ui32 chunkOffset = offset % ExpectedChunkSizeBytes;
+                    if (!Conflicts(destination, chunk, chunkOffset, size,
+                            !IsReadLoad || isBackgroundWrite)) {
+                        selectedQueue = &queue;
+                        selectedPosition = pos;
+                        vChunkIndex = chunk;
+                        offsetInChunk = chunkOffset;
+                        break;
+                    }
+                }
             }
-            const ui32 ioIndex = ioQueue.front();
-            ioQueue.pop_front();
-            ioQueue.push_back(ioIndex);
-
-            const ui32 offset = ioIndex * size;
+            if (!selectedQueue) {
+                break;
+            }
+            const ui32 selectedIndex = (*selectedQueue)[selectedPosition];
+            selectedQueue->erase(selectedQueue->begin() + selectedPosition);
+            selectedQueue->push_back(selectedIndex);
             if (!isBackgroundWrite) {
                 Report->Size = size;
             }
 
             const TInstant now = TAppData::TimeProvider->Now();
-            const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
-            const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
-
-            const ui64 requestIdx = NewTRequestInfo(size, now, false, isBackgroundWrite);
+            LastRequest = now;
+            IntervalMs = 0;
+            const ui64 requestIdx = NewTRequestInfo(destination, vChunkIndex,
+                offsetInChunk, size, !IsReadLoad || isBackgroundWrite, now, false, isBackgroundWrite);
 
             if (IsReadLoad && !isBackgroundWrite) {
                 auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
-                SendRequest(ctx, std::move(ev), requestIdx);
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
             } else {
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
@@ -681,7 +773,7 @@ public:
                 } else {
                     ev->AddPayload(TRope(RandomData));
                 }
-                SendRequest(ctx, std::move(ev), requestIdx);
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
             }
             if (isBackgroundWrite) {
                 ++BackgroundWritesSent;
@@ -698,7 +790,7 @@ public:
     }
 
     void SendInitRequests(const TActorContext& ctx) {
-        while (InFlight < InitInFlightMax) {
+        while (!StopAdmission && InFlight < InitInFlightMax) {
             bool sent = false;
             for (ui32 i = 0; i < Areas.size(); ++i) {
                 const ui32 idx = (CurrentInitArea + i) % Areas.size();
@@ -729,8 +821,14 @@ public:
 
                 const ui32 size = IoSizeBytes;
 
+                const TActorId destination = NextIoDestination();
+                if (Conflicts(destination, vChunkIndex, offsetInChunk, size, true)) {
+                    continue;
+                }
+
                 const TInstant now = TAppData::TimeProvider->Now();
-                const ui64 requestIdx = NewTRequestInfo(size, now, true);
+                const ui64 requestIdx = NewTRequestInfo(destination, vChunkIndex,
+                    offsetInChunk, size, true, now, true);
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
                 if (EnableChecksums) {
@@ -738,7 +836,7 @@ public:
                 } else {
                     ev->AddPayload(TRope(ZeroData));
                 }
-                SendRequest(ctx, std::move(ev), requestIdx);
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
                 ++InFlight;
 
                 if (area.InitType ==
@@ -757,13 +855,18 @@ public:
             }
         }
 
-        if (!HasPendingInit() && InFlight == 0) {
+        if (!StopAdmission && !HasPendingInit() && InFlight == 0) {
             Initializing = false;
             SendRequests(ctx);
         }
     }
 
     void Handle(NDDisk::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
+        const ui64 requestIdx = ev->Cookie;
+        const auto request = RequestInfo.find(requestIdx);
+        if (request == RequestInfo.end() || !request->second.IsWrite) {
+            return; // duplicate/stale cookie or response for a different I/O kind
+        }
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
         if (!ok) {
@@ -772,15 +875,22 @@ public:
                 << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
                 << " ErrorReason# " << msg.GetErrorReason();
             LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            FinishAndDie(ctx, str.Str());
-            return;
+            if (!TerminalError) {
+                TerminalError = str.Str();
+            }
+            StopAdmission = true;
+            MaxInFlight = 0;
         }
-        const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
 
     void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+        const ui64 requestIdx = ev->Cookie;
+        const auto request = RequestInfo.find(requestIdx);
+        if (request == RequestInfo.end() || request->second.IsWrite) {
+            return; // duplicate/stale cookie or response for a different I/O kind
+        }
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
         if (!ok) {
@@ -789,17 +899,27 @@ public:
                 << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
                 << " ErrorReason# " << msg.GetErrorReason();
             LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            FinishAndDie(ctx, str.Str());
-            return;
+            if (!TerminalError) {
+                TerminalError = str.Str();
+            }
+            StopAdmission = true;
+            MaxInFlight = 0;
         }
-        const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit, bool isBackground = false) {
+    ui64 NewTRequestInfo(TActorId destination, ui64 vChunkIndex, ui32 offsetInChunk,
+            ui32 size, bool isWrite, TInstant startTime, bool isInit, bool isBackground = false)
+    {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit, isBackground});
+        RequestInfo.emplace(requestIdx, TRequestInfo{destination, vChunkIndex, offsetInChunk,
+            size, isWrite, startTime, isInit, isBackground});
+        const TLocation location{destination, vChunkIndex};
+        ActiveByLocation[location].insert(requestIdx);
+        if (isWrite) {
+            WritesByLocation[location].insert(requestIdx);
+        }
         return requestIdx;
     }
 
@@ -834,6 +954,10 @@ public:
             TimeSeries.erase(TimeSeries.begin(), pos);
         }
         --InFlight;
+        RemoveFromIndex(ActiveByLocation, request, requestIdx);
+        if (request.IsWrite) {
+            RemoveFromIndex(WritesByLocation, request, requestIdx);
+        }
         RequestInfo.erase(it);
         SendRequests(ctx);
     }

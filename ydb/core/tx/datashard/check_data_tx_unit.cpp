@@ -83,7 +83,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, err);
+        }
 
         return EExecutionStatus::Executed;
     }
@@ -215,8 +217,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op)->AddError(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
+                            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+                                YDB_LOG_ERROR_CTX(ctx, err);
+                            }
                             return EExecutionStatus::Executed;
                         }
                     }

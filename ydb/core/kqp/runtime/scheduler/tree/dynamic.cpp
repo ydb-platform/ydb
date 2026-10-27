@@ -28,24 +28,36 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMi
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
-    // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
-    const auto demand = CpuDemand.load();
-    newQuery->CpuDemand = (demand + CpuActualDemand.load()) >> 1;
-    if (newQuery->CpuDemand == 0 && demand > 0) {
-        newQuery->CpuDemand = 1;
-    }
-    CpuActualDemand = 0;
+    newQuery->CpuMaxDemand = CpuMaxDemand.load();
 
-    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    // The actual demand is smoothed with the one of the previous snapshot.
+    if (const auto prevQuery = GetSnapshot()) {
+        newQuery->PrevRawCpuActualDemand = prevQuery->RawCpuActualDemand;
+    }
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction and actual demand
     const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load() + ReadBurstUsage.load();
     const auto burstThrottle = CpuBurstThrottle.load();
-    newQuery->CpuBurstUsage += burstUsage - PrevCpuBurstUsage;
+    newQuery->CpuBurstUsage = burstUsage - PrevCpuBurstUsage;
     newQuery->CpuBurstThrottle = burstThrottle - PrevCpuBurstThrottle;
     PrevCpuBurstUsage = burstUsage;
     PrevCpuBurstThrottle = burstThrottle;
 
     newQuery->CpuUsage = CpuUsage.load();
+    newQuery->CpuThrottle = CpuThrottle.load();
+
+    newQuery->MemoryDemand = MemoryDemand.load();
+
     return newQuery;
+}
+
+void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
+    auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
+
+    snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : AllowMinFairShare;
+    snapshot->MemoryFairShare = pool.MemoryFairShare;
+
+    SetSnapshot(snapshot);
 }
 
 TFullPoolId TQuery::GetFullPoolId() const {
@@ -104,11 +116,6 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     return run;
 }
 
-void TQuery::UpdateActualDemand() {
-    auto demand = CpuUsage + CpuThrottle + 1;
-    auto actualDemand = CpuActualDemand.load();
-    while (actualDemand < demand && !CpuActualDemand.compare_exchange_weak(actualDemand, demand)) {}
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // TPool
@@ -128,10 +135,11 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
     Counters = TPoolCounters();
-    Counters->Satisfaction = group->GetCounter("Satisfaction", false); // snapshot
     Counters->Limit        = group->GetCounter("Limit",        false);
     Counters->Guarantee    = group->GetCounter("Guarantee",    false);
+    Counters->EffectiveGuarantee = group->GetCounter("EffectiveGuarantee", true); // snapshot
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
+    Counters->ActualDemand = group->GetCounter("ActualDemand", true);  // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
     Counters->Queries      = group->GetCounter("Queries",      false);
@@ -145,10 +153,17 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 
     Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
+
+    Counters->MemoryLimit     = group->GetCounter("MemoryLimit",     false);
+    Counters->MemoryUsage     = group->GetCounter("MemoryUsage",     false);
+    Counters->MemoryDemand    = group->GetCounter("MemoryDemand",    false); // snapshot
+    Counters->MemoryFairShare = group->GetCounter("MemoryFairShare", false); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
-    auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+    auto* newPool = CreateSnapshot();
+
+    newPool->MemoryUsage = MemoryUsage.load();
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
@@ -159,6 +174,8 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
         Counters->UsageResume->Set(CpuBurstUsageResume);
         Counters->Read->Set(ReadBurstUsage);
         Counters->Throttle->Set(CpuBurstThrottle);
+        Counters->MemoryLimit->Set(GetMemoryLimit());
+        Counters->MemoryUsage->Set(MemoryUsage.load());
     }
 
     if (IsLeaf()) {
@@ -175,6 +192,24 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     return newPool;
+}
+
+NSnapshot::TPool* TPool::CreateSnapshot() const {
+    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// TDefaultPool
+///////////////////////////////////////////////////////////////////////////////
+
+TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
+    , TPool(id, counters, attrs)
+{
+}
+
+NSnapshot::TPool* TDefaultPool::CreateSnapshot() const {
+    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, *this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -205,7 +240,8 @@ TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
 {
     Y_ASSERT(counters);
     auto group = counters->GetKqpCounters();
-    Counters.TotalLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.TotalCpuLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.TotalMemoryLimit = group->GetCounter("scheduler/TotalMemoryLimit", false);
 }
 
 void TRoot::AddDatabase(const TDatabasePtr& database) {
@@ -223,9 +259,14 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    Counters.TotalLimit->Set(TotalLimit * 1'000'000);
+    const ui64 totalCpuLimit = TotalCpuLimit.load();
+    const ui64 totalMemoryLimit = TotalMemoryLimit.load();
 
-    newRoot->TotalLimit = TotalLimit;
+    Counters.TotalCpuLimit->Set(totalCpuLimit * 1'000'000);
+    Counters.TotalMemoryLimit->Set(totalMemoryLimit);
+
+    newRoot->TotalCpuLimit = totalCpuLimit;
+    newRoot->TotalMemoryLimit = totalMemoryLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

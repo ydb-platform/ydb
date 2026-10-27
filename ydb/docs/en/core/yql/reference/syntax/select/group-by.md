@@ -1,5 +1,3 @@
-{% if select_command != "SELECT STREAM" %}
-
 ## GROUP BY
 
 Groups the results of `SELECT` by the values of specified columns or expressions. Together with `GROUP BY`, [aggregate functions](../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) are often used to perform calculations in each group.
@@ -271,8 +269,6 @@ GROUP /*+ COMPACT() */ BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
-
-{% endif %}
 
 ## GROUP BY ... HOP {#group-by-hop}
 

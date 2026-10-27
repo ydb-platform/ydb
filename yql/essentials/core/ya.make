@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -12,6 +12,8 @@ SRCS(
     yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
+    yql_expr_constraint_streaming.cpp
+    yql_expr_constraint_streaming.h
     yql_expr_constraint.cpp
     yql_expr_constraint.h
     yql_expr_csee.cpp
@@ -123,8 +125,6 @@ GENERATE_ENUM_SERIALIZATION(yql_type_annotation.h)
 
 GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
@@ -141,6 +141,7 @@ RECURSE(
     pg_ext
     pg_settings
     poly_args
+    spark_meta
     sql_types
     url_lister
     url_preprocessing

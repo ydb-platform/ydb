@@ -15,9 +15,7 @@ enum ERuleProperties: ui32 {
     RequireTypes           = 0x04 | RequireOutputIUs,
     RequireMetadata        = 0x08 | RequireOutputIUs,
     RequireStatistics      = 0x10 | RequireTypes | RequireMetadata,
-    RequireLiveness        = 0x20 | RequireOutputIUs,
-    RequireNameConstraints = 0x40 | RequireOutputIUs,
-    RequireAliases         = 0x80 | RequireOutputIUs
+    RequireLiveness        = 0x20 | RequireOutputIUs
   };
 
 /**
@@ -49,8 +47,8 @@ class IRule {
 };
 
 /**
- * A Simplified rule does not alter the original subplan that it matched, but instead returns a new
- * subplan that replaces the old one.
+ * A simplified rule returns the matched operator when not applicable, or its
+ * replacement. Intrusive pointers keep matched nodes alive during rewrites.
  */
 class ISimplifiedRule : public IRule {
   public:
@@ -104,6 +102,26 @@ class TRuleBasedStage : public IRBOStage {
     TVector<std::unique_ptr<IRule>> Rules;
 };
 
+// Demand-based pruning is a whole-plan transformation, never an isolated rule.
+// Run before stage assignment and outside opaque CBO trees.
+class TGlobalPruningStage final: public IRBOStage {
+public:
+    explicit TGlobalPruningStage(TString stageName, bool pruneKeyColumns = true,
+                                 EPruningScope scope = EPruningScope::AllDefinitions);
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+
+private:
+    const bool PruneKeyColumns;
+    const EPruningScope Scope;
+};
+
+// Coordinated binding rewrites, before stage assignment and outside CBO trees.
+class TGlobalInliningStage final: public IRBOStage {
+public:
+    explicit TGlobalInliningStage(TString stageName);
+    void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
 /**
  * A rule based optimizer is a collection of rule-based and global stages.
  */
@@ -114,7 +132,7 @@ public:
 
     // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
     // and returns a root of the physical program.
-    TExprNode::TPtr Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx);
+    TExprNode::TPtr Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx);
 
     // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::unique_ptr<IRBOStage>&& stage) {
@@ -128,13 +146,14 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
-TExprNode::TPtr ConvertToPhysical(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& ctx);
+TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& ctx);
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
-void ComputePlanLiveness(TOpRoot& root);
-const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex);
-const TInfoUnitSet& GetLiveOut(IOperator* op);
-void ComputePlanAliases(TOpRoot& root);
-const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu);
+// Global results may only drive coordinated pruning, never an isolated rewrite.
+// Disabling key pruning requires current metadata and seeds Map/Read keys only.
+void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode = ELivenessMode::Local, bool pruneKeyColumns = true,
+                         EPruningScope scope = EPruningScope::AllDefinitions);
+const TUnorderedIUs& GetLiveIn(const IOperator* op, ui32 childIndex);
+const TUnorderedIUs& GetLiveOut(const IOperator* op);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");

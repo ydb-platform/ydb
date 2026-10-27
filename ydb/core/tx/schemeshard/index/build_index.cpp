@@ -104,7 +104,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
     }
     if (info.IsRebuild) {
         persistedBuildIndex.Update(
-            NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true)
+            NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true),
+            NIceDb::TUpdate<Schema::IndexBuild::RebuildIndexName>(info.RebuildIndexName)
         );
     }
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
@@ -485,6 +486,13 @@ void TSchemeShard::PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndex
     for (ui32 i = clusters.size(); i < info.KMeans.K; i++) {
         db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Delete();
     }
+}
+
+void TSchemeShard::PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i) {
+    auto& sizes = info.Clusters->GetClusterSizes();
+    db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+        NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(sizes[i])
+    );
 }
 
 void TSchemeShard::PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {

@@ -2045,6 +2045,107 @@ selector_config: []
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherOpaqueConfigTests) {
 
+    // Verify that disabling YAML resets an applied opaque config before its ACK and rejects that stale ACK.
+    Y_UNIT_TEST(TestOpaqueConfigResetOnYamlDisabledBeforeAck) {
+        // Acknowledge an empty baseline shared by YAML and the PROTO fallback.
+        const ui32 kind = NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem;
+        auto testConfig = DefaultConsoleTestConfig();
+        testConfig.OpaqueConfigParsers[kind] = std::bind(
+            NYaml::DefaultOpaqueConfigParser<NKikimrOpaqueConfigUt::TUtPrivateDatabaseConfig>,
+            std::placeholders::_1, true);
+        TTenantTestRuntime runtime(testConfig);
+        const auto dispatcherId = runtime.GetLocalServiceId(InitConfigsDispatcher(runtime));
+        TString yaml = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto subscriberId = runtime.Register(new TPrivateDatabaseConfigSubscriber(runtime.Sender));
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(handle);
+
+        // Read only this subscription's monitoring state after previously sent events are processed.
+        auto subscriptionState = [&]() {
+            THttpRequest request(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &request, nullptr, nullptr, "", nullptr);
+            runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new NMon::TEvHttpInfo(monReq)));
+            TAutoPtr<IEventHandle> responseHandle;
+            const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(responseHandle);
+            const auto& answer = response->Answer;
+            const auto begin = answer.find("- Kinds: PrivateDatabaseConfigItem\n");
+            UNIT_ASSERT_UNEQUAL_C(begin, TString::npos, answer);
+            auto end = answer.find("\n- Kinds:", begin);
+            if (end == TString::npos) {
+                end = answer.find("\nSubscribers:", begin);
+            }
+            UNIT_ASSERT_UNEQUAL_C(end, TString::npos, answer);
+            return answer.substr(begin, end - begin + 1);
+        };
+        UNIT_ASSERT(!subscriptionState().Contains("UpdateInProcess:"));
+
+        // Hold outgoing ACKs after the real subscriber applies each notification.
+        TVector<TAutoPtr<IEventHandle>> acks;
+        TVector<ui64> cookies;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Sender == dispatcherId && ev->Recipient == subscriberId &&
+                ev->GetTypeRewrite() == TEvConsole::EvConfigNotificationRequest)
+            {
+                const auto* notification = ev->Get<TEvConsole::TEvConfigNotificationRequest>();
+                UNIT_ASSERT_VALUES_EQUAL(notification->Record.ItemKindsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(notification->Record.GetItemKinds(0), kind);
+                if (!cookies.empty()) {
+                    UNIT_ASSERT(notification->OpaqueConfigs.empty());
+                    UNIT_ASSERT(!notification->Record.GetConfig().HasPrivateDatabaseConfig());
+                }
+                cookies.push_back(ev->Cookie);
+            }
+            if (ev->Sender == subscriberId && ev->Recipient == dispatcherId &&
+                ev->GetTypeRewrite() == TEvConsole::EvConfigNotificationResponse)
+            {
+                acks.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        SubstGlobal(yaml, "version: 0", "version: 1");
+        yaml += "  private_database_config:\n    secret_port: 200\n";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto* parsed = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(parsed->SecretPort, 200);
+        runtime.WaitFor("opaque config ACK", [&]() { return acks.size() == 1; }, TDuration::Seconds(1));
+        UNIT_ASSERT(subscriptionState().Contains("UpdateInProcessYamlVersion:"));
+
+        // Disable YAML without changing the empty PROTO fallback or acknowledging the opaque payload.
+        SubstGlobal(yaml, "version: 1", "version: 2");
+        SubstGlobal(yaml, "yaml_config_enabled: true", "yaml_config_enabled: false");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto* reset = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(
+            handle, TDuration::Seconds(1));
+        UNIT_ASSERT_C(reset, "Disabling YAML must remove the unacknowledged opaque config");
+        runtime.WaitFor("opaque reset ACK", [&]() { return acks.size() == 2; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(cookies.size(), 2);
+        UNIT_ASSERT_UNEQUAL(cookies[0], cookies[1]);
+        UNIT_ASSERT_VALUES_EQUAL(acks[0]->Cookie, cookies[0]);
+        UNIT_ASSERT_VALUES_EQUAL(acks[1]->Cookie, cookies[1]);
+        runtime.SetObserverFunc(observer);
+
+        // Deliver the stale ACK and prove that the reset remains pending without the canceled YAML version.
+        runtime.Send(acks[0].Release());
+        const auto pending = subscriptionState();
+        UNIT_ASSERT_STRING_CONTAINS(pending, TStringBuilder() << "UpdateInProcessCookie: " << cookies[1] << "\n");
+        UNIT_ASSERT(!pending.Contains("UpdateInProcessYamlVersion:"));
+
+        // Complete the reset with its own ACK and verify that no YAML version is committed.
+        runtime.Send(acks[1].Release());
+        const auto completed = subscriptionState();
+        UNIT_ASSERT(!completed.Contains("UpdateInProcess:"));
+        UNIT_ASSERT(!completed.Contains("YamlVersion:"));
+    }
+
     TTenantTestConfig TenantTestConfig()
     {
         // need real SchemeShard for CreateTenant; tenant is created dynamically,

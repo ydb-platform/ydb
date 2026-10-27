@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cpu_quota_manager.cpp
@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
 
     ydb/core/base
+    ydb/core/resource_pools
     ydb/core/scheme
 
 
@@ -18,8 +19,6 @@ PEERDIR(
 
     library/cpp/retry
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

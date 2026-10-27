@@ -78,13 +78,30 @@ TString FormatStringKey(ui64 key, int col, int stringBytes) {
     return result;
 }
 
-NUdf::TUnboxedValue MakeKeyValue(ETestedJoinKeyType keyType, ui64 key, int col, int stringBytes) {
+bool IsNullableKey(ETestedJoinKeyType keyType) {
+    return keyType == ETestedJoinKeyType::kNullableInteger || keyType == ETestedJoinKeyType::kNullableInt32 ||
+           keyType == ETestedJoinKeyType::kNullableString;
+}
+
+bool IsNullKey(ui64 row, int col) {
+    return (((row + 1) * 0x9E3779B97F4A7C15ull + static_cast<ui64>(col) * 0xD1B54A32D192ED03ull) >> 40) % 20 == 0;
+}
+
+NUdf::TUnboxedValue MakeKeyValue(ETestedJoinKeyType keyType, ui64 key, ui64 row, int col, int stringBytes) {
     const ui64 value = KeyComponent(key, col);
+    if (IsNullableKey(keyType) && IsNullKey(row, col)) {
+        return NUdf::TUnboxedValuePod();
+    }
     switch (keyType) {
     case ETestedJoinKeyType::kString:
+    case ETestedJoinKeyType::kNullableString:
         return MakeString(FormatStringKey(key, col, stringBytes));
     case ETestedJoinKeyType::kInteger:
+    case ETestedJoinKeyType::kNullableInteger:
         return NUdf::TUnboxedValuePod(value);
+    case ETestedJoinKeyType::kInt32:
+    case ETestedJoinKeyType::kNullableInt32:
+        return NUdf::TUnboxedValuePod(static_cast<i32>(value));
     }
     Y_ABORT("unreachable");
 }
@@ -128,6 +145,8 @@ TDqProgramBuilder::TJoinFilterLambda SideFilter(TDqSetup<false, true>* setup, ET
             pred = keepHigh ? pb.Greater(col, lit) : pb.Less(col, lit);
             break;
         }
+        default:
+            Y_ABORT("unsupported filter key type");
         }
         return pb.Coalesce(pred, pb.NewDataLiteral<bool>(false));
     };
@@ -139,6 +158,8 @@ void AttachFilters(TJoinDescription& descr, TDqSetup<false, true>* setup, const 
         return;
     }
     const auto type = keySchema.front();
+    Y_ABORT_UNLESS(type == ETestedJoinKeyType::kInteger || type == ETestedJoinKeyType::kString,
+                   "join filters are only supported for plain int and string leading key columns");
     if (filter == ETestedFilter::kLeft || filter == ETestedFilter::kAll) {
         descr.LeftFilter = SideFilter(setup, type, true, midKey, stringBytes);
     }
@@ -158,6 +179,8 @@ void AttachFilters(TJoinDescription& descr, TDqSetup<false, true>* setup, const 
                 pred = pb.Less(
                     left[0], pb.NewDataLiteral<NUdf::EDataSlot::String>(FormatStringKey(midKey, 0, stringBytes)));
                 break;
+            default:
+                Y_ABORT("unsupported filter key type");
             }
             return pb.Coalesce(pred, pb.NewDataLiteral<bool>(false));
         };
@@ -170,6 +193,14 @@ TType* KeyColumnType(TDqProgramBuilder& pb, ETestedJoinKeyType keyType) {
         return pb.NewDataType(NUdf::EDataSlot::String);
     case ETestedJoinKeyType::kInteger:
         return pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    case ETestedJoinKeyType::kInt32:
+        return pb.NewDataType(NUdf::TDataType<i32>::Id);
+    case ETestedJoinKeyType::kNullableString:
+        return pb.NewOptionalType(pb.NewDataType(NUdf::EDataSlot::String));
+    case ETestedJoinKeyType::kNullableInteger:
+        return pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    case ETestedJoinKeyType::kNullableInt32:
+        return pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
     }
     Y_ABORT("unreachable");
 }
@@ -180,6 +211,8 @@ int PayloadColumnCount(ETestedPayload payload, int widePayloadColumns) {
         return 1;
     case ETestedPayload::kWide:
         return widePayloadColumns;
+    case ETestedPayload::kTpc:
+        return 4;
     }
     Y_ABORT("unreachable");
 }
@@ -187,7 +220,23 @@ int PayloadColumnCount(ETestedPayload payload, int widePayloadColumns) {
 // Narrow keeps the shape this benchmark always had: one integer column on the
 // left and one string column on the right. Wide adds integer columns only, to
 // grow rows without also changing how payload values are compared and copied.
-TType* PayloadColumnType(TDqProgramBuilder& pb, ETestedPayload payload, bool leftSide) {
+TType* PayloadColumnType(TDqProgramBuilder& pb, ETestedPayload payload, bool leftSide, int col) {
+    if (payload == ETestedPayload::kTpc) {
+        if (leftSide) {
+            switch (col) {
+            case 0: return pb.NewDataType(NUdf::TDataType<i32>::Id);
+            case 1: return pb.NewDataType(NUdf::TDataType<double>::Id);
+            case 2: return pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+            default: return pb.NewDataType(NUdf::TDataType<ui16>::Id);
+            }
+        }
+        switch (col) {
+        case 0: return pb.NewDataType(NUdf::TDataType<i32>::Id);
+        case 1: return pb.NewDataType(NUdf::EDataSlot::String);
+        case 2: return pb.NewDataType(NUdf::TDataType<double>::Id);
+        default: return pb.NewDataType(NUdf::TDataType<i32>::Id);
+        }
+    }
     if (payload == ETestedPayload::kNarrow && !leftSide) {
         return pb.NewDataType(NUdf::EDataSlot::String);
     }
@@ -195,6 +244,27 @@ TType* PayloadColumnType(TDqProgramBuilder& pb, ETestedPayload payload, bool lef
 }
 
 NUdf::TUnboxedValue MakePayloadValue(ETestedPayload payload, bool leftSide, ui64 row, int col) {
+    if (payload == ETestedPayload::kTpc) {
+        const ui64 h = (row + 1) * 0x9E3779B97F4A7C15ull + static_cast<ui64>(col) * 0xD1B54A32D192ED03ull;
+        if (leftSide) {
+            switch (col) {
+            case 0: return NUdf::TUnboxedValuePod(static_cast<i32>((h >> 33) % 50 + 1));
+            case 1: return NUdf::TUnboxedValuePod(static_cast<double>((h >> 20) % 10000000) / 100.0);
+            case 2: return ((h >> 40) % 10 == 0) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(static_cast<i64>(h >> 24));
+            default: return NUdf::TUnboxedValuePod(static_cast<ui16>(8000 + (h >> 35) % 2500));
+            }
+        }
+        switch (col) {
+        case 0: return NUdf::TUnboxedValuePod(static_cast<i32>((h >> 33) % 25));
+        case 1: {
+            TString name = Sprintf("Supplier#%09" PRIu64, row);
+            name.resize(12 + (h >> 30) % 13, ' ');
+            return MakeString(name);
+        }
+        case 2: return NUdf::TUnboxedValuePod(static_cast<double>((h >> 20) % 1000000) / 100.0);
+        default: return NUdf::TUnboxedValuePod(static_cast<i32>(h >> 40));
+        }
+    }
     if (payload == ETestedPayload::kNarrow) {
         return leftSide ? NUdf::TUnboxedValuePod(ui64{111}) : MakeString("woo");
     }
@@ -219,7 +289,7 @@ TSideData BuildSide(TDqSetup<false, true>& setup, const THolderFactory& factory,
         side.ColumnTypes.push_back(KeyColumnType(pb, keySchema[col]));
     }
     for (int col = 0; col < payloadCols; ++col) {
-        side.ColumnTypes.push_back(PayloadColumnType(pb, payload, leftSide));
+        side.ColumnTypes.push_back(PayloadColumnType(pb, payload, leftSide, col));
     }
 
     TDefaultListRepresentation list;
@@ -227,7 +297,7 @@ TSideData BuildSide(TDqSetup<false, true>& setup, const THolderFactory& factory,
         NUdf::TUnboxedValue* items = nullptr;
         auto tuple = factory.CreateDirectArrayHolder(keyCols + payloadCols, items);
         for (int col = 0; col < keyCols; ++col) {
-            items[col] = MakeKeyValue(keySchema[col], keys[row], col, stringBytes);
+            items[col] = MakeKeyValue(keySchema[col], keys[row], row, col, stringBytes);
         }
         for (int col = 0; col < payloadCols; ++col) {
             items[keyCols + col] = MakePayloadValue(payload, leftSide, row, col);

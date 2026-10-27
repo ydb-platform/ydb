@@ -1061,7 +1061,7 @@ template <class TKey, class TValue, class THash>
 std::vector<typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValuePtr>
 TAsyncSlruCacheBase<TKey, TValue, THash>::TrimWithNotify(
     TShard* shard,
-    NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard,
+    TWriterGuard<TReaderWriterSpinLock>& guard,
     const TValuePtr& insertedValue,
     i64 weightDelta)
 {
@@ -1524,7 +1524,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Reconfigure(i64 capa
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard)
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Trim(TWriterGuard<TReaderWriterSpinLock>& guard)
 {
     auto evictedItems = this->TrimNoDelete();
     i64 evictedWeight = 0;

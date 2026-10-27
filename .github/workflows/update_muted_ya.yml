@@ -21,7 +21,7 @@ env:
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_config.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  PR_BRANCH_PREFIX: update-muted-ya
+  PR_BRANCH_PREFIX: robots/mute/update-muted-ya
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
 

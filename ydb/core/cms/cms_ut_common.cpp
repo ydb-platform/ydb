@@ -183,6 +183,11 @@ void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvPDiskStateRequest::TPt
         NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
         pDiskStateInfo.CopyFrom(pr.second);
     }
+    if (ev->Get()->Record.GetIncludeDDiskState()) {
+        for (const auto& info : node.DDiskStateInfo) {
+            record.AddDDiskStateInfo()->CopyFrom(info);
+        }
+    }
     {
         auto unguard = Unguard(guard);
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());

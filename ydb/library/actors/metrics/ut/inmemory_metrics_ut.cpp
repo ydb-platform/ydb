@@ -34,9 +34,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     Y_UNIT_TEST(QueuedCloseSurvivesRemovalFromRegistry) {
         TInMemoryMetricsBackend backend({.MemoryBytes = 64 * 8, .ChunkSizeBytes = 64, .MaxLines = 1});
-        auto state = std::make_shared<TLineWriterState>();
+        auto state = std::make_shared<TLineWriterState>(&backend);
         backend.RegisterLine(state, MakeLineKey("old", {}), TRawLineFrontend<>::MakeMeta());
-        TLine<TRawLineFrontend<>> old(&backend, state);
+        TLine<TRawLineFrontend<>> old(state);
         Pump(&backend);
         UNIT_ASSERT(old.Append(42));
         std::weak_ptr<TLineWriterState> weak = state;
@@ -61,12 +61,12 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
                 TInMemoryMetricsBackend backend({.MemoryBytes = 64, .ChunkSizeBytes = 64, .MaxLines = count});
                 TVector<TLine<TRawLineFrontend<>>> lines;
                 for (ui32 i = 0; i < count; ++i) {
-                    auto state = std::make_shared<TLineWriterState>();
+                    auto state = std::make_shared<TLineWriterState>(&backend);
                     states[i] = state;
                     if (registered) {
                         backend.RegisterLine(state, MakeLineKey(TStringBuilder() << "line" << i, {}), TRawLineFrontend<>::MakeMeta());
                     }
-                    lines.emplace_back(&backend, state);
+                    lines.emplace_back(state);
                 }
                 for (auto& line : lines) {
                     line.Close();
@@ -349,8 +349,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
     Y_UNIT_TEST(PendingRegistrationAndCloseRace) {
         TInMemoryMetricsBackend backend({.MemoryBytes = 1024, .ChunkSizeBytes = 64, .MaxLines = 1});
         for (ui32 i = 0; i < 200; ++i) {
-            auto state = std::make_shared<TLineWriterState>();
-            TLine<TRawLineFrontend<>> line(&backend, state);
+            auto state = std::make_shared<TLineWriterState>(&backend);
+            TLine<TRawLineFrontend<>> line(state);
             UNIT_ASSERT(line);
             UNIT_ASSERT(!line.Append(1));
             std::thread close([&] { line.Close(); });
@@ -365,8 +365,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     Y_UNIT_TEST(RegistrationBeforeFirstWriteAndShutdown) {
         TInMemoryMetricsBackend backend({.MemoryBytes = 1024, .ChunkSizeBytes = 64, .MaxLines = 1});
-        auto state = std::make_shared<TLineWriterState>();
-        TLine<TRawLineFrontend<>> line(&backend, state);
+        auto state = std::make_shared<TLineWriterState>(&backend);
+        TLine<TRawLineFrontend<>> line(state);
         UNIT_ASSERT(!line.Append(1));
         backend.RegisterLine(state, MakeLineKey("line", {}), TRawLineFrontend<>::MakeMeta());
         UNIT_ASSERT(!line.Append(1));
@@ -753,9 +753,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
     Y_UNIT_TEST(FirstTimestampSurvivesAppendsAndChunkReuse) {
         TInMemoryMetricsBackend backend({.MemoryBytes = 64, .ChunkSizeBytes = 64,
             .MaxLines = 1, .FreeChunkReservePercent = 0});
-        auto state = std::make_shared<TLineWriterState>();
+        auto state = std::make_shared<TLineWriterState>(&backend);
         backend.RegisterLine(state, MakeLineKey("line", {}), TRawLineFrontend<>::MakeMeta());
-        TLine<TRawLineFrontend<>> line(&backend, state);
+        TLine<TRawLineFrontend<>> line(state);
         Pump(&backend);
         UNIT_ASSERT(line.Append(1));
         TChunk* chunk = state->Reader->Storage.Writable.load();

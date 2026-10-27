@@ -223,6 +223,7 @@ public:
         TTabletInfo::SendStopTablet(sideEffects);
     }
 
+    ui32 GetBlockStorageGeneration() const;
     bool InitiateBlockStorage(TSideEffects& sideEffects);
     bool InitiateBlockStorage(TSideEffects& sideEffects, ui32 generation);
     bool InitiateDeleteStorage(TSideEffects& sideEffects);
@@ -263,7 +264,7 @@ public:
 
     TFollowerTabletInfo& SpawnFollower(TFollowerGroup& followerGroup) {
         TFollowerTabletInfo& follower = AddFollower(followerGroup);
-        follower.BecomeStopped();
+        follower.BecomeStopped(EHiveEventReason::InitialState);
         return follower;
     }
 

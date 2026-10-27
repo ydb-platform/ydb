@@ -1,8 +1,22 @@
---- contrib/python/aiohttp/aiohttp/_http_parser.pyx	(index)
-+++ contrib/python/aiohttp/aiohttp/_http_parser.pyx	(working tree)
-@@ -393,1 +393,1 @@ cdef class HttpParser:
+diff --git a/aiohttp/_http_parser.pyx b/aiohttp/_http_parser.pyx
+index 0fe6084..b26d572 100644
+--- a/aiohttp/_http_parser.pyx
++++ b/aiohttp/_http_parser.pyx
+@@ -456,7 +456,7 @@ cdef class HttpParser:
+             self._raw_name = b""
+             self._raw_value = b""
+ 
 -    cdef _on_header_field(self, char* at, size_t length):
 +    cdef _on_header_field(self, const char* at, size_t length):
-@@ -404,1 +404,1 @@ cdef class HttpParser:
+         if self._has_value:
+             self._process_header()
+ 
+@@ -465,7 +465,7 @@ cdef class HttpParser:
+         else:
+             self._raw_name += at[:length]
+ 
 -    cdef _on_header_value(self, char* at, size_t length):
 +    cdef _on_header_value(self, const char* at, size_t length):
+         if self._raw_value == b"":
+             self._raw_value = at[:length]
+         else:

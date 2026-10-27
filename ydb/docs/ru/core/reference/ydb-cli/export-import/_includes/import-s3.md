@@ -18,6 +18,12 @@
 
 При необходимости догрузки данных в существующие таблицы из S3 вы можете скопировать содержимое S3 в файловую систему (например, с помощью [S3cmd](https://s3tools.org/s3cmd)) и воспользоваться [командой `tools restore`](../tools-restore.md).
 
+{% note warning %}
+
+Команда `tools restore` загружает данные только в [строковые таблицы](../../../../concepts/datamodel/table.md#row-oriented-tables). Для догрузки в существующие [колоночные таблицы](../../../../concepts/datamodel/table.md#column-oriented-tables) используйте [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
+
+{% endnote %}
+
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:
@@ -46,6 +52,7 @@
 ### Дополнительные параметры {#aux}
 
 {% include [import-additional-params.md](import-additional-params.md) %}
+
 - `--list`: Перечислить объекты в существующей выгрузке.
 
 {% include [import-resource-broker-note.md](import-resource-broker-note.md) %}
@@ -105,6 +112,8 @@
 {% include [import-operation-list-tail.md](import-operation-list-tail.md) %}
 
 ## Примеры {#examples}
+
+Для восстановления первоначальных данных перед запуском асинхронной репликации используйте [пошаговое руководство по переносу с помощью резервного копирования и восстановления](../../../../devops/async-replication-initial-sync.md). Репликация запускается после успешного импорта всех целевых таблиц.
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

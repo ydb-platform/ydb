@@ -25,6 +25,7 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
     ut_perf
 )

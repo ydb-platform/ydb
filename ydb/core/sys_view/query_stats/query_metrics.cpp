@@ -84,8 +84,12 @@ THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId
         ui32
     >;
 
+    const auto statsType = sysViewInfo.GetType() == NKikimrSysView::EQueryMetricsOneHour
+        ? NKikimrSysView::METRICS_ONE_HOUR
+        : NKikimrSysView::METRICS_ONE_MINUTE;
+
     return MakeHolder<TQueryMetricsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
-        NKikimrSysView::METRICS_ONE_MINUTE);
+        statsType);
 }
 
 } // NKikimr::NSysView

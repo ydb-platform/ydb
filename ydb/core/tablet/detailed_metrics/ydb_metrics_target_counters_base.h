@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ydb_metrics_aggregator.h"
+#include "ydb_metrics_mapper.h"
 
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
@@ -84,6 +84,8 @@ protected:
      * @param[in] counterOptions The parsed enum options for the target counters
      * @param[in] targetCounterGroup The counter group where the target counters are created
      * @param[in,out] targetCounters The container where the target counters will be saved
+     * @param[in] nameScope The scope for the published metric names (Aggregate or Partition)
+     * @param[in] skipLeaderOnly When true, leave TargetCounter null for LeaderOnly metrics
      */
     template <
         class TCounterOptions,
@@ -98,16 +100,25 @@ protected:
     void CreateTargetCountersForCounterType(
         const TCounterOptions* counterOptions,
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        TTargetCounters& targetCounters
+        TTargetCounters& targetCounters,
+        EYdbMetricNameScope nameScope,
+        bool skipLeaderOnly
     ) {
         targetCounters.reserve(counterOptions->Size);
 
         for (size_t i = 0; i < counterOptions->Size; ++i) {
+            if (skipLeaderOnly && counterOptions->GetLeaderOnly(i)) {
+                // Leave TargetCounter null for LeaderOnly metrics when skipLeaderOnly is true
+                targetCounters.emplace_back();
+                continue;
+            }
+
+            const TString metricName = MakeYdbMetricName(counterOptions->GetNames()[i], nameScope);
             targetCounters.emplace_back().TargetCounter = CreateTargetCounter(
                 counterOptions,
                 targetCounterGroup,
                 i,
-                counterOptions->GetNames()[i]
+                metricName.c_str()
             );
         }
     }

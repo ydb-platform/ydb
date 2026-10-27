@@ -177,10 +177,18 @@ TStorage::TTryGetMessageResult TStorage::TryGetMessage(ui64 offset, const std::o
     auto isMessageGroupSkipped = [&](const TMessage& message) {
         return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
     };
-    // checks if message is eligible for return: it is not expired or skipped
+    // checks if message is eligible for return: it is not expired & not skipped
     const auto& [message, _] = GetMessageInt(offset);
     AFL_ENSURE(message != nullptr)("offset", offset)("case", caseDescription);
-    AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", caseDescription);
+    if (message->GetStatus() != EMessageStatus::Unprocessed) {
+        // in FIFO mode the first message in the group always Unprocessed
+        AFL_ENSURE(!KeepMessageOrder)("status", message->GetStatus())("offset", offset)("case", caseDescription);
+        return TTryGetMessageResult{
+            .Message = message,
+            .TryNextInGroup = true,
+            .Usable = false,
+        };
+    }
     if (RetentionExpired(*message, retentionDeadlineDelta)) {
         return TTryGetMessageResult{
             .Message = message,
@@ -243,36 +251,43 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         position.SlowPosition = SlowMessages.begin();
     }
 
-    if (KeepMessageOrder) {
-        TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
-        if (nextMessage.Message) {
-            auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
-            if (unlockedList.begin() != nextMessage.OrderIterator) [[unlikely]] {
-                // rotate
-                // move skipped messaged to the end of queue, so they won't be rechecked on the next iteration
-                TIntrusiveList<TOrderedMessageGroupIdHash> cut;
-                unlockedList.Cut(unlockedList.begin(), nextMessage.OrderIterator, cut.end());
-                unlockedList.Append(std::move(cut));
+    // If any of messages has a MessageGroupId, then use fairness selection, otherwise use a sequential offset scan
+    if (!MessageGroups.Groups.empty()) {
+        auto takeGroup = [&]() -> std::optional<TReadMessage> {
+            TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
+            if (!nextMessage.Message) {
+                return std::nullopt;
+            }
+            MessageGroups.RotateGroupsOrder(nextMessage.OrderIterator);
+            if (!KeepMessageOrder && nextMessage.Message->HasMessageGroupId) {
+                RotateStdMessageGroupPastReturned(nextMessage.Offset, *nextMessage.Message);
             }
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
-        }
-
-        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
-            TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, desc);
-            if (!result.Usable) {
-                return std::nullopt;
-            }
-            DoLock(offset, *result.Message, deadline);
-            return ConvertToReadMessage(offset, *result.Message);
         };
-
-        for (ui64 offset : MessageGroups.UnorderedOffsets) [[unlikely]] {
-            if (auto result = tryReturn(offset, "unordered")) {
-                return result;
+        auto takeGroupless = [&]() -> std::optional<TReadMessage> {
+            for (ui64 offset : MessageGroups.UnorderedOffsets) {
+                TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, "unordered");
+                if (!result.Usable) {
+                    continue;
+                }
+                DoLock(offset, *result.Message, deadline);
+                return ConvertToReadMessage(offset, *result.Message);
             }
+            return std::nullopt;
+        };
+        const bool grouplessFirst = (FairnessClassTurn++) % 2 == 0;
+        if (grouplessFirst) { // handle mixed case of groupless and grouped messages in the same queue
+            if (auto message = takeGroupless()) {
+                return message;
+            }
+            return takeGroup();
+        } else {
+            if (auto message = takeGroup()) {
+                return message;
+            }
+            return takeGroupless();
         }
-        return std::nullopt;
     }
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
@@ -541,6 +556,7 @@ bool TStorage::Purge(ui64 endOffset) {
     DLQQueue.clear();
     DLQMessages.clear();
     MessageGroups.Clear();
+    FairnessClassTurn = 0;
     ClearReceiveAttempts();
 
     FirstOffset = endOffset;
@@ -767,7 +783,16 @@ static bool TrackMessageStatusInLockedGroups(const TStorage::TMessage& message) 
 }
 
 void TStorage::TMessageGroups::UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash) {
-    if (locked.IsAccessible()) {
+    SetUnlockedEligibility(messageGroupIdHash, locked.IsAccessible());
+    if (locked.LockedSelf) {
+        LockedMessageGroupsId.insert(messageGroupIdHash);
+    } else {
+        LockedMessageGroupsId.erase(messageGroupIdHash);
+    }
+}
+
+void TStorage::TMessageGroups::SetUnlockedEligibility(ui32 messageGroupIdHash, bool eligible) {
+    if (eligible) {
         auto [uIt, uIns] = UnlockedMessageGroupsId.insert(messageGroupIdHash);
         if (uIns) {
             const TIntrusiveListItem<TOrderedMessageGroupIdHash>& pc = *uIt;
@@ -775,14 +800,8 @@ void TStorage::TMessageGroups::UpdateLockedMaps(const TLockedGroup& locked, ui32
             TIntrusiveListItem<TOrderedMessageGroupIdHash>& p = const_cast<TIntrusiveListItem<TOrderedMessageGroupIdHash>&>(pc);
             UnlockedMessageGroupsIdViewOrder.PushBack(&p);
         }
-        LockedMessageGroupsId.erase(messageGroupIdHash);
     } else {
         UnlockedMessageGroupsIdErase(messageGroupIdHash);
-        if (locked.LockedSelf) {
-            LockedMessageGroupsId.insert(messageGroupIdHash);
-        } else {
-            LockedMessageGroupsId.erase(messageGroupIdHash);
-        }
     }
 }
 
@@ -851,9 +870,6 @@ void TStorage::UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& mess
 }
 
 void TStorage::UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus) {
-    if (!KeepMessageOrder) {
-        return;
-    }
     if (!message.HasMessageGroupId) {
         if (EqualToOneOf(newStatus, EMessageStatus::Unprocessed)) {
             MessageGroups.UnorderedOffsets.insert(offset);
@@ -862,93 +878,186 @@ void TStorage::UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessa
         }
         return;
     }
-    if (!TrackMessageStatusInLockedGroups(message)) {
+    if (KeepMessageOrder && !TrackMessageStatusInLockedGroups(message)) {
         return;
     }
     if (message.GetStatus() == newStatus) {
         return;
     }
 
+    TSingleMessageGroupIdInfo* group = MapFindPtr(MessageGroups.Groups, message.MessageGroupIdHash);
+    AFL_ENSURE(group != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
+    const bool wasUnprocessed = message.GetStatus() == EMessageStatus::Unprocessed;
+    const bool willBeUnprocessed = newStatus == EMessageStatus::Unprocessed;
+    if (wasUnprocessed && !willBeUnprocessed) {
+        AFL_ENSURE(group->UnprocessedCount > 0)("offset", offset);
+        --group->UnprocessedCount;
+    } else if (!wasUnprocessed && willBeUnprocessed) {
+        ++group->UnprocessedCount;
+    }
+
+    if (!KeepMessageOrder) {
+        MessageGroups.SetUnlockedEligibility(message.MessageGroupIdHash, group->UnprocessedCount > 0);
+        return;
+    }
     if (!TrackMessageStatusInLockedGroups(newStatus)) {
         UpdateMessageGroupToNextMessage(offset, message);
         return;
     }
+    group->Locked.FillFromStatus(newStatus);
+    MessageGroups.UpdateLockedMaps(group->Locked, message.MessageGroupIdHash);
+}
 
-    TSingleMessageGroupIdInfo* ptr = MapFindPtr(MessageGroups.Groups, message.MessageGroupIdHash);
-    AFL_ENSURE(ptr != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
-    ptr->Locked.FillFromStatus(newStatus);
-    MessageGroups.UpdateLockedMaps(ptr->Locked, message.MessageGroupIdHash);
+void TStorage::PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup) {
+    if (firstMessageInGroup) {
+        message.RelinkPrevMessageGroupIdOffset(Nothing());
+    } else {
+        auto [prev, _] = GetMessageInt(group.LastOffset);
+        AFL_ENSURE(prev != nullptr)("offset", offset)("last", group.LastOffset);
+        prev->RelinkNextMessageGroupIdOffset(offset);
+        message.RelinkPrevMessageGroupIdOffset(group.LastOffset);
+    }
+    message.RelinkNextMessageGroupIdOffset(Nothing());
+    group.LastOffset = offset;
+}
+
+void TStorage::RotateStdMessageGroupPastReturned(ui64 offset, TMessage& returned) {
+    const auto nextOffset = returned.NextMessageGroupIdOffset();
+    if (nextOffset.Empty()) {
+        return;
+    }
+    auto* group = MapFindPtr(MessageGroups.Groups, returned.MessageGroupIdHash);
+    AFL_ENSURE(group != nullptr)("offset", offset);
+    TMessage* next = GetMessageInt(*nextOffset).first;
+    AFL_ENSURE(next != nullptr)("offset", offset)("next", *nextOffset);
+    TMessage* head = GetMessageInt(group->FirstOffset).first;
+    AFL_ENSURE(head != nullptr)("offset", offset)("first", group->FirstOffset);
+    TMessage* tail = GetMessageInt(group->LastOffset).first;
+    AFL_ENSURE(tail != nullptr)("offset", offset)("last", group->LastOffset);
+
+    const ui64 oldFirst = group->FirstOffset;
+    const ui64 oldLast = group->LastOffset;
+    tail->RelinkNextMessageGroupIdOffset(oldFirst);
+    head->RelinkPrevMessageGroupIdOffset(oldLast);
+    returned.RelinkNextMessageGroupIdOffset(Nothing());
+    next->RelinkPrevMessageGroupIdOffset(Nothing());
+    group->LastOffset = offset;
+    group->FirstOffset = *nextOffset;
+}
+
+void TStorage::UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group) {
+    const auto prevOffset = message.PrevMessageGroupIdOffset();
+    const auto nextOffset = message.NextMessageGroupIdOffset();
+    if (prevOffset.Defined()) {
+        auto [prev, _] = GetMessageInt(*prevOffset);
+        AFL_ENSURE(prev != nullptr)("offset", offset)("prev", *prevOffset);
+        prev->RelinkNextMessageGroupIdOffset(nextOffset);
+    } else {
+        group.FirstOffset = nextOffset.GetOrElse(Max<ui64>());
+    }
+    if (nextOffset.Defined()) {
+        auto [next, _] = GetMessageInt(*nextOffset);
+        AFL_ENSURE(next != nullptr)("offset", offset)("next", *nextOffset);
+        next->RelinkPrevMessageGroupIdOffset(prevOffset);
+    } else {
+        group.LastOffset = prevOffset.GetOrElse(Max<ui64>());
+    }
 }
 
 void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message) {
-    if (!KeepMessageOrder) {
-        return;
-    }
     if (!message.HasMessageGroupId) {
         MessageGroups.UnorderedOffsets.erase(offset);
         return;
     }
-    if (!TrackMessageStatusInLockedGroups(message)) {
+    if (KeepMessageOrder && !TrackMessageStatusInLockedGroups(message)) {
         return;
     }
 
-    auto messageGroupIterator = MessageGroups.Groups.find(message.MessageGroupIdHash);
-    TSingleMessageGroupIdInfo* ptr = (messageGroupIterator == MessageGroups.Groups.end()) ? nullptr : &messageGroupIterator->second;
-    AFL_ENSURE(ptr != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
-
-    if (message.GetStatus() == EMessageStatus::Locked) {
-        AFL_ENSURE(ptr->Locked.LockedSelf);
-        ptr->Locked.LockedSelf = false;
-    }
-    if (message.GetStatus() == EMessageStatus::Delayed) {
-        ptr->Locked.Delayed = false;
+    auto groupIt = MessageGroups.Groups.find(message.MessageGroupIdHash);
+    AFL_ENSURE(groupIt != MessageGroups.Groups.end())("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
+    TSingleMessageGroupIdInfo& group = groupIt->second;
+    if (message.GetStatus() == EMessageStatus::Unprocessed) {
+        AFL_ENSURE(group.UnprocessedCount > 0)("offset", offset);
+        --group.UnprocessedCount;
     }
 
-    UpdateMessageGroupToNextMessage(offset, message);
+    if (KeepMessageOrder) {
+        if (message.GetStatus() == EMessageStatus::Locked) {
+            AFL_ENSURE(group.Locked.LockedSelf);
+            group.Locked.LockedSelf = false;
+        }
+        if (message.GetStatus() == EMessageStatus::Delayed) {
+            group.Locked.Delayed = false;
+        }
+        UpdateMessageGroupToNextMessage(offset, message);
+        return;
+    }
+
+    UnlinkFromMessageGroupList(offset, message, group);
+
+    AFL_ENSURE(group.Size > 0)("offset", offset);
+    --group.Size;
+    if (group.Size == 0) {
+        MessageGroups.UnlockedMessageGroupsIdErase(message.MessageGroupIdHash);
+        MessageGroups.Groups.erase(groupIt);
+        AFL_ENSURE(Metrics.InflightMessageGroupCount > 0);
+        --Metrics.InflightMessageGroupCount;
+        return;
+    }
+    MessageGroups.SetUnlockedEligibility(message.MessageGroupIdHash, group.UnprocessedCount > 0);
 }
 
 void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
-    if (!KeepMessageOrder) {
-        return;
-    }
     if (!message.HasMessageGroupId) {
         if (message.GetStatus() == EMessageStatus::Unprocessed) {
             MessageGroups.UnorderedOffsets.insert(offset);
         }
         return;
     }
-    if (!TrackMessageStatusInLockedGroups(message)) {
+    if (KeepMessageOrder && !TrackMessageStatusInLockedGroups(message)) {
         return;
     }
 
-    const auto messageGroupIdHash = message.MessageGroupIdHash;
-    auto [it, firstMessageInGroup] = MessageGroups.Groups.try_emplace(ui32(message.MessageGroupIdHash));
+    const ui32 messageGroupIdHash = message.MessageGroupIdHash;
+    auto [it, firstMessageInGroup] = MessageGroups.Groups.try_emplace(messageGroupIdHash);
     bool firstReadableMessageInGroup = false;
     TSingleMessageGroupIdInfo& group = it->second;
     group.Size++;
     if (firstMessageInGroup) {
         ++Metrics.InflightMessageGroupCount;
         group.FirstOffset = offset;
-        firstReadableMessageInGroup = TrackMessageStatusInLockedGroups(message); // may be false on snapshot restore
+        if (KeepMessageOrder) {
+            firstReadableMessageInGroup = TrackMessageStatusInLockedGroups(message); // may be false on snapshot restore
+        } else {
+            PushBackToMessageGroupList(offset, message, group, true);
+        }
     } else {
-        auto [prev, _] = GetMessageInt(group.LastOffset);
-        AFL_ENSURE(prev != nullptr);
-        prev->SetNextMessageGroupIdOffset(offset);
-        if (!TrackMessageStatusInLockedGroups(*prev)) {
-            firstReadableMessageInGroup = true;
+        if (KeepMessageOrder) {
+            auto [prev, _] = GetMessageInt(group.LastOffset);
+            AFL_ENSURE(prev != nullptr)("offset", offset)("last", group.LastOffset);
+            prev->SetNextMessageGroupIdOffset(offset);
+            firstReadableMessageInGroup = !TrackMessageStatusInLockedGroups(*prev);
+        } else {
+            PushBackToMessageGroupList(offset, message, group, false);
         }
     }
-    if (firstReadableMessageInGroup) {
-        group.FirstOffset = offset;
+    if (message.GetStatus() == EMessageStatus::Unprocessed) {
+        ++group.UnprocessedCount;
     }
-    group.LastOffset = offset;
-    if (message.GetStatus() == EMessageStatus::Locked) {
-        AFL_ENSURE(firstReadableMessageInGroup)("offset", offset)("groupSize", group.Size);
-    }
-    if (firstReadableMessageInGroup) {
-        group.Locked.LockedParent = !CanReadMessageGroupIdHashFromParentPartition(messageGroupIdHash);
-        group.Locked.FillFromStatus(message.GetStatus());
-        MessageGroups.UpdateLockedMaps(group.Locked, message.MessageGroupIdHash);
+    if (KeepMessageOrder) {
+        group.LastOffset = offset;
+        if (message.GetStatus() == EMessageStatus::Locked) {
+            AFL_ENSURE(firstReadableMessageInGroup)("offset", offset)("groupSize", group.Size);
+        }
+        if (firstReadableMessageInGroup) {
+            group.FirstOffset = offset;
+            group.Locked.LockedParent = !CanReadMessageGroupIdHashFromParentPartition(messageGroupIdHash);
+            group.Locked.FillFromStatus(message.GetStatus());
+            MessageGroups.UpdateLockedMaps(group.Locked, message.MessageGroupIdHash);
+        }
+        return;
+    } else {
+        MessageGroups.SetUnlockedEligibility(messageGroupIdHash, group.UnprocessedCount > 0);
     }
 }
 
@@ -1851,7 +1960,7 @@ void TStorage::InitMetrics() {
     }
 
     Metrics.InflightMessageCount = Messages.size() + SlowMessages.size();
-    Metrics.InflightMessageGroupCount = KeepMessageOrder ? MessageGroups.Groups.size() : 0;
+    Metrics.InflightMessageGroupCount = MessageGroups.Groups.size();
 }
 
 void TStorage::TMessageGroups::Clear() {
@@ -1912,6 +2021,13 @@ bool TOrderedMessageGroupIdHash::operator==(const TOrderedMessageGroupIdHash& ot
 
 TOrderedMessageGroupIdHash::operator ui32() const {
     return GroupIdHash;
+}
+
+void TStorage::TMessageGroups::RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAfter) {
+    Y_ASSERT(cutAfter != UnlockedMessageGroupsIdViewOrder.end());
+    TIntrusiveList<TOrderedMessageGroupIdHash> cut;
+    UnlockedMessageGroupsIdViewOrder.Cut(UnlockedMessageGroupsIdViewOrder.begin(), std::next(cutAfter), cut.end());
+    UnlockedMessageGroupsIdViewOrder.Append(std::move(cut));
 }
 
 bool TStorage::TMessageGroups::UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const {

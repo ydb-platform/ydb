@@ -45,13 +45,14 @@ EPDISK_TYPE_SSD = 1
 class NbsCluster:
     """Running KiKiMR cluster with NBS enabled and one DDisk pool defined."""
 
-    def __init__(self, use_in_memory_pdisks=True):
+    def __init__(self, use_in_memory_pdisks=True, enable_frontend=False):
         self.cluster = None
         self.slots = []
         self.ddisk_pool_name = DDISK_POOL_NAME
         self.nbs_database_name = NBS_DATABASE_NAME
         # File-backed PDisks survive node.stop(); in-memory SectorMap does not.
         self.use_in_memory_pdisks = use_in_memory_pdisks
+        self.enable_frontend = enable_frontend
         # Set when a node or slot is restarted so recover() waits for the tenant.
         self._restarted = False
 
@@ -79,6 +80,10 @@ class NbsCluster:
                 'NBS_SS_PROXY': LogLevels.DEBUG,
             },
         )
+        # The classic frontend supports one disk; the vhost suites use several.
+        configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {
+            'enabled': self.enable_frontend,
+        }
         last_pdisk_id = max(p['pdisk_id'] for p in configurator.pdisks_info)
         for pdisk in configurator.pdisks_info:
             if pdisk['pdisk_id'] == last_pdisk_id:

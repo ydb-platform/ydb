@@ -10,17 +10,17 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalSortBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalSortBuilder(TIntrusivePtr<TOpSort> sort, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalSortBuilder(TOpSort& sort, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names)
         , Sort(sort) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    TVector<TExprNode::TPtr> BuildSortKeysForWideSort(const TVector<TInfoUnit>& inputs, const TVector<TSortElement>& sortElements);
     TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer);
-    std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements);
+    std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TSortIUs& sortElements);
+    TVector<TExprNode::TPtr> BuildSortKeysForWideSort(const TVector<TInfoUnitId>& inputs, const TSortIUs& sortElements);
 
-    TIntrusivePtr<TOpSort> Sort;
+    TOpSort& Sort;
 };

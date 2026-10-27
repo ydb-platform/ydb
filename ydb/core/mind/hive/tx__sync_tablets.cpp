@@ -25,7 +25,7 @@ public:
         if (local->IsFollower()) {
             if (remote.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                 if (local->AsFollower().Id == remote.GetFollowerId()
-                        && (local->IsStopped() || local->IsAliveOnLocal(Local))) {
+                        && (local->IsStopped() || local->IsPresentOnLocal(Local))) {
                     return true;
                 }
             }
@@ -73,7 +73,7 @@ public:
                     {"tabletId", tabletId});
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
-                tablet->InitiateStop(SideEffects);
+                tablet->InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                 // persist zeroed NodeId so it survives a hive restart
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
@@ -104,7 +104,7 @@ public:
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    tablet->BecomeStarting(node.Id);
+                    tablet->BecomeStarting(node.Id, EHiveEventReason::SyncTablets);
                     foundTablet(tablet, "starting");
                     continue;
                 }
@@ -126,7 +126,7 @@ public:
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    if (tablet->BecomeRunning(node.Id)) {
+                    if (tablet->BecomeRunning(node.Id, EHiveEventReason::SyncTablets)) {
                         if (tablet->IsLeader()) {
                             db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                                           NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->GetLeader().KnownGeneration));

@@ -10,42 +10,6 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class... TArgs>
-void IServiceContext::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
-{
-    if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
-    } else {
-        SuppressMissingRequestInfoCheck();
-    }
-}
-
-template <class... TArgs>
-void IServiceContext::SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
-{
-    if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
-    } else {
-        SuppressMissingRequestInfoCheck();
-    }
-}
-
-template <class... TArgs>
-void IServiceContext::SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
-{
-    if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
-    }
-}
-
-template <class... TArgs>
-void IServiceContext::SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args)
-{
-    if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
-    }
-}
-
 namespace NDetail {
 
 bool IsClientFeatureSupported(const IServiceContext* context, int featureId);
@@ -58,7 +22,7 @@ inline auto IServiceContext::AnnotateRequest(bool flush)
     return NLogging::TLoggingTagListBuilderGuard(
         GetRequestAnnotations(),
         [this, flush] {
-            SetRawRequestInfo(std::string(), /*incremental*/ !flush);
+            CommitRequestAnnotations(flush);
         });
 }
 

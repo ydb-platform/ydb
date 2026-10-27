@@ -255,7 +255,7 @@ class TFinalizeBuildIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto finalizeMainTable = Transaction.GetFinalizeBuildIndexMainTable();
@@ -362,7 +362,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TFinalizeBuildIndex");
     }
 

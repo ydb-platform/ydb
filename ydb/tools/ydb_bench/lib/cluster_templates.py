@@ -26,6 +26,59 @@ def _integer(value, label, maximum=65536):
     return value
 
 
+def parse_port_ranges(value, label):
+    if type(value) is int:
+        value = str(value)
+    if not isinstance(value, str) or len(value) > 4096:
+        raise BenchmarkError(label + ' must be a comma-separated list of ports or ranges')
+    if not value.strip():
+        return []
+    ranges = []
+    for part in value.split(','):
+        match = re.fullmatch(r'\s*([0-9]+)\s*(?:-\s*([0-9]+)\s*)?', part)
+        if not match:
+            raise BenchmarkError(label + ': use ports or ranges, for example 19001-19020, 19100')
+        first, last = int(match[1]), int(match[2] or match[1])
+        if not 1 <= first <= last <= 65535:
+            raise BenchmarkError(label + ': ranges must be ascending and within 1-65535')
+        ranges.append((first, last))
+    merged = []
+    for first, last in sorted(ranges):
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(last, merged[-1][1]))
+        else:
+            merged.append((first, last))
+    return merged
+
+
+def validate_port_ranges(value):
+    if not isinstance(value, dict) or set(value) - {'http', 'grpc', 'ic'}:
+        raise BenchmarkError('Port ranges must be an object with http, grpc and ic fields')
+    result = {}
+    for kind, ports in value.items():
+        ranges, auto = parse_port_selection(ports, kind.upper() + ' ports')
+        parts = [str(first) if first == last else f'{first}-{last}' for first, last in ranges]
+        if auto:
+            parts.append('auto')
+        if parts:
+            result[kind] = ', '.join(parts)
+    return result
+
+
+def parse_port_selection(value, label):
+    auto = False
+    if isinstance(value, str):
+        if len(value) > 4096:
+            raise BenchmarkError(label + ' must be a comma-separated list of ports, ranges or auto')
+        parts = [part.strip().lower() for part in value.split(',')]
+        auto = 'auto' in parts
+        if auto:
+            if '' in parts:
+                raise BenchmarkError(label + ': use ports, ranges or auto, for example 19001-19020, auto')
+            value = ','.join(part for part in parts if part != 'auto')
+    return parse_port_ranges(value, label), auto
+
+
 def validate_affinity(value):
     if not isinstance(value, dict):
         raise BenchmarkError("Affinity must be an object")
@@ -116,6 +169,7 @@ def validate_template(value, host_ids):
     if not isinstance(value, dict):
         raise BenchmarkError("Template must be an object")
     name = _text(value.get("name"), "Template name")
+    port_ranges = validate_port_ranges(value.get('port_ranges', {}))
     nodes = value.get("nodes")
     if not isinstance(nodes, list) or not 1 <= len(nodes) <= 64:
         raise BenchmarkError("A template must contain 1 to 64 nodes")
@@ -215,6 +269,7 @@ def validate_template(value, host_ids):
         "host_ids": selected_hosts,
         "data_centers": centers,
         "tenants": normalized_tenants,
+        **({'port_ranges': port_ranges} if port_ranges else {}),
         **({"ydb_config": cluster_config.validate(value["ydb_config"])[0]} if "ydb_config" in value else {}),
         **(
             {'ydb_tenant_configs': cluster_config.tenant_configs(value['ydb_tenant_configs'], paths)}

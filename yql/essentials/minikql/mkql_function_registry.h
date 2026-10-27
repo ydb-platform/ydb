@@ -92,8 +92,6 @@ public:
     using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
-
-    virtual bool SupportsSizedAllocators() const = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -150,6 +148,6 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
 
 const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
-void FillStaticModules(IMutableFunctionRegistry& registry);
+void FillStaticModules(IMutableFunctionRegistry& registry, bool skipLoaded = false);
 
 } // namespace NKikimr::NMiniKQL

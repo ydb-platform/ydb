@@ -297,8 +297,10 @@ private:
             {"marker", "BSCK09"},
             {"subsystem", request.Subsystem});
         Become(&TThis::StateProcessing);
+        // VDisk metadata every write depends on, SYSTEM ones included: it may spend the system reserve.
         auto msg = std::make_unique<NPDisk::TEvChunkReserve>(Ctx.LogCtx->PDiskCtx->Dsk->Owner,
-                Ctx.LogCtx->PDiskCtx->Dsk->OwnerRound, 1);
+                Ctx.LogCtx->PDiskCtx->Dsk->OwnerRound, 1, false, NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+                NPDisk::EAllocationPurpose::System);
         Send(Ctx.LogCtx->PDiskCtx->PDiskId, msg.release());
     }
 

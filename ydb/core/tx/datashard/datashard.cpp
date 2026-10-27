@@ -14,6 +14,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -423,6 +424,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        // The initial state comes without follower update notifications
+        SyncSchemeOnFollowerNeeded = true;
+        // Do not rely on a sync queued before the reactivation, an extra one is a no-op
+        SyncSchemeOnFollowerPending = false;
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -966,7 +971,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
             NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
@@ -1045,7 +1050,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .Step = record.GetStep(),
             .TxId = record.GetTxId(),
             .PathId = record.GetPathId(),
-            .BodySize = record.GetBody().size(),
+            .BodySize = record.GetBodySize(),
             .TableId = record.GetTableId(),
             .SchemaVersion = record.GetSchemaVersion(),
             .LockId = record.GetLockId(),
@@ -1055,7 +1060,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
@@ -4150,6 +4155,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
     // Expected that it's almost always one table here, hence only TableInfos.begin()
     // IsBackup can be filtered out though
     const auto& [localPathId, table] = *TableInfos.begin();
@@ -4168,10 +4175,27 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
+    // Unrelated executor commits may update yellow-stop flags without notifying
+    // the shard. Stop active direct imports on the next periodic check as well.
+    AbortDirectImportsForSpace();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
+
+    // Followers run periodic tasks only with EnableFollowerStats on. The sync
+    // usually completes right away and is reported below, while a sync that
+    // has to wait is reported on the next tick
+    if (IsFollower() &&
+        AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
+        SyncSchemeOnFollowerNeeded &&
+        !SyncSchemeOnFollowerPending)
+    {
+        SyncSchemeOnFollowerNeeded = false;
+        SyncSchemeOnFollowerPending = true;
+        Execute(CreateTxSyncSchemeOnFollower(), ctx);
+    }
+
     SendTableInfoToCountersAggregator(ctx);
     CollectCpuUsage(ctx);
 
@@ -4715,7 +4739,7 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EStatus,
+void TDataShard::ScanComplete(NTable::EStatus status,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4752,7 +4776,25 @@ void TDataShard::ScanComplete(NTable::EStatus,
                     {"cookie", cookie},
                     {"tabletId", TabletID()});
 
-                CdcStreamScanManager.Complete(cookie);
+                const auto& streamPathId = CdcStreamScanManager.GetStreamPathId(cookie);
+                const auto* info = CdcStreamScanManager.Get(streamPathId);
+                const auto replyTo = info->ReplyTo;
+                auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
+                response->Record.SetTabletId(TabletID());
+                info->TablePathId.ToProto(response->Record.MutableTablePathId());
+                streamPathId.ToProto(response->Record.MutableStreamPathId());
+                info->Stats.Serialize(*response->Record.MutableStats());
+
+                if (status == NTable::EStatus::Done) {
+                    response->Record.SetStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
+                    CdcStreamScanManager.Complete(cookie);
+                } else {
+                    response->Record.SetStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
+                    // keep the progress, so the retry resumes from the last key
+                    CdcStreamScanManager.Fail(cookie);
+                }
+
+                ctx.Send(replyTo, std::move(response));
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
                     {"tabletId", TabletID()},

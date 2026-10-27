@@ -68,8 +68,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <roaring/portability.h>
 #if CROARING_REGULAR_VISUAL_STUDIO
 #include <intrin.h>
-#elif (defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)) || \
-    defined(__FILC__)
+#elif CROARING_IS_X64 &&                                            \
+    ((defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)) || \
+     defined(__FILC__))
 #include <cpuid.h>
 #endif  // CROARING_REGULAR_VISUAL_STUDIO
 #include <roaring/isadetection.h>

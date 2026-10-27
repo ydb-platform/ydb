@@ -4,14 +4,15 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
 
-#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NFq::NRowDispatcher {
 
 class TTypeParser {
 public:
-    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
+    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters,
+        NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTypeParser();
 
     TValueStatus<NKikimr::NMiniKQL::TType*> ParseTypeYson(const TString& typeYson) const;
@@ -25,7 +26,7 @@ protected:
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
 };
 
-class TTopicParserBase : public ITopicParser, public TTypeParser {
+class TTopicParserBase: public ITopicParser, public TTypeParser {
 private:
     struct TStats {
         void AddParserLatency(TDuration parserLatency);
@@ -40,7 +41,9 @@ public:
     using TPtr = TIntrusivePtr<TTopicParserBase>;
 
 public:
-    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
+    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters,
+        NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTopicParserBase() = default;
 
 public:
@@ -70,4 +73,4 @@ TValueStatus<NYql::NUdf::EDataSlot> GetDataSlot(const NKikimr::NMiniKQL::TType* 
 
 TString TruncateString(std::string_view rawString, size_t maxSize = 1_KB);
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

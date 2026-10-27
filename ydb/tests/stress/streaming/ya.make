@@ -1,5 +1,7 @@
 PY3_PROGRAM(streaming)
 
+STYLE_PYTHON()
+
 PY_SRCS(
     __main__.py
 )

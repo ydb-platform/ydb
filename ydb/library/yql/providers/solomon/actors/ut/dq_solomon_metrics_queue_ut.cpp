@@ -1,9 +1,9 @@
-#include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
-#include <ydb/library/yql/providers/solomon/events/events.h>
-
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
+#include <ydb/library/yql/providers/solomon/events/events.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
@@ -16,40 +16,54 @@ using TRequest = TEvSolomonProvider::TEvGetNextBatch;
 using TBatch = TEvSolomonProvider::TEvMetricsBatch;
 using TAck = TEvSolomonProvider::TEvAck;
 using TUpdate = TEvSolomonProvider::TEvUpdateConsumersCount;
-size_t Count(const TBatch& batch) { return batch.Record.MetricsSize(); }
-bool Finished(const TBatch& batch) { return batch.Record.GetNoMoreMetrics(); }
-TString Item(const TBatch& batch) { return batch.Record.GetMetrics(0).GetType(); }
 
-class TClient : public NSo::ISolomonAccessorClient {
+size_t Count(const TBatch& batch) {
+    return batch.Record.MetricsSize();
+}
+
+bool Finished(const TBatch& batch) {
+    return batch.Record.GetNoMoreMetrics();
+}
+
+TString Item(const TBatch& batch) {
+    return batch.Record.GetMetrics(0).GetType();
+}
+
+class TClient: public NSo::ISolomonAccessorClient {
 public:
     NThreading::TPromise<NSo::TListMetricsResponse> Listing = NThreading::NewPromise<NSo::TListMetricsResponse>();
 
     NThreading::TFuture<NSo::TListMetricsLabelsResponse> ListMetricsLabels(const NSo::TSelectors&, TInstant, TInstant) const override {
-        return NThreading::MakeFuture(NSo::TListMetricsLabelsResponse(NSo::TListMetricsLabelsResult{{}, 2}, 10));
+        return NThreading::MakeFuture(NSo::TListMetricsLabelsResponse(NSo::TListMetricsLabelsResult{ {}, 2 }, 10));
     }
+
     NThreading::TFuture<NSo::TListMetricsResponse> ListMetrics(const NSo::TSelectors&, TInstant, TInstant) const override {
         return Listing.GetFuture();
     }
+
     NThreading::TFuture<NSo::TGetLabelsResponse> GetLabelNames(const NSo::TSelectors&, TInstant, TInstant) const override {
         UNIT_FAIL("Unexpected GetLabelNames");
         return {};
     }
+
     NThreading::TFuture<NSo::TGetPointsCountResponse> GetPointsCount(const NSo::TSelectors&, TInstant, TInstant) const override {
         UNIT_FAIL("Unexpected GetPointsCount");
         return {};
     }
+
     NThreading::TFuture<NSo::TGetDataResponse> GetData(const NSo::TSelectors&, TInstant, TInstant) const override {
         UNIT_FAIL("Unexpected GetData");
         return {};
     }
+
     NThreading::TFuture<NSo::TGetDataResponse> GetData(const TString&, TInstant, TInstant) const override {
         UNIT_FAIL("Unexpected GetData");
         return {};
     }
 };
 
-struct TFixture : public NUnitTest::TBaseFixture {
-    TTestActorRuntimeBase Runtime{2};
+struct TFixture: public NUnitTest::TBaseFixture {
+    TTestActorRuntimeBase Runtime{ 2 };
     TActorId QueueId;
     TActorId Consumer;
     std::deque<THolder<IEventHandle>> Responses;
@@ -59,8 +73,8 @@ struct TFixture : public NUnitTest::TBaseFixture {
 
     TFixture() {
         Runtime.Initialize();
-        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+        Runtime.GetLogSettings(0)->Append(
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
         Consumer = Runtime.AllocateEdgeActor(1);
         // Keep transport deterministic: capture remote output and drive connection
         // notifications explicitly, without a live interconnect or wall-clock timers.
@@ -70,8 +84,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
                     ++Unsubscribes;
                     return true;
                 }
-                if (ev->Type >= TEvSolomonProvider::EvBegin
-                    && ev->Type < TEvSolomonProvider::EvEnd) {
+                if (ev->Type >= TEvSolomonProvider::EvBegin && ev->Type < TEvSolomonProvider::EvEnd) {
                     Responses.emplace_back(ev.Release());
                     return true;
                 }
@@ -110,7 +123,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
     void CompleteListing(ui32 items) {
         NSo::TListMetricsResult result{};
         for (ui32 i = 0; i < items; ++i) {
-            result.Metrics.push_back({{}, TStringBuilder() << "metric-" << i});
+            result.Metrics.push_back({ {}, TStringBuilder() << "metric-" << i });
         }
         result.TotalCount = items;
         result.PagesCount = 1;
@@ -171,7 +184,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TSolomonMetricsQueueRetry) {
     Y_UNIT_TEST_F(DisconnectedConsumerFailsWholeQueue, TFixture) {
@@ -211,10 +224,10 @@ Y_UNIT_TEST_SUITE(TSolomonMetricsQueueRetry) {
         UNIT_ASSERT_VALUES_EQUAL(Pop(1, 1)->Record.SerializeAsString(), original);
         Disconnect();
         UNIT_ASSERT_VALUES_EQUAL(DisconnectDeadlines.size(), 2);
-        ExpireDeadline(); // First outage's timer must not expire the second outage.
+        ExpireDeadline();   // First outage's timer must not expire the second outage.
         Connect();
         UNIT_ASSERT_VALUES_EQUAL(Pop(1, 1)->Record.SerializeAsString(), original);
-        ExpireDeadline(); // Second outage has also recovered.
+        ExpireDeadline();   // Second outage has also recovered.
         Send(new TRequest(), 2, 1);
         UNIT_ASSERT_VALUES_EQUAL(Item(*Pop(2, 2)), "metric-1");
     }
@@ -225,8 +238,8 @@ Y_UNIT_TEST_SUITE(TSolomonMetricsQueueRetry) {
         Connect();
         Pop(1, 1);
         for (unsigned i = 0; i != 2; ++i) {
-            Runtime.Send(new IEventHandle(QueueId, Consumer,
-                new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::Disconnected)));
+            Runtime.Send(
+                new IEventHandle(QueueId, Consumer, new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::Disconnected)));
             Pump();
         }
         UNIT_ASSERT_VALUES_EQUAL(DisconnectDeadlines.size(), 1);
@@ -334,8 +347,8 @@ Y_UNIT_TEST_SUITE(TSolomonMetricsQueueRetry) {
         Send(new TRequest(), 1, 0, other);
         Connect();
         Responses.clear();
-        Runtime.Send(new IEventHandle(QueueId, Consumer,
-            new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
+        Runtime.Send(
+            new IEventHandle(QueueId, Consumer, new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
         Pump();
         UNIT_ASSERT_VALUES_EQUAL(Unsubscribes, 0);
         Reconnect();
@@ -401,8 +414,8 @@ Y_UNIT_TEST_SUITE(TSolomonMetricsQueueRetry) {
         UNIT_ASSERT_VALUES_EQUAL(error->Record.GetIssues(), "listing failed");
         Send(new TRequest(), 1);
         Reconnect();
-        UNIT_ASSERT_VALUES_EQUAL(Pop<TEvSolomonProvider::TEvMetricsReadError>(1, 1)->Record.SerializeAsString(),
-            error->Record.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            Pop<TEvSolomonProvider::TEvMetricsReadError>(1, 1)->Record.SerializeAsString(), error->Record.SerializeAsString());
         UNIT_ASSERT(Responses.empty());
     }
 

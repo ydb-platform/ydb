@@ -79,6 +79,13 @@ namespace NActors {
 #endif
 
     void TActorCoroImpl::Destroy() {
+#if CORO_THROUGH_THREADS
+        // the worker thread is started by the bootstrap, so there is nobody to resume in an actor destroyed before it,
+        // e.g. by the actor system Stop while its bootstrap is still queued
+        if (!WorkerThread.joinable()) {
+            return;
+        }
+#endif
         if (!Finished) { // only resume when we have bootstrapped and Run() was entered and not yet finished; in other case simply terminate
             InvokedFromDtor = true;
             Resume(nullptr);

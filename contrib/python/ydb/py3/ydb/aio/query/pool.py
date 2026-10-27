@@ -22,7 +22,7 @@ from ...query.base import BaseQueryTxMode, QueryExplainResultFormat
 from ...query.base import QueryClientSettings
 from ... import convert
 from ... import issues
-from ...observability.metrics import QuerySessionPoolMetrics
+from ...observability.metrics import create_query_session_pool_metrics
 from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
@@ -55,7 +55,7 @@ class QuerySessionPool:
         self._current_size = 0
         self._loop = asyncio.get_running_loop() if loop is None else loop
         self._query_client_settings = query_client_settings
-        self._metrics = QuerySessionPoolMetrics(name, driver, self._size)
+        self._metrics = create_query_session_pool_metrics(name, driver, self._size)
 
     async def _create_new_session(self):
         session = QuerySession(self._driver, settings=self._query_client_settings)
@@ -279,6 +279,7 @@ class QuerySessionPool:
         while True:
             try:
                 session = self._queue.get_nowait()
+                session._session_metrics.count_closed("pool_graceful_shutdown")
                 tasks.append(session.delete())
             except asyncio.QueueEmpty:
                 break

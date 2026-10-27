@@ -35,19 +35,20 @@ class NbsTestBase:
     @pytest.fixture(autouse=True)
     def setup(self):
         nbs_database_name = "/Root/NBS"
-        self.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                enable_nbs=True,
-                nbs_database_name=nbs_database_name,
-                additional_log_configs={
-                    'NBS_PARTITION': LogLevels.INFO,
-                    'NBS2_LOAD_TEST': LogLevels.DEBUG,
-                    'NBS_VOLUME': LogLevels.DEBUG,
-                    'NBS_SS_PROXY': LogLevels.DEBUG,
-                },
-            )
+        configurator = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            enable_nbs=True,
+            nbs_database_name=nbs_database_name,
+            additional_log_configs={
+                'NBS_PARTITION': LogLevels.INFO,
+                'NBS2_LOAD_TEST': LogLevels.DEBUG,
+                'NBS_VOLUME': LogLevels.DEBUG,
+                'NBS_SS_PROXY': LogLevels.DEBUG,
+            },
         )
+        # These load-actor/vhost tests are not limited to a single disk.
+        configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
+        self.cluster = KiKiMR(configurator)
         self.cluster.start()
         self.start_nbs(nbs_database_name)
 
@@ -247,7 +248,7 @@ class NbsTestBase:
     def fetch_pbuffer_page(self, pb_service_ids):
         """
         Fetch Persistent Buffer mon pages for the given service ids (grouped by
-        node — the mon actor only lists local PBuffers), with tablet LSN table.
+        node — the mon actor only lists local PBuffers).
         """
         by_node = {}
         for pb in pb_service_ids:
@@ -258,7 +259,6 @@ class NbsTestBase:
             params = [
                 ('formPresent', '1'),
                 ('describeFreeSpace', '0'),
-                ('showTablets', '1'),
                 ('autoRefresh', '0'),
             ]
             for pb in pbs:
@@ -268,6 +268,31 @@ class NbsTestBase:
                 self.fetch_mon(f'/node/{node_id}/actors/persistent_buffer?{query}')
             )
         return '\n'.join(pages)
+
+    def fetch_pbuffer_tablets(self, pb_service_ids, tablet_id, allow_missing=False):
+        """Fetch all namespaces of a tablet through the paginated PBuffer API."""
+        tablets = []
+        for pb in pb_service_ids:
+            node_id = self.pbuffer_node_id(pb)
+            page = 0
+            while True:
+                query = urllib.parse.urlencode({
+                    'action': 'tablets', 'pb': pb, 'tabletId': str(tablet_id), 'page': page,
+                })
+                url = f'{self.mon_base_url()}/node/{node_id}/actors/persistent_buffer?{query}'
+                response = requests.get(url, timeout=10)
+                if allow_missing and response.status_code == 404:
+                    break
+                assert response.status_code == 200, (
+                    f"PBuffer tablets request failed: {url} status={response.status_code} "
+                    f"body={response.text[:500]}"
+                )
+                data = response.json()
+                tablets.extend(data['tablets'])
+                page = data['page'] + 1
+                if page >= data['pages']:
+                    break
+        return tablets
 
     @staticmethod
     def parse_dbg_indexes(html):
@@ -370,20 +395,27 @@ class NbsTestBase:
         )
 
     def get_load_actor_adapter_actor_id(self, disk_id):
-        get_load_actor_res = json.loads(
-            execute_dstool_grpc(
-                self.cluster,
-                "token",
-                ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+        """
+        Return the load-actor adapter id once the partition has registered it.
+
+        A zero id means the tablet answered before the adapter existed.
+        """
+        deadline = time.time() + 40
+        last = None
+        while time.time() < deadline:
+            last = json.loads(
+                execute_dstool_grpc(
+                    self.cluster,
+                    "token",
+                    ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+                )
             )
-        )
-
-        status = get_load_actor_res["status"]
-        actor_id = get_load_actor_res["actorId"]
-        assert status == "success"
-        assert actor_id != ""
-
-        return actor_id
+            status = last.get("status")
+            actor_id = last.get("actorId") or ""
+            if status == "success" and actor_id not in ("", "[0:0:0]"):
+                return actor_id
+            time.sleep(1)
+        assert False, f"Load actor adapter is not ready for disk {disk_id}: {last}"
 
     def write(self, actor_id, index, data):
         execute_dstool_grpc(
@@ -562,7 +594,7 @@ class NbsTestBase:
         """
         # Verify basic success (Result field may not be present, which means success)
         if 'Result' in results:
-            assert results['Result'] == 0, "Load actor run finished with error"
+            assert results['Result'] == 0, f"Load actor run finished with error: {results}"
 
         # Verify IOPS and throughput are non-zero
         assert 'Iops' in results, f"Missing Iops in results: {results}"

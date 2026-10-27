@@ -6,4 +6,4 @@ std::vector<IClassBehaviour::TPtr> TFetcher::DoGetManagers() const {
     return { TDBInitialization::GetBehaviour() };
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

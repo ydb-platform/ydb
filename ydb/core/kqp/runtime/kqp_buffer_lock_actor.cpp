@@ -1,4 +1,5 @@
 #include "kqp_buffer_lock_actor.h"
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -65,10 +66,9 @@ private:
 public:
     TKqpBufferLockActor(TKqpBufferLockSettings&& settings)
         : Settings(std::move(settings))
-        , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
+        , Partitioning(Settings.TxManager->GetTableMeta(Settings.TableId).InitialPartitioning)
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
-            << "SessionActorId: " << Settings.SessionActorId)
-        , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
+            << "SessionActorId: " << Settings.SessionActorId) {
     }
 
     void Bootstrap() {
@@ -82,6 +82,7 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOCK_ACTOR";
 
     void PassAway() final {
+        EndQueryTraceSpan(LockActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
         if (!LockSendTime.empty()) {
@@ -113,8 +114,6 @@ public:
         Unlink();
 
         TActorBootstrapped<TKqpBufferLockActor>::PassAway();
-
-        LockActorSpan.End();
     }
 
     void Terminate() override {
@@ -123,6 +122,7 @@ public:
 
     void Unlink() override {
         AFL_ENSURE(LockIdToState.empty());
+        EndQueryTraceSpan(LockActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
             state.HasPipe = false;
@@ -160,8 +160,12 @@ public:
             ui64 cookie,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             bool skipAbsent,
-            const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot) override
+            const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot,
+            const NWilson::TTraceId& traceId) override
     {
+        if (!LockActorSpan) {
+            LockActorSpan = NWilson::TSpan(TWilsonKqp::LockActor, NWilson::TTraceId(traceId), "Lock rows");
+        }
         AFL_ENSURE(mvccSnapshot.GetStep() || mvccSnapshot.GetTxId()); // Snapshot must be set for the operation.
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
@@ -219,7 +223,7 @@ public:
 
     void StartLockTask(ui64 cookie, TLockState& state) {
         auto& worker = state.Worker;
-        worker->BuildLockRequests(Partitioning, LockRequestId);
+        worker->BuildLockRequests(Partitioning.GetPartitioning(), LockRequestId);
 
         while (true) {
             auto [shardId, lockRequest] = worker->PopNextLockRequest();
@@ -271,8 +275,6 @@ public:
             {"requestId", record.GetRequestId()},
             {"shardId", shardId});
 
-        Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
-
         auto& shardState = ShardToState[shardId];
         const bool needToCreatePipe = !shardState.HasPipe;
 
@@ -291,6 +293,11 @@ public:
             LockActorSpan.GetTraceId());
 
         shardState.HasPipe = true;
+
+        if (Settings.CollectShardMetas && !ShardMetas.contains(shardId)) {
+            AFL_ENSURE(Partitioning);
+            ShardMetas[shardId] = MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size());
+        }
 
         AFL_ENSURE(LockIdToState.emplace(
             requestId,
@@ -314,13 +321,16 @@ public:
             return;
         }
 
-        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
-
         auto& requestState = requestIt->second;
         const auto shardId = requestState.ShardId;
         const auto cookie = requestState.LockCookie;
 
-        Y_UNUSED(shardId);
+        if (Settings.CollectShardMetas) {
+            Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
+        } else {
+            Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
+        }
+        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& lockState = CookieToLockState.at(cookie);
         AFL_ENSURE(lockState.Worker);
@@ -435,6 +445,14 @@ public:
 
         Settings.Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
         Settings.Counters->LockedRowsCount->Add(record.LockedKeysSize());
+
+        // The shard is a pessimistic-lock commit participant only when it
+        // actually holds locks: a success result with no taken locks (e.g. all
+        // rows were absent and skipped) must not make it participate, or the
+        // commit would wait forever for a prepare that is never sent to it.
+        if (!record.GetLocks().empty()) {
+            Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK, Settings.QuerySpanId);
+        }
 
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));
@@ -574,7 +592,7 @@ public:
             {"table", Settings.TablePath});
         ResolveShardsInProgress = true;
 
-        Partitioning.reset();
+        Partitioning.Reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings.Database;
@@ -588,7 +606,7 @@ public:
 
         Settings.Counters->IteratorsShardResolve->Inc();
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, LockActorSpan.GetTraceId());
         return true;
     }
 
@@ -610,7 +628,7 @@ public:
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-        Partitioning = resultSet[0].KeyDescription->Partitioning;
+        Partitioning = TShardPartitionIndex(resultSet[0].KeyDescription->Partitioning);
 
         ProcessResolveResult();
     }
@@ -675,7 +693,8 @@ public:
 
 private:
     TKqpBufferLockSettings Settings;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
+    THashMap<ui64, TShardMeta> ShardMetas;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

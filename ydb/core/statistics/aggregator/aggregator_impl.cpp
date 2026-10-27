@@ -88,6 +88,8 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
         bool enableColumnStatisticsOld = EnableColumnStatistics;
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        EnableBackgroundAnalyzeChangeRatio = featureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        EnableAnalyzeSampling = featureFlags.GetEnableAnalyzeSampling();
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
             StartTraversalScheduler();
@@ -777,14 +779,6 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
 
-                if (!*isKnown) {
-                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
-                        {"tabletId", TabletID()},
-                        {"pathId", operationTable.PathId});
-                    DeleteStatisticsFromTable();
-                    return;
-                }
-
                 TraversalStartTime = TInstant::Now();
                 LastTraversalWasForce = true;
 
@@ -886,7 +880,10 @@ void TStatisticsAggregator::FinishTraversal(
     bool traversalSucceeded = (status == NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
     auto pathIt = ScheduleTraversals.find(pathId);
-    if (pathIt != ScheduleTraversals.end()) {
+    const auto* table = CurrentForceTraversalTable();
+    // A sample does not refresh the full statistics used by background ANALYZE.
+    if (pathIt != ScheduleTraversals.end()
+            && (!table || table->SampleRate == 1.0)) {
         auto& traversalTable = pathIt->second;
         traversalTable.LastUpdateTime = TraversalStartTime;
 
@@ -1456,6 +1453,9 @@ const NKikimrStat::TPathEntry* TStatisticsAggregator::FindBaseStatisticsEntry(
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
 {
+    if (!EnableBackgroundAnalyzeChangeRatio) {
+        return false;
+    }
     if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
         // Never analyzed — but only treat as stale once SchemeShard has sent
         // real counters. Otherwise FinishTraversal would keep baselining at

@@ -71,8 +71,9 @@ class TestTopicBalancingAutoPartitioningWorkload(StressFixture):
 
     @pytest.mark.parametrize("sdk", ["scale_aware_sdk", "old_sdk"])
     def test_read(self, sdk):
-        # Finish-only: ScaleAware unlocks children on Finish; old SDK needs
-        # from-end or the delay heuristic.
+        # Finish-only: ScaleAware unlocks children on Finish. The old SDK
+        # workload lets the balancer take a sealed parent and assign it once,
+        # then commits that parent so later delays stay inside the lag budget.
         self._run([
             "--path", f"topic_balancing_read_{sdk}",
             *self._sdk_args(sdk),

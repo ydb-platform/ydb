@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 GENERATE_ENUM_SERIALIZATION(dbg_connections.h)
@@ -49,6 +49,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    session
     dirty_map
     model
     mon_page

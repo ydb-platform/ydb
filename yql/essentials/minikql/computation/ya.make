@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     mkql_block_builder.cpp
@@ -44,8 +44,6 @@ CFLAGS(
 )
 
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

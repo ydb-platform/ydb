@@ -49,7 +49,7 @@ jobs:
         env:
           YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
           YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDB_GH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
+          YDB_GH_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.event.sender.login }}
           YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
           YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}

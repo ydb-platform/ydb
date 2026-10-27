@@ -390,7 +390,7 @@ protected:
             case NKikimrProto::OK:
             case NKikimrProto::ALREADY:
                 Blackboard.AddPutOkResponse(blobId, orderNumber);
-                WrittenBeyondBarrier[blobIdx] = record.GetWrittenBeyondBarrier();
+                WrittenBeyondBarrier[blobIdx] = WrittenBeyondBarrier[blobIdx] || record.GetWrittenBeyondBarrier();
                 break;
             default:
                 Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());

@@ -141,6 +141,7 @@
 /ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
 /ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
 /ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
+/ydb/tests/functional/federation_test @ydb-platform/Topics
 /ydb/tests/stress/topic/ @ydb-platform/Topics
 /ydb/tests/stress/topic_kafka/ @ydb-platform/Topics
 /ydb/tests/stress/topic_sqs/ @ydb-platform/Topics
@@ -156,6 +157,8 @@
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/generic @ydb-platform/fq
+/ydb/library/yql/providers/native @ydb-platform/fq
+/ydb/library/yql/providers/ydb_external @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq

@@ -1,0 +1,11 @@
+USE plato;
+
+PRAGMA config.flags("ShowLinksInPlan");
+PRAGMA DqEngine = "force";
+PRAGMA dq.FallbackPolicy = "never";
+
+SELECT
+    key,
+    Math::Abs(CAST(subkey AS Double)) AS abs_subkey
+FROM Input
+ORDER BY key;

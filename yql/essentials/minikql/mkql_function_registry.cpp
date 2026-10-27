@@ -119,7 +119,6 @@ public:
         , Builtins_(rhs.Builtins_)
         , LoadedLibraries_(rhs.LoadedLibraries_)
         , UdfModules_(rhs.UdfModules_)
-        , SupportsSizedAllocators_(rhs.SupportsSizedAllocators_)
     {
     }
 
@@ -169,9 +168,6 @@ public:
                                                                   << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
                                                                   << " " << UDF_ABI_VERSION_MINOR << " 0) macro in ya.make");
             lib->AbiVersion = version;
-            if (version < NUdf::MakeAbiVersion(2, 8, 0)) {
-                SupportsSizedAllocators_ = false;
-            }
 
 #if defined(_win_) || defined(_darwin_)
             auto bindSymbolsFunc = reinterpret_cast<NUdf::TBindSymbolsFunctionPtr>(lib->Lib.Sym(BindSymbolsFuncName));
@@ -365,10 +361,6 @@ public:
         return sink.Functions;
     }
 
-    bool SupportsSizedAllocators() const override {
-        return SupportsSizedAllocators_;
-    }
-
     void PrintInfoTo(IOutputStream& out) const override {
         Builtins_->PrintInfoTo(out);
     }
@@ -385,6 +377,13 @@ public:
 
     void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
         BackTraceCallback_ = callback;
+        if (callback) {
+            for (const auto& library : NUdf::GetStaticUdfLibraryList()) {
+                if (library->SetBackTraceCallback) {
+                    library->SetBackTraceCallback(callback);
+                }
+            }
+        }
     }
 
 private:
@@ -395,7 +394,6 @@ private:
     THolder<TMemoryUsageInfo> UdfMemoryInfo_;
     TUdfModulePathsMap SystemModulePaths_;
     NUdf::TBackTraceCallback BackTraceCallback_ = nullptr;
-    bool SupportsSizedAllocators_ = true;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -462,10 +460,6 @@ public:
         return TFunctionsMap();
     }
 
-    bool SupportsSizedAllocators() const override {
-        return true;
-    }
-
     void PrintInfoTo(IOutputStream& out) const override {
         Builtins_->PrintInfoTo(out);
     }
@@ -479,6 +473,25 @@ public:
 
 private:
     const IBuiltinFunctionRegistry::TPtr Builtins_;
+};
+
+class TStaticModuleLoader final: public NUdf::IRegistrator {
+public:
+    TStaticModuleLoader(IMutableFunctionRegistry& registry, bool skipLoaded)
+        : Registry_(registry)
+        , SkipLoaded_(skipLoaded)
+    {
+    }
+
+    void AddModule(const NUdf::TStringRef& name, NUdf::TUniquePtr<NUdf::IUdfModule> module) override {
+        if (!SkipLoaded_ || !Registry_.IsLoadedUdfModule(name)) {
+            Registry_.AddModule(TString(StaticModulePrefix) + name, name, std::move(module));
+        }
+    }
+
+private:
+    IMutableFunctionRegistry& Registry_;
+    const bool SkipLoaded_;
 };
 
 } // namespace
@@ -571,10 +584,14 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     return registry.Release();
 }
 
-void FillStaticModules(IMutableFunctionRegistry& registry) {
-    for (const auto& wrapper : NUdf::GetStaticUdfModuleWrapperList()) {
-        auto [name, ptr] = wrapper();
-        registry.AddModule(TString(StaticModulePrefix) + name, name, std::move(ptr));
+void FillStaticModules(IMutableFunctionRegistry& registry, bool skipLoaded) {
+    TStaticModuleLoader loader(registry, skipLoaded);
+
+    for (const auto& library : NUdf::GetStaticUdfLibraryList()) {
+        const ui32 version = library->AbiVersion;
+        Y_ENSURE(NUdf::IsAbiCompatible(version) && version >= NUdf::MakeAbiVersion(2, 8, 0),
+                 "Incompatible static UDF ABI version: " << NUdf::AbiVersionToStr(version));
+        library->Register(loader, 0);
     }
 }
 

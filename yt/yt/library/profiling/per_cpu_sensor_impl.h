@@ -3,18 +3,22 @@
 #include "impl.h"
 #include "summary.h"
 
-#include <library/cpp/yt/system/tscp.h>
+#include <library/cpp/yt/cpu_clock/public.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The sharded counters and gauge below index a fixed per-processor array by the current CPU and update
-// the shard with a plain atomic. They are the default hot implementation and the fallback
-// everywhere the rseq fast path is not enabled; the rseq-backed counterparts live in
-// yt/yt/library/profiling/rseq and are selected at construction time (see registry.cpp).
+constexpr int PerCpuShardCount = 64;
+
+////////////////////////////////////////////////////////////////////////////////
+
+// The sharded counters and gauge below use an approximate shard selector and update the selected
+// shard with a plain atomic. They are the default hot implementation and the fallback everywhere
+// the rseq fast path is not enabled; the rseq-backed counterparts live in yt/yt/library/profiling/rseq
+// and are selected at construction time (see registry.cpp).
 
 class TPerCpuCounter
     : public ICounter
@@ -30,10 +34,10 @@ private:
         std::atomic<i64> Value = 0;
     };
 
-    std::array<TShard, TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, PerCpuShardCount> Shards_;
 };
 
-static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
+static_assert(sizeof(TPerCpuCounter) == 64 + PerCpuShardCount * 64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,10 +55,10 @@ private:
         std::atomic<TDuration::TValue> Value = 0;
     };
 
-    std::array<TShard, TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, PerCpuShardCount> Shards_;
 };
 
-static_assert(sizeof(TPerCpuTimeCounter) == 64 + 64 * 64);
+static_assert(sizeof(TPerCpuTimeCounter) == 64 + PerCpuShardCount * 64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,11 +94,11 @@ private:
     static_assert(std::atomic<TWrite>::is_always_lock_free);
 #endif
 
-    std::array<TShard, TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, PerCpuShardCount> Shards_;
 };
 
 // One cache line larger than the counters: IGauge inherits TRefCounted virtually.
-static_assert(sizeof(TPerCpuGauge) == 2 * 64 + 64 * 64);
+static_assert(sizeof(TPerCpuGauge) == 2 * 64 + PerCpuShardCount * 64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,13 +115,13 @@ public:
 private:
     struct alignas(CacheLineSize) TShard
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         TSummarySnapshot<T> Value;
         // Lock-free fast path for the collect sweep: skip the lock for shards with no samples.
         std::atomic<bool> Empty = true;
     };
 
-    std::array<TShard, TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, PerCpuShardCount> Shards_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TPerCpuSummary<double>)

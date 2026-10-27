@@ -16,8 +16,8 @@
 #include <contrib/libs/grpc/src/core/lib/channel/call_tracer.h>
 #include <contrib/libs/grpc/src/core/lib/surface/call.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -119,6 +119,11 @@ public:
 
     std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
     { return {}; }
+
+    void AddOptionalLabels(
+        OptionalLabelComponent /* component */,
+        std::shared_ptr<std::map<TString, TString>> /* labels */) override
+    { }
 
 private:
     AtomicError Error_;
@@ -248,7 +253,7 @@ private:
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     TError TerminationError_;
     TGrpcLibraryLockPtr LibraryLock_ = TDispatcher::Get()->GetLibraryLock();
     TGrpcChannelPtr Channel_;
@@ -491,7 +496,7 @@ private:
 
         const NLogging::TLogger& Logger = GrpcLogger();
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseHandlerLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, ResponseHandlerLock_);
         IClientResponseHandlerPtr ResponseHandler_;
 
         // Completion queue must be accessed under read lock

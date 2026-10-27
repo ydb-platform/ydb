@@ -125,6 +125,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+
+        RebuildReplacing = 300,
     };
 
     struct TColumnBuildInfo {
@@ -208,6 +210,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     bool IsRebuild = false;
 
     TString IndexName;
+    // Empty for builds started before online rebuilds were supported.
+    TString RebuildIndexName;
+
+    const TString& GetBuildIndexName() const {
+        return RebuildIndexName.empty() ? IndexName : RebuildIndexName;
+    }
+
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
@@ -241,13 +250,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
             RebuildDrop,    // dropping old impl tables for rebuild
             RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -584,6 +595,7 @@ public:
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
         indexInfo->CancelRequested =

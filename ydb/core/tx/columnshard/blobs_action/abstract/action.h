@@ -83,6 +83,7 @@ private:
     std::shared_ptr<IStoragesManager> Storages;
     THashMap<TString, TStorageAction> StorageActions;
     const NBlobOperations::EConsumer ConsumerId;
+    bool CacheAfterWrite = false;
 
     TStorageAction& GetStorageAction(const TString& storageId) {
         auto it = StorageActions.find(storageId);
@@ -178,8 +179,23 @@ public:
         return GetStorageAction(storageId).GetRemoving(ConsumerId);
     }
 
+    NBlobOperations::EConsumer GetConsumerId() const {
+        return ConsumerId;
+    }
+
+    void SetCacheAfterWrite(const bool value) {
+        CacheAfterWrite = value;
+        for (auto&& [_, action] : StorageActions) {
+            if (auto writing = action.GetWritingOptional()) {
+                writing->SetCacheAfterWrite(value);
+            }
+        }
+    }
+
     std::shared_ptr<IBlobsWritingAction> GetWriting(const TString& storageId) {
-        return GetStorageAction(storageId).GetWriting(ConsumerId);
+        auto writing = GetStorageAction(storageId).GetWriting(ConsumerId);
+        writing->SetCacheAfterWrite(CacheAfterWrite);
+        return writing;
     }
 
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {

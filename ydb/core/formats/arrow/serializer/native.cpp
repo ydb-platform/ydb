@@ -15,6 +15,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NSerialization {
 
 arrow::ipc::IpcOptions TNativeSerializer::BuildDefaultOptions() {
@@ -90,7 +92,10 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader reader(buffer);
-    AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", schema->num_fields());
+    YDB_LOG_TRACE("",
+        {"event", "parsing"},
+        {"size", data.size()},
+        {"columns", schema->num_fields()});
     auto batchResult = arrow::ipc::ReadRecordBatch(schema, &dictMemo, options, &reader);
     if (!batchResult.ok()) {
         return batchResult;
@@ -129,7 +134,10 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
 #ifndef NDEBUG
     TStatusValidator::GetValid(Deserialize(str, batch->schema()));
 #endif
-    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
+    YDB_LOG_DEBUG("",
+        {"event", "serialize"},
+        {"size", str.size()},
+        {"columns", batch->schema()->num_fields()});
     return str;
 }
 

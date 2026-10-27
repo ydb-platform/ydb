@@ -774,7 +774,7 @@ static char *create_jws_compact_serialization(
                                 ++curr;
                         }
 
-                        if (!rd_list_find(&scope, start, (void *)strcmp))
+                        if (!rd_list_find(&scope, start, rd_list_cmp_str))
                                 rd_list_add(&scope, rd_strdup(start));
 
                         if (scope_json_length == 0) {

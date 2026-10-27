@@ -676,13 +676,13 @@ IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TP
     return ret;
 }
 
-IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool expandCons) {
+IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types, bool expandCons) {
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas)) {
         return IGraphTransformer::TStatus::Ok;
     }
 
     YQL_PROFILE_SCOPE(DEBUG, "ExpandApply");
-    TOptimizeExprSettings settings(nullptr);
+    TOptimizeExprSettings settings(&types);
     auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->Content() == "WithOptionalArgs") {
             if (!EnsureArgsCount(*node, 2, ctx)) {
@@ -1012,18 +1012,18 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
     return ret;
 }
 
-IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/true);
+IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types) {
+    return ExpandApplyImpl(input, output, ctx, types, /*expandCons=*/true);
 }
 
-IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/false);
+IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types) {
+    return ExpandApplyImpl(input, output, ctx, types, /*expandCons=*/false);
 }
 
-IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types) {
     output = input;
     for (;;) {
-        auto status = ExpandApply(output, output, ctx);
+        auto status = ExpandApply(output, output, ctx, types);
         if (status.Level != IGraphTransformer::TStatus::Repeat) {
             return status;
         }

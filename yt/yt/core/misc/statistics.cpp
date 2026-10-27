@@ -1,5 +1,7 @@
 #include "statistics.h"
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include "statistic_path.h"
 
 #include <yt/yt/core/ypath/token.h>
@@ -58,16 +60,16 @@ void TSummary::Reset()
     Last_ = std::nullopt;
 }
 
-void TSummary::Persist(const TStreamPersistenceContext& context)
+void TSummary::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Sum_);
-    Persist(context, Count_);
-    Persist(context, Min_);
-    Persist(context, Max_);
-    Persist(context, Last_);
+    PHOENIX_REGISTER_FIELD(1, Sum_);
+    PHOENIX_REGISTER_FIELD(2, Count_);
+    PHOENIX_REGISTER_FIELD(3, Min_);
+    PHOENIX_REGISTER_FIELD(4, Max_);
+    PHOENIX_REGISTER_FIELD(5, Last_);
 }
+
+PHOENIX_DEFINE_TYPE(TSummary);
 
 void Serialize(const TSummary& summary, IYsonConsumer* consumer)
 {
@@ -180,12 +182,13 @@ void TStatistics::RemoveRangeByPrefix(const TStatisticPath& prefixPath)
     Data_.erase(range.begin(), range.end());
 }
 
-void TStatistics::Persist(const TStreamPersistenceContext& context)
+// NB: Timestamp_ is not registered; it is only used by the YSON representation.
+void TStatistics::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Data_);
+    PHOENIX_REGISTER_FIELD(1, Data_);
 }
+
+PHOENIX_DEFINE_TYPE(TStatistics);
 
 void Serialize(const TStatistics& statistics, IYsonConsumer* consumer)
 {

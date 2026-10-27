@@ -16,6 +16,8 @@
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 
+#include <type_traits>
+
 namespace NYql::NUdf {
 
 template <class T>
@@ -24,11 +26,18 @@ concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeIn
     { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
 };
 
+// Y_HAS_MEMBER derives from the class under test, which is ill-formed when that class is final.
+#define Y_HAS_ADDRESSABLE_MEMBER(name)     \
+    template <class T, class = void>       \
+    struct THas##name: std::false_type {}; \
+    template <class T>                     \
+    struct THas##name<T, std::void_t<decltype(&T::name)>>: std::true_type {}
+
 template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
-    Y_HAS_MEMBER(BuildPolyArgsWithVersion);
+    Y_HAS_ADDRESSABLE_MEMBER(BuildPolyArgsWithVersion);
 
 public:
     using TTypeAwareMarker = bool;
@@ -466,7 +475,7 @@ template <CUDF... TUdfs>
 class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
-    Y_HAS_MEMBER(BuildPolyArgs);
+    Y_HAS_ADDRESSABLE_MEMBER(BuildPolyArgs);
 
 public:
     void CleanupOnTerminate() const override {

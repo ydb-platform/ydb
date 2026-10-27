@@ -99,8 +99,6 @@ ELSE()
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
-
 PROVIDES(YT_CODEC_CODEGEN)
 
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)

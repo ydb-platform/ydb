@@ -2,14 +2,60 @@
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
+#include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
 namespace NKikimr::NStorage {
+
+    namespace {
+        std::optional<TString> ValidateStaticPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) {
+            const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+            try {
+                for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                    if (!group.HasBridgePileId() || !group.RingsSize()) {
+                        continue;
+                    }
+                    const auto pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                    if (!pileId || pileId.GetPileIndex() >= registry.PilesSize()) {
+                        continue;
+                    }
+                    auto settings = config.GetSelfManagementConfig();
+                    const auto& name = registry.GetPiles(pileId.GetPileIndex()).GetName();
+                    if (const auto *rule = FindStoragePoolPileOverride(config.GetBlobStorageConfig(), name, std::nullopt)) {
+                        ApplyStoragePoolPileOverride(settings, *rule);
+                    }
+                    auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies());
+                    if (settings.HasErasureSpecies() && !TBlobStorageGroupType::ParseErasureName(erasure, settings.GetErasureSpecies())) {
+                        return "invalid static group ErasureSpecies";
+                    }
+                    const NBsController::TGroupGeometryInfo geometry(TBlobStorageGroupType(erasure), settings.GetGeometry());
+                    if (erasure != group.GetErasureSpecies() || group.RingsSize() != geometry.GetNumFailRealms()) {
+                        return "storage pool pile override changes erasure or topology of existing static group";
+                    }
+                    for (const auto& realm : group.GetRings()) {
+                        if (realm.FailDomainsSize() != geometry.GetNumFailDomainsPerFailRealm()) {
+                            return "storage pool pile override changes topology of existing static group";
+                        }
+                        for (const auto& domain : realm.GetFailDomains()) {
+                            if (domain.VDiskLocationsSize() != geometry.GetNumVDisksPerFailDomain()) {
+                                return "storage pool pile override changes topology of existing static group";
+                            }
+                        }
+                    }
+                }
+            } catch (const std::exception& ex) {
+                return TStringBuilder() << "invalid static group pile override: " << ex.what();
+            }
+            return std::nullopt;
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Inter-config validation
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
-            const NKikimrBlobStorage::TNodeWardenServiceSet& proposed, const THashSet<ui32>& invalidatedNodeIds) {
+            const NKikimrBlobStorage::TNodeWardenServiceSet& proposed, const THashSet<ui32>& invalidatedNodeIds,
+            const THashSet<TBridgePileId>& removedPileIds) {
         THashMap<std::tuple<ui32, ui32>, std::tuple<TString, ui64>> pdisks;
         for (const auto& pdisk : current.GetPDisks()) {
             if (const auto [_, inserted] = pdisks.try_emplace(std::tuple(pdisk.GetNodeID(), pdisk.GetPDiskID()),
@@ -34,8 +80,13 @@ namespace NKikimr::NStorage {
         }
 
         THashMap<ui32, ui32> currentGroupGens;
+        THashSet<ui32> removedPartGroupIds; // parts of bridged groups in the piles being removed, they go away with VDisks
         for (const auto& group : current.GetGroups()) {
             currentGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
+            const auto bridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+            if (removedPileIds.contains(bridgePileId)) {
+                removedPartGroupIds.insert(group.GetGroupID());
+            }
         }
 
         // make a list of slots in current config
@@ -43,7 +94,8 @@ namespace NKikimr::NStorage {
         for (const auto& vslot : current.GetVDisks()) {
             TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
             const auto it = currentGroupGens.find(vdiskId.GroupID.GetRawId());
-            if (it == currentGroupGens.end() || it->second != vdiskId.GroupGeneration) {
+            if (it == currentGroupGens.end() || it->second != vdiskId.GroupGeneration ||
+                    removedPartGroupIds.contains(it->first)) {
                 continue;
             }
             vdiskId.GroupGeneration = 0;
@@ -100,6 +152,8 @@ namespace NKikimr::NStorage {
                 if (group.GetGroupGeneration() != currentGroup.GetGroupGeneration() &&
                         group.GetGroupGeneration() != currentGroup.GetGroupGeneration() + 1) {
                     return "incorrect group generation change";
+                } else if (removedPartGroupIds.contains(group.GetGroupID()) && !group.RingsSize()) {
+                    // inline pile of the pile being removed, the group stays as bridge proxy one only
                 } else if (group.GetErasureSpecies() != currentGroup.GetErasureSpecies()) {
                     return "sudden group ErasureSpecies change";
                 } else if (group.RingsSize() != currentGroup.RingsSize()) {
@@ -111,6 +165,9 @@ namespace NKikimr::NStorage {
             }
         }
 
+        for (const ui32 groupId : removedPartGroupIds) {
+            groupInfo.erase(groupId);
+        }
         if (!groupInfo.empty()) {
             return "groups disappeared from config";
         }
@@ -119,9 +176,11 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrConfig::TBlobStorageConfig& current,
-            const NKikimrConfig::TBlobStorageConfig& proposed, const THashSet<ui32>& invalidatedNodeIds) {
+            const NKikimrConfig::TBlobStorageConfig& proposed, const THashSet<ui32>& invalidatedNodeIds,
+            const THashSet<TBridgePileId>& removedPileIds) {
         if (current.HasServiceSet() && proposed.HasServiceSet()) {
-            if (auto error = ValidateConfigUpdate(current.GetServiceSet(), proposed.GetServiceSet(), invalidatedNodeIds)) {
+            if (auto error = ValidateConfigUpdate(current.GetServiceSet(), proposed.GetServiceSet(), invalidatedNodeIds,
+                    removedPileIds)) {
                 return error;
             }
         } else if (current.HasServiceSet()) {
@@ -141,6 +200,15 @@ namespace NKikimr::NStorage {
         if (auto error = ValidateConfig(proposed)) {
             return TStringBuilder() << "proposed config validation failed: " << *error;
         }
+        if (current.GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            if (auto error = ValidateStaticPileOverrides(proposed)) {
+                return error;
+            }
+        }
+        if (current.GetClusterStateDetails().GetNonUniformStorageEnabled()
+                && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()) {
+            return "non-uniform storage activation can't be disabled";
+        }
 
         THashMap<ui32, std::tuple<TString, ui16>> currentNodeMap;
         for (const auto& node : current.GetAllNodes()) {
@@ -157,9 +225,22 @@ namespace NKikimr::NStorage {
             }
         }
 
+        // piles becoming INACTIVE are removed from the cluster along with their parts of static groups
+        THashSet<TBridgePileId> removedPileIds;
+        if (current.HasClusterState() && proposed.HasClusterState()) {
+            for (size_t i = 0; i < current.GetClusterState().PerPileStateSize(); ++i) {
+                const auto pileId = TBridgePileId::FromPileIndex(i);
+                using TClusterState = NKikimrBridge::TClusterState;
+                if (NBridge::GetPileState(current.GetClusterState(), pileId) != TClusterState::INACTIVE &&
+                        NBridge::GetPileState(proposed.GetClusterState(), pileId) == TClusterState::INACTIVE) {
+                    removedPileIds.insert(pileId);
+                }
+            }
+        }
+
         if (current.HasBlobStorageConfig() && proposed.HasBlobStorageConfig()) {
             if (auto error = ValidateConfigUpdate(current.GetBlobStorageConfig(), proposed.GetBlobStorageConfig(),
-                    invalidatedNodeIds)) {
+                    invalidatedNodeIds, removedPileIds)) {
                 return error;
             }
         } else if (current.HasBlobStorageConfig()) {
@@ -291,17 +372,26 @@ namespace NKikimr::NStorage {
             } else if (!group.HasGroupGeneration()) {
                 return "GroupGeneration field missing";
             } else if (group.HasBridgeGroupState()) {
-                // TODO(alexvru): validate number of piles and so on
-                for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
+                // the set of piles is validated against cluster state, see below
+                const char *error = nullptr;
+                NBridge::FindGroupPile(group.GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     if (const auto it = groupMap.find(refGroupId); it == groupMap.end()) {
-                        return "missing referenced group";
+                        error = "missing referenced group";
                     } else if (it->second->GetGroupGeneration() != pile.GetGroupGeneration()) {
-                        return "incorrect referenced group generation";
+                        error = "incorrect referenced group generation";
                     }
+                    return error != nullptr;
+                });
+                if (error) {
+                    return error;
                 }
-                continue;
-            } else if (!group.HasErasureSpecies()) {
+                if (!group.HasBridgeProxyGroupId() || group.GetBridgeProxyGroupId() != group.GetGroupID()) {
+                    continue; // bridge proxy group has no VDisks of its own; inline pile has them and is validated below
+                }
+            }
+            if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }
 
@@ -381,6 +471,21 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfig(const NKikimrConfig::TBlobStorageConfig& config, const THashSet<ui32>& nodeIds) {
+        if (auto error = ValidateStoragePoolPileOverrides(config)) {
+            return error;
+        }
+        try {
+            for (const auto& rule : config.GetStoragePoolPileOverrides()) {
+                if (rule.HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies erasure;
+                    TBlobStorageGroupType::ParseErasureName(erasure, rule.GetErasureSpecies());
+                    const NBsController::TGroupGeometryInfo geometry(TBlobStorageGroupType(erasure), rule.GetGeometry());
+                }
+            }
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "invalid storage pool pile override geometry: " << ex.what();
+        }
+
         if (config.HasServiceSet()) {
             if (auto error = ValidateConfig(config.GetServiceSet(), nodeIds)) {
                 return error;
@@ -418,6 +523,74 @@ namespace NKikimr::NStorage {
             if (auto error = ValidateConfig(config.GetBlobStorageConfig(), nodeIds)) {
                 return error;
             }
+        }
+
+        if (const auto& details = config.GetClusterStateDetails(); details.GetNonUniformStorageEnabled()) {
+            if (!config.HasClusterState() || details.GetBscConversionPending()) {
+                return "non-uniform storage requires a bridged cluster with BSC conversion complete";
+            }
+            if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelNonUniformStorage) {
+                return "non-uniform storage requires the corresponding bridge feature level";
+            }
+        }
+
+        if (const auto& details = config.GetClusterStateDetails(); details.HasPileRegistry()) {
+            if (!config.HasClusterState()) {
+                return "PileRegistry is set for not bridged cluster";
+            } else if (auto error = NBridge::ValidatePileRegistry(details.GetPileRegistry(), config.GetClusterState())) {
+                return *error;
+            }
+        }
+
+        if (config.HasClusterState() && config.GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelPileOverrides) {
+                return "storage pool pile overrides require the corresponding bridge feature level";
+            }
+            const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+            for (const auto& rule : config.GetBlobStorageConfig().GetStoragePoolPileOverrides()) {
+                for (const auto& name : rule.GetPileName()) {
+                    bool found = false;
+                    for (const auto& pile : registry.GetPiles()) {
+                        found |= pile.HasName() && pile.GetName() == name;
+                    }
+                    if (!found) {
+                        return TStringBuilder() << "unknown pile in storage pool pile override: " << name;
+                    }
+                }
+            }
+            if (auto error = ValidateStaticPileOverrides(config)) {
+                return error;
+            }
+        }
+
+        if (config.HasClusterState()) {
+            // bridged static group has its part in every pile, except for INACTIVE ones
+            const auto& clusterState = config.GetClusterState();
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto& state = group.GetBridgeGroupState();
+                if (clusterState.PerPileStateSize() < state.PileSize()) {
+                    return TStringBuilder() << "bridged static group has more piles than ClusterState GroupId# "
+                        << group.GetGroupID();
+                }
+                for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
+                    const bool inactive = clusterState.GetPerPileState(i) == NKikimrBridge::TClusterState::INACTIVE;
+                    if (inactive != !NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(i))) {
+                        return TStringBuilder() << "bridged static group " << (inactive ? "has" : "lacks")
+                            << " its part in pile in state "
+                            << NKikimrBridge::TClusterState::EPileState_Name(clusterState.GetPerPileState(i))
+                            << " GroupId# " << group.GetGroupID() << " PileIndex# " << i;
+                    }
+                }
+            }
+        }
+
+        if (config.GetClusterStateDetails().GetBscConversionPending() &&
+                config.GetClusterState().PerPileStateSize() != 1) {
+            // piles can't be added until BSC converts its groups into bridged ones
+            return "BscConversionPending is set while ClusterState doesn't contain exactly one pile";
         }
 
         return {};

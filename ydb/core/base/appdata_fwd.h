@@ -4,6 +4,8 @@
 #include <ydb/core/base/event_filter.h>
 #include <util/generic/hash_set.h>
 
+#include <memory>
+
 class TProgramShouldContinue;
 class IRandomProvider;
 class ITimeProvider;
@@ -17,6 +19,9 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    namespace NPathAliasing {
+        class TPathNormalizer;
+    }
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -121,6 +126,11 @@ namespace NKikimr {
     class TDynamicControlBoard;
     class TFeatureFlags;
     class TMetricsConfig;
+
+    namespace NWorkloadManager {
+        class IGateway;
+        using IGatewayPtr = std::shared_ptr<IGateway>;
+    }
 }
 
 namespace NKikimr {
@@ -212,6 +222,9 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
+    // Compiled once before actors start; configuration changes require a restart.
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
@@ -283,6 +296,7 @@ struct TAppData {
     NKikimrConfig::TDataErasureConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
+    NWorkloadManager::IGatewayPtr WorkloadManagerGateway;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;

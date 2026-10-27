@@ -2,7 +2,7 @@
 
 LIBRARY()
 
-VERSION(1.60.2)
+VERSION(1.61.3)
 
 LICENSE(BSD-3-Clause)
 

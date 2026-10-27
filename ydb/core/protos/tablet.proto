@@ -297,6 +297,7 @@ message TEvMoveDataResponse {
     enum EStatus {
         Success = 0;
         ErrorGroupIdMismatch = 1;
+        NotEnoughSpace = 2;
     }
     optional EStatus Status = 2;
     optional string ErrorReason = 3;

@@ -1,5 +1,5 @@
 #include "json_value_path.h"
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 #include <arrow/array/array_binary.h>
 #include <ydb/core/formats/arrow/accessor/common/json_value_view.h>

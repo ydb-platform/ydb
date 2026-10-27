@@ -103,6 +103,7 @@ SRCS(
 
     crypto/config.cpp
     crypto/crypto.cpp
+    crypto/helpers.cpp
     crypto/tls.cpp
 
     logging/appendable_compressed_file.cpp
@@ -150,6 +151,7 @@ SRCS(
     misc/id_generator.cpp
     misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
+    misc/jitter.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
@@ -195,7 +197,6 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
@@ -435,6 +436,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         concurrency/benchmarks
         bus/benchmarks
         logging/benchmark
+        phoenix/benchmarks
         rpc/benchmark
         ypath/benchmarks
         yson/benchmark

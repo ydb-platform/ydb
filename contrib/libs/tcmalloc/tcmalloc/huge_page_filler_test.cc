@@ -17,13 +17,15 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
+#include <cstdio>
+#include <ctime>
+#include <optional>
 #include <random>
 #include <string>
-#include <thread>  // NOLINT(build/c++11)
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -31,20 +33,17 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/algorithm/container.h"
-#include "absl/base/attributes.h"
 #include "absl/base/internal/cycleclock.h"
-#include "absl/base/internal/sysinfo.h"
 #include "absl/base/macros.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
-#include "absl/memory/memory.h"
 #include "absl/random/random.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/synchronization/mutex.h"
-#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "tcmalloc/common.h"
 #include "tcmalloc/huge_cache.h"
@@ -53,6 +52,8 @@
 #include "tcmalloc/internal/clock.h"
 #include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/logging.h"
+#include "tcmalloc/internal/range_tracker.h"
+#include "tcmalloc/internal/residency.h"
 #include "tcmalloc/pages.h"
 #include "tcmalloc/span.h"
 #include "tcmalloc/stats.h"
@@ -261,6 +262,42 @@ class PageTrackerTest : public testing::Test {
     PageHeapSpinLockHolder l;
     return tracker_.ReleaseFree(mock_);
   }
+};
+
+class FakeResidency : public Residency {
+ public:
+  FakeResidency() : native_pages_in_huge_page_(kMaxResidencyBits) {}
+  explicit FakeResidency(size_t native_pages_in_huge_page) {
+    native_pages_in_huge_page_ = native_pages_in_huge_page;
+  };
+  std::optional<Info> Get(const void* addr, size_t size) override {
+    return std::nullopt;
+  };
+
+  // Returns a bitmap of pages that are unbacked and a bitmap of pages that are
+  // swapped.
+  // The histogram creates bitmaps with the following pattern:
+  // unbacked: h
+  // swapped: s
+  // | h | h |   |   |
+  // |   |   | s | s |
+  SinglePageBitmaps GetUnbackedAndSwappedBitmaps(const void* addr) override {
+    Bitmap<kMaxResidencyBits> page_unbacked;
+    Bitmap<kMaxResidencyBits> page_swapped;
+    ResidencyPageMap residency;
+    size_t kNativePagesInHugePage = residency.GetNativePagesInHugePage();
+    page_unbacked.SetRange(0, kNativePagesInHugePage / 2);
+    page_swapped.SetRange(kNativePagesInHugePage / 2,
+                          kNativePagesInHugePage / 2);
+    return SinglePageBitmaps{page_unbacked, page_swapped,
+                             absl::StatusCode::kOk};
+  };
+  size_t GetNativePagesInHugePage() const override {
+    return native_pages_in_huge_page_;
+  };
+
+ private:
+  size_t native_pages_in_huge_page_;
 };
 
 TEST_F(PageTrackerTest, AllocSane) {
@@ -615,6 +652,54 @@ TEST_F(PageTrackerTest, b151915873) {
                                   &small.normal_length[kMaxPages.raw_num()]));
 }
 
+TEST_F(PageTrackerTest, CountInfoInHugePage) {
+  // This test verifies that CountInfoInHugePage returns the correct number of
+  // free_swapped, used_swapped, used_unbacked, and non_free_non_used_unbacked
+  // pages.
+  // The test creates a hugepage with the following pattern:
+  // unbacked: h
+  // swapped: s
+  // used: u
+  // free: f
+
+  // | h | h |   |   |
+  // |   |   | s | s |
+  // | u |   | u |   |
+  // |   | f |   | f |
+
+  static const Length kAllocSize = kPagesPerHugePage / 4;
+  SpanAllocInfo info = {1, AccessDensityPrediction::kSparse};
+  Get(kAllocSize - Length(4), info);              // 60 used pages
+  PAlloc a2 = Get(kAllocSize, info);              // 64 free pages
+  Get(kAllocSize + Length(3), info);              // 67 used pages
+  PAlloc a4 = Get(kAllocSize + Length(1), info);  // 65 free pages
+  Put(a2);
+  Put(a4);
+  // We now have a hugepage that looks like [alloced] [free] [alloced] [free].
+  // The free parts should be released when we mark the hugepage as such,
+  // but not the allocated parts.
+  ExpectPages(a2, /*success=*/true);
+  ExpectPages(a4, /*success=*/false);
+  ReleaseFree();
+  mock_.VerifyAndClear();
+
+  EXPECT_EQ(tracker_.released_pages(), a2.n);
+  EXPECT_EQ(tracker_.free_pages(), a2.n + a4.n);
+
+  FakeResidency fake_residency;
+  FakeResidency::SinglePageBitmaps bitmaps =
+      fake_residency.GetUnbackedAndSwappedBitmaps(
+          tracker_.location().start_addr());
+  int native_pages_in_huge_page = fake_residency.GetNativePagesInHugePage();
+  PageTracker::NativePageCounterInfo counter_info =
+      tracker_.CountInfoInHugePage(bitmaps, native_pages_in_huge_page);
+
+  EXPECT_EQ(counter_info.n_free_swapped, native_pages_in_huge_page / 4 + 2);
+  EXPECT_EQ(counter_info.n_used_swapped, native_pages_in_huge_page / 4 - 2);
+  EXPECT_EQ(counter_info.n_used_unbacked, native_pages_in_huge_page / 4);
+  EXPECT_EQ(counter_info.n_non_free_non_used_unbacked,
+            native_pages_in_huge_page / 4);
+}
 class BlockingUnback final : public MemoryModifyFunction {
  public:
   constexpr BlockingUnback() = default;
@@ -1252,8 +1337,7 @@ TEST_P(FillerTest, ReleaseZero) {
   // Trying to release no pages should not crash.
   EXPECT_EQ(
       ReleasePages(Length(0),
-                   SkipSubreleaseIntervals{.short_interval = absl::Seconds(1),
-                                           .long_interval = absl::Seconds(1)}),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Seconds(1)}),
       Length(0));
 }
 
@@ -1931,8 +2015,46 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
   };
 
   {
-    // Skip subrelease feature is disabled if all intervals are zero.
+    // Uses peak interval for skipping subrelease. We should correctly skip
+    // 128 pages.
     SCOPED_TRACE("demand_pattern 1");
+    demand_pattern(absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3)},
+                   false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Repeats the "demand_pattern 1" test with additional short-term and
+    // long-term intervals, to show that skip-subrelease prioritizes using
+    // peak_interval.
+    SCOPED_TRACE("demand_pattern 2");
+    demand_pattern(
+        absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3),
+                                .short_interval = absl::Milliseconds(10),
+                                .long_interval = absl::Milliseconds(20)},
+        false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Uses peak interval for skipping subrelease, subreleasing all free pages.
+    // The short-term interval is not used, as we prioritize using demand peak.
+    SCOPED_TRACE("demand_pattern 3");
+    demand_pattern(absl::Minutes(6), absl::Minutes(3), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2),
+                                           .short_interval = absl::Minutes(5)},
+                   true);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Skip subrelease feature is disabled if all intervals are zero.
+    SCOPED_TRACE("demand_pattern 4");
     demand_pattern(absl::Minutes(1), absl::Minutes(1), absl::Minutes(4),
                    SkipSubreleaseIntervals{}, true);
   }
@@ -1942,7 +2064,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
   {
     // Uses short-term and long-term intervals for skipping subrelease. It
     // incorrectly skips 128 pages.
-    SCOPED_TRACE("demand_pattern 2");
+    SCOPED_TRACE("demand_pattern 5");
     demand_pattern(absl::Minutes(3), absl::Minutes(2), absl::Minutes(7),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3),
                                            .long_interval = absl::Minutes(6)},
@@ -1954,7 +2076,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
   {
     // Uses short-term and long-term intervals for skipping subrelease,
     // subreleasing all free pages.
-    SCOPED_TRACE("demand_pattern 3");
+    SCOPED_TRACE("demand_pattern 6");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
                                            .long_interval = absl::Minutes(2)},
@@ -1965,7 +2087,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
   {
     // Uses only short-term interval for skipping subrelease. It correctly
     // skips 128 pages.
-    SCOPED_TRACE("demand_pattern 4");
+    SCOPED_TRACE("demand_pattern 7");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3)},
                    false);
@@ -1976,7 +2098,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
   {
     // Uses only long-term interval for skipping subrelease, subreleased all
     // free pages.
-    SCOPED_TRACE("demand_pattern 5");
+    SCOPED_TRACE("demand_pattern 8");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.long_interval = absl::Minutes(2)},
                    true);
@@ -1984,10 +2106,19 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
 
   Advance(absl::Minutes(30));
 
+  // This captures a corner case: If we hit another peak immediately after a
+  // subrelease decision (in the same time series epoch), do not count this as
+  // a correct subrelease decision.
+  {
+    SCOPED_TRACE("demand_pattern 9");
+    demand_pattern(
+        absl::Milliseconds(10), absl::Milliseconds(10), absl::Milliseconds(10),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2)}, false);
+  }
   // Repeats the "demand_pattern 9" test using short-term and long-term
   // intervals, to show that subrelease decisions are evaluated independently.
   {
-    SCOPED_TRACE("demand_pattern 6");
+    SCOPED_TRACE("demand_pattern 10");
     demand_pattern(absl::Milliseconds(10), absl::Milliseconds(10),
                    absl::Milliseconds(10),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
@@ -2011,8 +2142,8 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease) {
 
   if (!dense_tracker_sorted_on_allocs_) {
     EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 3 subreleases (384 pages) were skipped due to the sum of short-term (60s) fluctuations and long-term (120s) trends.
-HugePageFiller: 33.3333% of decisions confirmed correct, 0 pending (33.3333% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 6 subreleases (768 pages) were skipped due to either recent (120s) peaks, or the sum of short-term (60s) fluctuations and long-term (120s) trends.
+HugePageFiller: 50.0000% of decisions confirmed correct, 0 pending (50.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
   }
 }
@@ -2109,8 +2240,46 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   };
 
   {
-    // Skip subrelease feature is disabled if all intervals are zero.
+    // Uses peak interval for skipping subrelease. We should correctly skip
+    // 128 pages.
     SCOPED_TRACE("demand_pattern 1");
+    demand_pattern(absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3)},
+                   false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Repeats the "demand_pattern 1" test with additional short-term and
+    // long-term intervals, to show that skip-subrelease prioritizes using
+    // peak_interval.
+    SCOPED_TRACE("demand_pattern 2");
+    demand_pattern(
+        absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3),
+                                .short_interval = absl::Milliseconds(10),
+                                .long_interval = absl::Milliseconds(20)},
+        false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Uses peak interval for skipping subrelease, subreleasing all free pages.
+    // The short-term interval is not used, as we prioritize using demand peak.
+    SCOPED_TRACE("demand_pattern 3");
+    demand_pattern(absl::Minutes(6), absl::Minutes(3), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2),
+                                           .short_interval = absl::Minutes(5)},
+                   true);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Skip subrelease feature is disabled if all intervals are zero.
+    SCOPED_TRACE("demand_pattern 4");
     demand_pattern(absl::Minutes(1), absl::Minutes(1), absl::Minutes(4),
                    SkipSubreleaseIntervals{}, true);
   }
@@ -2120,7 +2289,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   {
     // Uses short-term and long-term intervals for skipping subrelease. It
     // incorrectly skips 128 pages.
-    SCOPED_TRACE("demand_pattern 2");
+    SCOPED_TRACE("demand_pattern 5");
     demand_pattern(absl::Minutes(3), absl::Minutes(2), absl::Minutes(7),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3),
                                            .long_interval = absl::Minutes(6)},
@@ -2132,7 +2301,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   {
     // Uses short-term and long-term intervals for skipping subrelease,
     // subreleasing all free pages.
-    SCOPED_TRACE("demand_pattern 3");
+    SCOPED_TRACE("demand_pattern 6");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
                                            .long_interval = absl::Minutes(2)},
@@ -2143,7 +2312,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   {
     // Uses only short-term interval for skipping subrelease. It correctly
     // skips 128 pages.
-    SCOPED_TRACE("demand_pattern 4");
+    SCOPED_TRACE("demand_pattern 7");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3)},
                    false);
@@ -2154,7 +2323,7 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   {
     // Uses only long-term interval for skipping subrelease, subreleased all
     // free pages.
-    SCOPED_TRACE("demand_pattern 5");
+    SCOPED_TRACE("demand_pattern 8");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.long_interval = absl::Minutes(2)},
                    true);
@@ -2166,7 +2335,15 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
   // subrelease decision (in the same time series epoch), do not count this as
   // a correct subrelease decision.
   {
-    SCOPED_TRACE("demand_pattern 6");
+    SCOPED_TRACE("demand_pattern 9");
+    demand_pattern(
+        absl::Milliseconds(10), absl::Milliseconds(10), absl::Milliseconds(10),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2)}, false);
+  }
+  // Repeats the "demand_pattern 9" test using short-term and long-term
+  // intervals, to show that subrelease decisions are evaluated independently.
+  {
+    SCOPED_TRACE("demand_pattern 10");
     demand_pattern(absl::Milliseconds(10), absl::Milliseconds(10),
                    absl::Milliseconds(10),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
@@ -2190,8 +2367,8 @@ TEST_P(FillerTest, SkipPartialAllocSubrelease_SpansAllocated) {
 
   if (!dense_tracker_sorted_on_allocs_) {
     EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 3 subreleases (384 pages) were skipped due to the sum of short-term (60s) fluctuations and long-term (120s) trends.
-HugePageFiller: 33.3333% of decisions confirmed correct, 0 pending (33.3333% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 6 subreleases (768 pages) were skipped due to either recent (120s) peaks, or the sum of short-term (60s) fluctuations and long-term (120s) trends.
+HugePageFiller: 50.0000% of decisions confirmed correct, 0 pending (50.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
   }
 }
@@ -2267,8 +2444,46 @@ TEST_P(FillerTest, SkipSubrelease) {
   };
 
   {
-    // Skip subrelease feature is disabled if all intervals are zero.
+    // Uses peak interval for skipping subrelease. We should correctly skip
+    // 128 pages.
     SCOPED_TRACE("demand_pattern 1");
+    demand_pattern(absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3)},
+                   false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Repeats the "demand_pattern 1" test with additional short-term and
+    // long-term intervals, to show that skip-subrelease prioritizes using
+    // peak_interval.
+    SCOPED_TRACE("demand_pattern 2");
+    demand_pattern(
+        absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3),
+                                .short_interval = absl::Milliseconds(10),
+                                .long_interval = absl::Milliseconds(20)},
+        false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Uses peak interval for skipping subrelease, subreleasing all free pages.
+    // The short-term interval is not used, as we prioritize using demand peak.
+    SCOPED_TRACE("demand_pattern 3");
+    demand_pattern(absl::Minutes(6), absl::Minutes(3), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2),
+                                           .short_interval = absl::Minutes(5)},
+                   true);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Skip subrelease feature is disabled if all intervals are zero.
+    SCOPED_TRACE("demand_pattern 4");
     demand_pattern(absl::Minutes(1), absl::Minutes(1), absl::Minutes(4),
                    SkipSubreleaseIntervals{}, true);
   }
@@ -2278,7 +2493,7 @@ TEST_P(FillerTest, SkipSubrelease) {
   {
     // Uses short-term and long-term intervals for skipping subrelease. It
     // incorrectly skips 128 pages.
-    SCOPED_TRACE("demand_pattern 2");
+    SCOPED_TRACE("demand_pattern 5");
     demand_pattern(absl::Minutes(3), absl::Minutes(2), absl::Minutes(7),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3),
                                            .long_interval = absl::Minutes(6)},
@@ -2290,7 +2505,7 @@ TEST_P(FillerTest, SkipSubrelease) {
   {
     // Uses short-term and long-term intervals for skipping subrelease,
     // subreleasing all free pages.
-    SCOPED_TRACE("demand_pattern 3");
+    SCOPED_TRACE("demand_pattern 6");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
                                            .long_interval = absl::Minutes(2)},
@@ -2301,7 +2516,7 @@ TEST_P(FillerTest, SkipSubrelease) {
   {
     // Uses only short-term interval for skipping subrelease. It correctly
     // skips 128 pages.
-    SCOPED_TRACE("demand_pattern 4");
+    SCOPED_TRACE("demand_pattern 7");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3)},
                    false);
@@ -2312,7 +2527,7 @@ TEST_P(FillerTest, SkipSubrelease) {
   {
     // Uses only long-term interval for skipping subrelease, subreleased all
     // free pages.
-    SCOPED_TRACE("demand_pattern 5");
+    SCOPED_TRACE("demand_pattern 8");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.long_interval = absl::Minutes(2)},
                    true);
@@ -2324,7 +2539,15 @@ TEST_P(FillerTest, SkipSubrelease) {
   // subrelease decision (in the same time series epoch), do not count this as
   // a correct subrelease decision.
   {
-    SCOPED_TRACE("demand_pattern 6");
+    SCOPED_TRACE("demand_pattern 9");
+    demand_pattern(
+        absl::Milliseconds(10), absl::Milliseconds(10), absl::Milliseconds(10),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2)}, false);
+  }
+  // Repeats the "demand_pattern 9" test using short-term and long-term
+  // intervals, to show that subrelease decisions are evaluated independently.
+  {
+    SCOPED_TRACE("demand_pattern 10");
     demand_pattern(absl::Milliseconds(10), absl::Milliseconds(10),
                    absl::Milliseconds(10),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
@@ -2347,8 +2570,8 @@ TEST_P(FillerTest, SkipSubrelease) {
   buffer.resize(strlen(buffer.c_str()));
 
   EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 3 subreleases (384 pages) were skipped due to the sum of short-term (60s) fluctuations and long-term (120s) trends.
-HugePageFiller: 33.3333% of decisions confirmed correct, 0 pending (33.3333% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 6 subreleases (768 pages) were skipped due to either recent (120s) peaks, or the sum of short-term (60s) fluctuations and long-term (120s) trends.
+HugePageFiller: 50.0000% of decisions confirmed correct, 0 pending (50.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
 }
 
@@ -2441,8 +2664,46 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   };
 
   {
-    // Skip subrelease feature is disabled if all intervals are zero.
+    // Uses peak interval for skipping subrelease. We should correctly skip
+    // 128 pages.
     SCOPED_TRACE("demand_pattern 1");
+    demand_pattern(absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3)},
+                   false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Repeats the "demand_pattern 1" test with additional short-term and
+    // long-term intervals, to show that skip-subrelease prioritizes using
+    // peak_interval.
+    SCOPED_TRACE("demand_pattern 2");
+    demand_pattern(
+        absl::Minutes(2), absl::Minutes(1), absl::Minutes(3),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(3),
+                                .short_interval = absl::Milliseconds(10),
+                                .long_interval = absl::Milliseconds(20)},
+        false);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Uses peak interval for skipping subrelease, subreleasing all free pages.
+    // The short-term interval is not used, as we prioritize using demand peak.
+    SCOPED_TRACE("demand_pattern 3");
+    demand_pattern(absl::Minutes(6), absl::Minutes(3), absl::Minutes(3),
+                   SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2),
+                                           .short_interval = absl::Minutes(5)},
+                   true);
+  }
+
+  Advance(absl::Minutes(30));
+
+  {
+    // Skip subrelease feature is disabled if all intervals are zero.
+    SCOPED_TRACE("demand_pattern 4");
     demand_pattern(absl::Minutes(1), absl::Minutes(1), absl::Minutes(4),
                    SkipSubreleaseIntervals{}, true);
   }
@@ -2452,7 +2713,7 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   {
     // Uses short-term and long-term intervals for skipping subrelease. It
     // incorrectly skips 128 pages.
-    SCOPED_TRACE("demand_pattern 2");
+    SCOPED_TRACE("demand_pattern 5");
     demand_pattern(absl::Minutes(3), absl::Minutes(2), absl::Minutes(7),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3),
                                            .long_interval = absl::Minutes(6)},
@@ -2464,7 +2725,7 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   {
     // Uses short-term and long-term intervals for skipping subrelease,
     // subreleasing all free pages.
-    SCOPED_TRACE("demand_pattern 3");
+    SCOPED_TRACE("demand_pattern 6");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
                                            .long_interval = absl::Minutes(2)},
@@ -2475,7 +2736,7 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   {
     // Uses only short-term interval for skipping subrelease. It correctly
     // skips 128 pages.
-    SCOPED_TRACE("demand_pattern 4");
+    SCOPED_TRACE("demand_pattern 7");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(3)},
                    false);
@@ -2486,7 +2747,7 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   {
     // Uses only long-term interval for skipping subrelease, subreleased all
     // free pages.
-    SCOPED_TRACE("demand_pattern 5");
+    SCOPED_TRACE("demand_pattern 8");
     demand_pattern(absl::Minutes(4), absl::Minutes(2), absl::Minutes(3),
                    SkipSubreleaseIntervals{.long_interval = absl::Minutes(2)},
                    true);
@@ -2494,10 +2755,19 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
 
   Advance(absl::Minutes(30));
 
+  // This captures a corner case: If we hit another peak immediately after a
+  // subrelease decision (in the same time series epoch), do not count this as
+  // a correct subrelease decision.
+  {
+    SCOPED_TRACE("demand_pattern 9");
+    demand_pattern(
+        absl::Milliseconds(10), absl::Milliseconds(10), absl::Milliseconds(10),
+        SkipSubreleaseIntervals{.peak_interval = absl::Minutes(2)}, false);
+  }
   // Repeats the "demand_pattern 9" test using short-term and long-term
   // intervals, to show that subrelease decisions are evaluated independently.
   {
-    SCOPED_TRACE("demand_pattern 6");
+    SCOPED_TRACE("demand_pattern 10");
     demand_pattern(absl::Milliseconds(10), absl::Milliseconds(10),
                    absl::Milliseconds(10),
                    SkipSubreleaseIntervals{.short_interval = absl::Minutes(1),
@@ -2520,8 +2790,8 @@ TEST_P(FillerTest, SkipSubrelease_SpansAllocated) {
   buffer.resize(strlen(buffer.c_str()));
 
   EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 4 subreleases (511 pages) were skipped due to the sum of short-term (60s) fluctuations and long-term (120s) trends.
-HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 8 subreleases (1022 pages) were skipped due to either recent (120s) peaks, or the sum of short-term (60s) fluctuations and long-term (120s) trends.
+HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
 }
 
@@ -2782,8 +3052,7 @@ TEST_P(FillerTest, ReportSkipSubreleases) {
   // Subreleases 0.5N free pages and skips 0.25N free pages.
   EXPECT_EQ(N / 2,
             ReleasePages(10 * N, SkipSubreleaseIntervals{
-                                     .short_interval = absl::Minutes(3),
-                                     .long_interval = absl::Minutes(3)}));
+                                     .peak_interval = absl::Minutes(3)}));
   Advance(absl::Minutes(3));
   std::vector<PAlloc> tiny1 =
       AllocateVectorWithSpanAllocInfo(N / 4, peak1a.front().span_alloc_info);
@@ -2821,8 +3090,7 @@ TEST_P(FillerTest, ReportSkipSubreleases) {
   std::vector<PAlloc> half2 = AllocateVector(N / 2);
   EXPECT_EQ(Length(0),
             ReleasePages(10 * N, SkipSubreleaseIntervals{
-                                     .short_interval = absl::Minutes(3),
-                                     .long_interval = absl::Minutes(3)}));
+                                     .peak_interval = absl::Minutes(3)}));
   Advance(absl::Minutes(3));
   std::vector<PAlloc> half3 = AllocateVector(N / 2);
   DeleteVector(half2);
@@ -2844,8 +3112,8 @@ TEST_P(FillerTest, ReportSkipSubreleases) {
   buffer.resize(strlen(buffer.c_str()));
 
   EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 2 subreleases (192 pages) were skipped due to the sum of short-term (180s) fluctuations and long-term (180s) trends.
-HugePageFiller: 100.0000% of decisions confirmed correct, 0 pending (100.0000% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 2 subreleases (192 pages) were skipped due to either recent (180s) peaks, or the sum of short-term (0s) fluctuations and long-term (0s) trends.
+HugePageFiller: 100.0000% of decisions confirmed correct, 0 pending (100.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
 }
 
@@ -2892,8 +3160,7 @@ TEST_P(FillerTest, ReportSkipSubreleases_SpansAllocated) {
   // Subreleases 0.75N free pages.
   EXPECT_EQ(3 * N / 4,
             ReleasePages(10 * N, SkipSubreleaseIntervals{
-                                     .short_interval = absl::Seconds(1),
-                                     .long_interval = absl::Seconds(1)}));
+                                     .peak_interval = absl::Minutes(3)}));
   Advance(absl::Minutes(3));
   std::vector<PAlloc> tiny1 =
       AllocateVectorWithSpanAllocInfo(N / 4, peak1a.front().span_alloc_info);
@@ -2931,8 +3198,7 @@ TEST_P(FillerTest, ReportSkipSubreleases_SpansAllocated) {
   std::vector<PAlloc> half2 = AllocateVectorWithSpanAllocInfo(N / 2, info);
   EXPECT_EQ(Length(0),
             ReleasePages(10 * N, SkipSubreleaseIntervals{
-                                     .short_interval = absl::Seconds(1),
-                                     .long_interval = absl::Seconds(1)}));
+                                     .peak_interval = absl::Minutes(3)}));
   Advance(absl::Minutes(3));
   std::vector<PAlloc> half3 = AllocateVectorWithSpanAllocInfo(N / 2, info);
   DeleteVector(half2);
@@ -2954,8 +3220,8 @@ TEST_P(FillerTest, ReportSkipSubreleases_SpansAllocated) {
   buffer.resize(strlen(buffer.c_str()));
 
   EXPECT_THAT(buffer, testing::HasSubstr(R"(
-HugePageFiller: Since the start of the execution, 2 subreleases (191 pages) were skipped due to the sum of short-term (1s) fluctuations and long-term (1s) trends.
-HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 2 subreleases (192 pages) were skipped due to either recent (180s) peaks, or the sum of short-term (0s) fluctuations and long-term (0s) trends.
+HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending), as per anticipated 300s realized fragmentation.
 )"));
 }
 
@@ -3571,6 +3837,101 @@ TEST_P(FillerTest, CheckFillerStats_SpansAllocated) {
     Delete(alloc);
   }
 }
+// Test the native page bounds where kNativePagesInHugePage (kernel) is <
+// kPagesPerHugePage (tcmalloc), kNativePagesInHugePage = kPagesPerHugePage,
+// kNativePagesInHugePage > kPagesPerHugePage.
+TEST_P(FillerTest, CheckNativePageHistoBounds) {
+  if (std::get<0>(GetParam()) ==
+      HugePageFillerDenseTrackerType::kSpansAllocated) {
+    GTEST_SKIP() << "Skipping test for kSpansAllocated";
+  }
+  if (kPagesPerHugePage != Length(256)) {
+    // The output is hardcoded on this assumption, and dynamically calculating
+    // it would be way too much of a pain.
+    return;
+  }
+  // Case for 256 KiB pages, 8 pages in a huge page region
+  FakeResidency residency_8_native_pages(8);
+  std::string buffer(1024 * 1024, '\0');
+  {
+    PageHeapSpinLockHolder l;
+    Printer printer(&*buffer.begin(), buffer.size());
+    filler_.Print(printer, /*everything=*/true, &residency_8_native_pages);
+  }
+  buffer.resize(strlen(buffer.c_str()));
+  EXPECT_THAT(buffer, testing::HasSubstr(R"(
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0
+)"));
+
+  // Case for 128 KiB pages, 16 pages in a huge page region
+  FakeResidency residency_16_native_pages(16);
+  {
+    PageHeapSpinLockHolder l;
+    Printer printer(&*buffer.begin(), buffer.size());
+    filler_.Print(printer, /*everything=*/true, &residency_16_native_pages);
+  }
+  buffer.resize(strlen(buffer.c_str()));
+  EXPECT_THAT(buffer, testing::HasSubstr(R"(
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 <  9<=     0 < 10<=     0 < 11<=     0
+HugePageFiller: < 12<=     0 < 13<=     0 < 14<=     0 < 15<=     0
+)"));
+
+  // Case for arm 64 KiB native pages, 32 pages in a huge page region
+  FakeResidency residency_32_native_pages(32);
+  {
+    PageHeapSpinLockHolder l;
+    Printer printer(&*buffer.begin(), buffer.size());
+    filler_.Print(printer, /*everything=*/true, &residency_32_native_pages);
+  }
+  buffer.resize(strlen(buffer.c_str()));
+  EXPECT_THAT(buffer, testing::HasSubstr(R"(
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 10<=     0 < 12<=     0 < 14<=     0
+HugePageFiller: < 16<=     0 < 18<=     0 < 20<=     0 < 22<=     0 < 24<=     0 < 25<=     0
+HugePageFiller: < 26<=     0 < 27<=     0 < 28<=     0 < 29<=     0 < 30<=     0 < 31<=     0
+)"));
+
+  // Case for 8 KiB kib pages, 256 pages in a huge page region
+  FakeResidency residency_256_native_pages(256);
+  {
+    PageHeapSpinLockHolder l;
+    Printer printer(&*buffer.begin(), buffer.size());
+    filler_.Print(printer, /*everything=*/true, &residency_256_native_pages);
+  }
+  buffer.resize(strlen(buffer.c_str()));
+  EXPECT_THAT(buffer, testing::HasSubstr(R"(
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 24<=     0 < 40<=     0 < 56<=     0
+HugePageFiller: < 72<=     0 < 88<=     0 <104<=     0 <120<=     0 <136<=     0 <152<=     0
+HugePageFiller: <168<=     0 <184<=     0 <200<=     0 <216<=     0 <232<=     0 <248<=     0
+HugePageFiller: <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0 <254<=     0
+HugePageFiller: <255<=     0
+)"));
+
+  // Case for 4kib native pages, 512 pages in a huge page region
+  FakeResidency residency_512_native_pages(512);
+  {
+    PageHeapSpinLockHolder l;
+    Printer printer(&*buffer.begin(), buffer.size());
+    filler_.Print(printer, /*everything=*/true, &residency_512_native_pages);
+  }
+  buffer.resize(strlen(buffer.c_str()));
+  EXPECT_THAT(buffer, testing::HasSubstr(R"(
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+)"));
+}
 
 // Test the output of Print(). This is something of a change-detector test,
 // but that's not all bad in this case.
@@ -3590,12 +3951,12 @@ TEST_P(FillerTest, Print) {
   // chosen at random.
   randomize_density_ = false;
   auto allocs = GenerateInterestingAllocs();
-
+  FakeResidency fake_residency;
   std::string buffer(1024 * 1024, '\0');
   {
     PageHeapSpinLockHolder l;
     Printer printer(&*buffer.begin(), buffer.size());
-    filler_.Print(printer, /*everything=*/true);
+    filler_.Print(printer, /*everything=*/true, &fake_residency);
     buffer.erase(printer.SpaceRequired());
   }
 
@@ -3767,42 +4128,6 @@ HugePageFiller: <161<=     0 <177<=     0 <193<=     0 <209<=     0 <225<=     0
 HugePageFiller: <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0 <254<=     0
 HugePageFiller: <255<=     0 <256<=     0
 
-HugePageFiller: # of sparsely-accessed regular hps with allocated spans (  0,      1]
-HugePageFiller: # of sparsely-accessed regular hps with a<= # of free pages <b
-HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     1
-HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 16<=     0 < 32<=     0 < 48<=     0
-HugePageFiller: < 64<=     0 < 80<=     0 < 96<=     0 <112<=     0 <128<=     0 <144<=     0
-HugePageFiller: <160<=     0 <176<=     0 <192<=     0 <208<=     0 <224<=     0 <240<=     0
-HugePageFiller: <248<=     0 <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0
-HugePageFiller: <254<=     0 <255<=     0
-
-HugePageFiller: # of sparsely-accessed regular hps with allocated spans (  1,      2]
-HugePageFiller: # of sparsely-accessed regular hps with a<= # of free pages <b
-HugePageFiller: <  0<=     1 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
-HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 16<=     0 < 32<=     0 < 48<=     0
-HugePageFiller: < 64<=     0 < 80<=     0 < 96<=     0 <112<=     0 <128<=     0 <144<=     0
-HugePageFiller: <160<=     0 <176<=     0 <192<=     0 <208<=     0 <224<=     0 <240<=     0
-HugePageFiller: <248<=     0 <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0
-HugePageFiller: <254<=     0 <255<=     0
-
-HugePageFiller: # of sparsely-accessed regular hps with allocated spans (  2,      3]
-HugePageFiller: # of sparsely-accessed regular hps with a<= # of free pages <b
-HugePageFiller: <  0<=     1 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
-HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 16<=     0 < 32<=     0 < 48<=     0
-HugePageFiller: < 64<=     0 < 80<=     0 < 96<=     0 <112<=     0 <128<=     0 <144<=     0
-HugePageFiller: <160<=     0 <176<=     0 <192<=     0 <208<=     0 <224<=     0 <240<=     0
-HugePageFiller: <248<=     0 <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0
-HugePageFiller: <254<=     0 <255<=     0
-
-HugePageFiller: # of sparsely-accessed regular hps with allocated spans (  3,      4]
-HugePageFiller: # of sparsely-accessed regular hps with a<= # of free pages <b
-HugePageFiller: <  0<=     1 <  1<=     1 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
-HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 16<=     0 < 32<=     0 < 48<=     0
-HugePageFiller: < 64<=     0 < 80<=     0 < 96<=     0 <112<=     0 <128<=     0 <144<=     0
-HugePageFiller: <160<=     0 <176<=     0 <192<=     0 <208<=     0 <224<=     0 <240<=     0
-HugePageFiller: <248<=     0 <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0
-HugePageFiller: <254<=     0 <255<=     0
-
 HugePageFiller: # of sparsely-accessed regular hps with lifetime a <= # hps < b
 HugePageFiller: <   0 ms <=      5 <   1 ms <=      0 <  10 ms <=      0 < 100 ms <=      0 < 1000 ms <=      0 < 10000 ms <=      0
 HugePageFiller: < 100000 ms <=      0 < 1000000 ms <=      0
@@ -3917,6 +4242,230 @@ HugePageFiller: <160<=     0 <176<=     0 <192<=     0 <208<=     0 <224<=     0
 HugePageFiller: <248<=     0 <249<=     0 <250<=     0 <251<=     0 <252<=     0 <253<=     0
 HugePageFiller: <254<=     0 <255<=     0
 
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed regular hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of donated hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     1 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed partial released hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed partial released hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed released hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed released hps with a <= # of unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed regular hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of donated hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     1 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed partial released hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed partial released hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed released hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed released hps with a <= # of swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed regular hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of donated hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     1 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed partial released hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed partial released hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed released hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed released hps with a <= # of used and swapped < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed regular hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed regular hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     5 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of donated hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     1 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed partial released hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed partial released hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     0 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of sparsely-accessed released hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
+HugePageFiller: # of densely-accessed released hps with a <= # of used and unbacked < b
+HugePageFiller: <  0<=     0 <  1<=     0 <  2<=     0 <  3<=     0 <  4<=     0 <  5<=     0
+HugePageFiller: <  6<=     0 <  7<=     0 <  8<=     0 < 40<=     0 < 72<=     0 <104<=     0
+HugePageFiller: <136<=     0 <168<=     0 <200<=     0 <232<=     2 <264<=     0 <296<=     0
+HugePageFiller: <328<=     0 <360<=     0 <392<=     0 <424<=     0 <456<=     0 <488<=     0
+HugePageFiller: <504<=     0 <505<=     0 <506<=     0 <507<=     0 <508<=     0 <509<=     0
+HugePageFiller: <510<=     0 <511<=     0
+
 HugePageFiller: 0 of sparsely-accessed regular pages hugepage backed out of 5.
 HugePageFiller: 0 of densely-accessed regular pages hugepage backed out of 5.
 HugePageFiller: 0 of donated pages hugepage backed out of 1.
@@ -3932,8 +4481,8 @@ HugePageFiller: minimum free pages: 0 (0 backed)
 HugePageFiller: at peak demand: 3547 pages (and 267 free, 26 unmapped)
 HugePageFiller: at peak demand: 15 hps (10 regular, 1 donated, 0 partial, 4 released)
 
-HugePageFiller: Since the start of the execution, 0 subreleases (0 pages) were skipped due to the sum of short-term (0s) fluctuations and long-term (0s) trends.
-HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending).
+HugePageFiller: Since the start of the execution, 0 subreleases (0 pages) were skipped due to either recent (0s) peaks, or the sum of short-term (0s) fluctuations and long-term (0s) trends.
+HugePageFiller: 0.0000% of decisions confirmed correct, 0 pending (0.0000% of pages, 0 pending), as per anticipated 0s realized fragmentation.
 HugePageFiller: Subrelease stats last 10 min: total 282 pages subreleased (0 pages from partial allocs), 5 hugepages broken
 )"));
 

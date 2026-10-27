@@ -10,6 +10,7 @@ import ydb
 import pytest
 import random
 import requests
+import re
 
 from collections import defaultdict
 from typing import List, Dict, Optional, Self
@@ -61,7 +62,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
-    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_kqp_constraints_transformer = param.get("enable_kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
         "enable_dq_source_stream_lookup_join_local_lookups", True
     )
@@ -77,8 +78,23 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
+        "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
+
+    if param.get("enable_exactly_once_topics_writing", False):
+        extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
+
+    for flag in (
+        "enable_streaming_aggregation",
+        "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_state_recompute",
+    ):
+        if flag in param:
+            if param[flag]:
+                extra_feature_flags.add(flag)
+            else:
+                disabled_feature_flags.append(flag)
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     else:
@@ -102,13 +118,10 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
-    if not enable_kqp_constraints_transformer:
-        disabled_feature_flags.append("enable_kqp_constraints_transformer")
-
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-        extra_feature_flags.add("enable_access_service_v2_interface")
+    if enable_kqp_constraints_transformer:
+        extra_feature_flags.add("enable_kqp_constraints_transformer")
     else:
-        disabled_feature_flags.append("enable_access_service_v2_interface")
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
@@ -129,11 +142,12 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
+        additional_log_configs=param.get("log_levels"),
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
         query_service_config={
-            "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
+            "available_external_data_sources": ["ObjectStorage", "Ydb"],
             "enable_match_recognize": True,
         },
         table_service_config={
@@ -164,7 +178,6 @@ def get_ydb_config(request, enable_fq_connector=None):
             },
         }
 
-    config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
     config.yaml_config["auth_config"]["local_metadata_service"] = {
@@ -599,6 +612,14 @@ class Kikimr:
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
 
+        # Tenant slots start before the full config reaches CMS. Keep this setting
+        # in the bootstrap config so KQP honors it for the first test queries.
+        table_service_config = full_yaml_config.get("table_service_config", {})
+        if "enable_compile_cache_warmup" in table_service_config:
+            config.yaml_config["table_service_config"] = {
+                "enable_compile_cache_warmup": table_service_config["enable_compile_cache_warmup"]
+            }
+
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
@@ -655,6 +676,33 @@ class Kikimr:
     def get_database_name(self) -> str:
         return self.endpoint.database
 
+    def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
+        node_counts = {}
+
+        def resources_updated() -> bool:
+            node_counts.clear()
+            for node_id in counter_nodes(self.cluster):
+                try:
+                    response = requests.get(
+                        monitoring_endpoint(self.cluster, node_id) + "/actors/kqp_resource_manager",
+                        headers={"Authorization": "root@builtin"},
+                        timeout=5,
+                    )
+                    response.raise_for_status()
+                except requests.RequestException as error:
+                    node_counts[node_id] = str(error)
+                    continue
+                # Read the published snapshot used by the planner. The
+                # RM/NodeNumberInSnapshot counter changes before it is published.
+                match = re.search(r"Nodes count: (\d+)", response.text)
+                node_counts[node_id] = int(match.group(1)) if match else 0
+            logger.info("KQP resource snapshot node counts: %s (expected %s)", node_counts, expected_count)
+            return bool(node_counts) and all(count == expected_count for count in node_counts.values())
+
+        assert wait_for(
+            resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1
+        ), f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
+
 
 class StreamingTestBase(TestYdsBase):
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
@@ -698,7 +746,25 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
+            diagnostics = "failed to retrieve Status / Issues"
+            try:
+                result_sets = kikimr.ydb_client.query(
+                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
+                    )
+                    if result_sets
+                    else []
+                )
+            except Exception as diagnostics_error:
+                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
+            raise AssertionError(f"{error}\n{diagnostics}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -715,12 +781,15 @@ class StreamingTestBase(TestYdsBase):
         node.start()
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
-        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        """Find and restart the node hosting the streaming query reader.
         Returns the restarted node ID."""
 
         def _find_node():
             for node_id in kikimr.cluster.slots:
-                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                if any(
+                    self.get_actor_count(kikimr, node_id, actor_name)
+                    for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
+                ):
                     return node_id
             return None
 
@@ -730,7 +799,7 @@ class StreamingTestBase(TestYdsBase):
             step_seconds=1,
         )
         restart_node_id = _find_node()
-        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        assert restart_node_id is not None, "No node found with a streaming query reader"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id
 

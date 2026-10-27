@@ -1,3 +1,4 @@
+import "ydb/core/protos/test_shard_control.proto";
 import "ydb/core/protos/console.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/console_base.proto";
@@ -251,6 +252,7 @@ message TResponse {
         optional uint64 MaxRttGapUs = 5;
     }
     optional TInterconnectLoadResult InterconnectLoadResult = 1100;
+    optional TNbsDbgLikeLoadControlResponse NbsDbgLikeLoadControl = 1101;
 }
 
 message TFakeConfigDummy {

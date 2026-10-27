@@ -14,6 +14,9 @@ namespace NKeyValue {
 };
 
 namespace TEvKeyValue {
+    inline constexpr char RequestInFlightLimitReached[] =
+        "KeyValue request in-flight limit reached";
+
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,
@@ -299,6 +302,7 @@ namespace TEvKeyValue {
             CHECK_TRASH,
             WAIT_FOR_GC,
             SUCCESS,
+            NOT_ENOUGH_SPACE,
             ERROR,
         };
         EResult Result;
@@ -339,6 +343,10 @@ namespace TEvKeyValue {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::SUCCESS);
         }
 
+        static std::unique_ptr<TEvAdvanceMoveDataResult> NotEnoughSpace() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::NOT_ENOUGH_SPACE);
+        }
+
         static std::unique_ptr<TEvAdvanceMoveDataResult> Error() {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::ERROR);
         }
@@ -348,6 +356,7 @@ namespace TEvKeyValue {
         enum class EResult {
             OK,
             NODATA,
+            YELLOW_STOP,
             ERROR,
         };
         EResult Result;

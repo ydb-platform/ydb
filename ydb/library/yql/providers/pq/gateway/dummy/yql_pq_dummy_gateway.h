@@ -11,7 +11,7 @@
 namespace NYql {
 
 // Dummy PQ gateway for tests.
-class TDummyPqGateway final : public IPqGateway {
+class TDummyPqGateway final: public IPqGateway {
 public:
     using TPtr = TIntrusivePtr<TDummyPqGateway>;
 
@@ -24,40 +24,25 @@ public:
     NThreading::TFuture<void> CloseSession(const TString& sessionId) final;
 
     ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& path,
-        const TString& token) final;
+        const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final;
 
     IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& path,
-        const TString& token) final;
+        const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final;
 
-    NThreading::TFuture<TListStreams> ListStreams(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& token,
-        ui32 limit,
-        const TString& exclusiveStartStreamName) final;
+    NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database,
+        const TString& token, ui32 limit, const TString& exclusiveStartStreamName) final;
 
-    void UpdateClusterConfigs(
-        const TString& clusterName,
-        const TString& endpoint,
-        const TString& database,
-        bool secure) final;
+    void UpdateClusterConfigs(const TString& clusterName, const TString& endpoint, const TString& database, bool secure) final;
 
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final;
 
     void AddCluster(const NYql::TPqClusterConfig& cluster) final;
 
-    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) final;
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(
+        const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) final;
 
-    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) final;
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(
+        const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) final;
 
     IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) final;
 
@@ -66,7 +51,7 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final;
 
 private:
-    TString SkipDatabasePrefix(const TString& path, const TString& database) const;
+    TString SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster = false) const;
 
     mutable TMutex Mutex;
     const bool AllowSkipDatabasePrefix = false;
@@ -76,4 +61,4 @@ private:
 
 TDummyPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix = false);
 
-} // namespace NYql
+}   // namespace NYql

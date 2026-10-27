@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/scope.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -19,6 +20,7 @@ private:
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, PortionsErasedCounter, 0);
 
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
 
@@ -106,6 +108,14 @@ public:
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+        // This helper measures inactivity using wall time. Keep the legacy waits
+        // until it uses the runtime's clock (https://github.com/ydb-platform/ydb/pull/55845).
+        const bool wasFast = testRuntime && testRuntime->SetFastSimulatedTime(false);
+        Y_DEFER {
+            if (testRuntime) {
+                testRuntime->SetFastSimulatedTime(wasFast);
+            }
+        };
         TInstant start = TInstant::Now();
         const ui32 countStart0 = GetCleaningStartedCounter().Val();
         ui32 countStart = countStart0;

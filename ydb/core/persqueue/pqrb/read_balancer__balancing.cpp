@@ -311,9 +311,19 @@ void TPartitionFamily::Destroy(const TActorContext&) {
         Session->Families.erase(Id);
     }
 
-    for (auto partitionId : Partitions) {
-        Consumer.PartitionMapping.erase(partitionId);
+    // Partitions is not the full set of ids that point here. A releasing family
+    // can UpdatePartitionMapping for partitions that live only in RootPartitions
+    // or WantedPartitions, then Reset(Destroy) skips AfterRelease. Erasing just
+    // Partitions leaves FindFamily pointing at this object after it is freed
+    // (HasSpecialSession in ProccessReadingFinished).
+    for (auto it = Consumer.PartitionMapping.begin(); it != Consumer.PartitionMapping.end(); ) {
+        if (it->second == this) {
+            Consumer.PartitionMapping.erase(it++);
+        } else {
+            ++it;
+        }
     }
+
     Consumer.UnreadableFamilies.erase(Id);
     Consumer.FamiliesRequireBalancing.erase(Id);
     Consumer.Families.erase(Id);

@@ -381,6 +381,10 @@ public:
     uint32_t OverlapClusters = 0;
     double OverlapRatio = 0;
 
+    // Maintain the index on table writes. Enabled when unset.
+    // When false, rebuild the index to reflect table changes.
+    std::optional<bool> AutoUpdate = std::nullopt;
+
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 
     void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
@@ -804,12 +808,15 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
+    TTtlEvictToExternalStorageAction(const std::string& storageName, const std::optional<std::string>& objectKeyPrefix);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
+    const std::optional<std::string>& GetObjectKeyPrefix() const;
 
 private:
     std::string Storage_;
+    std::optional<std::string> ObjectKeyPrefix_;
 };
 
 class TTtlTierSettings {

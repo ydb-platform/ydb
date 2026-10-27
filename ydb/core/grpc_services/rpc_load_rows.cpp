@@ -244,6 +244,7 @@ public:
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->NormalizePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
@@ -272,7 +273,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -370,6 +371,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    const TString TablePath;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -384,6 +386,7 @@ public:
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->NormalizePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
@@ -423,7 +426,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     const TString& GetSourceData() const override {
@@ -641,35 +644,49 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    const TString TablePath;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();
     }
 };
 
-void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    bool diskQuotaExceeded = p->GetDiskQuotaExceeded();
+// Both gRPC and local RPC enter here; internal upload actors remain unrestricted.
+class TBulkUpsertRPC : public TActorBootstrapped<TBulkUpsertRPC> {
+public:
+    explicit TBulkUpsertRPC(IRequestOpCtx* request)
+        : Request(request)
+    {}
 
-    if (GetProtoRequest(p.get())->has_arrow_batch_settings()) {
-        f.RegisterActor(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
-    } else if (GetProtoRequest(p.get())->has_csv_settings()) {
-        f.RegisterActor(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
-    } else {
-        f.RegisterActor(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded, "BulkRowsUpsertActor"));
+    void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            Request->RaiseIssue(NYql::TIssue("Client data writes are disabled"));
+            Request->ReplyWithYdbStatus(StatusIds::PRECONDITION_FAILED);
+            PassAway();
+            return;
+        }
+
+        const bool diskQuotaExceeded = Request->GetDiskQuotaExceeded();
+        const auto* proto = GetProtoRequest(Request.get());
+        if (proto->has_arrow_batch_settings() || proto->has_csv_settings()) {
+            Register(new TUploadColumnsRPCPublic(Request.release(), diskQuotaExceeded));
+        } else {
+            Register(new TUploadRowsRPCPublic(Request.release(), diskQuotaExceeded, "BulkRowsUpsertActor"));
+        }
+        PassAway();
     }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
+void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TBulkUpsertRPC(p.release()));
 }
 
 template<>
 IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    bool diskQuotaExceeded = msg->GetDiskQuotaExceeded();
-
-    if (GetProtoRequest(msg)->has_arrow_batch_settings()) {
-        return new TUploadColumnsRPCPublic(msg, diskQuotaExceeded);
-    } else if (GetProtoRequest(msg)->has_csv_settings()) {
-        return new TUploadColumnsRPCPublic(msg, diskQuotaExceeded);
-    } else {
-        return new TUploadRowsRPCPublic(msg, diskQuotaExceeded, "BulkRowsUpsertActor");
-    }
+    return new TBulkUpsertRPC(msg);
 }
 
 

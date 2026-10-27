@@ -28,50 +28,133 @@ std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadS
 template <class TThis>
 struct TTraits;
 
+template <class T>
+struct TExternalMetadata
+{
+    static constexpr bool External = false;
+};
+
+template <class T, class TSaveContext, class TLoadContext>
+concept CSerializableOnItsOwn =
+    requires (const T& value, TSaveContext& context) { value.Save(context); } ||
+    requires (T& value, TLoadContext& context) { value.Load(context); } ||
+    requires (T& value, TSaveContext& context) { value.Persist(context); };
+
+struct TExternalSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& value)
+    {
+        TExternalMetadata<T>::Save(context, value);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& value)
+    {
+        TExternalMetadata<T>::Load(context, value);
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
+#undef PHOENIX_DECLARE_EXTERNAL_TYPE
 #undef PHOENIX_DECLARE_TYPE
 #undef PHOENIX_DECLARE_POLYMORPHIC_TYPE
+#undef PHOENIX_DECLARE_VIRTUAL_TYPE
 #undef PHOENIX_DECLARE_TEMPLATE_TYPE
 #undef PHOENIX_DECLARE_POLYMORPHIC_TEMPLATE_TYPE
 #undef PHOENIX_DECLARE_OPAQUE_TYPE
+#undef PHOENIX_REGISTER_FIELD
+#undef PHOENIX_REGISTER_DELETED_FIELD
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue) \
 public: \
     [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix::TTypeTag(typeTagValue); \
-    static void RegisterMetadata(auto&& registrar); \
     \
 private: \
     using TThis = type; \
+    using TAccessor = type; \
     using TLoadContextImpl = TLoadContext; \
     \
-    template <class TThis, class TContext> \
-    friend std::unique_ptr<::NYT::NPhoenix::NDetail::TRuntimeTypeLoadSchedule<TThis, TContext>> NYT::NPhoenix::NDetail::BuildRuntimeTypeLoadSchedule( \
+    template <class TThis_, class TContext_> \
+    friend std::unique_ptr<::NYT::NPhoenix::NDetail::TRuntimeTypeLoadSchedule<TThis_, TContext_>> NYT::NPhoenix::NDetail::BuildRuntimeTypeLoadSchedule( \
         const ::NYT::NPhoenix::NDetail::TTypeLoadSchedule* schedule); \
-    template <class TThis> \
+    template <class TThis_> \
     friend struct ::NYT::NPhoenix::NDetail::TTraits
 
-#define PHOENIX_DECLARE_TYPE__IMPL(type, typeTagValue, saveLoadModifier) \
+#define PHOENIX_DECLARE_TYPE__IMPL(type, typeTagValue, saveLoadPrefix, saveLoadSuffix) \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue); \
 public: \
     static const ::NYT::NPhoenix::TTypeDescriptor& GetTypeDescriptor(); \
-    void Save(TSaveContext& context) const saveLoadModifier; \
-    void Load(TLoadContext& context) saveLoadModifier; \
+    saveLoadPrefix void Save(TSaveContext& context) const saveLoadSuffix; \
+    saveLoadPrefix void Load(TLoadContext& context) saveLoadSuffix; \
     \
 private: \
-    static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap()
+    static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap(); \
+    \
+    /* NB: Must come last; either ';' or an inline body follows. */ \
+    static void RegisterMetadata(auto&& registrar)
 
-#define PHOENIX_DECLARE_FRIEND() \
-    template <class T> \
-    friend struct TPhoenixTypeInitializer__;
+#define PHOENIX_DECLARE_EXTERNAL_TYPE(type, typeTagValue, saveContext, loadContext) \
+    static_assert(!std::is_final_v<type>, "Externally registered type must not be final"); \
+    \
+    template <> \
+    struct ::NYT::NPhoenix::NDetail::TExternalMetadata<type> \
+        : public type \
+    { \
+        static constexpr bool External = true; \
+        \
+        using TThis = type; \
+        using TAccessor = TExternalMetadata<type>; \
+        using TSaveContextImpl = saveContext; \
+        using TLoadContextImpl = loadContext; \
+        \
+        static_assert( \
+            !::NYT::NPhoenix::NDetail::CSerializableOnItsOwn<type, TSaveContextImpl, TLoadContextImpl>, \
+            "Externally registered type must have no other serialization path for these contexts: " \
+            "a translation unit missing this declaration would silently use it"); \
+        \
+        [[maybe_unused]] static constexpr auto TypeTag = ::NYT::NPhoenix::TTypeTag(typeTagValue); \
+        \
+        static void RegisterMetadata(auto&& registrar); \
+        \
+        static void Save(TSaveContextImpl& context, const TThis& value); \
+        static void Load(TLoadContextImpl& context, TThis& value); \
+        static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<TThis, TLoadContextImpl>& GetRuntimeFieldDescriptorMap(); \
+    }; \
+    \
+    namespace NYT { \
+    \
+    template <class C> \
+        requires std::derived_from<C, saveContext> || std::derived_from<C, loadContext> \
+    struct TSerializerTraits<type, C> \
+    { \
+        using TSerializer = ::NYT::NPhoenix::NDetail::TExternalSerializer; \
+    }; \
+    \
+    } /* namespace NYT */ \
+    static_assert(true)
+
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
+    registrar.template Field<fieldTag, &TAccessor::fieldName>(#fieldName) __VA_ARGS__ ()
+
+#define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version, ...) \
+    registrar \
+        .template VirtualField<fieldTag>(#fieldName, [] (TThis* /*this_*/, auto& context) { \
+            Load<fieldType>(context); \
+        }) \
+        .BeforeVersion(version) __VA_ARGS__ ()
 
 #define PHOENIX_DECLARE_TYPE(type, typeTag) \
-    PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, )
+    PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, , )
+
+#define PHOENIX_DECLARE_VIRTUAL_TYPE(type, typeTag) \
+    PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, virtual, )
 
 #define PHOENIX_DECLARE_POLYMORPHIC_TYPE(type, typeTag) \
-    PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, override)
+    PHOENIX_DECLARE_TYPE__IMPL(type, typeTag, , override)
 
 #define PHOENIX_DECLARE_TEMPLATE_TYPE__IMPL(type, typeTag, saveLoadModifier) \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTag); \
@@ -79,14 +162,14 @@ private: \
 public: \
     static const ::NYT::NPhoenix::TTypeDescriptor& GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
-        return descriptor; \
+        static const auto& Descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        return Descriptor; \
     } \
     \
     static const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& GetRuntimeFieldDescriptorMap() \
     { \
-        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
-        return map; \
+        static const auto Map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        return Map; \
     } \
     \
     void Save(TSaveContext& context) const saveLoadModifier \
@@ -97,7 +180,10 @@ public: \
     void Load(TLoadContext& context) saveLoadModifier \
     { \
         ::NYT::NPhoenix::NDetail::LoadImpl(this, context); \
-    }
+    } \
+    \
+    /* NB: Must come last; either ';' or an inline body follows. */ \
+    static void RegisterMetadata(auto&& registrar)
 
 #define PHOENIX_DECLARE_TEMPLATE_TYPE(type, typeTag) \
     PHOENIX_DECLARE_TEMPLATE_TYPE__IMPL(type, typeTag, )

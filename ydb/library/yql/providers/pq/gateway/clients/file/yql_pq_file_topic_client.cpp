@@ -1,8 +1,9 @@
-#include "yql_pq_file_topic_client.h"
 #include "yql_pq_blocking_queue.h"
+#include "yql_pq_file_topic_client.h"
+
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 
 #include <library/cpp/threading/future/async.h>
-
 #include <util/folder/path.h>
 #include <util/generic/hash.h>
 #include <util/stream/file.h>
@@ -22,7 +23,7 @@ struct TConfirmSessionInfo {
     std::optional<uint64_t> Offset;
 };
 
-class TFileTopicReadSession final : public IReadSession {
+class TFileTopicReadSession final: public IReadSession {
     constexpr static TDuration FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
     using TEQueue = TBlockingEQueue<TReadSessionEvent::TEvent>;
@@ -30,13 +31,16 @@ class TFileTopicReadSession final : public IReadSession {
     using TMessage = TReadSessionEvent::TDataReceivedEvent::TMessage;
 
 public:
-    TFileTopicReadSession(TFile file, TPartitionSession::TPtr session, const TString& producerId, bool cancelOnFileFinish, NThreading::TFuture<TConfirmSessionInfo> startFuture)
+    TFileTopicReadSession(TFile file, TPartitionSession::TPtr session, const TString& producerId, bool cancelOnFileFinish,
+        NThreading::TFuture<TConfirmSessionInfo> startFuture)
         : File(std::move(file))
         , Session(std::move(session))
         , ProducerId(producerId)
         , CancelOnFileFinish(cancelOnFileFinish)
         , StartFuture(startFuture)
-        , FilePoller([this]() { PollFileForChanges(); })
+        , FilePoller([this]() {
+            PollFileForChanges();
+        })
     {
         Pool.Start(1);
     }
@@ -60,7 +64,12 @@ public:
         Y_UNUSED(maxByteSize);
 
         std::vector<TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ.Pop(block); event.has_value() && res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max()); event = EventsQ.Pop(/* block */ false)) {
+        while (res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max())) {
+            auto event = EventsQ.Pop(block);
+            block = false;
+            if (!event) {
+                break;
+            }
             res.push_back(std::move(*event));
         }
 
@@ -99,17 +108,8 @@ public:
 private:
     TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize, const TString& messageGroupId) {
         const auto now = TInstant::Now();
-        TMessageInformation msgInfo(
-            offset,
-            ProducerId,
-            SeqNo,
-            now,
-            now,
-            MakeIntrusive<TWriteSessionMeta>(),
-            MakeIntrusive<TMessageMeta>(),
-            uncompressedSize,
-            messageGroupId
-        );
+        TMessageInformation msgInfo(offset, ProducerId, SeqNo, now, now, MakeIntrusive<TWriteSessionMeta>(), MakeIntrusive<TMessageMeta>(),
+            uncompressedSize, messageGroupId);
         return msgInfo;
     }
 
@@ -121,7 +121,8 @@ private:
     void PollFileForChanges() {
         TFileInput fi(File);
         bool seekable = TFileStat(File).IsFile();
-        EventsQ.Push(TReadSessionEvent::TStartPartitionSessionEvent(Session, /*committedOffset*/0, /*endOffset*/(seekable ? File.GetLength() : 0)));
+        EventsQ.Push(
+            TReadSessionEvent::TStartPartitionSessionEvent(Session, /*committedOffset*/ 0, /*endOffset*/ (seekable ? File.GetLength() : 0)));
         while (!StartFuture.IsReady()) {
             StartFuture.Wait(FILE_POLL_PERIOD);
             if (EventsQ.IsStopped()) {
@@ -149,8 +150,8 @@ private:
             while ((read = fi.ReadLine(rawMsg))) {
                 MsgOffset += read - 1;
                 msgs.emplace_back(MakeNextMessage(rawMsg));
-                MsgOffset ++;
-                SeqNo ++;
+                MsgOffset++;
+                SeqNo++;
                 size += rawMsg.size();
                 if (!maxBatchRowSize--) {
                     break;
@@ -160,7 +161,7 @@ private:
             if (!msgs.empty()) {
                 EventsQ.Push(TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session), size);
             } else if (CancelOnFileFinish) {
-                EventsQ.Push(TSessionClosedEvent(EStatus::CANCELLED, {NIssue::TIssue("PQ file topic was finished")}), size);
+                EventsQ.Push(TSessionClosedEvent(EStatus::CANCELLED, { NIssue::TIssue("PQ file topic was finished") }), size);
             }
 
             Sleep(FILE_POLL_PERIOD);
@@ -188,7 +189,7 @@ private:
     ui64 SeqNo = 0;
 };
 
-class TFileTopicWriteSession final : public IWriteSession, private TContinuationTokenIssuer {
+class TFileTopicWriteSession final: public IWriteSession, private TContinuationTokenIssuer {
     // We acquire ownership of messages immediately
     struct TOwningWriteMessage {
         explicit TOwningWriteMessage(TWriteMessage&& msg)
@@ -208,7 +209,9 @@ class TFileTopicWriteSession final : public IWriteSession, private TContinuation
 public:
     explicit TFileTopicWriteSession(TFile file)
         : File(std::move(file))
-        , FileWriter([this]() { PushToFile(); })
+        , FileWriter([this]() {
+            PushToFile();
+        })
     {
         Pool.Start(1);
         EventsQ.Push(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
@@ -235,7 +238,12 @@ public:
 
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount) final {
         std::vector<TWriteSessionEvent::TEvent> res;
-        for (auto event = EventsQ.Pop(block); event.has_value() && res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max()); event = EventsQ.Pop(/* block */ false)) {
+        while (res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max())) {
+            auto event = EventsQ.Pop(block);
+            block = false;
+            if (!event) {
+                break;
+            }
             res.push_back(std::move(*event));
         }
 
@@ -283,7 +291,8 @@ public:
     }
 
     // Ignores codec in message and always writes raw for debugging purposes
-    void WriteEncoded(TContinuationToken&& token, std::string_view data, ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
+    void WriteEncoded(TContinuationToken&& token, std::string_view data, ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo,
+        std::optional<TInstant> createTimestamp) final {
         Y_UNUSED(codec, originalSize);
 
         TWriteMessage message(data);
@@ -318,7 +327,7 @@ private:
             do {
                 auto& [content, msg] = *maybeMsg;
                 TWriteSessionEvent::TWriteAck ack;
-                if (msg.SeqNo_.has_value()) { // FIXME should be auto generated otherwise
+                if (msg.SeqNo_.has_value()) {   // FIXME should be auto generated otherwise
                     ack.SeqNo = *msg.SeqNo_;
                 }
                 ack.State = TWriteSessionEvent::TWriteAck::EES_WRITTEN;
@@ -358,9 +367,9 @@ private:
     std::thread FileWriter;
 };
 
-struct TDummyPartitionSession final : public TPartitionSessionControl {
+struct TDummyPartitionSession final: public TPartitionSessionControl {
     TDummyPartitionSession(ui64 sessionId, const TString& topicPath, ui64 partId, NThreading::TPromise<TConfirmSessionInfo> promise)
-    : Promise(std::move(promise))
+        : Promise(std::move(promise))
     {
         PartitionSessionId = sessionId;
         TopicPath = topicPath;
@@ -379,10 +388,9 @@ struct TDummyPartitionSession final : public TPartitionSessionControl {
     void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override {
     }
 
-    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
-        Promise.SetValue(TConfirmSessionInfo {
-            .Offset = readOffset
-        });
+    void ConfirmCreate(
+        std::optional<uint64_t> readOffset, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
+        Promise.SetValue(TConfirmSessionInfo{ .Offset = readOffset });
     }
 
     void ConfirmDestroy() override {
@@ -395,45 +403,54 @@ private:
     NThreading::TPromise<TConfirmSessionInfo> Promise;
 };
 
-class TFileTopicClient final : public ITopicClient {
+class TFileTopicClient final: public NFq::IMessageStreamClient {
 public:
-    TFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings)
-        : Database(settings.Database)
+    TFileTopicClient(const TString& stream, const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings)
+        : Stream(stream)
+        , Database(settings.Database)
         , Topics(topics)
         , AllowSkipDatabasePrefix(settings.SkipDatabasePrefix)
-    {}
+    {
+        if (Stream.empty()) {
+            ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::InvalidArgument) << "Stream name must be nonempty";
+        }
+    }
 
-    TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
-        Y_UNUSED(settings);
-        Ydb::Topic::DescribeTopicResult describeTopicResult;
-        const TClusterNPath key { "pq", SkipDatabasePrefix(path) };
+    const TString& GetStream() const override {
+        return Stream;
+    }
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
+        NFq::TMessageStreamResult<NFq::TMessageStreamDescription> result;
+        const TClusterNPath key{ "pq", SkipDatabasePrefix(Stream) };
         const auto topicsIt = Topics.find(key);
         if (topicsIt == Topics.end()) {
-            NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found");
-            return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::NOT_FOUND, std::move(issues)), {}));
+            result.Status = NFq::EMessageStreamStatus::NotFound;
+            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found"));
+            return NThreading::MakeFuture(std::move(result));
         }
-        for (size_t partition = 0; partition < topicsIt->second.PartitionsCount; ++partition) {
-            auto& partitionInfo = *describeTopicResult.add_partitions();
-            partitionInfo.set_partition_id(partition);
-            partitionInfo.set_active(true);
+        for (ui64 id = 0; id < topicsIt->second.PartitionsCount; ++id) {
+            result.Value.Partitions.push_back({ .PartitionId = { id } });
         }
-        return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::SUCCESS, {}), std::move(describeTopicResult)));
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamDescription>::Success(std::move(result.Value)));
     }
 
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings) final {
-        Y_UNUSED(path, consumer, settings);
-        return NThreading::MakeFuture(TDescribeConsumerResult(TStatus(EStatus::SUCCESS, {}), {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>::Failure(
+            NFq::EMessageStreamStatus::Unsupported, { NYql::TIssue("File streams do not provide these metadata") }));
     }
 
-    TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings) final {
-        Y_UNUSED(path, partitionId, settings);
-        return NThreading::MakeFuture(TDescribePartitionResult(TStatus(EStatus::SUCCESS, {}), {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(
+        NFq::TMessageStreamPartitionId) override {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>::Failure(
+            NFq::EMessageStreamStatus::Unsupported, { NYql::TIssue("File streams do not provide these metadata") }));
     }
 
-    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
-        Y_ENSURE(!settings.Topics_.empty());
-        const auto& topic = settings.Topics_.front();
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
+        const auto sdkSettings = ToSdkReadSettings(Stream, settings);
+        Y_ENSURE(!sdkSettings.Topics_.empty());
+        const auto& topic = sdkSettings.Topics_.front();
         const TString topicPath(topic.Path_);
 
         Y_ENSURE(topic.PartitionIds_.size() >= 1);
@@ -453,21 +470,12 @@ public:
         }
         auto promise = NThreading::NewPromise<TConfirmSessionInfo>();
 
-        return std::make_shared<TFileTopicReadSession>(
-            TFile(*filePath, EOpenMode::TEnum::RdOnly),
-            MakeIntrusive<TDummyPartitionSession>(static_cast<ui64>(0), TString(topicPath), partitionId, promise),
-            "",
-            topicsIt->second.CancelOnFileFinish,
-            promise.GetFuture()
-        );
+        return WrapYdbReadSession(std::make_shared<TFileTopicReadSession>(TFile(*filePath, EOpenMode::TEnum::RdOnly),
+            MakeIntrusive<TDummyPartitionSession>(static_cast<ui64>(0), TString(topicPath), partitionId, promise), "",
+            topicsIt->second.CancelOnFileFinish, promise.GetFuture()));
     }
 
-    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) final {
-        Y_UNUSED(settings);
-        return nullptr;
-    }
-
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings) final {
+    std::shared_ptr<IWriteSession> CreateSdkWriteSession(const TWriteSessionSettings& settings) {
         const auto& key = std::make_pair("pq", SkipDatabasePrefix(TString(settings.Path_)));
         const auto topicsIt = Topics.find(key);
         Y_ENSURE(topicsIt != Topics.end(), "Cluster: " << key.first << ", topic: " << key.second << " not found");
@@ -477,9 +485,13 @@ public:
         return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::WrOnly | EOpenMode::TEnum::ForAppend));
     }
 
-    TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset, const TCommitOffsetSettings& settings) final {
-        Y_UNUSED(path, partitionId, consumerName, offset, settings);
-        return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
+        NFq::TMessageStreamPartitionId partitionId, const TString&, ui64 offset) override {
+        return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>{
+            .Status = NFq::EMessageStreamStatus::Unsupported,
+            .Issues = { NYql::TIssue("File streams do not persist consumer positions") },
+            .Value = { .PartitionId = partitionId, .NextOffset = offset },
+        });
     }
 
 private:
@@ -487,15 +499,23 @@ private:
         return AllowSkipDatabasePrefix ? NYql::SkipDatabasePrefix(path, Database) : path;
     }
 
+    const TString Stream;
     const TString Database;
     const THashMap<TClusterNPath, TDummyTopic> Topics;
     const bool AllowSkipDatabasePrefix = false;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings) {
-    return MakeIntrusive<TFileTopicClient>(topics, settings);
+std::shared_ptr<NFq::IMessageStreamClient> CreateFileTopicClient(
+    const TString& stream, const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings) {
+    return std::make_shared<TFileTopicClient>(stream, topics, settings);
 }
 
-} // namespace NYql
+std::shared_ptr<NYdb::NTopic::IWriteSession> CreateFileTopicWriteSession(const THashMap<TClusterNPath, TDummyTopic>& topics,
+    const TFileTopicClientSettings& settings, const NYdb::NTopic::TWriteSessionSettings& writeSettings)
+{
+    return TFileTopicClient(TString(writeSettings.Path_), topics, settings).CreateSdkWriteSession(writeSettings);
+}
+
+}   // namespace NYql

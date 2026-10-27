@@ -1,5 +1,3 @@
-PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup');
-
 /* custom error: Cannot infer common Decimal type for '+' operation. */
 /* custom error: Cannot infer common Decimal type for '-' operation. */
 /* custom error: Cannot infer common Decimal type for '*' operation. */

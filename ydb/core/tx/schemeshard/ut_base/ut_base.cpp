@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <util/generic/size_literals.h>
@@ -3559,6 +3560,57 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, {txId-1, txId});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // KIKIMR-25849: PartitionCount must be filled even when the
+    // TablePartitions list is not requested
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Without partitioning info: PartitionCount must still be filled
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", false), {
+            NLs::Finished,
+            NLs::TablePartitionCount(3),
+        });
+
+        // With partitioning info: PartitionCount must match the list
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
+            NLs::Finished,
+            NLs::PartitionCount(3),
+            NLs::TablePartitionCount(3),
+        });
+
+        // Split one shard and check that PartitionCount follows the actual shard count
+        auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+        const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3u);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 1000000000 } }
+                }
+            })",
+            partitions[0].GetDatashardId()).c_str()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", false), {
+            NLs::Finished,
+            NLs::TablePartitionCount(4),
+        });
     }
 
     // TDropForceUnsafe on a table with an in-progress split must abort the split
@@ -13703,5 +13755,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 Name: "Table1"
                 Columns { Name: "value"  FamilyName: "new_family" }
             )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST_TWIN(ClientModificationsUserToken, enableClientModifications) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin", "admins@builtin"};
+
+        const NACLib::TUserToken admin("admin@builtin", {});
+        const TVector<TString> tokens = {
+            admin.SerializeAsString(),
+            NACLib::TUserToken("member@builtin", {"admins@builtin"}).SerializeAsString(),
+            NACLib::TUserToken("user@builtin", {}).SerializeAsString(),
+            TString(),
+        };
+
+        ui64 txId = 100;
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const bool allowed = enableClientModifications || i < 2 || tokens[i].empty();
+            const TString name = TStringBuilder() << "dir" << i;
+
+            auto* request = MkDirRequest(++txId, "/MyRoot", name);
+            request->Record.SetUserToken(tokens[i]);
+
+            // Neither the requested owner nor the audit SID grants administrator privileges.
+            request->Record.SetOwner("admin@builtin");
+            request->Record.SetUserSID("admin@builtin");
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResults(runtime, txId, allowed
+                ? TVector<TExpectedResult>{{NKikimrScheme::StatusAccepted}}
+                : TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed,
+                    "Client schema modifications are disabled for non-administrators"}});
+
+            if (!allowed) {
+                TestLs(runtime, "/MyRoot/" + name, false, NLs::PathNotExist);
+
+                // A rejected proposal must not leave an in-flight operation behind.
+                request = MkDirRequest(txId, "/MyRoot", name);
+                request->Record.SetUserToken(admin.SerializeAsString());
+                AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+                TestModificationResult(runtime, txId);
+            }
+
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + name, false, NLs::PathExist);
+        }
     }
 }

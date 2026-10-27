@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(util.h)
 
@@ -16,14 +16,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
     ydb/public/api/protos
     yql/essentials/providers/common/structured_token
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -257,6 +257,10 @@ public:
         Counters_->UseDatabase(database);
     }
 
+    ICounterBlock* GetCounterBlock() const override {
+        return Counters_.Get();
+    }
+
 private:
     void Clone() {
         if (!Server_->IsShuttingDown()) {

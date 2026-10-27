@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/containers/ring_queue.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/misc/strong_typedef.h>
 
@@ -53,7 +53,7 @@ public:
     bool Empty() const;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
 
     i64 FirstSlotCookie_ = 1;
     TRingQueue<bool> SlotOccupied_;

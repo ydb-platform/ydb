@@ -918,8 +918,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 auto inbootIt = InbootTablets.find(leader);
                 if (inbootIt != InbootTablets.end()) {
                     MarkDeadTablet(leader, inbootIt->second.Generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
+                    InbootTablets.erase(inbootIt);
                 }
-                InbootTablets.erase(inbootIt);
             }
             if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);

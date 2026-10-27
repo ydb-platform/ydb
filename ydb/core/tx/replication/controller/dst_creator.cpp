@@ -9,6 +9,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/replication/common/family_settings.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
@@ -25,6 +26,71 @@ namespace NKikimr::NReplication::NController {
 
 using namespace NConsole;
 using namespace NSchemeShard;
+
+namespace {
+
+bool CheckColumnFamilySettings(
+        const NKikimrSchemeOp::TFamilyDescription& expected,
+        const NKikimrSchemeOp::TFamilyDescription& actual,
+        TString& error)
+{
+    const auto name = GetFamilyName(expected);
+
+    const auto expectedCodec = GetColumnCodec(expected);
+    const auto actualCodec = GetColumnCodec(actual);
+    if (expectedCodec != actualCodec) {
+        error = TStringBuilder() << "Column family codec mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCodec)
+            << ", got: " << static_cast<ui32>(actualCodec);
+        return false;
+    }
+
+    const auto expectedCacheMode = expected.GetColumnCacheMode();
+    const auto actualCacheMode = actual.GetColumnCacheMode();
+    if (expectedCacheMode != actualCacheMode) {
+        error = TStringBuilder() << "Column family cache mode mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCacheMode)
+            << ", got: " << static_cast<ui32>(actualCacheMode);
+        return false;
+    }
+
+    const auto& expectedData = expected.GetStorageConfig().GetData();
+    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
+    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    const auto& actualData = actual.GetStorageConfig().GetData();
+    const auto& actualMedia = actualData.GetPreferredPoolKind();
+    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    error = TStringBuilder() << "Column family media mismatch"
+        << ": name: " << name
+        << ", expected: " << expectedMedia
+        << ", got: " << actualMedia;
+    return false;
+}
+
+bool CheckReplicationMode(
+        const NKikimrSchemeOp::TTableDescription& table,
+        NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode)
+{
+    return table.GetReplicationConfig().GetMode() == mode;
+}
+
+bool IsReplica(const NKikimrSchemeOp::TTableDescription& table) {
+    return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+}
+
+bool NotReplica(const NKikimrSchemeOp::TTableDescription& table) {
+    return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+}
+
+} // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
@@ -126,14 +192,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             if (bootstrap) {
                 GetTableProfiles();
             } else {
                 Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
-                    .WithKeyShardBoundary(true)));
+                    .WithKeyShardBoundary(true)),
+                    0,
+                    RetryGeneration);
             }
             break;
-        case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -144,7 +212,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, DescribeSrcPath);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -170,10 +238,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        if (ev->Cookie != RetryGeneration) {
+            return;
+        }
+
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
-        Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
+        Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table || Kind == TReplication::ETargetKind::IndexTable);
         const auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
@@ -196,6 +268,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             case Ydb::Table::TableIndex::kGlobalIndex:
             case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 ++it;
+                continue;
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
+                    ++it;
+                } else {
+                    it = indexes.erase(it);
+                }
                 continue;
             default:
                 it = indexes.erase(it);
@@ -237,7 +316,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Async indexes are maintained by the destination's own change exchange.
+                // Only synchronous index tables have independent replication targets.
+                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                }
             }
         }
 
@@ -249,6 +332,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void AllocateTxId() {
+        WaitingTxId = 0;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
     }
@@ -269,28 +353,91 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        CreateDst();
+        if (DropIndexTx.HasDropIndex()) {
+            if (Cleanup) {
+                return DescribeDstPath();
+            }
+            ExecuteSchemeTx(DropIndexTx);
+        } else if (Attaching) {
+            AttachDst();
+        } else if (InitialScan) {
+            CreateDst();
+        } else {
+            DescribeDstPath();
+        }
     }
 
     void CreateDst() {
+        ExecuteSchemeTx(TxBody);
+    }
+
+    void AttachDst() {
+        NKikimrSchemeOp::TModifyScheme tx;
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
+        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
+        ExecuteSchemeTx(tx);
+    }
+
+    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
+        return !InitialScan
+            && Kind == TReplication::ETargetKind::Table
+            && !Cleanup
+            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    }
+
+    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
+            const NKikimrScheme::TEvDescribeSchemeResult& desc)
+    {
+        const auto parts = SplitPath(desc.GetPath());
+        Y_ABORT_UNLESS(!parts.empty());
+        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
+        DropIndexTx.SetInternal(true);
+        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
+        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
+        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
+
+        // DROP INDEX is addressed by name. Bind it to the table and index we
+        // validated so a concurrent schema change cannot redirect the removal.
+        auto* tableCondition = DropIndexTx.AddApplyIf();
+        tableCondition->SetPathId(DstPathId.LocalPathId);
+        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
+        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
+        Attaching = false;
+        PrepareAttachment();
+    }
+
+    void PrepareAttachment() {
+        NeedToCheck = true;
+        if (PendingDstPathId) {
+            return AllocateTxId();
+        }
+        // Persist the path before either removing indexes or making it read-only.
+        PendingDstPathId = DstPathId;
+        Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
+        Become(&TThis::StateWaitForPrepareAttachDstResult);
+    }
+
+    void ExecuteSchemeTx(const NKikimrSchemeOp::TModifyScheme& tx) {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
-        *ev->Record.AddTransaction() = TxBody;
+        *ev->Record.AddTransaction() = tx;
 
         if (Owner) {
             ev->Record.SetOwner(Owner);
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
-        Become(&TThis::StateCreateDst);
+        Become(&TThis::StateExecuteSchemeTx);
     }
 
-    STATEFN(StateCreateDst) {
+    STATEFN(StateExecuteSchemeTx) {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState", "StateCreateDst"});
+            {"actorState", "StateExecuteSchemeTx"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -300,6 +447,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != TxId) {
+            return;
+        }
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
@@ -311,13 +461,25 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusMultipleModifications:
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
+                Attaching = false;
                 return SubscribeTx(record.GetPathCreateTxId());
+            } else if (Attaching || DropIndexTx.HasDropIndex()) {
+                Attaching = false;
+                DropIndexTx.Clear();
+                Become(&TThis::StateDescribeDstPath);
+                return Retry();
             } else {
                 return Error(record.GetStatus(), record.GetReason());
             }
             break;
         case NKikimrScheme::StatusAlreadyExists:
             return DescribeDstPath();
+        case NKikimrScheme::StatusPreconditionFailed:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            if (DropIndexTx.HasDropIndex()) {
+                return DescribeDstPath();
+            }
+            return Error(record.GetStatus(), record.GetReason());
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
@@ -326,12 +488,20 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void SubscribeTx(ui64 txId) {
         YDB_LOG_DEBUG("Subscribe tx",
             {"txId", txId});
+        WaitingTxId = txId;
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
+
+        if (!WaitingTxId || ev->Get()->Record.GetTxId() != WaitingTxId) {
+            return;
+        }
+        if (Attaching && WaitingTxId == TxId) {
+            AttachmentComplete = true;
+        }
 
         if (NeedToCheck) {
             DescribeDstPath();
@@ -341,7 +511,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
+        DropIndexTx.Clear();
+        Send(PipeCache, new TEvPipeCache::TEvForward(
+            PendingDstPathId
+                ? new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId)
+                : new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
     }
 
@@ -350,7 +524,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            sFunc(TEvents::TEvWakeup, DescribeDstPath);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -363,16 +537,33 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusSuccess: {
+            const auto& desc = record.GetPathDescription();
+
             TString error;
-            if (!CheckScheme(record.GetPathDescription(), error)) {
+            if (!CheckScheme(desc, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
-            } else {
-                DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+            }
+
+            DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+            for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                if (ShouldDropVectorIndex(index)) {
+                    return PrepareDropIndex(index, record);
+                }
+            }
+            if (InitialScan || AttachmentComplete) {
                 return Success();
             }
-            break;
+
+            // Readonly metadata is published before destination shards finish
+            // the ALTER. A recovered/uncertain attachment needs a serialized
+            // replacement ALTER and its completion, even if mode already matches.
+            Attaching = true;
+            return PrepareAttachment();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
+            if (!InitialScan) {
+                return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
+            }
             return AllocateTxId();
         case NKikimrScheme::StatusSchemeError:
         case NKikimrScheme::StatusAccessDenied:
@@ -386,23 +577,45 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
     }
 
+    STATEFN(StateWaitForPrepareAttachDstResult) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWaitForPrepareAttachDstResult"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvPrepareAttachDstResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvPrepareAttachDstResult::TPtr&) {
+        PendingDstPathId = DstPathId;
+        AllocateTxId();
+    }
+
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
+        if (PendingDstPathId && Cleanup) {
+            const auto& table = desc.GetTable();
+            return NotReplica(table) || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
+        }
+
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::IndexTable:
+            return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        if (!got.HasReplicationConfig()) {
+        const bool needsConfig = InitialScan || Attaching || IsReplica(got);
+
+        if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
             return false;
         }
 
-        if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
+        if (needsConfig && !CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
             return false;
         }
 
@@ -436,9 +649,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         // check columns
-        THashMap<TStringBuf, TStringBuf> columns;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TColumnDescription*> columns;
         for (const auto& column : got.GetColumns()) {
-            columns.emplace(column.GetName(), column.GetType());
+            columns.emplace(column.GetName(), &column);
         }
 
         if (tableDesc->ColumnsSize() != columns.size()) {
@@ -446,6 +659,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ": expected: " << tableDesc->ColumnsSize()
                 << ", got: " << columns.size();
             return false;
+        }
+
+        // Compare family names instead of IDs: each cluster assigns its own IDs.
+        THashMap<ui32, TStringBuf> gotFamilyNames;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TFamilyDescription*> families;
+        gotFamilyNames.emplace(0, DefaultFamilyName);
+        for (const auto& family : got.GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(family);
+            if (name.empty()) {
+                error = TStringBuilder() << "Unnamed non-default destination column family"
+                    << ": id: " << family.GetId();
+                return false;
+            }
+            gotFamilyNames[family.GetId()] = name;
+            families.emplace(name, &family);
         }
 
         for (const auto& column : tableDesc->GetColumns()) {
@@ -456,11 +684,46 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            if (column.GetType() != it->second) {
+            if (column.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
-                    << ", got: " << it->second;
+                    << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            const auto expectedFamily = GetColumnFamilyName(column);
+            const auto name = gotFamilyNames.find(it->second->GetFamily());
+            const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;
+            if (name == gotFamilyNames.end() || actualFamily != expectedFamily) {
+                error = TStringBuilder() << "Column family mismatch"
+                    << ": column: " << column.GetName()
+                    << ", expected: " << expectedFamily
+                    << ", got: " << actualFamily;
+                return false;
+            }
+        }
+
+        for (const auto& expected : tableDesc->GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(expected);
+            auto it = families.find(name);
+            if (it == families.end()) {
+                error = TStringBuilder() << "Cannot find column family"
+                    << ": name: " << name;
+                return false;
+            }
+
+            if (!CheckColumnFamilySettings(expected, *it->second, error)) {
+                return false;
+            }
+
+            families.erase(it);
+        }
+
+        for (const auto& item : families) {
+            if (item.first != DefaultFamilyName) {
+                error = TStringBuilder() << "Unexpected column family"
+                    << ": name: " << item.first;
                 return false;
             }
         }
@@ -468,6 +731,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
+            if (ShouldDropVectorIndex(index)) {
+                continue;
+            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -632,13 +898,64 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
-        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(RetryGeneration));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != RetryGeneration) {
+            return;
+        }
+
+        const auto state = CurrentStateFunc();
+        if (state == &TThis::StateDescribeSrcPath) {
+            DescribeSrcPath();
+        } else if (state == &TThis::StateDescribeDstPath) {
+            DescribeDstPath();
+        } else if (state == &TThis::StateExecuteSchemeTx) {
+            AllocateTxId();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (YdbProxy == ev->Get()->YdbProxy) {
+            return;
+        }
+
+        YdbProxy = ev->Get()->YdbProxy;
+        if (!Cleanup && CurrentStateFunc() == &TThis::StateDescribeSrcPath) {
+            // The old proxy discards its outstanding requests on shutdown.
+            // Ignore late replies/retries and validate using the new credentials.
+            ++RetryGeneration;
+            DescribeSrcPath();
+        }
+        // Other states either have not used the source yet or are already
+        // reconciling local DDL. Keep their requests and retries intact.
+    }
+
+    void CompleteAttachment() {
+        if (!PendingDstPathId || Cleanup) {
+            return;
+        }
+
+        Cleanup = true;
+        const auto state = CurrentStateFunc();
+        if (state == &TThis::StateResolveDatabase
+            || state == &TThis::StateGetTableProfiles
+            || state == &TThis::StateDescribeSrcPath)
+        {
+            // The source proxy may already be gone. Reconcile the persisted
+            // attachment locally, without waiting for source validation or retries.
+            ++RetryGeneration;
+            AllocateTxId();
+        }
+        // Once local DDL has started, keep waiting for its result/completion.
     }
 
     void PassAway() override {
         if (const auto& actorId = std::exchange(Subscriber, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
+        TActorBootstrapped<TDstCreator>::PassAway();
     }
 
 public:
@@ -658,7 +975,10 @@ public:
             const TString& dstPath,
             EReplicationMode mode,
             EConsistencyLevel consistency,
-            const TString& database)
+            const TString& database,
+            bool initialScan,
+            const TPathId& pendingDstPathId,
+            bool cleanup)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -670,17 +990,28 @@ public:
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
+        , InitialScan(initialScan)
+        , Cleanup(cleanup)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
+        , PendingDstPathId(pendingDstPathId)
     {
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        // DONE and DROP finish the pending attachment so it can be detached locally.
+        if (PendingDstPathId && Cleanup) {
+            return AllocateTxId();
+        }
         switch (Kind) {
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
+            if (!InitialScan) {
+                return Resolve(PathId);
+            }
+            [[fallthrough]];
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
             // transfer works with an existing table
@@ -694,6 +1025,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
+            sFunc(TEvPrivate::TEvCompleteDstAttachment, CompleteAttachment);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -701,7 +1034,7 @@ public:
 private:
     const TActorId Parent;
     const ui64 SchemeShardId;
-    const TActorId YdbProxy;
+    TActorId YdbProxy;
     const TPathId PathId;
     const ui64 ReplicationId;
     const ui64 TargetId;
@@ -710,6 +1043,8 @@ private:
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
+    const bool InitialScan;
+    bool Cleanup;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -717,10 +1052,16 @@ private:
     TString Owner;
     TTableProfiles TableProfiles;
     ui64 TxId = 0;
+    ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
+    NKikimrSchemeOp::TModifyScheme DropIndexTx;
     TActorId PipeCache;
     bool NeedToCheck = false;
+    bool Attaching = false;
+    bool AttachmentComplete = false;
+    ui64 RetryGeneration = 0;
     TPathId DstPathId;
+    TPathId PendingDstPathId;
     TActorId Subscriber;
 
 }; // TDstCreator
@@ -791,15 +1132,21 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
+        replication->GetConfig().GetInitialScan(),
+        target->GetPendingDstPathId(),
+        replication->GetDesiredState() == TReplication::EState::Done
+            || replication->GetState() == TReplication::EState::Removing);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EConsistencyLevel consistency)
+        EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
+        const TPathId& pendingDstPathId,
+        bool cleanup)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
 }
 
 }

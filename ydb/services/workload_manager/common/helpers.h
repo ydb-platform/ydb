@@ -1,28 +1,23 @@
 #pragma once
 
-#include <library/cpp/retry/retry_policy.h>
-
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-
-#include <yql/essentials/public/issue/yql_issue.h>
-
+#include <ydb/library/actors/core/log.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <library/cpp/retry/retry_policy.h>
 #include <util/string/builder.h>
-
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NWorkloadManager {
 
 inline TString GetPoolKey(const TString& databaseId, const TString& poolId) {
     return CanonizePath(TStringBuilder() << databaseId << "/" << poolId);
 }
-
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
@@ -33,7 +28,7 @@ inline TString GetPoolKey(const TString& databaseId, const TString& poolId) {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 
 template <typename TDerived>
-class TSchemeActorBase : public NActors::TActorBootstrapped<TDerived> {
+class TSchemeActorBase: public NActors::TActorBootstrapped<TDerived> {
     using TRetryPolicy = IRetryPolicy<bool>;
 
 protected:
@@ -85,19 +80,17 @@ protected:
     }
 
     bool ScheduleRetry(const TString& message, bool longDelay = false) {
-        return ScheduleRetry({NYql::TIssue(message)}, longDelay);
+        return ScheduleRetry({ NYql::TIssue(message) }, longDelay);
     }
 
 private:
     static TRetryPolicy::IRetryState::TPtr CreateRetryState() {
         return TRetryPolicy::GetExponentialBackoffPolicy(
-                  [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
-                , TDuration::MilliSeconds(100)
-                , TDuration::MilliSeconds(500)
-                , TDuration::Seconds(1)
-                , std::numeric_limits<size_t>::max()
-                , TDuration::Seconds(10)
-            )->CreateRetryState();
+            [](bool longDelay) {
+                return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
+            }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(500), TDuration::Seconds(1), std::numeric_limits<size_t>::max(),
+            TDuration::Seconds(10))
+            ->CreateRetryState();
     }
 
 protected:
@@ -107,9 +100,9 @@ private:
     TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
-
-TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
 TString DatabaseIdToDatabase(TStringBuf databaseId);
+
+bool IsServerlessDatabaseId(TStringBuf databaseId);
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 
@@ -119,4 +112,4 @@ ui64 SaturationSub(ui64 x, ui64 y);
 
 NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
 
-}  // NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

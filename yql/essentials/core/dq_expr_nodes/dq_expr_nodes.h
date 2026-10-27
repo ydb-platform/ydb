@@ -14,13 +14,17 @@ struct TTopSortSettings {
     static inline const TString DescendingSort = "Desc";
 };
 
-class TDqConnection : public NGenerated::TDqConnectionStub<TExprBase, TCallable, TDqOutput> {
+class TDqConnection: public NGenerated::TDqConnectionStub<TExprBase, TCallable, TDqOutput> {
 public:
     explicit TDqConnection(const TExprNode* node)
-        : TDqConnectionStub(node) {}
+        : TDqConnectionStub(node)
+    {
+    }
 
     explicit TDqConnection(const TExprNode::TPtr& node)
-        : TDqConnectionStub(node) {}
+        : TDqConnectionStub(node)
+    {
+    }
 
     static bool Match(const TExprNode* node) {
         if (!node) {
@@ -39,13 +43,17 @@ public:
     }
 };
 
-class TDqOutputAnnotationBase : public NGenerated::TDqOutputAnnotationBaseStub<TExprBase, TCallable, TCoAtom> {
+class TDqOutputAnnotationBase: public NGenerated::TDqOutputAnnotationBaseStub<TExprBase, TCallable, TCoAtom> {
 public:
     explicit TDqOutputAnnotationBase(const TExprNode* node)
-        : TDqOutputAnnotationBaseStub(node) {}
+        : TDqOutputAnnotationBaseStub(node)
+    {
+    }
 
     explicit TDqOutputAnnotationBase(const TExprNode::TPtr& node)
-        : TDqOutputAnnotationBaseStub(node) {}
+        : TDqOutputAnnotationBaseStub(node)
+    {
+    }
 
     static bool Match(const TExprNode* node) {
         if (!node) {
@@ -60,8 +68,7 @@ public:
             return false;
         }
 
-        return TCoAtom::Match(node->Child(0))
-            && TCallable::Match(node->Child(1));
+        return TCoAtom::Match(node->Child(0)) && TCallable::Match(node->Child(1));
     }
 };
 } // namespace NDq

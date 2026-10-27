@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_yson_block_iterator.cpp
@@ -12,6 +12,4 @@ PEERDIR(
     yt/yql/providers/yt/fmr/utils/comparator
 )
  
-YQL_LAST_ABI_VERSION()
-
 END()

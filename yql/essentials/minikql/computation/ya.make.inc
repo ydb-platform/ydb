@@ -31,8 +31,6 @@ PEERDIR(
     library/cpp/threading/future
 )
 
-YQL_LAST_ABI_VERSION()
-
 ADDINCL(
     ${ORIG_SRC_DIR}
 )

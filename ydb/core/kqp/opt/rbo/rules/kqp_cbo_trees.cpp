@@ -21,23 +21,26 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-TIntrusivePtr<TOpRead> FindReadThroughMapFilter(const TIntrusivePtr<IOperator>& op) {
+TOpRead* FindReadThroughMapFilter(IOperator* op) {
     if (op->Kind == EOperator::Source) {
         return CastOperator<TOpRead>(op);
     }
 
     if (op->Kind == EOperator::Map) {
-        return FindReadThroughMapFilter(CastOperator<TOpMap>(op)->GetInput());
+        return FindReadThroughMapFilter(CastOperator<TOpMap>(op)->GetInput().Get());
     }
 
     if (op->Kind == EOperator::Filter) {
-        return FindReadThroughMapFilter(CastOperator<TOpFilter>(op)->GetInput());
+        return FindReadThroughMapFilter(CastOperator<TOpFilter>(op)->GetInput().Get());
+    }
+    if (op->Kind == EOperator::Replicate) {
+        return FindReadThroughMapFilter(CastOperator<TOpReplicate>(op)->GetReplicate().GetInput().Get());
     }
 
     return {};
 }
 
-TString GetReadTableName(const TIntrusivePtr<TOpRead>& read) {
+TString GetReadTableName(TOpRead* read) {
     if (!read || !read->TableCallable) {
         return {};
     }
@@ -45,7 +48,7 @@ TString GetReadTableName(const TIntrusivePtr<TOpRead>& read) {
     return NYql::NNodes::TKqpTable(read->TableCallable).Path().StringValue();
 }
 
-TString GetReadRelationName(const TIntrusivePtr<TOpRead>& read) {
+TString GetReadRelationName(TOpRead* read) {
     if (!read->Alias.empty()) {
         return read->Alias;
     }
@@ -76,10 +79,6 @@ TString MakeSyntheticRelationName(ui32& syntheticId, THashSet<TString>& usedName
     }
 }
 
-TString MakeUniqueColumnName(const TString& preferred, THashSet<TString>& usedNames) {
-    return MakeUniqueName(preferred.empty() ? TString("_col") : preferred, usedNames);
-}
-
 // CBO leaves are boundary operators of the packed join island, not necessarily
 // base reads:
 //
@@ -91,13 +90,11 @@ TString MakeUniqueColumnName(const TString& preferred, THashSet<TString>& usedNa
 //
 // Map/Filter chains over a read use the read alias/table name as the CBO
 // relation name. Other boundary subtrees, e.g. Aggregate CD, use generated
-// _kqp_rbo_cbo_leaf_N names. Column names come from lineage when available,
-// otherwise from output IUs, and are uniquified across the CBO island.
+// _kqp_rbo_cbo_leaf_N names. Columns are the leaf's output IDs.
 TCBOLeaf BuildCBOLeaf(
-    const TIntrusivePtr<IOperator>& op,
+    TIntrusivePtr<IOperator> op,
     TCBOBoundaryEdge edge,
     THashSet<TString>& usedRelationNames,
-    THashSet<TString>& usedColumnNames,
     ui32& syntheticRelationId)
 {
     TCBOLeaf leaf = {
@@ -105,7 +102,7 @@ TCBOLeaf BuildCBOLeaf(
         .Edge = edge,
     };
 
-    if (auto read = FindReadThroughMapFilter(op)) {
+    if (auto read = FindReadThroughMapFilter(op.Get())) {
         const auto relationName = GetReadRelationName(read);
         leaf.RelationName = relationName.empty()
             ? MakeSyntheticRelationName(syntheticRelationId, usedRelationNames)
@@ -114,36 +111,7 @@ TCBOLeaf BuildCBOLeaf(
     } else {
         leaf.RelationName = MakeSyntheticRelationName(syntheticRelationId, usedRelationNames);
     }
-
-    for (const auto& column : op->GetOutputIUs()) {
-        TString cboColumnName;
-        if (op->Props.Metadata) {
-            const auto& lineage = op->Props.Metadata->ColumnLineage.Mapping;
-            if (const auto it = lineage.find(column); it != lineage.end() && !it->second.ColumnName.empty()) {
-                cboColumnName = it->second.ColumnName;
-            }
-        }
-
-        if (cboColumnName.empty()) {
-            cboColumnName = column.GetColumnName();
-        }
-
-        const auto cboColumn = TInfoUnit(leaf.RelationName, MakeUniqueColumnName(cboColumnName, usedColumnNames));
-        leaf.ColumnsToCBO[column] = cboColumn;
-        leaf.CBOToColumns[cboColumn] = column;
-    }
-
     return leaf;
-}
-
-NKqp::TColumnStatistics ConvertYqlColumnStatistics(const NYql::TColumnStatistics& src) {
-    NKqp::TColumnStatistics result;
-    result.NumUniqueVals = src.NumUniqueVals;
-    result.HyperLogLog = src.HyperLogLog;
-    result.CountMinSketch = src.CountMinSketch;
-    result.EqWidthHistogramEstimator = src.EqWidthHistogramEstimator;
-    result.Type = src.Type;
-    return result;
 }
 
 TVector<TString> BuildTranslatedKeyColumns(const TCBOLeaf& leaf) {
@@ -152,9 +120,10 @@ TVector<TString> BuildTranslatedKeyColumns(const TCBOLeaf& leaf) {
         return keyColumns;
     }
 
-    for (const auto& key : leaf.Op->Props.Metadata->KeyColumns) {
-        if (const auto it = leaf.ColumnsToCBO.find(key); it != leaf.ColumnsToCBO.end()) {
-            keyColumns.push_back(it->second.GetColumnName());
+    const auto& outputs = leaf.Op->GetOutputIUs();
+    for (const auto key : leaf.Op->Props.Metadata->KeyColumns.Items()) {
+        if (outputs.Contains(key)) {
+            keyColumns.push_back(ToString(key));
         }
     }
     return keyColumns;
@@ -162,6 +131,7 @@ TVector<TString> BuildTranslatedKeyColumns(const TCBOLeaf& leaf) {
 
 TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> BuildTranslatedColumnStatistics(
     const TCBOLeaf& leaf,
+    const TColumnLineage& lineage,
     NYql::TTypeAnnotationContext& typeCtx)
 {
     if (!leaf.Op->Props.Metadata) {
@@ -169,35 +139,65 @@ TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> BuildTranslatedColumnStatist
     }
 
     auto result = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
-    const auto& lineage = leaf.Op->Props.Metadata->ColumnLineage.Mapping;
 
-    for (const auto& [rboColumn, cboColumn] : leaf.ColumnsToCBO) {
-        const auto lineageIt = lineage.find(rboColumn);
-        if (lineageIt == lineage.end() || lineageIt->second.TableName.empty()) {
+    THashMap<TString, THashMap<TString, TString>> cboColumnByTableColumn;
+
+    for (const auto column : leaf.Op->GetOutputIUs()) {
+        const auto* source = FindSourceStatistics(*leaf.Op, column, lineage);
+        if (!source || source->TableName.empty()) {
             continue;
         }
 
-        const auto tableStatsIt = typeCtx.ColumnStatisticsByTableName.find(lineageIt->second.TableName);
+        cboColumnByTableColumn[source->TableName][source->ColumnName] = ToString(column);
+
+        const auto tableStatsIt = typeCtx.ColumnStatisticsByTableName.find(source->TableName);
         if (tableStatsIt == typeCtx.ColumnStatisticsByTableName.end()) {
             continue;
         }
 
-        const auto columnStatsIt = tableStatsIt->second->Data.find(lineageIt->second.ColumnName);
+        const auto columnStatsIt = tableStatsIt->second->Data.find(source->ColumnName);
         if (columnStatsIt == tableStatsIt->second->Data.end()) {
             continue;
         }
 
-        result->Data[cboColumn.GetColumnName()] = ConvertYqlColumnStatistics(columnStatsIt->second);
+        result->Data[ToString(column)] = NKqp::TColumnStatistics(columnStatsIt->second);
     }
 
-    if (result->Data.empty()) {
+    for (const auto& [tableName, cboColumnByColumn] : cboColumnByTableColumn) {
+        const auto tableStatsIt = typeCtx.ColumnStatisticsByTableName.find(tableName);
+        if (tableStatsIt == typeCtx.ColumnStatisticsByTableName.end()) {
+            continue;
+        }
+
+        for (const auto& [_, multiColumnStats] : tableStatsIt->second->MultiData) {
+            TVector<TString> translatedColumns;
+            for (const auto& column : multiColumnStats.Columns) {
+                const auto it = cboColumnByColumn.find(column);
+                if (it == cboColumnByColumn.end()) {
+                    translatedColumns.clear();
+                    break;
+                }
+                translatedColumns.push_back(it->second);
+            }
+
+            if (translatedColumns.empty()) {
+                continue;
+            }
+
+            NKqp::TMultiColumnStatistics translated(multiColumnStats);
+            translated.Columns = translatedColumns;
+            result->MultiData[MakeMultiColumnKey(translatedColumns)] = std::move(translated);
+        }
+    }
+
+    if (result->Data.empty() && result->MultiData.empty()) {
         return {};
     }
     return result;
 }
 
-TOptimizerStatistics BuildLeafOptimizerStatistics(const TCBOLeaf& leaf, NYql::TTypeAnnotationContext& typeCtx) {
-    auto stats = BuildOptimizerStatistics(leaf.Op->Props, true, typeCtx);
+TOptimizerStatistics BuildLeafOptimizerStatistics(const TCBOLeaf& leaf, const TColumnLineage& lineage, NYql::TTypeAnnotationContext& typeCtx) {
+    auto stats = BuildOptimizerStatistics(*leaf.Op, lineage, true, typeCtx);
     stats.KeyColumns = MakeIntrusive<TOptimizerStatistics::TKeyColumns>(BuildTranslatedKeyColumns(leaf));
 
     if (leaf.Op->Props.Metadata) {
@@ -212,72 +212,15 @@ TOptimizerStatistics BuildLeafOptimizerStatistics(const TCBOLeaf& leaf, NYql::TT
         stats.TableAliases->AddMapping(leaf.SourceTableName, leaf.RelationName);
     }
 
-    stats.ColumnStatistics = BuildTranslatedColumnStatistics(leaf, typeCtx);
+    stats.ColumnStatistics = BuildTranslatedColumnStatistics(leaf, lineage, typeCtx);
     return stats;
 }
 
-TVector<const TCBOLeaf*> FindLeavesByRelation(const TVector<TCBOLeaf>& leaves, const TString& relationName) {
-    TVector<const TCBOLeaf*> result;
-    for (const auto& leaf : leaves) {
-        if (leaf.RelationName == relationName || leaf.SourceTableName == relationName) {
-            result.push_back(&leaf);
-        }
-    }
-    return result;
-}
-
-const TCBOLeaf& FindLeafForRBOColumn(
-    const TVector<TCBOLeaf>& leaves,
-    const TInfoUnit& column,
-    const std::shared_ptr<IBaseOptimizerNode>& side)
-{
-    THashSet<TString> sideLabels;
-    for (const auto& label : side->Labels()) {
-        sideLabels.insert(label);
-    }
-
-    for (const auto& leaf : leaves) {
-        if (sideLabels.contains(leaf.RelationName) && leaf.ColumnsToCBO.contains(column)) {
-            return leaf;
-        }
-    }
-
-    Y_ENSURE(false, TStringBuilder() << "Could not map NEW RBO column "
-        << column.GetFullName() << " to a CBO leaf");
-    return leaves.front();
-}
-
-TJoinColumn ConvertRBOColumnToCBO(
-    const TVector<TCBOLeaf>& leaves,
-    const TInfoUnit& column,
-    const std::shared_ptr<IBaseOptimizerNode>& side)
-{
-    const auto& leaf = FindLeafForRBOColumn(leaves, column, side);
-    const auto it = leaf.ColumnsToCBO.find(column);
-    Y_ENSURE(it != leaf.ColumnsToCBO.end());
-    return TJoinColumn(it->second.GetAlias(), it->second.GetColumnName());
-}
-
-TInfoUnit ConvertCBOColumnToRBO(const TVector<TCBOLeaf>& leaves, const TJoinColumn& column) {
-    for (const auto* leafPtr : FindLeavesByRelation(leaves, column.RelName)) {
-        const auto& leaf = *leafPtr;
-        const auto cboColumn = TInfoUnit(leaf.RelationName, column.AttributeName);
-        if (const auto it = leaf.CBOToColumns.find(cboColumn); it != leaf.CBOToColumns.end()) {
-            return it->second;
-        }
-    }
-
-    Y_ENSURE(false, TStringBuilder() << "Could not map CBO column "
-        << column.RelName << "." << column.AttributeName
-        << " back to NEW RBO input");
-    return {};
-}
-
-TVector<TInfoUnit> ConvertCBOColumnsToRBO(const TVector<TCBOLeaf>& leaves, const TVector<TJoinColumn>& columns) {
-    TVector<TInfoUnit> result;
-    result.reserve(columns.size());
+TOrderedIUs<> ConvertCBOColumnsToRBO(const TVector<TJoinColumn>& columns) {
+    TOrderedIUs<> result;
+    result.Reserve(columns.size());
     for (const auto& column : columns) {
-        result.push_back(ConvertCBOColumnToRBO(leaves, column));
+        result.Append(GetCBOColumnId(column));
     }
     return result;
 }
@@ -293,11 +236,10 @@ TVector<TCBOLeaf> BuildCBOLeaves(const TOpCBOTree& cboTree) {
     }
 
     THashSet<TString> usedRelationNames;
-    THashSet<TString> usedColumnNames;
     ui32 syntheticRelationId = 0;
     for (const auto& node : cboTree.TreeNodes) {
-        for (ui32 childIndex = 0; childIndex < node->Children.size(); ++childIndex) {
-            const auto& child = node->Children[childIndex];
+        for (ui32 childIndex = 0; childIndex < node->GetChildCount(); ++childIndex) {
+            auto child = node->GetChild(childIndex);
             if (treeNodeSet.contains(child.Get())) {
                 continue;
             }
@@ -306,7 +248,6 @@ TVector<TCBOLeaf> BuildCBOLeaves(const TOpCBOTree& cboTree) {
                 child,
                 TCBOBoundaryEdge{node.Get(), childIndex},
                 usedRelationNames,
-                usedColumnNames,
                 syntheticRelationId));
         }
     }
@@ -350,13 +291,13 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
         }
         const auto& metadata = *leaf.Op->Props.Metadata;
 
-        if (!metadata.ShuffledByColumns.empty()) {
+        if (!metadata.ShuffledByColumns.Items().empty()) {
             auto& shuffledBy = resolvedLeafShufflings[i];
-            shuffledBy.reserve(metadata.ShuffledByColumns.size());
+            shuffledBy.reserve(metadata.ShuffledByColumns.Items().size());
             bool allShufflingColumnsResolved = true;
-            for (const auto& col : metadata.ShuffledByColumns) {
-                if (const auto it = leaf.ColumnsToCBO.find(col); it != leaf.ColumnsToCBO.end()) {
-                    shuffledBy.emplace_back(it->second.GetAlias(), it->second.GetColumnName());
+            for (const auto col : metadata.ShuffledByColumns.Items()) {
+                if (leaf.Op->GetOutputIUs().Contains(col)) {
+                    shuffledBy.push_back(MakeCBOColumn(leaf.RelationName, col));
                 } else {
                     allShufflingColumnsResolved = false;
                     break;
@@ -369,12 +310,12 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
             }
         }
 
-        if (!metadata.KeyColumns.empty()) {
+        if (!metadata.KeyColumns.Items().empty()) {
             TVector<TJoinColumn> sortedBy;
-            sortedBy.reserve(metadata.KeyColumns.size());
-            for (const auto& col : metadata.KeyColumns) {
-                if (const auto it = leaf.ColumnsToCBO.find(col); it != leaf.ColumnsToCBO.end()) {
-                    sortedBy.emplace_back(it->second.GetAlias(), it->second.GetColumnName());
+            sortedBy.reserve(metadata.KeyColumns.Items().size());
+            for (const auto col : metadata.KeyColumns.Items()) {
+                if (leaf.Op->GetOutputIUs().Contains(col)) {
+                    sortedBy.push_back(MakeCBOColumn(leaf.RelationName, col));
                 }
             }
             if (!sortedBy.empty()) {
@@ -413,6 +354,7 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
 std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
     TIntrusivePtr<TOpCBOTree>& cboTree,
     NYql::TTypeAnnotationContext& typeCtx,
+    const TColumnLineage& lineage,
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     const TVector<TCBOLeaf>& leaves)
 {
@@ -421,36 +363,44 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
     THashMap<TCBOBoundaryEdge, std::shared_ptr<IBaseOptimizerNode>, TCBOBoundaryEdge::THashFunction> leafNodeMap;
     THashMap<IOperator*, std::shared_ptr<IBaseOptimizerNode>> nodeMap;
 
-    // Build one CBO relation per boundary input. Each relation carries the
-    // leaf-scoped column aliases and translated statistics.
-    for (const auto& leaf : leaves) {
-        auto stats = BuildLeafOptimizerStatistics(leaf, typeCtx);
+    // Build one CBO relation per boundary input. Leaf outputs are disjoint,
+    // so every ID names a column of exactly one relation.
+    TMappedIUs<ui32> leafOf;
+    for (ui32 index = 0; index < leaves.size(); ++index) {
+        const auto& leaf = leaves[index];
+        for (const auto id : leaf.Op->GetOutputIUs()) {
+            leafOf.Add(id, index);
+        }
+        auto stats = BuildLeafOptimizerStatistics(leaf, lineage, typeCtx);
         auto relNode = std::make_shared<NOpt::TRBORelOptimizerNode>(
-            TVector<TString>{leaf.RelationName}, stats, leaf.Op, leaf.CBOToColumns);
+            TVector<TString>{leaf.RelationName}, stats, leaf.Op);
         rels.push_back(relNode);
         leafNodeMap.insert({leaf.Edge, relNode});
     }
+    const auto toCBO = [&](TInfoUnitId id) {
+        return MakeCBOColumn(leaves[leafOf.At(id)].RelationName, id);
+    };
 
-    auto resolveChildNode = [&nodeMap, &leafNodeMap](const TIntrusivePtr<TOpJoin>& join, ui32 childIndex) {
-        const auto& child = join->Children[childIndex];
-        if (const auto it = nodeMap.find(child.get()); it != nodeMap.end()) {
+    auto resolveChildNode = [&nodeMap, &leafNodeMap](TOpJoin* join, ui32 childIndex) {
+        auto* child = join->GetChild(childIndex).Get();
+        if (const auto it = nodeMap.find(child); it != nodeMap.end()) {
             return it->second;
         }
-        return leafNodeMap.at(TCBOBoundaryEdge{join.get(), childIndex});
+        return leafNodeMap.at(TCBOBoundaryEdge{join, childIndex});
     };
 
     for (auto node : cboTree->TreeNodes) {
         auto join = CastOperator<TOpJoin>(node);
-        auto leftNode = resolveChildNode(join, 0);
-        auto rightNode = resolveChildNode(join, 1);
+        auto leftNode = resolveChildNode(join.Get(), 0);
+        auto rightNode = resolveChildNode(join.Get(), 1);
         TVector<TJoinColumn> leftKeys;
         TVector<TJoinColumn> rightKeys;
 
-        for (const auto& joinKey : join->JoinKeys) {
-            leftKeys.push_back(ConvertRBOColumnToCBO(leaves, joinKey.Left, leftNode));
-            rightKeys.push_back(ConvertRBOColumnToCBO(leaves, joinKey.Right, rightNode));
-            leftKeys.back().EqualNulls = joinKey.EqualNulls;
-            rightKeys.back().EqualNulls = joinKey.EqualNulls;
+        for (const auto& [leftKey, rightKey, equalNulls] : join->JoinKeys.Items()) {
+            leftKeys.push_back(toCBO(leftKey));
+            rightKeys.push_back(toCBO(rightKey));
+            leftKeys.back().EqualNulls = equalNulls;
+            rightKeys.back().EqualNulls = equalNulls;
         }
 
         result = std::make_shared<TJoinOptimizerNode>(leftNode,
@@ -463,7 +413,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
             false,
             false);
 
-        nodeMap.insert({join.get(), result});
+        nodeMap.insert({join.Get(), result});
     }
 
     return result;
@@ -484,12 +434,12 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(
 
         Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
 
-        TVector<TJoinKey> joinKeys;
+        TJoinIUs joinKeys;
         for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
-            auto leftKey = ConvertCBOColumnToRBO(leaves, join->LeftJoinKeys[i]);
-            auto rightKey = ConvertCBOColumnToRBO(leaves, join->RightJoinKeys[i]);
+            auto leftKey = GetCBOColumnId(join->LeftJoinKeys[i]);
+            auto rightKey = GetCBOColumnId(join->RightJoinKeys[i]);
             Y_ENSURE(join->LeftJoinKeys[i].EqualNulls == join->RightJoinKeys[i].EqualNulls, "Join keys have different IS NOT DISTINCT FROM semantics.");
-            joinKeys.emplace_back(leftKey, rightKey, join->LeftJoinKeys[i].EqualNulls);
+            joinKeys.Add({leftKey, rightKey, join->LeftJoinKeys[i].EqualNulls});
         }
 
         auto joinKind = ConvertToJoinString(join->JoinType);
@@ -503,8 +453,8 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(
         }
 
         if (join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
-            res->Props.LeftShuffleBy = ConvertCBOColumnsToRBO(leaves, join->ShuffleLeftSideBy);
-            res->Props.RightShuffleBy = ConvertCBOColumnsToRBO(leaves, join->ShuffleRightSideBy);
+            res->Props.LeftShuffleBy = ConvertCBOColumnsToRBO(join->ShuffleLeftSideBy);
+            res->Props.RightShuffleBy = ConvertCBOColumnsToRBO(join->ShuffleRightSideBy);
         }
         return res;
     }

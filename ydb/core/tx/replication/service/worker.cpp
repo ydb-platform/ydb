@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -209,6 +210,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         void Registered() {
             InitDone = true;
+        }
+
+        void ResetCreateAttempt() {
             CreateAttempt = 0;
         }
 
@@ -231,6 +235,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             YDB_LOG_INFO("Handshake with reader",
                 {"sender", ev->Sender});
 
+            // This handshake only confirms creation of the SDK session wrapper.
+            // Keep the retry budget until the reader actually delivers data.
             Reader.Registered();
             if (ReaderSessionStarted && PendingSchemaChange && !SchemaReportCommitted) {
                 // The reader may have been recreated after receiving the
@@ -253,6 +259,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 {"sender", ev->Sender});
 
             Writer.Registered();
+            Writer.ResetCreateAttempt();
+            if (LastBuildProgress) {
+                auto progress = MakeHolder<TEvService::TEvIndexBuildProgressResult>();
+                progress->Record.MutableProgress()->CopyFrom(*LastBuildProgress);
+                Send(Writer, std::move(progress));
+            }
+
             if (InFlightData) {
                 Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             } else if (TerminateWriter) {
@@ -262,6 +275,53 @@ class TWorker: public TActorBootstrapped<TWorker> {
             YDB_LOG_WARN("Handshake from unknown actor",
                 {"sender", ev->Sender});
             return;
+        }
+    }
+
+    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev) {
+        if (ev->Sender != Writer || !InFlightData) {
+            return;
+        }
+
+        PendingBuildProgress = MakeHolder<NKikimrReplication::TIndexBuildProgress>(ev->Get()->Record.GetProgress());
+        Forward(ev);
+    }
+
+    void UpdateLag() {
+        if (InFlightData) {
+            const auto& records = InFlightData->Records;
+            auto it = MinElementBy(records, [](const auto& record) {
+                return record.GetCreateTime();
+            });
+
+            if (it != records.end()) {
+                Lag = TlsActivationContext->Now() - it->GetCreateTime();
+            }
+        }
+    }
+
+    void Handle(TEvService::TEvIndexBuildProgressResult::TPtr& ev) {
+        if (!PendingBuildProgress || !InFlightData
+            || ev->Get()->Record.GetProgress().SerializeAsString() != PendingBuildProgress->SerializeAsString())
+        {
+            return;
+        }
+
+        LastBuildProgress = std::move(PendingBuildProgress);
+        Send(ev->Forward(Writer));
+        const auto offset = LastBuildProgress->GetOffset();
+        UpdateLag();
+        auto& records = InFlightData->Records;
+        const auto firstNew = FindIf(records, [offset](const auto& record) { return record.GetOffset() >= offset; });
+        records.erase(records.begin(), firstNew);
+        if (!records.empty()) {
+            Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, records));
+        } else {
+            InFlightData.Reset();
+            TerminateWriter.Reset();
+            if (Reader) {
+                Send(Reader, new TEvWorker::TEvPoll());
+            }
         }
     }
 
@@ -275,16 +335,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        if (InFlightData) {
-            const auto& records = InFlightData->Records;
-            auto it = MinElementBy(records, [](const auto& record) {
-                return record.GetCreateTime();
-            });
-
-            if (it != records.end()) {
-                Lag = TlsActivationContext->Now() - it->GetCreateTime();
-            }
-        }
+        UpdateLag();
 
         // A schema barrier owns the raw batch until the controller has
         // applied the schema and the writer has refreshed. A normal poll from
@@ -330,9 +381,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         const auto offset = ev->Get()->Offset;
         if (PendingSchemaChange) {
-            if (PendingSchemaChange->Offset != offset
-                || PendingSchemaChange->Schema.SerializeAsString() != ev->Get()->Schema.SerializeAsString())
-            {
+            if (PendingSchemaChange->Offset != offset || !IsSameSchemaChange(PendingSchemaChange->Schema, ev->Get()->Schema)) {
                 YDB_LOG_WARN("Conflicting schema change from writer",
                     {"offset", offset});
                 return;
@@ -433,12 +482,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         const bool matchesPendingSchemaChange = PendingSchemaChange
             && PendingSchemaChange->Offset == ev->Get()->Record.GetOffset()
-            && PendingSchemaChange->Schema.SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString();
+            && IsSameSchemaChange(PendingSchemaChange->Schema, ev->Get()->Record.GetSchema());
 
         if (ev->Get()->Record.GetCompleted()
             && RecoveredCompletionSchema
             && RecoveredCompletionOffset == ev->Get()->Record.GetOffset()
-            && RecoveredCompletionSchema->SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString())
+            && IsSameSchemaChange(*RecoveredCompletionSchema, ev->Get()->Record.GetSchema()))
         {
             RecoveredCompletionSchema.Reset();
             RecoveredCompletionReported = false;
@@ -457,8 +506,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         {
             if (RecoveredCompletionSchema
                 && (RecoveredCompletionOffset != ev->Get()->Record.GetOffset()
-                    || RecoveredCompletionSchema->SerializeAsString()
-                        != ev->Get()->Record.GetSchema().SerializeAsString()))
+                    || !IsSameSchemaChange(*RecoveredCompletionSchema, ev->Get()->Record.GetSchema())))
             {
                 YDB_LOG_WARN("Conflicting recovered schema change result",
                     {"sender", ev->Sender});
@@ -552,7 +600,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Writer || !PendingSchemaChange
-            || ev->Get()->Schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString())
+            || !IsSameSchemaChange(ev->Get()->Schema, PendingSchemaChange->Schema))
         {
             YDB_LOG_WARN("Unexpected schema change applied",
                 {"sender", ev->Sender});
@@ -646,6 +694,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             ReaderReplayBoundary.Clear();
         }
 
+        Reader.ResetCreateAttempt();
         InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
@@ -790,6 +839,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void ReportLag() {
+        if (PendingBuildProgress) {
+            auto progress = MakeHolder<TEvService::TEvIndexBuildProgress>();
+            progress->Record.MutableProgress()->CopyFrom(*PendingBuildProgress);
+            Send(Parent, std::move(progress));
+        }
+
         ScheduleLagReport();
 
         if (!Reader || !Writer) {
@@ -877,6 +932,8 @@ public:
             hFunc(TEvService::TEvGetTxId, Forward);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Forward);
+            hFunc(TEvService::TEvIndexBuildProgress, Handle);
+            hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
             sFunc(TEvents::TEvWakeup, ReportLag);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -893,6 +950,8 @@ private:
     THolder<TEvWorker::TEvData> InFlightData;
     THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    THolder<NKikimrReplication::TIndexBuildProgress> PendingBuildProgress;
+    THolder<NKikimrReplication::TIndexBuildProgress> LastBuildProgress;
     bool SchemaReportCommitted = false;
     bool SchemaReleaseReceived = false;
     bool WriterHasSchemaBarrier = false;

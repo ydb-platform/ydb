@@ -50,6 +50,11 @@ dstool
 │     └─ reconfigure                    Create virtual group backed by BlobDepot
 ├─ pool
 │  ├─ list                              List pools
+│  ├─ set                               Set storage pool settings that are not 
+│  │                                    part of the pool definition
+│  ├─ set-bridge-mode                   Make storage pool of bridged cluster 
+│  │                                    bridged or ordinary one; its groups keep
+│  │                                     their ids and data
 │  └─ create
 │     └─ virtual                        Create pool suitable for virtual groups
 ├─ box
@@ -87,7 +92,16 @@ dstool
 │  ├─ get                               Get cluster wide settings
 │  ├─ set                               Set cluster wide settings
 │  ├─ workload
-│  │  └─ run                            Create workload to stress failure model
+│  │  ├─ run                            Create workload to stress failure model
+│  │  └─ nbs-dbg-like                   Manage dedicated NbsDbgLike load tablets
+│  │                                     and recoverable gRPC runs
+│  │     ├─ create
+│  │     ├─ list
+│  │     ├─ describe
+│  │     ├─ delete
+│  │     ├─ run
+│  │     ├─ results
+│  │     └─ stop
 │  └─ list                              List cluster
 └─ nbs
    └─ partition

@@ -216,6 +216,10 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
 
+    std::unique_ptr<IAbortableInputStream> ReadFilePartition(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options = {}) override;
+
     std::unique_ptr<IOutputStream> WriteFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -399,6 +403,12 @@ public:
         const TTransactionId& transactionId,
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
+
+    TFilePartitions GetFilePartitions(
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options = {}) override;
 
     void CheckClusterLiveness(
         const TCheckClusterLivenessOptions& options = {}) override;

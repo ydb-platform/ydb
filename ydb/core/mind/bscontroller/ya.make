@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     blob_checker.cpp
@@ -10,6 +10,7 @@ SRCS(
     bsc_audit.h
     bsc_audit.cpp
     bridge.cpp
+    bridge_sync_counters.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
@@ -27,6 +28,8 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    database_space.cpp
+    database_space.h
     ddisk.cpp
     ddisk_info.cpp
     defs.h

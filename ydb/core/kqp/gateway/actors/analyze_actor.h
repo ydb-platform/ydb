@@ -26,7 +26,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
     TAnalyzeActor(const TString& database,const TString& tablePath,
         const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise,
-        double sampleRate);
+        double sampleRate, NWilson::TTraceId traceId = {});
 
     void Bootstrap();
 
@@ -69,6 +69,7 @@ private:
     TULIDGenerator UlidGen;
     TPathId PathId;
     const TString OperationId;
+    const NWilson::TTraceId TraceId;
 
     // for retries
     NStat::TEvStatistics::TEvAnalyze Request;

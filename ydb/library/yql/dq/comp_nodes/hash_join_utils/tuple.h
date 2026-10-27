@@ -5,11 +5,14 @@
 #include <yql/essentials/public/udf/udf_types.h>
 
 #include <util/generic/bitmap.h>
+#include <util/generic/bitops.h>
 #include <util/generic/buffer.h>
 #include <util/system/compiler.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
+#include <array>
+#include <cstring>
 #include <string>
 
 namespace NKikimr {
@@ -141,6 +144,8 @@ struct TColumnDesc {
                        // Must be same for matching key columns
     ui32 Offset =
         0; // Offset in bytes for column value from the beginning of tuple
+    bool FloatingPoint = false; // Float/Double key: hashed and compared in canonical
+                                // form, while the original bytes are kept aside
 };
 
 // Defines in memory layout of tuple.
@@ -177,6 +182,21 @@ struct TTupleLayout {
     TDynBitMap EqualNullsKeyMask;
     bool HasEqualNullsKeys = false;
 
+    // Keys are hashed and compared bytewise, so Float/Double keys get -0.0 and
+    // every NaN rewritten to a single representation, matching EquateFloats.
+    // The original bytes live in an extra payload slot and are written back on
+    // unpack, so the join result keeps the input value.
+    struct TFloatOriginal {
+        ui32 KeyOffset = 0;
+        ui32 PayloadOffset = 0;
+        ui32 Size = 0;
+        ui32 OriginalIndex = 0; // input/output buffer of this key
+    };
+    std::vector<ui32> FloatKeyOffsets;
+    std::vector<ui32> DoubleKeyOffsets;
+    std::vector<TFloatOriginal> FloatOriginals;
+    bool HasFloatingPointKeys = false;
+
     // Input-column indexes (OriginalColumnIndex) that use IS NOT DISTINCT FROM.
     // Join-key slots from settings must be remapped to these indexes first.
     void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
@@ -187,8 +207,50 @@ struct TTupleLayout {
         return mask;
     }
 
-    void NormalizeEqualNullsFixedKeys(ui8* res) const;
-    bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
+    void NormalizeEqualNullsFixedKeys(ui8* res) const {
+        if (Y_LIKELY(!HasEqualNullsKeys)) {
+            return;
+        }
+
+        const ui32 fixedMaskBytes = (KeyColumnsFixedNum + 7) / 8;
+        for (ui32 byteN = 0; byteN < fixedMaskBytes; ++byteN) {
+            ui8 nullEqualNulls = GetEqualNullsMaskByte(byteN) & ~res[BitmaskOffset + byteN];
+            while (nullEqualNulls) {
+                const ui32 j = byteN * 8 + CountTrailingZeroBits(static_cast<ui32>(nullEqualNulls));
+                if (j >= KeyColumnsFixedNum) {
+                    break;
+                }
+                const auto& col = KeyColumns[j];
+                std::memset(res + col.Offset, 0, col.DataSize);
+                nullEqualNulls &= nullEqualNulls - 1;
+            }
+        }
+    }
+
+    // Must run on freshly packed rows before their key bytes are hashed.
+    // Stashes the original key bytes into the extra payload slot first.
+    Y_FORCE_INLINE void CanonicalizeFloatKeys(ui8* rows, ui32 count) const {
+        if (Y_UNLIKELY(HasFloatingPointKeys)) {
+            StashFloatOriginals(rows, count);
+            CanonicalizeFloatKeysImpl(rows, count);
+        }
+    }
+    void StashFloatOriginals(ui8* rows, ui32 count) const;
+    void CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const;
+
+    // Overwrites unpacked key buffers with the stashed original bytes.
+    Y_FORCE_INLINE void RestoreFloatOriginals(ui8** columns, const ui8* rows, ui32 start, ui32 count) const {
+        if (Y_UNLIKELY(HasFloatingPointKeys)) {
+            RestoreFloatOriginalsImpl(columns, rows, start, count);
+        }
+    }
+    void RestoreFloatOriginalsImpl(ui8** columns, const ui8* rows, ui32 start, ui32 count) const;
+    bool HashVariableKey(const ui8* res, ui32 keyColIdx) const {
+        if (Y_LIKELY(!HasEqualNullsKeys) || !EqualNullsKeyMask.Get(keyColIdx)) {
+            return true;
+        }
+        return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
+    }
 
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
@@ -278,54 +340,12 @@ struct TTupleLayoutFallback : public TTupleLayout {
 };
 
 
-template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallback {
-
-    explicit TTupleLayoutSIMD(const std::vector<TColumnDesc> &columns);
-
-    void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-        std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-        ui32 count) const override;
-
-    void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-            const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
-            ui32 start, ui32 count) const override;
-
-    void
-    BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
-                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
-                 ui32 start, ui32 count, ui32 bucketsLogNum) const override;
-
-  private:
-    using TSimdI8 = typename TTraits::TSimdI8;
-    template <class T> using TSimd = typename TTraits::template TSimd8<T>;
-
-    static constexpr ui8 kSIMDMaxCols = 4;
-    static constexpr ui8 kSIMDMaxInnerLoopSize = 4;
-
-    size_t BlockRows_; // Estimated rows per cache block
-    std::vector<size_t> BlockColsOffsets_;
-    std::vector<size_t> BlockFixedColsSizes_;
-    std::vector<size_t> BlockColumnsOrigInds_;
-
-    struct SIMDSmallTupleDesc {
-        ui8 Cols = 0;
-        ui8 InnerLoopIters;
-        size_t SmallTupleSize;
-        size_t RowOffset;
-    };
-    SIMDSmallTupleDesc SIMDSmallTuple_;
-    std::vector<TSimd<ui8>> SIMDPermMasks_; // small tuple precomputed masks
-
-    struct SIMDTransposeDesc {
-        ui8 Cols = 0;
-        size_t RowOffset;
-    };
-    // [1, 2, 4, 8] bytes x [Key, Payload]
-    std::array<SIMDTransposeDesc, 8> SIMDTranspositions_;
-    static constexpr std::array<size_t, 4> SIMDTranspositionsColSizes_ = {1, 2,
-                                                                          4, 8};
-};
+#ifdef USE_X86_SIMD
+// Call only after checking the corresponding CPU feature. The object and all
+// its SIMD operations are instantiated in the matching ISA-specific library.
+THolder<TTupleLayout> CreateAVX2TupleLayout(const std::vector<TColumnDesc>& columns);
+THolder<TTupleLayout> CreateSSE42TupleLayout(const std::vector<TColumnDesc>& columns);
+#endif
 
 template <bool EqualNulls>
 bool TupleKeysEqual(const TTupleLayout *layout,

@@ -218,7 +218,7 @@ public:
 
     virtual const char* Name() const override final { return "TDropSequence"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& drop = Transaction.GetDrop();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -354,7 +354,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TDropSequence");
     }
 

@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
 #include "kqp_statement_rewrite.h"
 
@@ -8,10 +9,12 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
@@ -20,8 +23,10 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -100,6 +105,19 @@ bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     }
 
     return true;
+}
+
+bool HasSamplingRead(const TExprNode::TPtr& root) {
+    return FindNode(root, [](const TExprNode::TPtr& node) {
+        if (!TCoRead::Match(node.Get()) || node->ChildrenSize() <= TKiReadTable::idx_Settings ||
+            !TMaybeNode<TKiDataSource>(node->ChildPtr(TCoRead::idx_DataSource)))
+        {
+            return false;
+        }
+        const auto& settings = *node->Child(TKiReadTable::idx_Settings);
+        return HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+            HasSetting(settings, "samplingmemtablestride");
+    }) != nullptr;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -987,6 +1005,7 @@ public:
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
+                querySettings.IsInternalCall = SessionCtx->Query().IsInternalCall;
                 querySettings.CollectStats = GetStatsMode(settings.StatsMode);
 
                 TFuture<TQueryResult> future;
@@ -1095,7 +1114,8 @@ private:
                 || node.Maybe<TS3DataSink>()
                 || node.Maybe<TYtDSource>()
                 || node.Maybe<TYtDSink>()
-                || node.Maybe<TGenDataSource>();
+                || node.Maybe<TGenDataSource>()
+                || (node.Maybe<TCoDataSource>() && node.Cast<TCoDataSource>().Category().Value() == YdbExternalProviderName);
 
             return !hasFederatedSorcesOrSinks;
         });
@@ -1232,6 +1252,12 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
+        if (HasAppData(ActorSystem)) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
+                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+            }
+        }
+
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
@@ -1244,6 +1270,18 @@ public:
         if (FederatedQuerySetup) {
             const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
             const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            std::set<NYql::EDatabaseType> availableTypes;
+            for (const auto& type : availableExternalDataSources) {
+                // YdbTopics is a legacy configuration alias, not a valid EDS type.
+                if (type == "YdbTopics") {
+                    availableTypes.insert(NYql::EDatabaseType::Ydb);
+                } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+                    availableTypes.insert(*databaseType);
+                } else {
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_GATEWAY, "Unknown external data source type, ignoring it",
+                        {"sourceType", type});
+                }
+            }
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
@@ -1251,7 +1289,7 @@ public:
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
-                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
+                                                                                 availableTypes);
         }
     }
 
@@ -1425,6 +1463,32 @@ private:
                 result.CommandTagName,
                 &effectiveSettings
             );
+            if (!astRes.IsOk() && isSql && SessionCtx->Config().GetEnableNewRBO()) {
+                // Forced YqlSelect translation rejects table hints before we can
+                // inspect their Read! nodes. Accept legacy translation only for
+                // sampling; other queries retain the original parser diagnostics.
+                TExprContext samplingCtx;
+                auto samplingSqlVersion = sqlVersion;
+                bool samplingDeprecatedSQL = TypesCtx->DeprecatedSQL;
+                bool samplingKeepInCache = false;
+                TMaybe<TString> samplingCommandTag;
+                NSQLTranslation::TTranslationSettings samplingSettings;
+                settingsBuilder.SetYqlSelect(NSQLTranslation::EYqlSelect::Disable);
+                auto samplingAst = ParseQuery(query.Text, isSql, samplingSqlVersion, samplingDeprecatedSQL,
+                    samplingCtx, settingsBuilder, samplingKeepInCache, samplingCommandTag, &samplingSettings);
+                TExprNode::TPtr samplingExpr;
+                if (samplingAst.IsOk() &&
+                    CompileExpr(*samplingAst.Root, samplingExpr, samplingCtx, ModuleResolver.get(), nullptr) &&
+                    HasSamplingRead(samplingExpr))
+                {
+                    astRes = std::move(samplingAst);
+                    sqlVersion = samplingSqlVersion;
+                    TypesCtx->DeprecatedSQL = samplingDeprecatedSQL;
+                    result.KeepInCache = samplingKeepInCache;
+                    result.CommandTagName = std::move(samplingCommandTag);
+                    effectiveSettings = std::move(samplingSettings);
+                }
+            }
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
             queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
@@ -1471,6 +1535,15 @@ private:
 
         if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
+        }
+
+        if (HasSamplingRead(queryExpr)) {
+            // Sampling requires the read ranges source even for scan queries.
+            SessionCtx->ConfigPtr()->SetEnableKqpScanQuerySourceRead(true);
+            // RBO read operators do not preserve sampling settings. Select the
+            // legacy pipeline before optimization, independently of error fallback.
+            SessionCtx->ConfigPtr()->SetEnableNewRBO(false);
+            TypesCtx->IgnoreExpandPg = false;
         }
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
@@ -1769,7 +1842,8 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1802,6 +1876,7 @@ private:
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScript);
 
+        SessionCtx->Query().IsInternalCall = settings.IsInternalCall;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1829,6 +1904,7 @@ private:
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScriptStreaming);
 
+        SessionCtx->Query().IsInternalCall = settings.IsInternalCall;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().RpcCtx = settings.RpcCtx;
         SessionCtx->Query().StatsMode = settings.StatsMode;
@@ -1911,7 +1987,7 @@ private:
             return;
         }
 
-        auto state = MakeIntrusive<NYql::TS3State>();
+        auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
@@ -1942,6 +2018,20 @@ private:
 
         TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
+    }
+
+    void InitYdbExternalProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbExternalProviderName))) {
+            return;
+        }
+
+        const auto& resources = FederatedQuerySetup->YdbExternalResources;
+        YQL_ENSURE(resources, "Missing YdbExternal resources");
+        auto provider = NYql::CreateYdbExternalDataProviders(
+            TypesCtx.Get(), [resources] { return resources->GetMetadataClientCache(); },
+            FederatedQuerySetup->CredentialsFactory);
+        TypesCtx->AddDataSource(NYql::YdbExternalProviderName, std::move(provider.Source));
+        TypesCtx->AddDataSink(NYql::YdbExternalProviderName, std::move(provider.Sink));
     }
 
     void InitGenericProvider() {
@@ -1989,7 +2079,12 @@ private:
                 .CreateOperationTracker(false)
         );
 
-        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        auto ytSource = CreateYtDataSource(ytState);
+        if (Config->FeatureFlags.GetEnableQYT()) {
+            ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
+                NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
+        }
+        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
@@ -2010,7 +2105,7 @@ private:
             return;
         }
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
@@ -2032,7 +2127,7 @@ private:
         }
 
         TString sessionId = CreateGuidAsString();
-        auto state = MakeIntrusive<TPqState>(sessionId);
+        auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
         state->EnableSettingsValidation = true;
@@ -2123,6 +2218,7 @@ private:
             if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
                 InitS3Provider(queryType);
                 InitGenericProvider();
+                InitYdbExternalProvider();
                 InitSolomonProvider();
 
                 if (FederatedQuerySetup->YtGateway) {

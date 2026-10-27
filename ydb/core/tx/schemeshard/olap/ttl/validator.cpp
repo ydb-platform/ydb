@@ -53,6 +53,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     const auto& columnType = GetType(*column);
     switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+            if (!AppDataVerified().FeatureFlags.GetEnableColumnShardExtendedTtlTypes()) {
+                errors.AddError("TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled");
+                return false;
+            }
+            break;
         case NScheme::NTypeIds::Pg:
             errors.AddError("Unsupported column type for TTL in column tables");
             return false;
@@ -114,6 +122,19 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!tier.HasEvictToExternalStorage()) {
             continue;
         }
+
+        if (tier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+            if (!AppDataVerified().FeatureFlags.GetEnableTieringObjectKeyTree()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tree object keys are disabled for OLAP tiering");
+                return false;
+            }
+
+            if (tier.GetEvictToExternalStorage().GetObjectKeyPrefix().size() > 800) {
+                errors.AddError("Tiering object key prefix must not exceed 800 bytes");
+                return false;
+            }
+        }
+
         const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
         TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {

@@ -1906,16 +1906,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                    false,
                                                                    0);
 
-        std::atomic<bool> ready = true;
-        std::atomic<bool> abandoned = false;
+        std::atomic<NTopic::EDecompressionTaskState> state = NTopic::EDecompressionTaskState::Ready;
 
-        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, state);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready, abandoned);
-        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, state);
+        stream->InsertDataEvent(0, 0, data, state);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, state);
 
         TDeferredActions actions;
 

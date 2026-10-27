@@ -606,6 +606,7 @@ private:
         auto itLoadQuery = LoadQueriesInFlight.find(ev->Cookie);
         Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
         auto [requestId, requestIndex] = itLoadQuery->second;
+        LoadQueriesInFlight.erase(itLoadQuery);
 
         YDB_LOG_DEBUG("TEvLoadStatisticsQueryResponse",
             {"requestId", requestId});

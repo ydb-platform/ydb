@@ -355,6 +355,11 @@ void TWriteSessionActor<Protocol>::Handle(TEvPQProxy::TEvDone::TPtr&, const TAct
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
+
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
@@ -389,6 +394,10 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
+    if constexpr (Protocol == EProtocol::Topic) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
+
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -406,6 +415,12 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     if (topic_path.empty()) {
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
     }
 
     if constexpr (Protocol == EProtocol::PQv1) {
@@ -1454,6 +1469,11 @@ void TWriteSessionActor<Protocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRe
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
     RequestNotChecked = true;
 
     if (State != ES_INITED) {

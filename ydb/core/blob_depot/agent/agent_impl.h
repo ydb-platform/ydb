@@ -341,6 +341,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
+            bool done = false;
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
@@ -350,14 +351,18 @@ namespace NKikimr::NBlobDepot {
                         ConnectToBlobDepot();
                     }
                 }
-                if (!info->GetTotalVDisksNum()) {
-                    // proxy finishes serving user requests
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
-                    ProxyId = {};
-                }
+                // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
+                // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends
+                done = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
             }
             if (ProxyId) {
+                // the proxy gets the configuration even when it is going to be stopped, to pass us requests it has queued
+                // while being unconfigured
                 TActivationContext::Send(ev->Forward(ProxyId));
+                if (done) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(ProxyId, {}), {},
+                        nullptr, 0));
+                }
             }
         }
 
@@ -399,6 +404,18 @@ namespace NKikimr::NBlobDepot {
         std::optional<ui32> DecommitGroupId;
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
+
+        // Channel -> highest step the tablet reclaimed in BlobDepotGeneration while we were disconnected. Cleared
+        // when registration changes that generation. An id at or below this step is void: the tablet may already
+        // have collected the blob, so a query still holding one must fail instead of committing it.
+        THashMap<ui8, ui32> ExpiredSteps;
+
+        bool IsBlobSeqIdExpired(const TBlobSeqId& blobSeqId) const {
+            const auto it = ExpiredSteps.find(blobSeqId.Channel);
+            return it != ExpiredSteps.end()
+                && blobSeqId.Generation == BlobDepotGeneration
+                && blobSeqId.Step <= it->second;
+        }
 
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
         // S3WrapperId is always the per-node router service id obtained from NodeWarden
@@ -505,6 +522,7 @@ namespace NKikimr::NBlobDepot {
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);

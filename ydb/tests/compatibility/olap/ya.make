@@ -12,17 +12,21 @@ TEST_SRCS(
     test_rename_table.py
     test_compression.py
     test_encoding.py
+    test_tiering.py
+    test_ttl_types.py
 )
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries
 )
 
 PEERDIR(
+    contrib/python/boto3
     ydb/tests/library
     ydb/tests/library/compatibility
 )

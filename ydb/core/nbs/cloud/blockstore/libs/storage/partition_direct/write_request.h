@@ -52,6 +52,9 @@ private:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
+    // Sends one direct write in place of a failed one, or replies when the
+    // quorum is unreachable. Does nothing after the reply.
+    void MaybeSendReplacementDirectWrite(const NProto::TError& error);
     void MaybeReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);

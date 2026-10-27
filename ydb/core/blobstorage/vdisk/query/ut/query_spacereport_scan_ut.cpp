@@ -126,17 +126,35 @@ namespace {
             sst->Info.IndexParts = 3;
 
             TPhysicalSstEstimate estimate;
-            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(firstKey, sst.Get());
+            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(firstKey, sst.Get(), 1);
             UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 0);
             UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 0);
             UNIT_ASSERT_VALUES_EQUAL(estimate.StructuralMetadataBytes, 0);
 
-            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(lastKey, sst.Get());
+            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(lastKey, sst.Get(), 1);
             UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 3);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.StripedBytes, 0);
             UNIT_ASSERT_VALUES_EQUAL(
                 estimate.StructuralMetadataBytes,
                 sizeof(TIdxDiskPlaceHolder) + 2 * sizeof(TIdxDiskLinker));
+        }
+
+        Y_UNIT_TEST(StripedSstContributesAlignedExtentInsteadOfWholeChunk) {
+            using TSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+
+            TTestContexts contexts;
+            const TKeyBlock key(10);
+            auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
+            sst->LoadedIndex.emplace_back(key, TMemRecBlock(1));
+            sst->AllChunks = {11};
+            sst->HeapStripe = TDiskPart(11, 4096, 5000);
+
+            TPhysicalSstEstimate estimate;
+            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(key, sst.Get(), 4096);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.StripedBytes, 8192);
         }
     }
 
@@ -187,12 +205,40 @@ namespace {
     }
 
     Y_UNIT_TEST_SUITE(TLogoBlobSpaceMergerTest) {
+        Y_UNIT_TEST(StripedSstUsesConfiguredAppendBlockSize) {
+            using TSst = TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
+
+            TTestContexts contexts;
+            const TBlobStorageGroupType gtype = contexts.GetVCtx()->Top->GType;
+            const TKeyLogoBlob key = MakeLogoBlobKey();
+            const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
+            const TMemRecLogoBlob memRec = MakeDiskBlob(
+                gtype, {0}, TDiskPart(10, 0, payloadBytes + 8));
+
+            TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndex));
+            index.emplace_back(key, memRec);
+            auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
+            sst->LoadLinearIndex(index);
+            sst->AllChunks = {11};
+            sst->HeapStripe = TDiskPart(11, 4096, 5000);
+
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 4096);
+            merger.Clear();
+            merger.AddFromSegment(memRec, nullptr, key, 1, sst.Get());
+            merger.Finish();
+
+            const auto& estimate = merger.GetConclusion().PhysicalSsts;
+            UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.StripedBytes, 8192);
+        }
+
         Y_UNIT_TEST(InplacedDataIsSplitIntoLiveAndMergeRedundantPhysicalBytes) {
             const TBlobStorageGroupType gtype = MakeGroupType();
             const TKeyLogoBlob key = MakeLogoBlobKey();
             const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
             constexpr ui32 headerBytes = 16;
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 1);
 
             merger.Clear();
             merger.AddFromSegment(
@@ -224,7 +270,7 @@ namespace {
             const TKeyLogoBlob key = MakeLogoBlobKey();
             const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
             constexpr ui32 headerBytes = 8;
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 1);
 
             merger.Clear();
             merger.AddFromSegment(
@@ -252,7 +298,7 @@ namespace {
             const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
             constexpr ui32 oldHeaderBytes = 8;
             constexpr ui32 newHeaderBytes = 20;
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 1);
 
             merger.Clear();
             merger.AddFromSegment(
@@ -280,7 +326,7 @@ namespace {
             const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
             const TDiskPart oldPart(20, 0, payloadBytes + 16);
             const TDiskPart winningPart(20, 4096, payloadBytes + 16);
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 1);
 
             merger.Clear();
             merger.AddFromSegment(MakeHugeBlob(gtype, 0, oldPart), nullptr, key, 1, nullptr);
@@ -323,7 +369,7 @@ namespace {
             const TDiskPart hugePart(20, 0, payloadBytes + headerBytes);
             const THugeBlobCtx hugeBlobCtx("", nullptr, EBlobHeaderMode::OLD_HEADER);
 
-            TLogoBlobSpaceMerger inplacedTarget(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger inplacedTarget(gtype, nullptr, true, true, 32, 1);
             inplacedTarget.Clear();
             inplacedTarget.AddFromSegment(
                 MakeDiskBlob(gtype, {0}, inplacedPart), nullptr, key, 2, nullptr);
@@ -340,7 +386,7 @@ namespace {
                 EHugeBlobClassification::MergeRedundant);
 
             TLogoBlobSpaceMerger hugeTarget(
-                gtype, nullptr, true, true, 32, &hugeBlobCtx, 1);
+                gtype, nullptr, true, true, 32, 1, &hugeBlobCtx, 1);
             hugeTarget.Clear();
             hugeTarget.AddFromSegment(
                 MakeDiskBlob(gtype, {0}, inplacedPart), nullptr, key, 2, nullptr);
@@ -365,7 +411,7 @@ namespace {
             const THugeBlobCtx hugeBlobCtx("", nullptr, EBlobHeaderMode::OLD_HEADER);
 
             TLogoBlobSpaceMerger merger(
-                gtype, nullptr, true, true, 32, &hugeBlobCtx, 1);
+                gtype, nullptr, true, true, 32, 1, &hugeBlobCtx, 1);
             merger.Clear();
             merger.AddFromFresh(MakeMemBlob(gtype, 0, payloadBytes), nullptr, key, 2);
             merger.AddFromSegment(
@@ -390,7 +436,7 @@ namespace {
                 TDiskPart(21, 0, firstPayloadBytes + 8),
                 TDiskPart(21, 4096, secondPayloadBytes + 8),
             };
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 32, 1);
 
             merger.Clear();
             merger.AddFromSegment(
@@ -433,7 +479,7 @@ namespace {
             const ui32 payloadBytes = gtype.PartSize(TLogoBlobID(key.LogoBlobID(), 1));
             const TDiskPart first(20, 0, payloadBytes + 8);
             const TDiskPart second(20, 4096, payloadBytes + 8);
-            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 1);
+            TLogoBlobSpaceMerger merger(gtype, nullptr, true, true, 1, 1);
 
             merger.Clear();
             merger.AddFromSegment(MakeHugeBlob(gtype, 0, first), nullptr, key, 1, nullptr);

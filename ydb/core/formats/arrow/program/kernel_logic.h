@@ -6,6 +6,8 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <library/cpp/object_factory/object_factory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
@@ -48,6 +50,11 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
 
     virtual TString GetClassName() const = 0;
+
+    // Returns an input whose index representation is preserved by this calculation.
+    virtual std::optional<ui32> GetOriginalAddressFromInput() const {
+        return std::nullopt;
+    }
 
     TConclusion<bool> Execute(
         const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
@@ -94,6 +101,83 @@ public:
     }
 
     virtual bool IsBoolInResult() const override;
+};
+
+class TCoalesceKernelLogic: public TSimpleKernelLogic {
+private:
+    const std::shared_ptr<arrow::DataType> OutputType;
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
+        TAccessorsCollection& resources) const override;
+
+public:
+    explicit TCoalesceKernelLogic(const arrow::compute::ScalarKernel& kernel);
+};
+
+class TToStringKernel: public TSimpleKernelLogic {
+private:
+    // We are conservative in this field computation for correctness sake and set it only for known good cases.
+    // More cases may be expanded to true as necessary.
+    YDB_READONLY(bool, PreservesOriginalAddress, false);
+
+    static bool DoesPreserveOriginalAddress(const arrow::compute::ScalarKernel& kernel) {
+        const auto& signature = *kernel.signature;
+        const auto& inputTypes = signature.in_types();
+        return !signature.is_varargs() && inputTypes.size() == 1 &&
+               inputTypes.front().kind() == arrow::compute::InputType::EXACT_TYPE &&
+               (inputTypes.front().type()->Equals(*arrow::utf8()) || inputTypes.front().type()->Equals(*arrow::binary())) &&
+               signature.out_type().kind() == arrow::compute::OutputType::FIXED &&
+               signature.out_type().type()->Equals(*arrow::binary());
+    }
+
+public:
+    TToStringKernel() = default;
+
+    explicit TToStringKernel(const arrow::compute::ScalarKernel& kernel)
+        : PreservesOriginalAddress(DoesPreserveOriginalAddress(kernel)) {
+    }
+
+    static std::shared_ptr<TToStringKernel> Resolve(const arrow::compute::ScalarFunction& function) {
+        const auto kernels = function.kernels();
+        // kernels.size() == 0 would probably be a valid setup for no-op (like ToString from type to itself) passed by upper levels.
+        // but for now no such case exists
+        if (kernels.size() != 1) {
+            return std::make_shared<TToStringKernel>();
+        }
+        return std::make_shared<TToStringKernel>(*kernels.front());
+    }
+
+    static TString GetClassNameStatic() {
+        return ToString(NYql::TKernelRequestBuilder::EUnaryOp::ToString);
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
+        return PreservesOriginalAddress ? std::optional<ui32>(0) : std::nullopt;
+    }
+
+    static const inline auto Registrator = TFactory::TRegistrator<TToStringKernel>(GetClassNameStatic());
+};
+
+class TJustKernel: public TSimpleKernelLogic {
+public:
+    static TString GetClassNameStatic() {
+        return ToString(NYql::TKernelRequestBuilder::EUnaryOp::Just);
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
+        // Just preserves its input value while adding optionality.
+        return 0;
+    }
+
+    static const inline auto Registrator = TFactory::TRegistrator<TJustKernel>(GetClassNameStatic());
 };
 
 class TLogicMatchString: public IKernelLogic {
@@ -225,12 +309,12 @@ public:
         : IKernelLogic([&] {
             {
                 using enum TIndexCheckOperation::EOperation;
-                
-                AFL_VERIFY(op == Less || op == LessOrEqual || 
+
+                AFL_VERIFY(op == Less || op == LessOrEqual ||
                     op == Greater || op == GreaterOrEqual || op == Equals
                 );
             }
-        
+
             switch(op) {
                 case TIndexCheckOperation::EOperation::Equals:
                     return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
@@ -279,18 +363,18 @@ private:
     class TDescription {
     private:
         std::shared_ptr<NAccessor::IChunkedArray> InputAccessor;
-        std::string_view JsonPath;
+        NAccessor::NSubColumns::TParsedJsonPath JsonPath;
 
     public:
-        TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
+        TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, NAccessor::NSubColumns::TParsedJsonPath jsonPath)
             : InputAccessor(inputAccessor)
-            , JsonPath(jsonPath) {
+            , JsonPath(std::move(jsonPath)) {
         }
 
         const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {
             return InputAccessor;
         }
-        std::string_view GetJsonPath() const {
+        const NAccessor::NSubColumns::TParsedJsonPath& GetJsonPath() const {
             return JsonPath;
         }
     };
@@ -308,11 +392,12 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        if (const auto pathValidation = NAccessor::NSubColumns::ValidateJsonPath(svPath); pathValidation.IsFail()) {
-            return pathValidation;
+        auto parsedPath = NAccessor::NSubColumns::ParseJsonPath(svPath);
+        if (parsedPath.IsFail()) {
+            return TConclusionStatus::Fail(parsedPath.GetErrorMessage());
         }
 
-        return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
+        return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), parsedPath.DetachResult());
     }
 
     virtual TString GetClassName() const override {
@@ -326,7 +411,8 @@ private:
 
 protected:
     virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const;
-    virtual std::shared_ptr<IChunkedArray> ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const;
+    virtual std::shared_ptr<IChunkedArray> ExtractArray(
+        const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const;
 
 public:
 };
@@ -350,7 +436,7 @@ private:
 
     static const inline TFactory::TRegistrator<TExistsJsonPath> Registrator = TFactory::TRegistrator<TExistsJsonPath>(GetClassNameStatic());
     virtual std::shared_ptr<IChunkedArray> ExtractArray(
-        const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const override;
+        const std::shared_ptr<IChunkedArray>& jsonAcc, const NAccessor::NSubColumns::TParsedJsonPath& path) const override;
     virtual NAccessor::TCompositeChunkedArray::TBuilder MakeCompositeBuilder() const override;
 
 public:

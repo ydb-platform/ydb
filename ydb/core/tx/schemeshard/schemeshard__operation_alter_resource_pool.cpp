@@ -118,7 +118,7 @@ class TAlterResourcePool : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         Y_UNUSED(owner);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -152,6 +152,7 @@ public:
         const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::ModifyResourcePool(resourcePoolDescription, oldResourcePoolInfo);
         Y_ABORT_UNLESS(resourcePoolInfo);
         RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+        RETURN_RESULT_UNLESS(NResourcePool::IsCpuGuaranteeValid(result, parentPath, dstPath->PathId, resourcePoolInfo, context));
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr resourcePool = ReplaceResourcePoolPathElement(dstPath);
@@ -183,7 +184,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

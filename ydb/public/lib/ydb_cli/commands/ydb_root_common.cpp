@@ -1,4 +1,5 @@
 #include "ydb_root_common.h"
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 #include "ydb_config.h"
 #include "ydb_profile.h"
@@ -342,6 +343,9 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
             }
         }
 
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
+        }
         return CreateInsecureCredentialsProviderFactory();
     };
 }
@@ -650,6 +654,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
+    auto& oidcAuth = AddOidcOptions(opts, config.Oidc, false);
+
     opts.SetAuthMethodsEnvPriority(
         iamTokenAuth,
         ycTokenAuth,
@@ -657,7 +663,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         saKeyAuth,
         ydbTokenAuth,
         ydbUserAuth,
-        oauth2TokenExchangeAuth
+        oauth2TokenExchangeAuth,
+        &oidcAuth
     );
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
@@ -721,6 +728,13 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
     if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
+    }
+    if (MisuseErrors.empty()) {
+        try {
+            ResolveOidcOptions(config.Oidc, *ParseResult);
+        } catch (const std::exception& error) {
+            MisuseErrors.emplace_back(error.what());
+        }
     }
     if (IsVerbose()) {
         std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {

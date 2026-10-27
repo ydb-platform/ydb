@@ -1,6 +1,8 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -134,9 +136,42 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
+TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter) const {
+    if (!HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+        return path;
+    }
+    if (parameter == "database" && Params.Get(parameter).empty()) {
+        parameter = Params.Get("tenant").empty() ? "path" : "tenant";
+    }
+    const TCgiParameters query = Event ? Event->Get()->Request.GetParams() : TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
+    TString original = query.Get(parameter);
+    if (original.empty()) {
+        const TStringBuf body = Event ? Event->Get()->Request.GetPostContent() : HttpEvent->Get()->Request->Body;
+        const TStringBuf contentType = Event ? Event->Get()->Request.GetHeader("Content-Type") : HttpEvent->Get()->Request->ContentType;
+        if (NHttp::Trim(contentType.Before(';'), ' ') == "application/x-www-form-urlencoded") {
+            original = TCgiParameters(body).Get(parameter);
+        } else {
+            NJson::TJsonValue json;
+            if (NJson::ReadJsonTree(body, &json)) {
+                original = json[parameter].GetString();
+            }
+        }
+    }
+    const TString& canonical = Params.Get(parameter);
+    if (!original.empty() && !canonical.empty() && path.StartsWith(canonical)
+        && (path.size() == canonical.size() || path[canonical.size()] == '/')) {
+        if (parameter != "path" || original.StartsWith('/')) {
+            original = CanonizePath(original);
+        }
+        return original + path.substr(canonical.size());
+    }
+    return path;
+}
+
+void TViewerPipeClient::BuildParamsFromJson(TStringBuf data, bool pathList) {
     NJson::TJsonValue jsonData;
     if (NJson::ReadJsonTree(data, &jsonData)) {
+        NormalizePathParameters(jsonData, pathList);
         if (jsonData.IsMap()) {
             for (const auto& [key, value] : jsonData.GetMap()) {
                 switch (value.GetType()) {
@@ -161,29 +196,43 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
     }
 }
 
-void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
-    for (const auto& [key, value] : TCgiParameters(data)) {
+void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data, bool pathList) {
+    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data), pathList)) {
         Params.InsertUnescaped(key, value);
     }
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
-    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+    bool limitTraceVerbosity = true;
+    if (HasAppData()) {
+        if (const auto* appData = AppData(); appData->Icb) {
+            if (auto control = appData->Icb->ViewerControls.LimitTraceVerbosity.AtomicLoad()) {
+                limitTraceVerbosity = control->Get();
+            }
+        }
+    }
+
+    constexpr ui8 viewerTraceDefaultVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+    const ui8 viewerTraceMaxVerbosity = limitTraceVerbosity
+        ? TComponentTracingLevels::DynamicNodesOnly
+        : NWilson::TTraceId::MAX_VERBOSITY;
 
     auto request = GetRequest();
-    NWilson::TTraceId traceId;
-    TString traceparent = request.GetHeader("traceparent");
-    if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
-    }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
+
+    ui8 verbosity = viewerTraceDefaultVerbosity;
+    if (traceVerbosity) {
+        verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
+    }
+
+    NWilson::TTraceId traceId;
+    TString traceparent = request.GetHeader("traceparent");
+    if (traceparent) {
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, verbosity);
+    }
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = viewerTraceMaxVerbosity;
-        if (traceVerbosity) {
-            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
-        }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
             ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
@@ -203,12 +252,13 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     : Viewer(viewer)
     , Event(ev)
 {
-    Params = Event->Get()->Request.GetParams();
+    const bool pathList = Event->Get()->Request.GetPath().EndsWith("/storage_stats");
+    Params = NormalizePathParameters(Event->Get()->Request.GetParams(), pathList);
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
-        BuildParamsFromJson(Event->Get()->Request.GetPostContent());
+        BuildParamsFromJson(Event->Get()->Request.GetPostContent(), pathList);
     }
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
-        BuildParamsFromFormData(Event->Get()->Request.GetPostContent());
+        BuildParamsFromFormData(Event->Get()->Request.GetPostContent(), pathList);
     }
     if (!Event->Get()->Database.empty()) {
         Database = Event->Get()->Database;
@@ -221,13 +271,14 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     : Viewer(viewer)
     , HttpEvent(ev)
 {
-    Params = TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
+    const bool pathList = HttpEvent->Get()->Request->URL.Before('?').EndsWith("/storage_stats");
+    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')), pathList);
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
-        BuildParamsFromJson(HttpEvent->Get()->Request->Body);
+        BuildParamsFromJson(HttpEvent->Get()->Request->Body, pathList);
     }
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/x-www-form-urlencoded") {
-        BuildParamsFromFormData(HttpEvent->Get()->Request->Body);
+        BuildParamsFromFormData(HttpEvent->Get()->Request->Body, pathList);
     }
     if (!HttpEvent->Get()->Database.empty()) {
         Database = HttpEvent->Get()->Database;

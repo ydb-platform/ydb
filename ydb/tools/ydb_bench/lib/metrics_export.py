@@ -241,7 +241,7 @@ class MetricsExporter:
                     manifest = json.loads((root / 'run.json').read_text())
                     for profile in manifest.get('runs', []):
                         benchmark, name = profile.get('benchmark'), profile.get('profile')
-                        if benchmark not in ('local-ydb', 'distributed-ydb'):
+                        if benchmark not in ('local-ydb', 'distributed-ydb', 'dedicated-ydb'):
                             continue
                         if selection and (benchmark != selection['benchmark'] or name != selection['profile']):
                             continue

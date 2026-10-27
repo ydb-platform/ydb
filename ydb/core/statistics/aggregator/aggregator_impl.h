@@ -269,6 +269,8 @@ private:
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
+    bool EnableBackgroundAnalyzeChangeRatio = false;
+    bool EnableAnalyzeSampling = false;
 
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
 

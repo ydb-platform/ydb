@@ -36,6 +36,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<TPathId> RestoreTablesToUnmark;
     TVector<ui64> IncrementalBackupsToResume;
     TVector<ui64> FullBackupsToResume;
+    TVector<TPathId> StreamingQueriesOperationsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -1636,6 +1637,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
+                if (row.IsValid()) {
+                    // storage space state is reported by BS_CONTROLLER and must survive restarts, the root domain too
+                    rootDomainInfo->SetDomainStateVersion(row.GetValueOrDefault<Schema::SubDomains::StateVersion>(0));
+                    rootDomainInfo->SetStorageSpaceExhausted(row.GetValueOrDefault<Schema::SubDomains::StorageSpaceExhausted>(false));
+                    if (rootDomainInfo->GetStorageSpaceExhausted()) {
+                        Self->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, +1);
+                    }
+                }
+
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
 
                 Self->SubDomains.Set(Self->RootPathId(), rootDomainInfo);
@@ -1695,6 +1705,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     domainInfo->SetSmallBlobsQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsQuotaExceeded>(false));
                     if (domainInfo->GetSmallBlobsQuotaExceeded()) {
                         Self->ChangeSimpleCounter(COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, +1);
+                    }
+                    domainInfo->SetStorageSpaceExhausted(rowset.GetValueOrDefault<Schema::SubDomains::StorageSpaceExhausted>(false));
+                    if (domainInfo->GetStorageSpaceExhausted()) {
+                        Self->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, +1);
                     }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
@@ -2189,8 +2203,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& streamingQuery = Self->StreamingQueries.Set(pathId, new TStreamingQueryInfo());
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
+                streamingQuery->OperationOwnerActorId = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerActorId>();
 
                 const auto pathIt = Self->PathsById.find(pathId);
+                if (streamingQuery->OperationOwnerActorId && pathIt != Self->PathsById.end() && !pathIt->second->Dropped()) {
+                    StreamingQueriesOperationsToResume.emplace_back(pathId);
+                }
+
                 if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
                     Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
                     if (const auto& props = streamingQuery->Properties.GetProperties();
@@ -2643,25 +2662,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            TPathId prevTableId;
-
             TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
                     rowSet.GetValue<Schema::TablePartitionStats::TableOwnerId>(),
                     rowSet.GetValue<Schema::TablePartitionStats::TableLocalId>());
-
-                if (tableId != prevTableId) {
-                    if (prevTableId) {
-                        Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                        if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                        }
-                    }
-
-                    prevTableId = tableId;
-                }
 
                 Y_ABORT_UNLESS(Self->Tables.contains(tableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
@@ -2749,14 +2754,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
             }
-
-            if (prevTableId) {
-                Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                }
-            }
         }
 
         // Read partition stats (ShardIdx format)
@@ -2767,7 +2764,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            TPathId prevTableId;
             TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
@@ -2776,20 +2772,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const TShardIdx shardIdx = TShardIdx(
                     rowSet.GetValue<T::OwnerShardIdx>(),
                     rowSet.GetValue<T::LocalShardIdx>());
-
-                if (tableId != prevTableId) {
-                    // Aggregate the previous table's newly updated stats.
-                    // (Tables also processed by the positional block get re-aggregated here;
-                    // that is acceptable since the domain aggregate will self-correct on the
-                    // first live stats update from any shard.)
-                    if (prevTableId && Self->Tables.contains(prevTableId)) {
-                        TTableInfo::TPtr prevTableInfo = Self->Tables.at(prevTableId);
-                        if (!prevTableInfo->IsBackup && !prevTableInfo->IsShardsStatsDetached()) {
-                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, prevTableInfo->GetStats().Aggregated);
-                        }
-                    }
-                    prevTableId = tableId;
-                }
 
                 if (!Self->Tables.contains(tableId)) {
                     if (!rowSet.Next()) {
@@ -2803,6 +2785,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         return false;
                     }
                     continue;
+                }
+
+                if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                    if (shardInfo->PathId != tableId) {
+                        tableInfo->DetachShardsStats();
+                    }
                 }
 
                 TPartitionStats stats;
@@ -2857,12 +2845,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
             }
+        }
 
-            if (prevTableId && Self->Tables.contains(prevTableId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                }
+        // Both formats may contain stats for the same table. Aggregate once, after
+        // loading both, so newer ShardIdx rows can replace legacy partition stats.
+        for (const auto& [tableId, tableInfo] : Self->Tables) {
+            if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
+                Self->ResolveDomainInfo(tableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
             }
         }
 
@@ -3963,6 +3952,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
+                txState.LoadSplitLineage = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::LoadSplitLineage>(false);
 
                 if (Self->TolerateOrphanedPaths) {
                     const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);
@@ -4161,7 +4151,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOperation::TPtr operation = Self->Operations.at(operationId.GetTxId());
                 Y_ABORT_UNLESS(operationId.GetSubTxId() == operation->Parts.size());
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
                 ISubOperation::TPtr part = operation->RestorePart(txState.TxType, txState.State, context);
                 ++(operation->PreparedParts);
                 operation->AddPart(part);
@@ -6049,7 +6039,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             for (auto& part: operation->Parts) {
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
                 part->ProgressState(context);
             }
         }
@@ -6787,6 +6777,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
             .FullBackupIds = std::move(FullBackupsToResume),
+            .StreamingQueriesOperations = std::move(StreamingQueriesOperationsToResume),
         });
 
         Self->ScheduleForcedCompactionProgress(ctx);

@@ -20,9 +20,9 @@ struct TDatabaseStorageStats {
             const NKikimrWhiteboard::TVDiskStateInfo& vdisk,
             const NKikimrWhiteboard::TPDiskStateInfo& pdisk,
             ui32 groupSizeInUnits) {
-        ui64 slotSize = pdisk.GetExpectedSlotSize();
+        ui64 slotSize = pdisk.GetEnforcedDynamicSlotSize();
         if (!slotSize) {
-            slotSize = pdisk.GetEnforcedDynamicSlotSize();
+            slotSize = pdisk.GetExpectedSlotSize();
         }
         if (!slotSize) {
             const ui32 slotCount = pdisk.GetExpectedSlotCount();
@@ -34,11 +34,10 @@ struct TDatabaseStorageStats {
             slotSize = pdisk.GetTotalSize() / slotCount;
         }
 
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
-            groupSizeInUnits,
-            pdisk.GetSlotSizeInUnits(),
-            pdisk.GetExpectedSlotSize());
-        Total += slotSize * ownerWeight;
+        slotSize = TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdisk.GetSlotSizeInUnits(), pdisk.GetExpectedSlotSize(),
+            pdisk.HasUserChunkPoolSize() ? std::make_optional(pdisk.GetUserChunkPoolSize()) : std::nullopt);
+        Total += Min(slotSize, Max<ui64>() - Total);
     }
 };
 
@@ -221,6 +220,8 @@ public:
             }
             if (PDiskStateResponse.count(nodeId) == 0) {
                 auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
+                request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
                 PDiskStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
             if (VDiskStateResponse.count(nodeId) == 0) {

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_mounts.h
@@ -17,8 +17,6 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/v1/translation
 )
-
-YQL_LAST_ABI_VERSION()
 
 RESOURCE(
     yql/essentials/mount/lib/yql/aggregate.yqls /lib/yql/aggregate.yqls

@@ -15,6 +15,7 @@ struct TPipeFactoryOptions {
     IFileCache::TPtr FileCache;
     THashMap<TString, TString> Env;
     bool EnablePorto = false;
+    bool EnablePortoAnonLimitRaiseBeforeDestroy = true;
     TString PortoLayer;
     int MaxProcesses = 1;
     TString ContainerName;

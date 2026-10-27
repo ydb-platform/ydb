@@ -1,8 +1,8 @@
 diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
-index 47008d0..40f2351 100644
+index 3835dde..c061b54 100644
 --- a/tcmalloc/malloc_extension.cc
 +++ b/tcmalloc/malloc_extension.cc
-@@ -804,6 +804,20 @@ void MallocExtension::EnableForkSupport() {
+@@ -837,6 +837,20 @@ void MallocExtension::EnableForkSupport() {
  #endif
  }
  
@@ -24,10 +24,10 @@ index 47008d0..40f2351 100644
      CreateSampleUserDataCallback create,
      CopySampleUserDataCallback copy,
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 3534226..345bf6a 100644
+index 95cd108..d104a9f 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
-@@ -667,6 +667,10 @@ class MallocExtension final {
+@@ -691,6 +691,10 @@ class MallocExtension final {
    // Allocator will continue to function correctly in the child, after calling fork().
    static void EnableForkSupport();
  
@@ -39,10 +39,10 @@ index 3534226..345bf6a 100644
    using CopySampleUserDataCallback = void*(void*);
    using DestroySampleUserDataCallback = void(void*);
 diff --git a/tcmalloc/page_allocator.cc b/tcmalloc/page_allocator.cc
-index 2f450d8..f723297 100644
+index f2a10a7..dbba15b 100644
 --- a/tcmalloc/page_allocator.cc
 +++ b/tcmalloc/page_allocator.cc
-@@ -138,6 +138,10 @@ void PageAllocator::ShrinkToUsageLimit(Length n) {
+@@ -140,6 +140,10 @@ void PageAllocator::ShrinkToUsageLimit(Length n) {
    warned = true;
    TC_LOG("Couldn't respect usage limit of %v and OOM is likely to follow.",
           limits_[kSoft]);

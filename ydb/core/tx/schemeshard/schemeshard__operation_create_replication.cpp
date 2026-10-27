@@ -357,7 +357,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
         const auto& name = desc.GetName();
@@ -471,7 +471,16 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
-        desc.MutableState()->MutableStandBy();
+        if (desc.GetConfig().HasTransferSpecific()) {
+            desc.MutableConfig()->ClearInitialScan();
+        } else if (!desc.GetConfig().HasInitialScan()) {
+            desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
+        }
+        if (desc.GetConfig().GetInitialScan()) {
+            desc.MutableState()->MutableStandBy();
+        } else {
+            desc.MutableState()->MutablePaused();
+        }
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
@@ -495,6 +504,12 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
+        // Undo-safety contract: the first direct DB write follows — from here
+        // on this Propose is undo-unsafe. Single-part suboperation only
+        // (enforced at ignite time in ProcessOperationParts): a failed propose
+        // aborts the whole transaction and the txc rolls everything back.
+        // All validations MUST stay above this line — a SetError/return after
+        // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
 
         if (!acl.empty()) {
@@ -536,7 +551,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateReplication");
     }
 

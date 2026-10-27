@@ -11,3 +11,5 @@ items:
       href: metrics.md
 - name: Подсказки оптимизатора
   href: hints.md
+- name: Параметризованные запросы и повторная компиляция
+  href: parameterized-queries.md

@@ -9,6 +9,7 @@ UNITTEST_FOR(ydb/core/blob_depot)
         )
 
         PEERDIR(
+            ydb/core/blob_depot/agent
             ydb/core/testlib/default
             ydb/library/actors/http
             ydb/library/aws_init

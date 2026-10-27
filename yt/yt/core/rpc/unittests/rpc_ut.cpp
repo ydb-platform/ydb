@@ -464,6 +464,33 @@ TYPED_TEST(TNotGrpcTest, ServerNotWriting)
         .ThrowOnError();
 }
 
+TYPED_TEST(TNotGrpcTest, StreamingStatistics)
+{
+    TTestProxy proxy(this->CreateChannel());
+    proxy.DefaultServerAttachmentsStreamingParameters().WindowSize = 10;
+
+    auto req = proxy.StreamingStatistics();
+    req->set_block_count(3);
+    auto invokeResult = req->Invoke();
+    WaitFor(req->GetRequestAttachmentsStream()->Close())
+        .ThrowOnError();
+
+    // The second block does not fit into the window until the first one is read.
+    Sleep(TDuration::MilliSeconds(200));
+    for (int index = 0; index < 3; ++index) {
+        WaitFor(req->GetResponseAttachmentsStream()->Read())
+            .ThrowOnError();
+    }
+    WaitFor(CheckEndOfStream(req->GetResponseAttachmentsStream()))
+        .ThrowOnError();
+    WaitFor(invokeResult)
+        .ThrowOnError();
+
+    auto statistics = WaitFor(this->GetTestService()->GetStreamingStatistics())
+        .ValueOrThrow();
+    EXPECT_GE(statistics.WriteStallTime, TDuration::MilliSeconds(100));
+}
+
 TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -1684,16 +1711,16 @@ TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTime)
 
     // The window is empty, the counter is running.
     Sleep(TDuration::MilliSeconds(50));
-    auto elapsed1 = stream->GetWindowDrainedTime();
+    auto elapsed1 = stream->GetStatistics().WindowDrainedTime;
     EXPECT_GE(elapsed1, TDuration::MilliSeconds(50));
 
     // Non-empty, the counter is frozen.
     auto payload1 = TSharedRef::FromString(std::string("abc"));
     auto future1 = stream->Write(payload1);
     EXPECT_TRUE(future1.IsSet());
-    auto elapsed2 = stream->GetWindowDrainedTime();
+    auto elapsed2 = stream->GetStatistics().WindowDrainedTime;
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed2);
+    EXPECT_EQ(stream->GetStatistics().WindowDrainedTime, elapsed2);
 
     auto payload2 = TSharedRef::FromString(std::string("de"));
     auto future2 = stream->Write(payload2);
@@ -1702,27 +1729,27 @@ TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTime)
     // Partial drain.
     stream->HandleFeedback({3});
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed2);
+    EXPECT_EQ(stream->GetStatistics().WindowDrainedTime, elapsed2);
 
     // Full drain, the counter is running.
     stream->HandleFeedback({5});
     Sleep(TDuration::MilliSeconds(50));
-    auto elapsed3 = stream->GetWindowDrainedTime();
+    auto elapsed3 = stream->GetStatistics().WindowDrainedTime;
     EXPECT_GE(elapsed3 - elapsed2, TDuration::MilliSeconds(50));
 
     // Close puts the end-of-stream block into the window.
     auto closeFuture = stream->Close();
-    auto elapsed4 = stream->GetWindowDrainedTime();
+    auto elapsed4 = stream->GetStatistics().WindowDrainedTime;
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed4);
+    EXPECT_EQ(stream->GetStatistics().WindowDrainedTime, elapsed4);
 
     // The final acknowledgement completes the stream.
     stream->HandleFeedback({6});
     EXPECT_TRUE(closeFuture.IsSet());
     EXPECT_TRUE(WaitForFast(closeFuture).IsOK());
-    auto elapsed5 = stream->GetWindowDrainedTime();
+    auto elapsed5 = stream->GetStatistics().WindowDrainedTime;
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed5);
+    EXPECT_EQ(stream->GetStatistics().WindowDrainedTime, elapsed5);
 }
 
 TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTimeFrozenOnAbort)
@@ -1731,9 +1758,9 @@ TEST_F(TAttachmentsOutputStreamTest, WindowDrainedTimeFrozenOnAbort)
 
     stream->Abort(TError("oops"));
 
-    auto elapsed = stream->GetWindowDrainedTime();
+    auto elapsed = stream->GetStatistics().WindowDrainedTime;
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWindowDrainedTime(), elapsed);
+    EXPECT_EQ(stream->GetStatistics().WindowDrainedTime, elapsed);
 }
 
 TEST_F(TAttachmentsOutputStreamTest, WriteStallTime)
@@ -1742,37 +1769,37 @@ TEST_F(TAttachmentsOutputStreamTest, WriteStallTime)
 
     // No writes, the timer is idle.
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWriteStallTime(), TDuration::Zero());
+    EXPECT_EQ(stream->GetStatistics().WriteStallTime, TDuration::Zero());
 
     // The write fits into the window.
     auto payload1 = TSharedRef::FromString(std::string("abc"));
     auto future1 = stream->Write(payload1);
     EXPECT_TRUE(future1.IsSet());
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWriteStallTime(), TDuration::Zero());
+    EXPECT_EQ(stream->GetStatistics().WriteStallTime, TDuration::Zero());
 
     // The write overflows the window, start the timer.
     auto payload2 = TSharedRef::FromString(std::string("defg"));
     auto future2 = stream->Write(payload2);
     EXPECT_FALSE(future2.IsSet());
     Sleep(TDuration::MilliSeconds(50));
-    auto stalled1 = stream->GetWriteStallTime();
+    auto stalled1 = stream->GetStatistics().WriteStallTime;
     EXPECT_GE(stalled1, TDuration::MilliSeconds(50));
 
     // Partial drain, not enough to unpark the write, timer is still running.
     stream->HandleFeedback({1});
     EXPECT_FALSE(future2.IsSet());
     Sleep(TDuration::MilliSeconds(50));
-    auto stalled2 = stream->GetWriteStallTime();
+    auto stalled2 = stream->GetStatistics().WriteStallTime;
     EXPECT_GE(stalled2 - stalled1, TDuration::MilliSeconds(50));
 
     // The stall is over.
     stream->HandleFeedback({3});
     EXPECT_TRUE(future2.IsSet());
     EXPECT_TRUE(WaitForFast(future2).IsOK());
-    auto stalled3 = stream->GetWriteStallTime();
+    auto stalled3 = stream->GetStatistics().WriteStallTime;
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWriteStallTime(), stalled3);
+    EXPECT_EQ(stream->GetStatistics().WriteStallTime, stalled3);
 
     // Close is not counted as a stall.
     auto closeFuture = stream->Close();
@@ -1780,7 +1807,7 @@ TEST_F(TAttachmentsOutputStreamTest, WriteStallTime)
     stream->HandleFeedback({8});
     EXPECT_TRUE(closeFuture.IsSet());
     EXPECT_TRUE(WaitForFast(closeFuture).IsOK());
-    EXPECT_EQ(stream->GetWriteStallTime(), stalled3);
+    EXPECT_EQ(stream->GetStatistics().WriteStallTime, stalled3);
 }
 
 TEST_F(TAttachmentsOutputStreamTest, WriteStallTimeFrozenOnAbort)
@@ -1796,10 +1823,10 @@ TEST_F(TAttachmentsOutputStreamTest, WriteStallTimeFrozenOnAbort)
     stream->Abort(TError("oops"));
     EXPECT_TRUE(future.IsSet());
 
-    auto elapsed = stream->GetWriteStallTime();
+    auto elapsed = stream->GetStatistics().WriteStallTime;
     EXPECT_GE(elapsed, TDuration::MilliSeconds(50));
     Sleep(TDuration::MilliSeconds(50));
-    EXPECT_EQ(stream->GetWriteStallTime(), elapsed);
+    EXPECT_EQ(stream->GetStatistics().WriteStallTime, elapsed);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

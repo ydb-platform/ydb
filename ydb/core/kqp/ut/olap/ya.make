@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -21,7 +21,6 @@ SRCS(
     optimizer_ut.cpp
     peephole_ut.cpp
     sys_view_ut.cpp
-    tiering_ut.cpp
 )
 
 PEERDIR(
@@ -51,4 +50,5 @@ RECURSE_FOR_TESTS(
     storage
     reading
     pushdown
+    tiering
 )

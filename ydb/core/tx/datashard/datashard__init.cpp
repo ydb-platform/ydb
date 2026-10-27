@@ -1075,6 +1075,9 @@ ITransaction* TDataShard::CreateTxSyncSchemeOnFollower() {
 // low watermark for KeepSnapshotTimeout after its last write
 void TDataShard::OnFollowerDataUpdated() {
     SyncSchemeOnFollowerNeeded = true;
+    if (!HnswIndexCache.empty()) {
+        ScheduleHnswFollowerSync();
+    }
 }
 
 }}

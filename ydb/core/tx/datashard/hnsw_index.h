@@ -28,6 +28,63 @@ namespace NKikimr::NDataShard {
         bool Covered = true;
     };
 
+    // A bootstrap response may race with redo that has already passed its
+    // checkpoint. Remember those commits until the graph base becomes known;
+    // a late commit below that base must invalidate the downloaded generation.
+    class THnswBootstrapChanges {
+    public:
+        static constexpr size_t MaxSteps = 16384;
+        static constexpr ui64 RecordBytes = 128;
+
+        bool NeedsRecord(ui32 step) const {
+            return !SnapshotKnown && (Steps.empty() || Steps.back().Step != step);
+        }
+
+        bool Observe(ui32 step, TRowVersion version, std::shared_ptr<void> reservation = {}) {
+            if (SnapshotKnown)
+                return Covers(step) || version > Base;
+            if (!Steps.empty() && step < Steps.back().Step)
+                return false;
+            if (NeedsRecord(step)) {
+                if (Steps.size() == MaxSteps)
+                    return false;
+                Steps.push_back({step, version, std::move(reservation)});
+            } else {
+                Steps.back().Version = Min(Steps.back().Version, version);
+            }
+            return true;
+        }
+
+        bool HasChangesAfter(ui32 checkpoint) const {
+            return !Steps.empty() && Steps.back().Step > checkpoint;
+        }
+
+        bool SetSnapshot(TRowVersion base, ui32 checkpoint) {
+            for (const auto& change : Steps) {
+                if (change.Step > checkpoint && change.Version <= base)
+                    return false;
+            }
+            Base = base;
+            Checkpoint = checkpoint;
+            SnapshotKnown = true;
+            std::vector<TStep>().swap(Steps);
+            return true;
+        }
+
+        bool Covers(ui32 step) const { return SnapshotKnown && step <= Checkpoint; }
+
+    private:
+        struct TStep {
+            ui32 Step;
+            TRowVersion Version;
+            std::shared_ptr<void> Reservation;
+        };
+        std::vector<TStep> Steps;
+        TRowVersion Base;
+        ui32 Checkpoint = 0;
+        bool SnapshotKnown = false;
+    };
+
     // Owned by the tablet mailbox. Generations share committed history, never
     // transaction-local intents. Build workers only access the immutable graph.
     class THnswIndexChanges {

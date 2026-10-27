@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    datashard_hnsw_replication.cpp
     datashard_hnsw.cpp
     hnsw_index_build_actor.cpp
     hnsw_index_build_actor.h

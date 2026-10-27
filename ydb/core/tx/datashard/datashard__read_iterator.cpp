@@ -2907,6 +2907,11 @@ public:
             topState->Target = topK.GetTargetVector();
 
             if (AppData()->FeatureFlags.GetEnableHnswIndex() && TableInfo.HnswSettings) {
+                if (Self->IsFollower()) {
+                    // Bootstrap the cache, but keep follower SQL on exact reads
+                    // until readiness coordination is added in step 9.
+                    Self->ScheduleHnswFollowerSync();
+                }
                 // Reconstruct a missing graph asynchronously. The triggering read
                 // continues through the exact table scan.
                 const ui32 localTid = TableInfo.LocalTid;

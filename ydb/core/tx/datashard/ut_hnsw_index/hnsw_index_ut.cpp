@@ -947,6 +947,50 @@ namespace NKikimr::NDataShard {
         UNIT_ASSERT_EXCEPTION(graph->SaveGraph(graphOutput), yexception);
     }
 
+    Y_UNIT_TEST(BootstrapRejectsLateCommitsBeforeAndAfterManifestDelivery) {
+        THnswBootstrapChanges before;
+        UNIT_ASSERT(before.Observe(11, {50, 0}));
+        UNIT_ASSERT(!before.SetSnapshot({100, 0}, 10));
+        THnswBootstrapChanges after;
+        UNIT_ASSERT(after.Observe(9, {50, 0}));
+        UNIT_ASSERT(after.SetSnapshot({100, 0}, 10));
+        UNIT_ASSERT(after.Covers(9));
+        UNIT_ASSERT(after.Observe(9, {50, 0}));
+        UNIT_ASSERT(!after.Covers(11));
+        UNIT_ASSERT(after.Observe(11, {101, 0}));
+        UNIT_ASSERT(!after.Observe(12, {100, 0}));
+    }
+
+    Y_UNIT_TEST(BootstrapHistoryIsBoundedAndReleasesReservationsAtCheckpoint) {
+        THnswBootstrapChanges changes;
+        auto reservation = std::make_shared<int>(0);
+        std::weak_ptr<int> weak = reservation;
+        UNIT_ASSERT(changes.Observe(1, {100, 0}, std::move(reservation)));
+        UNIT_ASSERT(!weak.expired());
+        UNIT_ASSERT(changes.SetSnapshot({50, 0}, 1));
+        UNIT_ASSERT(weak.expired());
+        THnswBootstrapChanges delayed;
+        for (ui32 step = 0; step < THnswBootstrapChanges::MaxSteps; ++step)
+            UNIT_ASSERT(delayed.Observe(step, {100, 0}));
+        UNIT_ASSERT(!delayed.Observe(THnswBootstrapChanges::MaxSteps, {100, 0}));
+    }
+
+    Y_UNIT_TEST(BootstrapTracksMinimumVersionWithinStepAndRejectsReordering) {
+        THnswBootstrapChanges changes;
+        UNIT_ASSERT(changes.Observe(11, {101, 0}));
+        UNIT_ASSERT(changes.Observe(11, {99, 0}));
+        UNIT_ASSERT(!changes.SetSnapshot({100, 0}, 10));
+        UNIT_ASSERT(!changes.Observe(10, {102, 0}));
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        tracker->SetLimit(1024);
+        {
+            THnswBootstrapChanges owned;
+            UNIT_ASSERT(owned.Observe(1, {1, 0}, TryReserveHnswMemory(tracker, 128)));
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 128u);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0u);
+    }
+
     } // Y_UNIT_TEST_SUITE(THnswIndexTest)
 
 } // namespace NKikimr::NDataShard

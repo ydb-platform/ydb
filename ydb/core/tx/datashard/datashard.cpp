@@ -416,6 +416,11 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AllocCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "datashard");
 
+    HnswFollowerSyncScheduled = false;
+    ++HnswFollowerSyncEpoch;
+    InvalidateHnswIndexes();
+    HnswIndexCache.clear();
+
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
@@ -432,7 +437,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
-        InvalidateHnswIndexes();
+        ScheduleHnswFollowerSync();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -4670,6 +4675,8 @@ void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &
     if (ev->Get()->SourceType == TEvHnswCache::TEvRegister::EventType) {
         // Some embedded runtimes, including tests, have no controller.
         // Distinguish that disabled cache from a pending first limit grant.
+        HnswCacheRegistrationPending = false;
+        HnswCacheRegistered = false;
         if (HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker->SetLimit(0);
         }

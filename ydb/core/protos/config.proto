@@ -2090,6 +2090,55 @@ message TImmediateControlsConfig {
             MaxValue: 86400,
             DefaultValue: 0,
         }];
+
+        optional uint64 ReplTotalRequestBytesPerSecond = 57 [(ControlOptions) = {
+            Description: "Node-wide byte rate for requests issued by group replication; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 500000000,
+        }];
+        optional uint64 ReplTotalResponseBytesPerSecond = 58 [(ControlOptions) = {
+            Description: "Node-wide byte rate for responses issued by group replication; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 500000000,
+        }];
+        optional uint64 ReplPDiskReadBytesPerSecondHDD = 59 [(ControlOptions) = {
+            Description: "Group replication read byte rate per HDD PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 100000000,
+        }];
+        optional uint64 ReplPDiskWriteBytesPerSecondHDD = 60 [(ControlOptions) = {
+            Description: "Group replication write byte rate per HDD PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 100000000,
+        }];
+        optional uint64 ReplPDiskReadBytesPerSecondSSD = 61 [(ControlOptions) = {
+            Description: "Group replication read byte rate per SSD PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 200000000,
+        }];
+        optional uint64 ReplPDiskWriteBytesPerSecondSSD = 62 [(ControlOptions) = {
+            Description: "Group replication write byte rate per SSD PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 200000000,
+        }];
+        optional uint64 ReplPDiskReadBytesPerSecondNVME = 63 [(ControlOptions) = {
+            Description: "Group replication read byte rate per NVMe PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 300000000,
+        }];
+        optional uint64 ReplPDiskWriteBytesPerSecondNVME = 64 [(ControlOptions) = {
+            Description: "Group replication write byte rate per NVMe PDisk; 0 disables throttling",
+            MinValue: 0,
+            MaxValue: 1000000000000,
+            DefaultValue: 300000000,
+        }];
     }
 
     message TTabletControls {

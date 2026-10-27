@@ -19,12 +19,6 @@
 namespace NKikimr::NStorage {
     static constexpr TDuration TemporaryPDiskIdleTimeout = TDuration::Minutes(1);
 
-    static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
-        {NPDisk::DEVICE_TYPE_ROT, 100000000},
-        {NPDisk::DEVICE_TYPE_SSD, 200000000},
-        {NPDisk::DEVICE_TYPE_NVME, 300000000},
-    };
-
     static ui32 CalculateExpectedSlotCountFromSlotSize(ui64 driveSize, ui64 slotSizeInBytes, ui32 maxSlots) {
         Y_ABORT_UNLESS(driveSize);
         Y_ABORT_UNLESS(slotSizeInBytes);
@@ -469,23 +463,24 @@ namespace NKikimr::NStorage {
         }
 
         TPDiskCategory category(record.Record.GetPDiskCategory());
-        std::optional<ui64> readBytesPerSecond, writeBytesPerSecond;
-        for (const auto& item : Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig().GetMediaTypeQuota()) {
-            if (PDiskTypeToPDiskType(item.GetType()) == category.Type()) {
-                if (item.HasReadBytesPerSecond()) {
-                    readBytesPerSecond.emplace(item.GetReadBytesPerSecond());
-                }
-                if (item.HasWriteBytesPerSecond()) {
-                    writeBytesPerSecond.emplace(item.GetWriteBytesPerSecond());
-                }
-            }
+        const TControlWrapper *readBytesPerSecond = nullptr;
+        const TControlWrapper *writeBytesPerSecond = nullptr;
+        switch (category.Type()) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                readBytesPerSecond = &ReplPDiskReadBytesPerSecondHDD;
+                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondHDD;
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+                readBytesPerSecond = &ReplPDiskReadBytesPerSecondSSD;
+                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondSSD;
+                break;
+            case NPDisk::DEVICE_TYPE_NVME:
+                readBytesPerSecond = &ReplPDiskReadBytesPerSecondNVME;
+                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondNVME;
+                break;
+            default:
+                break;
         }
-        std::optional<ui64> def;
-        if (const auto it = DefaultSpeedLimit.find(category.Type()); it != DefaultSpeedLimit.end()) {
-            def = it->second;
-        }
-        readBytesPerSecond = readBytesPerSecond ? readBytesPerSecond : def;
-        writeBytesPerSecond = writeBytesPerSecond ? writeBytesPerSecond : def;
         if (readBytesPerSecond) {
             record.ReplPDiskReadQuoter = std::make_shared<TReplQuoter>(*readBytesPerSecond);
         }

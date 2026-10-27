@@ -37,6 +37,7 @@ namespace NSchemeShardUT_Private {
             type name##_ = defaultValue
 
         OPTION(ui32, NChannels, 4);
+        OPTION(NActors::NLog::EPriority, FlatTxSchemeShardLogPriority, NActors::NLog::PRI_DEBUG);
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
@@ -113,6 +114,7 @@ namespace NSchemeShardUT_Private {
         TMap<ui64, TActorId> TxNotificationSubscribers;
         TActorId TxReliablePropose;
         ui32 ChannelsCount;
+        const NActors::NLog::EPriority FlatTxSchemeShardLogPriority;
         TActorId MeteringFake;
         THolder<NYdb::TDriver> YdbDriver;
 
@@ -125,8 +127,9 @@ namespace NSchemeShardUT_Private {
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
 
-        // Keep NOTICE and more severe messages by default; ENABLE_SCHEMESHARD_LOG=1
-        // restores the requested verbose priority without rebuilding the tests.
+        // Keep FLAT_TX_SCHEMESHARD at the priority configured by SetupLogging;
+        // other components default to NOTICE. ENABLE_SCHEMESHARD_LOG=1 restores
+        // the requested verbose priority without rebuilding the tests.
         static void SetVerboseLogPriority(TTestActorRuntime& runtime, NActors::NLog::EComponent component,
             NActors::NLog::EPriority verbosePriority);
 

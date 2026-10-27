@@ -728,6 +728,24 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Volatile cluster-wide states of physical DataCenters for mirror-3-dc groups.
+message TDefineDataCenterStates {
+    message TDataCenter {
+        enum EState {
+            INCLUDED = 0;
+            EXCLUDED = 1;
+            RECOVERING = 2;
+        }
+        string Name = 1;
+        EState State = 2;
+    }
+    // Replaces the entire list. Unlisted DataCenters are INCLUDED.
+    repeated TDataCenter DataCenter = 1;
+}
+
+// Clear the volatile states and publish a new generation of every dynamic mirror-3-dc group.
+message TTestResetDataCenterStates {}
+
 message TConfigRequest {
     message TCommand {
         oneof Command {
@@ -787,6 +805,8 @@ message TConfigRequest {
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
+            TDefineDataCenterStates DefineDataCenterStates = 65;
+            TTestResetDataCenterStates TestResetDataCenterStates = 66;
         }
     }
 

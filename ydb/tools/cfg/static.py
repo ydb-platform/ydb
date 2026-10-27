@@ -1864,6 +1864,12 @@ class StaticConfigGenerator(object):
 
     def _configure_default_state_storage(self, domains_config, domain_id):
         state_storage_cfg = domains_config.StateStorage.add(SSId=domain_id)
+        explicit_node_ids = self.__cluster_details.explicit_state_storage_node_ids
+        if explicit_node_ids:
+            state_storage_cfg.Ring.NToSelect = self.__n_to_select
+            state_storage_cfg.Ring.Node.extend(explicit_node_ids)
+            return
+
         node_limit = {
             types.Erasure.BLOCK_4_2: 8,
             types.Erasure.MIRROR_3_DC: 9,

@@ -1,5 +1,7 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.UseFixedVDiskSlotSizeRuntimeSwitch
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.ActivationAndValidation
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeRestart.RegistrationSnapshotPrecedesDiskUpdates
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
@@ -23,6 +25,7 @@ ydb/core/kqp/ut/tracing TKqpQueryTrace.SpillingReportsFollowRequestedStatsMode
 ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
 ydb/core/memory_controller/ut TMemoryController.MemTable
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
+ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/tablet/ut TNodeDatabaseMetricsAggregatorTest.ConcurrentPackSeesWholeBuckets
 ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch

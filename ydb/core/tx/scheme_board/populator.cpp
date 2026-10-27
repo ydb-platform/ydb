@@ -117,7 +117,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             BatchSize = 0;
         }
 
-        Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery);
+        Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery, FullSyncCookie);
     }
 
     void ResumeSync(const TPathId& fromPathId) {
@@ -145,7 +145,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
             UpdatesInFlight[pathId].emplace(version, ev->Cookie);
             if (needSend) {
-                Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+                // Publication cookies are retained in UpdatesInFlight. The
+                // replica only needs to echo the kind of update being ACKed.
+                Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, IncrementalUpdateCookie);
             }
         } else {
             auto it = UpdatesRequested.find(pathId);
@@ -306,7 +308,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             return;
         }
 
-        if (!ev->Cookie && ev->Get()->GetPathId() == CurPathId) {
+        if (ev->Cookie == FullSyncCookie && ev->Get()->GetPathId() == CurPathId) {
             LastAckedPathId = CurPathId;
 
             CurPathId = CurPathId.NextId();
@@ -491,6 +493,11 @@ private:
     THashMap<TPathId, TSet<std::pair<ui64, ui64>>> Updates;
     THashMap<TPathId, TSet<std::pair<ui64, ui64>>> UpdatesRequested;
     THashMap<TPathId, TSet<std::pair<ui64, ui64>>> UpdatesInFlight;
+
+    // Transport cookies distinguish full-sync ACKs from live/catch-up ACKs.
+    // They are independent of the original publication cookie (which may be zero).
+    static constexpr ui64 FullSyncCookie = 0;
+    static constexpr ui64 IncrementalUpdateCookie = 1;
 
     // used during sync
     TPathId CurPathId;
@@ -718,7 +725,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             {"version", (isDeletion ? 0 : version)});
 
         if (isDeletion) {
-            if (!Descriptions.contains(pathId)) {
+            if (!Descriptions.contains(pathId) && record.GetPath().empty()) {
                 YDB_LOG_NOTICE("Immediate ack for deleted path",
                     {"selfId", SelfId()},
                     {"sender", ev->Sender},
@@ -743,7 +750,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
         auto& path = it->second.Paths[pathId];
-        path = Descriptions.at(pathId).Path;
+        path = isDeletion && !Descriptions.contains(pathId)
+            ? record.GetPath()
+            : Descriptions.at(pathId).Path;
         Update(pathId, isDeletion, ev->Cookie, path);
 
         if (isDeletion) {

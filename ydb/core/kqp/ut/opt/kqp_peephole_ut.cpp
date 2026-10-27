@@ -1,3 +1,5 @@
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -86,6 +88,22 @@ NYql::TExprNode::TPtr BuildPackUnpackWideMap(NYql::TExprContext& ctx, EPackKind 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
+
+    Y_UNIT_TEST(NonDeterministicProducerKeepsTypes) {
+        TKikimrSettings settings;
+        auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(false);
+        tableService->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM EightShard
+            WHERE CAST(Key AS Timestamp) < CurrentUtcTimestamp();
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[24u]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
 
     Y_UNIT_TEST(IdentityPackUnpackIsEliminated) {
         NYql::TExprContext ctx;

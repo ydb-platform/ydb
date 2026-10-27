@@ -20,7 +20,7 @@ inputs:
     description: "Test threads count"
   link_threads:
     type: string
-    default: 6
+    default: 2
     description: "link threads count"
   test_size:
     type: string

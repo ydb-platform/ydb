@@ -294,6 +294,10 @@ public:
             + (MutableBackup ? MutableBackup->GetWastedMem() : 0);
     }
 
+    ui64 GetMemAllocatedSize() const noexcept {
+        return GetMemSize() + GetMemWaste();
+    }
+
     ui64 GetMemRowCount() const noexcept
     {
         return Stat_.FrozenRows

@@ -4,7 +4,8 @@ namespace NFq {
 
 TTestConnectionRequestCounters::TTestConnectionRequestCounters(const TString& name)
     : Name(name)
-{}
+{
+}
 
 void TTestConnectionRequestCounters::Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
     auto requestCounters = counters->GetSubgroup("request", Name);
@@ -15,7 +16,7 @@ void TTestConnectionRequestCounters::Register(const ::NMonitoring::TDynamicCount
 }
 
 NMonitoring::IHistogramCollectorPtr TTestConnectionRequestCounters::GetLatencyHistogramBuckets() {
-    return NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
+    return NMonitoring::ExplicitHistogram({ 0, 10, 100, 1000, 10000 });
 }
 
-} // NFq
+}   // namespace NFq

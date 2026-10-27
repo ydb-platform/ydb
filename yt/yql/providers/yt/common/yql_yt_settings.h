@@ -411,7 +411,7 @@ using TSecureTmpStatePtr = std::shared_ptr<const std::atomic<bool>>;
 TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster);
 TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions);
 
-struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
+struct TYtConfiguration : public NCommon::TDispatcherAndSettings<TYtSettings> {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
     TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});

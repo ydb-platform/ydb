@@ -625,6 +625,67 @@ static TNodeLocation MakeTestLocation(ui32 nodeId, ui32 rackId = 0) {
 
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
+    Y_UNIT_TEST(AcrossPilesPreservesDatacenterGeometry) {
+        TBlobStorageController::TStoragePoolInfo pool;
+        pool.BridgeMode = false;
+        const auto geometry = TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType::ErasureMirror3dc, pool);
+        TTestContext context(3, 1, 4, 1, 1);
+        TGroupMapper mapper(geometry);
+        auto registerDisks = [&](TGroupMapper& target, bool distinctDatacenters) {
+            context.IteratePDisks([&](TPDiskId id, const auto&) {
+                NActorsInterconnect::TNodeLocation location;
+                context.GetLocation(id).Serialize(&location, false);
+                const ui32 pile = (id.NodeId - 1) / 4;
+                location.SetBridgePileName(TStringBuilder() << "pile_" << pile);
+                if (!distinctDatacenters) {
+                    location.SetDataCenter("shared_dc");
+                }
+                UNIT_ASSERT(target.RegisterPDisk({
+                    .PDiskId = id,
+                    .Location = TNodeLocation(location),
+                    .Usable = true,
+                    .ExpectedSlotCount = 10,
+                    .Operational = true,
+                    .BridgePileId = TBridgePileId::FromPileIndex(pile),
+                }));
+            });
+        };
+        registerDisks(mapper, true);
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        // Neither the unlabelled pile nor a single labelled pile can satisfy three DCs.
+        UNIT_ASSERT(!mapper.AllocateGroup(1, group, {}, {}, 1, 0, true, {}, error));
+        group.clear();
+        UNIT_ASSERT(!mapper.AllocateGroup(1, group, {}, {}, 1, 0, true, TBridgePileId::FromPileIndex(0), error));
+        group.clear();
+        UNIT_ASSERT_C(mapper.AllocateGroup(1, group, {}, {}, 1, 0, true,
+            TGroupMapper::TPileScope::AcrossPiles(), error), error.ErrorMessage);
+        TString layoutError;
+        UNIT_ASSERT_C(context.CheckGroupPlacement(group, geometry, layoutError), layoutError);
+
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 1;
+        request.PileScope = TGroupMapper::TPileScope::AcrossPiles();
+        TGroupMapper::Traverse(group, [&](TVDiskIdShort id, TPDiskId disk) {
+            request.VDisks.push_back({.VDiskId = id, .PDiskId = disk});
+        });
+        const auto old = request.VDisks.front().PDiskId;
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{};
+        const auto result = mapper.AllocateGroupReassignment(request);
+        UNIT_ASSERT_C(result.Success, result.Error.ErrorMessage);
+        UNIT_ASSERT_C(context.CheckGroupPlacement(result.Group, geometry, layoutError), layoutError);
+        UNIT_ASSERT_UNEQUAL(result.Group[0][0][0], old);
+        UNIT_ASSERT_VALUES_EQUAL((result.Group[0][0][0].NodeId - 1) / 4, (old.NodeId - 1) / 4);
+
+        // Different pile labels must not make one physical DC look like three DCs.
+        TGroupMapper sameDatacenter(geometry);
+        registerDisks(sameDatacenter, false);
+        group.clear();
+        UNIT_ASSERT(!sameDatacenter.AllocateGroup(1, group, {}, {}, 1, 0, true,
+            TGroupMapper::TPileScope::AcrossPiles(), error));
+    }
+
     Y_UNIT_TEST(SimplestErasureNone) {
         // Single node with single PDisk with 2 slots on it
         TTestContext context(1, 1, 1, 1, 1);

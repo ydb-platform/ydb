@@ -4,6 +4,7 @@
 #include "events.h"
 
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/generic/yexception.h>
 
@@ -147,6 +148,13 @@ private:
 
 NActors::IActor* MakeGraphExecutionEventsActor(const TString& traceID, std::vector<IDqTaskPreprocessor::TPtr>&& taskPreprocessors) {
     return new TGraphExecutionEventsActor(traceID, std::move(taskPreprocessors));
+}
+
+NActors::TActorId RegisterGraphExecutionEventsActor(NActors::TActorSystem& actorSystem, const TString& traceID, std::vector<IDqTaskPreprocessor::TPtr>&& taskPreprocessors) {
+    return actorSystem.Register(
+        MakeGraphExecutionEventsActor(traceID, std::move(taskPreprocessors)),
+        NActors::TMailboxType::HTSwap,
+        EExecutorPoolType::GraphEvents);
 }
 
 } // namespace NYql::NDqs

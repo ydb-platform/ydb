@@ -10,6 +10,9 @@ void BecomeUser(const TString& username, const TString& groupname) {
 void TurnOnBecomeUserAmbientCaps() {
 }
 
+void EnsureNonRootUserAndGroup() {
+}
+
 void TurnOffBecomeUserAbility() {
 }
 

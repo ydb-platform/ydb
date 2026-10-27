@@ -133,4 +133,69 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
                 "string", PrepareToCompare(arrFiltered->ToString()));
         }
     }
+
+    Y_UNIT_TEST(HasNoNullsWithValidDefault) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddRecord(1, "other");
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == false);
+    }
+
+    Y_UNIT_TEST(HasNullsWithValidDefaultAndExplicitNull) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddNull(1);
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNullsWithMissingNullDefault) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 1, 0);
+        builder.AddRecord(1, "value");
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNoNullsWhenNullDefaultIsFullyOverridden) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 2, 0);
+        builder.AddRecord(0, "first");
+        builder.AddRecord(1, "second");
+        UNIT_ASSERT(builder.Finish(2)->HasNulls() == false);
+    }
+
+    Y_UNIT_TEST(VisitsSparseDistinctValuesWithoutMaterializingDefaultRows) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddRecord(1, "other");
+        auto array = builder.Finish(1000);
+
+        std::vector<std::shared_ptr<arrow::Array>> values;
+        array->VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& value) {
+            values.push_back(value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+        UNIT_ASSERT(values[0]->GetScalar(0).ValueOrDie()->Equals(arrow::StringScalar("default")));
+        UNIT_ASSERT(values[1]->GetScalar(0).ValueOrDie()->Equals(arrow::StringScalar("other")));
+    }
+
+    Y_UNIT_TEST(VisitsNullDefaultAmongSparseDistinctValues) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 1, 0);
+        builder.AddRecord(1, "value");
+        auto array = builder.Finish(2);
+
+        std::vector<std::shared_ptr<arrow::Array>> values;
+        array->VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& value) {
+            values.push_back(value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+        UNIT_ASSERT(values[0]->IsNull(0));
+    }
+
+    Y_UNIT_TEST(VisitsExplicitNullAmongSparseDistinctValues) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddNull(1);
+        auto array = builder.Finish(2);
+
+        std::vector<std::shared_ptr<arrow::Array>> values;
+        array->VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& value) {
+            values.push_back(value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+        UNIT_ASSERT(values[1]->IsNull(0));
+    }
 };

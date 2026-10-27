@@ -1,14 +1,16 @@
+#include "cpu_spec.h"
 #include "service.h"
+
 #include "metadata_subscription/fetcher.h"
 #include "metadata_subscription/storage_paths.h"
-#include "cpu_spec.h"
 #include "wasm/manifest.h"
 #include "wasm/module_catalog.h"
 
-#include <ydb/services/metadata/service.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
+
+#include <ydb/services/metadata/service.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <util/folder/path.h>
@@ -34,11 +36,10 @@ bool ManifestLooksValid(TStringBuf manifest) {
     }
 }
 
-} // namespace
+}   // namespace
 
 TUdfStoreService::TUdfStoreService(
-    const NKikimrConfig::TUdfStoreConfig& config,
-    TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
+    const NKikimrConfig::TUdfStoreConfig& config, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
     : FunctionRegistry(std::move(functionRegistry))
     , KvStorageMedia(config.GetKvStorageMedia())
     , EnableUnsafeNativeUdfFlag(config.GetEnableUnsafeNativeUdf())
@@ -47,20 +48,24 @@ TUdfStoreService::TUdfStoreService(
     , CompileCapacity(Max<ui32>(1, config.GetWasmCompileMaxPerDinode()))
     , WasmCpuSpecOverride(config.GetWasmCpuSpecOverride())
     , LocalCpuSpec(DetectLocalCpuSpec(WasmCpuSpecOverride))
-{}
+{
+}
 
 bool TUdfStoreService::IsNamePending(const TString& name, EUdfType type) const {
-    auto pred = [&](const TPendingUdf& pending) { return pending.Name == name; };
+    auto pred = [&](const TPendingUdf& pending) {
+        return pending.Name == name;
+    };
     if (type == EUdfType::WASM) {
-        return std::any_of(PendingWasmCompile.begin(), PendingWasmCompile.end(), pred)
-            || std::any_of(PendingWasmLoad.begin(), PendingWasmLoad.end(), pred);
+        return std::any_of(PendingWasmCompile.begin(), PendingWasmCompile.end(), pred) ||
+               std::any_of(PendingWasmLoad.begin(), PendingWasmLoad.end(), pred);
     }
     return std::any_of(PendingNativeUdfs.begin(), PendingNativeUdfs.end(), pred);
 }
 
 bool TUdfStoreService::IsLibraryPending(const TString& name) const {
-    return std::any_of(PendingLibraryCompile.begin(), PendingLibraryCompile.end(),
-        [&](const TPendingLibrary& pending) { return pending.Name == name; });
+    return std::any_of(PendingLibraryCompile.begin(), PendingLibraryCompile.end(), [&](const TPendingLibrary& pending) {
+        return pending.Name == name;
+    });
 }
 
 TString TUdfStoreService::GetModuleExtensionFromManifest(TStringBuf manifest) {
@@ -74,10 +79,7 @@ TString TUdfStoreService::GetModuleExtensionFromManifest(TStringBuf manifest) {
     return "wasm";
 }
 
-bool TUdfStoreService::AreLibraryDependenciesReady(
-    TStringBuf manifest,
-    const TSnapshot* snapshot) const
-{
+bool TUdfStoreService::AreLibraryDependenciesReady(TStringBuf manifest, const TSnapshot* snapshot) const {
     const TSnapshot* snap = snapshot ? snapshot : CurrentSnapshot.get();
     if (!snap) {
         return false;
@@ -97,10 +99,7 @@ bool TUdfStoreService::AreLibraryDependenciesReady(
     }
 }
 
-THashMap<TString, TString> TUdfStoreService::CollectLibraryUids(
-    TStringBuf manifest,
-    const TSnapshot* snapshot) const
-{
+THashMap<TString, TString> TUdfStoreService::CollectLibraryUids(TStringBuf manifest, const TSnapshot* snapshot) const {
     THashMap<TString, TString> uids;
     const TSnapshot* snap = snapshot ? snapshot : CurrentSnapshot.get();
     if (!snap) {
@@ -215,10 +214,10 @@ void TUdfStoreService::ReportGapsUnblockedByLibrary(const TString& libraryName) 
         }
         try {
             const auto manifest = NWasm::ParseManifest(udf.GetManifest());
-            const bool dependsOnLibrary = std::any_of(
-                manifest.RequiredLibraries.begin(),
-                manifest.RequiredLibraries.end(),
-                [&](const TString& name) { return name == libraryName; });
+            const bool dependsOnLibrary =
+                std::any_of(manifest.RequiredLibraries.begin(), manifest.RequiredLibraries.end(), [&](const TString& name) {
+                    return name == libraryName;
+                });
             if (!dependsOnLibrary) {
                 continue;
             }
@@ -239,10 +238,10 @@ void TUdfStoreService::UnloadWasmUdfsDependingOnLibrary(const TString& libraryNa
         }
         try {
             const auto manifest = NWasm::ParseManifest(udf.GetManifest());
-            const bool dependsOnLibrary = std::any_of(
-                manifest.RequiredLibraries.begin(),
-                manifest.RequiredLibraries.end(),
-                [&](const TString& required) { return required == libraryName; });
+            const bool dependsOnLibrary =
+                std::any_of(manifest.RequiredLibraries.begin(), manifest.RequiredLibraries.end(), [&](const TString& required) {
+                    return required == libraryName;
+                });
             if (!dependsOnLibrary) {
                 continue;
             }
@@ -256,9 +255,8 @@ void TUdfStoreService::UnloadWasmUdfsDependingOnLibrary(const TString& libraryNa
 }
 
 void TUdfStoreService::Bootstrap() {
-    GapsWithoutControllerGauge = GetServiceCounters(AppData()->Counters, "udf_store")
-        ->GetSubgroup("subsystem", "dinode")
-        ->GetCounter("WasmGapsWithoutController", false);
+    GapsWithoutControllerGauge =
+        GetServiceCounters(AppData()->Counters, "udf_store")->GetSubgroup("subsystem", "dinode")->GetCounter("WasmGapsWithoutController", false);
 
     ModulesTablePath = TUdfModule::GetBehaviour()->GetStorageTablePath();
     ModuleChunksTablePath = GetModuleChunksTablePath();
@@ -270,10 +268,7 @@ void TUdfStoreService::Bootstrap() {
 }
 
 void TUdfStoreService::EnsureArtifactTable() {
-    Register(new TWasmArtifactTableInitializer(
-        SelfId(),
-        ArtifactTablePath,
-        ArtifactChunksTablePath));
+    Register(new TWasmArtifactTableInitializer(SelfId(), ArtifactTablePath, ArtifactChunksTablePath));
 }
 
 void TUdfStoreService::Handle(TEvStoreInitialized::TPtr& ev) {
@@ -314,9 +309,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     YDB_LOG_INFO("TUdfStoreService: received UDF snapshot");
 
     for (const auto& [name, library] : snapshot->GetLibraries()) {
-        const TUdfModule* existing = CurrentSnapshot
-            ? CurrentSnapshot->GetLibraryByName(name)
-            : nullptr;
+        const TUdfModule* existing = CurrentSnapshot ? CurrentSnapshot->GetLibraryByName(name) : nullptr;
         const bool isNew = !existing;
         if (isNew) {
             YDB_LOG_INFO("TUdfStoreService: library added",
@@ -324,10 +317,8 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 {"md5", library.GetMd5()},
                 {"version", library.GetVersion()});
             EnqueueLibraryCompileIfNeeded(library);
-        } else if (existing->GetUid() != library.GetUid()
-            || existing->GetMd5() != library.GetMd5()
-            || existing->GetSize() != library.GetSize()
-            || existing->GetVersion() != library.GetVersion())
+        } else if (existing->GetUid() != library.GetUid() || existing->GetMd5() != library.GetMd5() ||
+                   existing->GetSize() != library.GetSize() || existing->GetVersion() != library.GetVersion())
         {
             // uid is the primary re-upload signal: md5 alone is only a checksum
             // and may stay the same across uploads of identical bytes.
@@ -365,11 +356,9 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 {"uid", udf.GetUid()},
                 {"type", udf.GetType()},
                 {"size", udf.GetSize()});
-        } else if (existing->GetUid() != udf.GetUid()
-            || existing->GetMd5() != udf.GetMd5()
-            || existing->GetSize() != udf.GetSize()
-            || existing->GetVersion() != udf.GetVersion()
-            || (udf.GetType() == EUdfType::WASM && existing->GetManifest() != udf.GetManifest()))
+        } else if (existing->GetUid() != udf.GetUid() || existing->GetMd5() != udf.GetMd5() || existing->GetSize() != udf.GetSize() ||
+                   existing->GetVersion() != udf.GetVersion() ||
+                   (udf.GetType() == EUdfType::WASM && existing->GetManifest() != udf.GetManifest()))
         {
             YDB_LOG_INFO("TUdfStoreService: UDF changed",
                 {"name", name},
@@ -480,14 +469,8 @@ void TUdfStoreService::FetchNextNativeBody() {
     NativeFetchInProgress = true;
     const auto& pending = PendingNativeUdfs.front();
 
-    Register(new TKvBodyReadActor(
-        SelfId(),
-        pending.Name,
-        pending.Md5,
-        KvVolumePath,
-        UnsafeNativeUdfDir,
-        FunctionRegistry,
-        pending.ExpectedSize));
+    Register(
+        new TKvBodyReadActor(SelfId(), pending.Name, pending.Md5, KvVolumePath, UnsafeNativeUdfDir, FunctionRegistry, pending.ExpectedSize));
 }
 
 void TUdfStoreService::FetchNextLibraryCompile() {
@@ -500,13 +483,7 @@ void TUdfStoreService::FetchNextLibraryCompile() {
     const auto& pending = PendingLibraryCompile.front();
 
     Register(new TWasmLibraryCompileActor(
-        SelfId(),
-        pending.Name,
-        LocalCpuSpec,
-        ModulesTablePath,
-        ModuleChunksTablePath,
-        ArtifactTablePath,
-        ArtifactChunksTablePath));
+        SelfId(), pending.Name, LocalCpuSpec, ModulesTablePath, ModuleChunksTablePath, ArtifactTablePath, ArtifactChunksTablePath));
 }
 
 void TUdfStoreService::FetchNextWasmCompile() {
@@ -518,16 +495,8 @@ void TUdfStoreService::FetchNextWasmCompile() {
     WasmCompileInProgress = true;
     const auto& pending = PendingWasmCompile.front();
 
-    Register(new TWasmCompileActor(
-        SelfId(),
-        pending.Name,
-        pending.Manifest,
-        LocalCpuSpec,
-        ModulesTablePath,
-        ModuleChunksTablePath,
-        ArtifactTablePath,
-        ArtifactChunksTablePath,
-        pending.LibraryUids));
+    Register(new TWasmCompileActor(SelfId(), pending.Name, pending.Manifest, LocalCpuSpec, ModulesTablePath, ModuleChunksTablePath,
+        ArtifactTablePath, ArtifactChunksTablePath, pending.LibraryUids));
 }
 
 void TUdfStoreService::FetchNextWasmLoad() {
@@ -539,20 +508,12 @@ void TUdfStoreService::FetchNextWasmLoad() {
     WasmLoadInProgress = true;
     const auto& pending = PendingWasmLoad.front();
 
-    Register(new TWasmArtifactLoadActor(
-        SelfId(),
-        pending.Name,
-        pending.Manifest,
-        pending.Uid,
-        ArtifactTablePath,
-        ArtifactChunksTablePath,
-        pending.LibraryUids,
-        FunctionRegistry));
+    Register(new TWasmArtifactLoadActor(SelfId(), pending.Name, pending.Manifest, pending.Uid, ArtifactTablePath, ArtifactChunksTablePath,
+        pending.LibraryUids, FunctionRegistry));
 }
 
 void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
-    const bool fromCompile = !PendingLibraryCompile.empty()
-        && PendingLibraryCompile.front().Name == ev->Get()->LibraryName;
+    const bool fromCompile = !PendingLibraryCompile.empty() && PendingLibraryCompile.front().Name == ev->Get()->LibraryName;
     if (!fromCompile) {
         YDB_LOG_WARN("TUdfStoreService: received unexpected TEvLibraryCompileResponse for library",
             {"libraryName", ev->Get()->LibraryName});
@@ -585,11 +546,7 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
 
     const auto assignmentIt = LibraryAssignments.find(libraryName);
     if (assignmentIt != LibraryAssignments.end()) {
-        ReportCompileResult(
-            assignmentIt->second,
-            ev->Get()->Success,
-            ev->Get()->Deferred,
-            ev->Get()->ErrorMessage);
+        ReportCompileResult(assignmentIt->second, ev->Get()->Success, ev->Get()->Deferred, ev->Get()->ErrorMessage);
         LibraryAssignments.erase(assignmentIt);
     }
 
@@ -637,11 +594,7 @@ void TUdfStoreService::Handle(TEvWasmCompileResponse::TPtr& ev) {
     }
 
     if (assigned) {
-        ReportCompileResult(
-            assignmentIt->second,
-            ev->Get()->Success,
-            ev->Get()->Deferred,
-            ev->Get()->ErrorMessage);
+        ReportCompileResult(assignmentIt->second, ev->Get()->Success, ev->Get()->Deferred, ev->Get()->ErrorMessage);
         ModuleAssignments.erase(assignmentIt);
     }
 
@@ -655,10 +608,8 @@ void TUdfStoreService::Handle(TEvReadBodyResponse::TPtr& ev) {
     // The same name may sit in both queues (a native UDF and a WASM UDF), so
     // match the type too: taking the wrong queue would leave the other fetch
     // marked in progress forever.
-    const bool fromNative = ev->Get()->Type != EUdfType::WASM
-        && !PendingNativeUdfs.empty() && PendingNativeUdfs.front().Name == ev->Get()->Name;
-    const bool fromWasm = ev->Get()->Type == EUdfType::WASM
-        && !PendingWasmLoad.empty() && PendingWasmLoad.front().Name == ev->Get()->Name;
+    const bool fromNative = ev->Get()->Type != EUdfType::WASM && !PendingNativeUdfs.empty() && PendingNativeUdfs.front().Name == ev->Get()->Name;
+    const bool fromWasm = ev->Get()->Type == EUdfType::WASM && !PendingWasmLoad.empty() && PendingWasmLoad.front().Name == ev->Get()->Name;
 
     if (!fromNative && !fromWasm) {
         YDB_LOG_WARN("TUdfStoreService: received unexpected TEvReadBodyResponse for UDF with no matching pending fetch",
@@ -666,9 +617,7 @@ void TUdfStoreService::Handle(TEvReadBodyResponse::TPtr& ev) {
         return;
     }
 
-    TPendingUdf pending = fromNative
-        ? std::move(PendingNativeUdfs.front())
-        : std::move(PendingWasmLoad.front());
+    TPendingUdf pending = fromNative ? std::move(PendingNativeUdfs.front()) : std::move(PendingWasmLoad.front());
     if (fromNative) {
         PendingNativeUdfs.pop_front();
         NativeFetchInProgress = false;
@@ -723,11 +672,12 @@ NActors::TActorId MakeServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, "SrvcUdfStore");
 }
 
-NActors::IActor* CreateService(const NKikimrConfig::TUdfStoreConfig& serviceConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry) {
+NActors::IActor* CreateService(
+    const NKikimrConfig::TUdfStoreConfig& serviceConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry) {
     if (!serviceConfig.GetEnabled()) {
         return nullptr;
     }
     return new TUdfStoreService(serviceConfig, std::move(functionRegistry));
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

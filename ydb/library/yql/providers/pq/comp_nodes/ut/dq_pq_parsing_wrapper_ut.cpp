@@ -2,12 +2,11 @@
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/dq_setup.h>
 #include <ydb/library/yql/providers/pq/comp_nodes/dq_pq_parsing_wrapper.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_node_builder.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -30,7 +29,7 @@ struct TLayout {
     ui32 OutputWatermarkClusterIndex = 0;
 };
 
-class TStreamValue : public TComputationValue<TStreamValue> {
+class TStreamValue: public TComputationValue<TStreamValue> {
 public:
     using TBase = TComputationValue<TStreamValue>;
 
@@ -70,21 +69,21 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, TCallable*& source
     auto ui64Type = pb.NewDataType(NUdf::EDataSlot::Uint64);
 
     auto sourceItemType = pb.NewStructType({
-        {"Data", stringType},
-        {"__ydb_partition_id", ui64Type},
-        {"__ydb_cluster", stringType},
+        { "Data", stringType },
+        { "__ydb_partition_id", ui64Type },
+        { "__ydb_cluster", stringType },
     });
     auto lambdaItemType = pb.NewStructType({
-        {"Data", stringType},
-        {"__ydb_partition_id", ui64Type},
-        {"__ydb_cluster", stringType},
+        { "Data", stringType },
+        { "__ydb_partition_id", ui64Type },
+        { "__ydb_cluster", stringType },
     });
     auto outputItemType = pb.NewStructType({
-        {"Data", stringType},
-        {"__ydb_partition_id", ui64Type},
-        {"__ydb_cluster", stringType},
-        {"__ydb_watermark_partition_id", ui64Type},
-        {"__ydb_watermark_cluster", stringType},
+        { "Data", stringType },
+        { "__ydb_partition_id", ui64Type },
+        { "__ydb_cluster", stringType },
+        { "__ydb_watermark_partition_id", ui64Type },
+        { "__ydb_watermark_cluster", stringType },
     });
 
     const auto sourceStructType = AS_TYPE(TStructType, sourceItemType);
@@ -117,13 +116,13 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, TCallable*& source
     };
 
     auto callable = TCallableBuilder(pb.GetTypeEnvironment(), "DqPqParsingWrapper", outputStreamType)
-        .Add(TRuntimeNode(sourceNode, false))
-        .Add(lambdaArg)
-        .Add(lambdaBody)
-        .Add(pb.NewList(stringType, metadataMapping))
-        .Build();
+                        .Add(TRuntimeNode(sourceNode, false))
+                        .Add(lambdaArg)
+                        .Add(lambdaBody)
+                        .Add(pb.NewList(stringType, metadataMapping))
+                        .Build();
 
-    return setup.BuildGraph(TRuntimeNode(callable, false), {sourceNode});
+    return setup.BuildGraph(TRuntimeNode(callable, false), { sourceNode });
 }
 
 TComputationNodeFactory GetTestNodeFactory() {
@@ -136,15 +135,11 @@ TComputationNodeFactory GetTestNodeFactory() {
 }
 
 void SetInput(IComputationGraph& graph, TLayout layout) {
-    graph.GetEntryPoint(0, true)->SetValue(
-        graph.GetContext(),
-        graph.GetHolderFactory().Create<TStreamValue>(
-            graph.GetContext(),
-            std::vector<TInputItem>{
-                {"first", 11, "cluster-a"},
-                {"second", 22, "cluster-b"},
-            },
-            layout));
+    graph.GetEntryPoint(0, true)->SetValue(graph.GetContext(), graph.GetHolderFactory().Create<TStreamValue>(graph.GetContext(),
+                                                                   std::vector<TInputItem>{
+                                                                       { "first", 11, "cluster-a" },
+                                                                       { "second", 22, "cluster-b" },
+                                                                   }, layout));
 }
 
 void AssertRow(const NUdf::TUnboxedValue& row, const TLayout& layout, const TInputItem& expected) {
@@ -158,7 +153,7 @@ void AssertRow(const NUdf::TUnboxedValue& row, const TLayout& layout, const TInp
     UNIT_ASSERT_VALUES_EQUAL(TString(watermarkCluster.AsStringRef()), expected.Cluster);
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqParsingWrapperTest) {
     Y_UNIT_TEST(PassesMetadataThroughLambdaAndAppendsWatermarkMetadata) {
@@ -172,13 +167,13 @@ Y_UNIT_TEST_SUITE(TDqPqParsingWrapperTest) {
 
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, root.Fetch(result));
-        AssertRow(result, layout, {"first", 11, "cluster-a"});
+        AssertRow(result, layout, { "first", 11, "cluster-a" });
 
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, root.Fetch(result));
-        AssertRow(result, layout, {"second", 22, "cluster-b"});
+        AssertRow(result, layout, { "second", 22, "cluster-b" });
 
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, root.Fetch(result));
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

@@ -1,16 +1,13 @@
 #include "application.h"
 #include "utils.h"
 
-#include <library/cpp/colorizer/colors.h>
-#include <library/cpp/getopt/last_getopt.h>
-
-#include <util/stream/file.h>
-
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/blob_depot/mon_main.h>
 
+#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/getopt/last_getopt.h>
+#include <util/stream/file.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/udf/udf_static_registry.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -31,7 +28,7 @@ void InterruptHandler(int) {
 }
 #endif
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 TMainBase::TMainBase() {
 #ifdef PROFILE_MEMORY_ALLOCATIONS
@@ -48,13 +45,18 @@ void TMainBase::FinishProfileMemoryAllocations() {
         TStringOutput stream(output);
         NAllocProfiler::StopAllocationSampling(stream);
 
-        Cout << CoutColors.Red() << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump size " << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
+        Cout << CoutColors.Red()
+             << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump "
+                "size "
+             << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
     }
 }
 #endif
 
 void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettings& settings) {
-    options.AddLongOption("threads", "User pool size for each node (also scaled system, batch and IC pools in proportion: system / user / batch / IC = 1 / 10 / 1 / 1)")
+    options
+        .AddLongOption("threads",
+            "User pool size for each node (also scaled system, batch and IC pools in proportion: system / user / batch / IC = 1 / 10 / 1 / 1)")
         .RequiredArgument("uint")
         .StoreMappedResultT<ui32>(&UserPoolSize, [](ui32 threadsCount) {
             if (threadsCount < 1) {
@@ -63,9 +65,7 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
             return threadsCount;
         });
 
-    options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
-        .RequiredArgument("file")
-        .EmplaceTo(&UdfsPaths);
+    options.AddLongOption('u', "udf", "Load shared library with UDF by given path").RequiredArgument("file").EmplaceTo(&UdfsPaths);
 
     options.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
         .RequiredArgument("directory")
@@ -90,7 +90,8 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .RequiredArgument("file")
         .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
 
-    options.AddLongOption('M', "monitoring", "Embedded UI ports range start (start on random free port by default), if used will be run as daemon")
+    options
+        .AddLongOption('M', "monitoring", "Embedded UI ports range start (start on random free port by default), if used will be run as daemon")
         .OptionalArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
             settings.MonitoringEnabled = true;
@@ -113,10 +114,9 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .DefaultValue(settings.DomainName)
         .StoreResult(&settings.DomainName);
 
-    TChoices<std::function<void()>> backtrace({
-        {"heavy", &NKikimr::EnableYDBBacktraceFormat},
-        {"light", []() { SetFormatBackTraceFn(FormatBackTrace); }}
-    });
+    TChoices<std::function<void()>> backtrace({ { "heavy", &NKikimr::EnableYDBBacktraceFormat }, { "light", []() {
+                                                                                                      SetFormatBackTraceFn(FormatBackTrace);
+                                                                                                  } } });
     options.AddLongOption("backtrace", "Default backtrace format function")
         .RequiredArgument("backtrace-type")
         .DefaultValue("heavy")
@@ -133,7 +133,9 @@ void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
         .RequiredArgument("priority")
         .StoreMappedResultT<TString>(&DefaultLogPriority, GetLogPrioritiesMap("log-default"));
 
-    options.AddLongOption("log", TStringBuilder() << "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)" << allowedPriorities)
+    options
+        .AddLongOption(
+            "log", TStringBuilder() << "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)" << allowedPriorities)
         .RequiredArgument("component=priority")
         .Handler1([this, logPriority = GetLogPrioritiesMap("log")](const NLastGetopt::TOptsParser* option) {
             TStringBuf component;
@@ -184,19 +186,11 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> TMainBase::CreateFunc
     NKikimr::NMiniKQL::FindUdfsInDir(UdfsDirectory, &paths);
 
     const auto previousHandler = std::signal(SIGINT, SIG_DFL);
-    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, paths)->Clone();
-    std::signal(SIGINT, previousHandler); // Restore previous signal handler after udfs load
+    auto functionRegistry =
+        NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, paths)->Clone();
+    std::signal(SIGINT, previousHandler);   // Restore previous signal handler after udfs load
 
-    if (ExcludeLinkedUdfs) {
-        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
-            auto [name, ptr] = wrapper();
-            if (!functionRegistry->IsLoadedUdfModule(name)) {
-                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
-            }
-        }
-    } else {
-        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
-    }
+    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry, ExcludeLinkedUdfs);
 
     return functionRegistry;
 }
@@ -206,7 +200,8 @@ void TMainBase::ReplaceYqlTokenTemplate(TString& text) const {
     if (YqlToken) {
         SubstGlobal(text, tokenVariableName, YqlToken);
     } else if (text.Contains(tokenVariableName)) {
-        ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE << " environment variable";
+        ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE
+                            << " environment variable";
     }
 }
 
@@ -226,7 +221,8 @@ void TMainBase::SetupActorSystemConfig(NKikimrConfig::TAppConfig& config) const 
 
     asConfig.ClearExecutor();
 
-    const auto addExecutor = [&asConfig](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type, std::optional<ui64> spinThreshold = std::nullopt) {
+    const auto addExecutor = [&asConfig](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type,
+                                 std::optional<ui64> spinThreshold = std::nullopt) {
         auto& executor = *asConfig.AddExecutor();
         executor.SetName(name);
         executor.SetThreads(threads);
@@ -256,8 +252,7 @@ void TMainBase::SetupActorSystemConfig(NKikimrConfig::TAppConfig& config) const 
     addExecutor("IO", 1, NKikimrConfig::TActorSystemConfig::TExecutor::IO);
     asConfig.SetIoExecutor(3);
 
-    addExecutor("IC", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10)
-        .SetTimePerMailboxMicroSecs(100);
+    addExecutor("IC", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10).SetTimePerMailboxMicroSecs(100);
     auto& serviceExecutors = *asConfig.MutableServiceExecutor();
     serviceExecutors.Clear();
     auto& serviceExecutor = *serviceExecutors.Add();
@@ -293,39 +288,31 @@ void TMainBase::SetupLogsConfig(NKikimrConfig::TLogConfig& config) const {
         ModifyLogPriorities(logPriorities, config);
     };
 
-    setupLogPriority({
-        "PUBLIC_HTTP", "DB_POOL", "STREAMS", "YQL_", "YQ_", "FQ_"
-    }, FqLogPriority);
+    setupLogPriority({ "PUBLIC_HTTP", "DB_POOL", "STREAMS", "YQL_", "YQ_", "FQ_" }, FqLogPriority);
 
-    setupLogPriority({
-        "KQP_", "METADATA_"
-    }, KqpLogPriority);
+    setupLogPriority({ "KQP_", "METADATA_" }, KqpLogPriority);
 
-    setupLogPriority({
-        "MINIKQL_ENGINE", "KQP_TASKS_RUNNER", "KQP_COMPUTE", "DQ_TASK_RUNNER", "OBJECT_STORAGE_INFERENCINATOR", "SSA_GRAPH_EXECUTION"
-    }, RuntimeLogPriority);
+    setupLogPriority({ "MINIKQL_ENGINE", "KQP_TASKS_RUNNER", "KQP_COMPUTE", "DQ_TASK_RUNNER", "OBJECT_STORAGE_INFERENCINATOR",
+                         "SSA_GRAPH_EXECUTION" }, RuntimeLogPriority);
 
-    setupLogPriority({
-        "TABLET_", "TX_", "OPS_", "PIPE_", "KEYVALUE", "PERSQUEUE", "PQ_", "BOARD_", "QUOTER_", "DATASHARD_", "CMS", "KESUS_",
-        "CONFIGS_", "SCHEME_", "SEQUENCE", "COLUMNSHARD_", "REPLICATION_", "TRANSFER", "NAMESERVICE", "DATA_INTEGRITY", "MEMORY_",
-        "GROUPED_MEMORY_LIMITER", "STATISTICS", "OBJECTS_MONITORING", "ARROW_HELPER", "EXT_INDEX", "DISCOVERY", "BLOB_CACHE",
-        "DISCOVERY_CACHE", "BG_TASKS", "GENERAL_CACHE", "LOCAL_YDB_PROXY", "CHANGE_EXCHANGE", "SYSTEM_VIEWS", "BUILD_INDEX",
-        "EXPORT", "IMPORT", "S3_WRAPPER", "CONTINUOUS_BACKUP", "NET_CLASSIFIER", "KESYS_PROXY_REQUEST", "NODE_BROKER", "FLAT_TX_SCHEMESHARD",
-        "TENANT_SLOT_BROKER", "SQS", "CHOOSE_PROXY", "LB_CONFIG_MANAGER", "LONG_TX_SERVICE", "SAUSAGE_BIO", "RESOURCE_BROKER",
-        "STATESTORAGE", "HIVE", "LOCAL", "BOOTSTRAPPER", "TENANT_POOL", "LABELS_MAINTAINER", "GRAPH", "SCHEMESHARD_DESCRIBE",
-    }, TabletsLogPriority);
+    setupLogPriority(
+        {
+            "TABLET_", "TX_", "OPS_", "PIPE_", "KEYVALUE", "PERSQUEUE", "PQ_", "BOARD_", "QUOTER_", "DATASHARD_", "CMS", "KESUS_", "CONFIGS_",
+            "SCHEME_", "SEQUENCE", "COLUMNSHARD_", "REPLICATION_", "TRANSFER", "NAMESERVICE", "DATA_INTEGRITY", "MEMORY_",
+            "GROUPED_MEMORY_LIMITER", "STATISTICS", "OBJECTS_MONITORING", "ARROW_HELPER", "EXT_INDEX", "DISCOVERY", "BLOB_CACHE",
+            "DISCOVERY_CACHE", "BG_TASKS", "GENERAL_CACHE", "LOCAL_YDB_PROXY", "CHANGE_EXCHANGE", "SYSTEM_VIEWS", "BUILD_INDEX", "EXPORT",
+            "IMPORT", "S3_WRAPPER", "CONTINUOUS_BACKUP", "NET_CLASSIFIER", "KESYS_PROXY_REQUEST", "NODE_BROKER", "FLAT_TX_SCHEMESHARD",
+            "TENANT_SLOT_BROKER", "SQS", "CHOOSE_PROXY", "LB_CONFIG_MANAGER", "LONG_TX_SERVICE", "SAUSAGE_BIO", "RESOURCE_BROKER",
+            "STATESTORAGE", "HIVE", "LOCAL", "BOOTSTRAPPER", "TENANT_POOL", "LABELS_MAINTAINER", "GRAPH", "SCHEMESHARD_DESCRIBE",
+        }, TabletsLogPriority);
 
-    setupLogPriority({
-        "BRIDGE", "DS_PROXY_NODE_MON", "BLOBSTORAGE", "BSCONFIG", "BS_", "BLOB_"
-    }, BsLogPriority);
+    setupLogPriority({ "BRIDGE", "DS_PROXY_NODE_MON", "BLOBSTORAGE", "BSCONFIG", "BS_", "BLOB_" }, BsLogPriority);
 
-    setupLogPriority({
-        "TOKEN_", "KAFKA_PROXY", "YDB_SDK", "TICKET_PARSER", "BLACKBOX_VALIDATOR", "LDAP_AUTH_PROVIDER", "RPC_REQUEST", "HEALTH",
-        "DB_METADATA_CACHE", "HTTP_PROXY", "AUDIT_LOG_WRITER", "METERING_WRITER", "VIEWER",
-        "MSGBUS_", "GRPC_"
-    }, ServerIoLogPriority);
+    setupLogPriority(
+        { "TOKEN_", "KAFKA_PROXY", "YDB_SDK", "TICKET_PARSER", "BLACKBOX_VALIDATOR", "LDAP_AUTH_PROVIDER", "RPC_REQUEST", "HEALTH",
+            "DB_METADATA_CACHE", "HTTP_PROXY", "AUDIT_LOG_WRITER", "METERING_WRITER", "VIEWER", "MSGBUS_", "GRPC_" }, ServerIoLogPriority);
 
     ModifyLogPriorities(LogPriorities, config);
 }
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

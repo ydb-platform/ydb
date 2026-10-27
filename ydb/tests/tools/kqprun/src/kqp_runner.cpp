@@ -2,7 +2,6 @@
 #include "ydb_setup.h"
 
 #include <fmt/format.h>
-
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
@@ -19,7 +18,7 @@ class TKqpRunner::TImpl {
     static constexpr TDuration RETRY_PERIOD = TDuration::MilliSeconds(100);
     static constexpr TDuration SCRIPT_RETRY_CYCLE = TDuration::Minutes(1);
 
-    struct TStreamingMeta : public TQueryMeta {
+    struct TStreamingMeta: public TQueryMeta {
         TString Name;
         TString Database;
         TString ExecutionStatus;
@@ -51,7 +50,7 @@ public:
             // Minimal retry rate limit for infinite retries
             policy.SetRetryRateLimit((1.0 + std::sqrt(1.0 + 4.0 * policy.GetRetryPeriodMs() / policy.GetBackoffPeriodMs())) / 2.0);
 
-            RetryMapping_ = {mapping};
+            RetryMapping_ = { mapping };
         }
     }
 
@@ -68,7 +67,8 @@ public:
             }
 
             if (const auto delay = RetryState_->GetNextRetryDelay(status)) {
-                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Retrying query execution in " << *delay << "..." << CoutColors_.Default() << Endl;
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Retrying query execution in " << *delay << "..."
+                     << CoutColors_.Default() << Endl;
                 Sleep(*delay);
             } else {
                 return false;
@@ -104,10 +104,11 @@ public:
             Cout << CoutColors_.Cyan() << "Starting script request:\n" << CoutColors_.Default() << script.Query << Endl;
         }
 
-        TRequestResult status = YdbSetup_.ScriptRequest({.Options = script, .RetryMapping = RetryMapping_}, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ScriptRequest({ .Options = script, .RetryMapping = RetryMapping_ }, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
-            Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString()
+                 << Endl;
             return status.Status;
         }
 
@@ -129,19 +130,19 @@ public:
         TQueryMeta meta;
         TRequestResult status;
         switch (queryType) {
-        case EQueryType::ScriptQuery:
-            queryTypeStr = "Generic";
-            status = YdbSetup_.QueryRequest(query, meta, ResultSets_, GetProgressCallback());
-            break;
+            case EQueryType::ScriptQuery:
+                queryTypeStr = "Generic";
+                status = YdbSetup_.QueryRequest(query, meta, ResultSets_, GetProgressCallback());
+                break;
 
-        case EQueryType::YqlScriptQuery:
-            queryTypeStr = "Yql script";
-            status = YdbSetup_.YqlScriptRequest(query, meta, ResultSets_);
-            break;
+            case EQueryType::YqlScriptQuery:
+                queryTypeStr = "Yql script";
+                status = YdbSetup_.YqlScriptRequest(query, meta, ResultSets_);
+                break;
 
-        case EQueryType::AsyncQuery:
-            YdbSetup_.QueryRequestAsync(query);
-            return Ydb::StatusIds::SUCCESS;
+            case EQueryType::AsyncQuery:
+                YdbSetup_.QueryRequestAsync(query);
+                return Ydb::StatusIds::SUCCESS;
         }
 
         TYdbSetup::StopTraceOpt();
@@ -171,7 +172,8 @@ public:
         using namespace fmt::literals;
 
         if (query.Action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
-            ythrow yexception() << "Invalid execution action for streaming query: " << NKikimrKqp::EQueryAction_Name(query.Action) << ", only allowed action is execute";
+            ythrow yexception() << "Invalid execution action for streaming query: " << NKikimrKqp::EQueryAction_Name(query.Action)
+                                << ", only allowed action is execute";
         }
 
         if (!query.Params.empty()) {
@@ -190,11 +192,7 @@ public:
                     RESOURCE_POOL = "{pool}"
                 ) AS DO BEGIN
                 {query}
-                END DO)",
-                "query_name"_a = queryName,
-                "pool"_a = query.PoolId,
-                "query"_a = query.Query
-            ),
+                END DO)", "query_name"_a = queryName, "pool"_a = query.PoolId, "query"_a = query.Query),
             .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
             .TraceId = query.TraceId,
             .UserSID = query.UserSID,
@@ -204,7 +202,8 @@ public:
         });
 
         if (!status.IsSuccess()) {
-            Cerr << CerrColors_.Red() << "Failed to create streaming query '" << queryName << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to create streaming query '" << queryName << "', reason:" << CerrColors_.Default() << Endl
+                 << status.ToString() << Endl;
             return status.Status;
         }
 
@@ -226,10 +225,12 @@ public:
         ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID, resultSetId, ResultSets_[resultSetId]);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(
+                ExecutionMeta_.Database, ExecutionOperation_, userSID, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
-                Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl
+                     << status.ToString() << Endl;
                 return false;
             }
         }
@@ -243,12 +244,14 @@ public:
         TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
 
         if (!status.IsSuccess()) {
-            Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl
+                 << status.ToString() << Endl;
             return false;
         }
 
         if (!status.Issues.Empty()) {
-            Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString()
+                 << Endl;
         }
 
         return true;
@@ -266,12 +269,14 @@ public:
         });
 
         if (!status.IsSuccess()) {
-            Cerr << CerrColors_.Red() << "Failed to drop streaming query '" << StreamingMeta_.Name << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to drop streaming query '" << StreamingMeta_.Name << "', reason:" << CerrColors_.Default()
+                 << Endl << status.ToString() << Endl;
             return false;
         }
 
         if (!status.Issues.Empty()) {
-            Cerr << CerrColors_.Red() << "Drop streaming query finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Drop streaming query finished with issues:" << CerrColors_.Default() << Endl
+                 << status.Issues.ToString() << Endl;
         }
 
         return true;
@@ -279,7 +284,8 @@ public:
 
     void PrintScriptResults() const {
         if (Options_.ResultOutput) {
-            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
+            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default()
+                 << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
                 if (ResultSets_.size() > 1 && VerbosityLevel_ >= EVerbosity::Info) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
@@ -309,20 +315,25 @@ private:
             }
 
             if (!status.IsSuccess()) {
-                Cerr << CerrColors_.Red() << "Failed to get script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors_.Red() << "Failed to get script execution operation, reason:" << CerrColors_.Default() << Endl
+                     << status.ToString() << Endl;
                 return status.Status;
             }
 
-            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
+            if (const auto newIssues = status.Issues.ToString();
+                newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
                 previousIssues = newIssues;
                 Cerr << CerrColors_.Red() << "Script execution issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
             }
 
             if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
-                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default() << Endl;
-                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default()
+                     << Endl;
+                TRequestResult cancelStatus =
+                    YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
                 if (!cancelStatus.IsSuccess()) {
-                    Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl
+                         << cancelStatus.ToString() << Endl;
                     return cancelStatus.Status;
                 }
             }
@@ -336,7 +347,8 @@ private:
         PrintScriptFinish(ExecutionMeta_, "Script", duration);
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
-            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status " << ExecutionMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status " << ExecutionMeta_.ExecutionStatus
+                 << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return status.Status;
         }
 
@@ -356,7 +368,7 @@ private:
         const auto fetchPeriod = GetPingPeriod();
         TString fullQueryName = StreamingMeta_.Name;
         if (const auto& database = NKikimr::CanonizePath(StreamingMeta_.Database); !fullQueryName.StartsWith(database)) {
-            fullQueryName = NKikimr::JoinPath({database, fullQueryName});
+            fullQueryName = NKikimr::JoinPath({ database, fullQueryName });
         }
 
         TRequestResult status;
@@ -364,16 +376,18 @@ private:
         while (true) {
             TQueryMeta meta;
             std::vector<Ydb::ResultSet> resultSets;
-            status = YdbSetup_.QueryRequest({
-                .Query = TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` WHERE Path = \"" << fullQueryName << "\"",
-                .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
-                .TraceId = "streaming-control::fetch",
-                .UserSID = BUILTIN_ACL_METADATA,
-                .Database = StreamingMeta_.Database,
-            }, meta, resultSets, nullptr);
+            status = YdbSetup_.QueryRequest(
+                {
+                    .Query = TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` WHERE Path = \"" << fullQueryName << "\"",
+                    .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+                    .TraceId = "streaming-control::fetch",
+                    .UserSID = BUILTIN_ACL_METADATA,
+                    .Database = StreamingMeta_.Database,
+                }, meta, resultSets, nullptr);
 
             if (!status.IsSuccess()) {
-                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, reason:" << CerrColors_.Default() << Endl << status.ToString()
+                     << Endl;
                 return status.Status;
             }
 
@@ -383,7 +397,8 @@ private:
 
             NYdb::TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, query '" << fullQueryName << "' not found" << CerrColors_.Default() << Endl;
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, query '" << fullQueryName << "' not found"
+                     << CerrColors_.Default() << Endl;
                 return Ydb::StatusIds::NOT_FOUND;
             }
 
@@ -412,7 +427,7 @@ private:
                 }
             }
 
-            if (IsIn({"COMPLETED", "FAILED", "STOPPED", "CREATED"}, StreamingMeta_.ExecutionStatus)) {
+            if (IsIn({ "COMPLETED", "FAILED", "STOPPED", "CREATED" }, StreamingMeta_.ExecutionStatus)) {
                 if (StreamingMeta_.ExecutionStatus == "FAILED") {
                     status.Status = Ydb::StatusIds::GENERIC_ERROR;
                 } else if (StreamingMeta_.ExecutionStatus == "STOPPED") {
@@ -423,13 +438,15 @@ private:
                 break;
             }
 
-            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
+            if (const auto newIssues = status.Issues.ToString();
+                newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
                 previousIssues = newIssues;
                 Cerr << CerrColors_.Red() << "Streaming query issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
             }
 
             if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
-                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling streaming query..." << CoutColors_.Default() << Endl;
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling streaming query..." << CoutColors_.Default()
+                     << Endl;
                 TRequestResult cancelStatus = YdbSetup_.QueryRequest({
                     .Query = TStringBuilder() << "ALTER STREAMING QUERY IF EXISTS `" << StreamingMeta_.Name << "` SET (RUN = FALSE)",
                     .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
@@ -438,7 +455,8 @@ private:
                     .Database = StreamingMeta_.Database,
                 });
                 if (!cancelStatus.IsSuccess()) {
-                    Cerr << CerrColors_.Red() << "Failed to cancel streaming query, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    Cerr << CerrColors_.Red() << "Failed to cancel streaming query, reason:" << CerrColors_.Default() << Endl
+                         << cancelStatus.ToString() << Endl;
                     return cancelStatus.Status;
                 }
             }
@@ -452,7 +470,8 @@ private:
         PrintScriptFinish(StreamingMeta_, "Streaming", duration);
 
         if (!status.IsSuccess() || StreamingMeta_.ExecutionStatus != "COMPLETED") {
-            Cerr << CerrColors_.Red() << "Failed to execute streaming query, invalid final status " << StreamingMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to execute streaming query, invalid final status " << StreamingMeta_.ExecutionStatus
+                 << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return status.Status;
         }
 
@@ -559,12 +578,7 @@ private:
                 }
                 return ERetryErrorClass::NoRetry;
             };
-            RetryPolicy_ = IRetryPolicy::GetExponentialBackoffPolicy(
-                retryFunc,
-                RETRY_PERIOD,
-                RETRY_PERIOD,
-                TDuration::Seconds(1)
-            );
+            RetryPolicy_ = IRetryPolicy::GetExponentialBackoffPolicy(retryFunc, RETRY_PERIOD, RETRY_PERIOD, TDuration::Seconds(1));
         }
         RetryState_ = RetryPolicy_->CreateRetryState();
     }
@@ -596,12 +610,12 @@ private:
     TInstant StartTime_;
 };
 
-
 //// TKqpRunner
 
 TKqpRunner::TKqpRunner(const TRunnerOptions& options)
     : Impl_(new TImpl(options))
-{}
+{
+}
 
 bool TKqpRunner::ExecuteSchemeQuery(const TRequestOptions& query) const {
     return Impl_->ExecuteWithRetries([this, query]() {
@@ -657,4 +671,4 @@ void TKqpRunner::PrintScriptResults() const {
     Impl_->PrintScriptResults();
 }
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

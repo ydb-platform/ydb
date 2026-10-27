@@ -6,4 +6,4 @@ namespace NYql {
 
 inline constexpr TStringBuf YdbExternalProviderName = "ydb_external";
 
-} // namespace NYql
+}   // namespace NYql

@@ -14,7 +14,7 @@
 
 namespace NKikimr::NUdfStore::NWasm {
 
-struct TQueryCompartmentHandle : public TNonCopyable {
+struct TQueryCompartmentHandle: public TNonCopyable {
     std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> Compartment;
     // Key: "ModuleName::ExportName" (YQL name or create/call/destroy export)
     THashMap<TString, void*> Exports;
@@ -38,7 +38,8 @@ class TWasmCompartmentManager {
 public:
     explicit TWasmCompartmentManager(TWasmModuleCatalog& catalog = GetWasmModuleCatalog())
         : Catalog_(catalog)
-    {}
+    {
+    }
 
     TQueryCompartmentHandlePtr Acquire(const TVector<TString>& moduleNames) const;
 
@@ -68,4 +69,4 @@ TQueryCompartmentHandle* GetCurrentQueryCompartment();
 
 TString MakeExportKey(TStringBuf moduleName, TStringBuf functionName);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

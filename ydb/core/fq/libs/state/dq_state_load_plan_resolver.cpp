@@ -3,16 +3,16 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
-
-#include <library/cpp/threading/future/wait/wait.h>
 
 #include <algorithm>
 
@@ -20,9 +20,10 @@ namespace NFq {
 
 namespace {
 
-class TStateLoadPlanResolverActor final : public NActors::TActorBootstrapped<TStateLoadPlanResolverActor>, public NActors::IActorExceptionHandler {
+class TStateLoadPlanResolverActor final: public NActors::TActorBootstrapped<TStateLoadPlanResolverActor>,
+                                         public NActors::IActorExceptionHandler {
     struct TEvPrivate {
-        enum EEv : ui32 {
+        enum EEv: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvSourcesPrepared = EvBegin,
             EvEnd
@@ -30,10 +31,11 @@ class TStateLoadPlanResolverActor final : public NActors::TActorBootstrapped<TSt
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
 
-        struct TEvSourcesPrepared : NActors::TEventLocal<TEvSourcesPrepared, EvSourcesPrepared> {
+        struct TEvSourcesPrepared: NActors::TEventLocal<TEvSourcesPrepared, EvSourcesPrepared> {
             explicit TEvSourcesPrepared(NThreading::TFuture<NYql::TIssues> result)
                 : Result(std::move(result))
-            {}
+            {
+            }
 
             NThreading::TFuture<NYql::TIssues> Result;
         };
@@ -45,7 +47,8 @@ public:
         , Dst(std::move(dst))
         , Settings(std::move(settings))
         , Cookie(cookie)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -113,7 +116,7 @@ public:
         THashSet<ui64> taskIds;
         for (const auto& [taskId, taskPlan] : Plan) {
             for (const auto& source : taskPlan.GetSources()) {
-                if (sourcesToPrepare.contains(std::pair<ui64, ui64>{taskId, source.GetInputIndex()}) && !source.HasState()) {
+                if (sourcesToPrepare.contains(std::pair<ui64, ui64>{ taskId, source.GetInputIndex() }) && !source.HasState()) {
                     for (const auto& foreign : source.GetForeignTasksSources()) {
                         if (const auto foreignTaskId = foreign.GetTaskId(); !States.contains(foreignTaskId)) {
                             taskIds.insert(foreignTaskId);
@@ -159,14 +162,12 @@ private:
             co_return true;
         }
 
-        const auto ev = co_await NActors::ActorRequest<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(
-            Settings.StorageProxy,
-            new NYql::NDq::TEvDqCompute::TEvGetTaskState(Settings.GraphId, taskIds, Settings.Checkpoint, Settings.CoordinatorGeneration)
-        );
+        const auto ev = co_await NActors::ActorRequest<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(Settings.StorageProxy,
+            new NYql::NDq::TEvDqCompute::TEvGetTaskState(Settings.GraphId, taskIds, Settings.Checkpoint, Settings.CoordinatorGeneration));
         const auto& result = *ev->Get();
-        YQL_ENSURE(result.Generation == Settings.CoordinatorGeneration
-            && result.Checkpoint.GetId() == Settings.Checkpoint.GetId()
-            && result.Checkpoint.GetGeneration() == Settings.Checkpoint.GetGeneration(), "Unexpected checkpoint response while preparing recovery");
+        YQL_ENSURE(result.Generation == Settings.CoordinatorGeneration && result.Checkpoint.GetId() == Settings.Checkpoint.GetId() &&
+                       result.Checkpoint.GetGeneration() == Settings.Checkpoint.GetGeneration(),
+            "Unexpected checkpoint response while preparing recovery");
 
         if (!result.Issues.Empty()) {
             AddIssueWithSubIssues("Failed to load checkpoint task states", result.Issues);
@@ -203,7 +204,8 @@ private:
             }
 
             for (const auto& sourcePlan : taskPlan->GetSources()) {
-                if (sourcePlan.GetStateType() != STATE_TYPE_FOREIGN || (selected && !selected->contains(std::pair<ui64, ui64>{task.GetId(), sourcePlan.GetInputIndex()}))) {
+                if (sourcePlan.GetStateType() != STATE_TYPE_FOREIGN ||
+                    (selected && !selected->contains(std::pair<ui64, ui64>{ task.GetId(), sourcePlan.GetInputIndex() }))) {
                     continue;
                 }
 
@@ -213,18 +215,21 @@ private:
                 auto& request = it->second;
                 if (inserted) {
                     request.Source = source;
-                    request.SecureParams = {task.GetSecureParams().begin(), task.GetSecureParams().end()};
-                    request.RequestContext = {task.GetRequestContext().begin(), task.GetRequestContext().end()};
+                    request.SecureParams = { task.GetSecureParams().begin(), task.GetSecureParams().end() };
+                    request.RequestContext = { task.GetRequestContext().begin(), task.GetRequestContext().end() };
                 } else {
-                    Y_VALIDATE(request.Source.SerializeAsString() == source.SerializeAsString(), "Source settings must be equal for stage tasks");
-                    Y_VALIDATE((request.SecureParams == THashMap<TString, TString>(task.GetSecureParams().begin(), task.GetSecureParams().end())), "Secure params must be equal for stage tasks");
-                    Y_VALIDATE((request.RequestContext == THashMap<TString, TString>(task.GetRequestContext().begin(), task.GetRequestContext().end())), "Request context must be equal for stage tasks");
+                    Y_VALIDATE(
+                        request.Source.SerializeAsString() == source.SerializeAsString(), "Source settings must be equal for stage tasks");
+                    Y_VALIDATE((request.SecureParams == THashMap<TString, TString>(task.GetSecureParams().begin(),
+                                                            task.GetSecureParams().end())), "Secure params must be equal for stage tasks");
+                    Y_VALIDATE((request.RequestContext == THashMap<TString, TString>(task.GetRequestContext().begin(),
+                                                              task.GetRequestContext().end())), "Request context must be equal for stage tasks");
                 }
 
                 auto& prepared = request.Tasks.emplace_back();
                 prepared.TaskId = task.GetId();
                 prepared.Meta = task.GetMeta();
-                prepared.ReadRanges = {task.GetReadRanges().begin(), task.GetReadRanges().end()};
+                prepared.ReadRanges = { task.GetReadRanges().begin(), task.GetReadRanges().end() };
                 prepared.State.InputIndex = sourcePlan.GetInputIndex();
 
                 if (sourcePlan.HasState()) {
@@ -233,7 +238,9 @@ private:
                     for (const auto& foreign : sourcePlan.GetForeignTasksSources()) {
                         const auto* state = States.FindPtr(foreign.GetTaskId());
                         YQL_ENSURE(state, "Missing source checkpoint for task " << foreign.GetTaskId());
-                        const auto it = std::find_if(state->Sources.begin(), state->Sources.end(), [&](const auto& item) { return item.InputIndex == foreign.GetInputIndex(); });
+                        const auto it = std::find_if(state->Sources.begin(), state->Sources.end(), [&](const auto& item) {
+                            return item.InputIndex == foreign.GetInputIndex();
+                        });
                         YQL_ENSURE(it != state->Sources.end(), "Missing source input in checkpoint");
                         prepared.State.Data.insert(prepared.State.Data.end(), it->Data.begin(), it->Data.end());
                     }
@@ -254,7 +261,7 @@ private:
                 YQL_ENSURE(it != integrations.end(), "Source recovery preparation is unavailable for " << type);
                 futures.emplace_back(it->second->PrepareSourceRecovery(std::move(sources)));
             } catch (const std::exception& e) {
-                futures.emplace_back(NThreading::MakeFuture(NYql::TIssues{NYql::TIssue(e.what())}));
+                futures.emplace_back(NThreading::MakeFuture(NYql::TIssues{ NYql::TIssue(e.what()) }));
             }
         }
 
@@ -263,20 +270,22 @@ private:
         }
 
         const auto cookie = NActors::AllocateWaitCookie();
-        NThreading::WaitAll(futures).Apply([futures](const auto&) {
-            NYql::TIssues issues;
-            for (const auto& future : futures) {
-                try {
-                    issues.AddIssues(future.GetValue());
-                } catch (const std::exception& e) {
-                    issues.AddIssue(NYql::TIssue(e.what()));
+        NThreading::WaitAll(futures)
+            .Apply([futures](const auto&) {
+                NYql::TIssues issues;
+                for (const auto& future : futures) {
+                    try {
+                        issues.AddIssues(future.GetValue());
+                    } catch (const std::exception& e) {
+                        issues.AddIssue(NYql::TIssue(e.what()));
+                    }
                 }
-            }
 
-            return issues;
-        }).Subscribe([system = ActorContext().ActorSystem(), self = SelfId(), cookie](const auto& result) {
-            system->Send(new NActors::IEventHandle(self, {}, new TEvPrivate::TEvSourcesPrepared(result), /* flags */ 0, cookie));
-        });
+                return issues;
+            })
+            .Subscribe([system = ActorContext().ActorSystem(), self = SelfId(), cookie](const auto& result) {
+                system->Send(new NActors::IEventHandle(self, {}, new TEvPrivate::TEvSourcesPrepared(result), /* flags */ 0, cookie));
+            });
 
         const auto ev = co_await NActors::ActorWaitForEvent<TEvPrivate::TEvSourcesPrepared>(cookie);
         if (const auto& issues = ev->Get()->Result.GetValue(); !issues.Empty()) {
@@ -313,7 +322,8 @@ private:
             Plan.clear();
         }
 
-        Send(Owner, new TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult(success, std::move(Plan), std::move(Issues)), /* flags */ 0, Cookie);
+        Send(Owner, new TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult(success, std::move(Plan), std::move(Issues)), /* flags */ 0,
+            Cookie);
         PassAway();
     }
 
@@ -335,10 +345,11 @@ private:
     NYql::TIssues Issues;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* CreateStateLoadPlanResolver(NProto::TGraphParams src, NProto::TGraphParams dst, TStateLoadPlanResolverSettings settings, ui64 cookie) {
+NActors::IActor* CreateStateLoadPlanResolver(
+    NProto::TGraphParams src, NProto::TGraphParams dst, TStateLoadPlanResolverSettings settings, ui64 cookie) {
     return new TStateLoadPlanResolverActor(std::move(src), std::move(dst), std::move(settings), cookie);
 }
 
-} // namespace NFq
+}   // namespace NFq

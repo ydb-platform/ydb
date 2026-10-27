@@ -5,15 +5,14 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NFq {
 
 NActors::TActorId HealthActorId();
 
-NActors::IActor* CreateHealthActor(
-        const NConfig::THealthConfig& config,
-        const NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateHealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NFq
+}   // namespace NFq

@@ -1,12 +1,10 @@
 #pragma once
 
-#include "common.h"
 #include "actors.h"
-
-#include <ydb/tests/tools/kqprun/runlib/utils.h>
+#include "common.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
-
+#include <ydb/tests/tools/kqprun/runlib/utils.h>
 
 namespace NKqpRun {
 
@@ -19,15 +17,13 @@ struct TSchemeMeta {
     TString Ast;
 };
 
-
 struct TQueryMeta {
     TString Ast;
     TString Plan;
     TDuration TotalDuration;
 };
 
-
-struct TExecutionMeta : public TQueryMeta {
+struct TExecutionMeta: public TQueryMeta {
     bool Ready = false;
     NYdb::NQuery::EExecStatus ExecutionStatus = NYdb::NQuery::EExecStatus::Unspecified;
 
@@ -35,7 +31,6 @@ struct TExecutionMeta : public TQueryMeta {
 
     i32 ResultSetsCount = 0;
 };
-
 
 class TYdbSetup {
     using TRequestResult = NKikimrRun::TRequestResult;
@@ -47,15 +42,18 @@ public:
 
     TRequestResult ScriptRequest(const TScriptRequest& script, TString& operation) const;
 
-    TRequestResult QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
+    TRequestResult QueryRequest(
+        const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
     TRequestResult QueryRequest(const TRequestOptions& query) const;
 
     TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
-    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const;
+    TRequestResult GetScriptExecutionOperationRequest(
+        const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const;
 
-    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+    TRequestResult FetchScriptExecutionResultsRequest(
+        const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
     TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const;
 
@@ -78,4 +76,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

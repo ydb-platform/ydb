@@ -15,25 +15,26 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 
 namespace {
 
-class TTimestampReadSessionFixture : public TLocalTopicClientFixture {
+class TTimestampReadSessionFixture: public TLocalTopicClientFixture {
 public:
     void CheckKafkaTimestamps() {
         // Store Kafka bytes under a test codec so the server does not cut the
         // batch before it reaches the reader's Kafka metadata handling.
         TCodecMap::GetTheCodecMap().Set(static_cast<ui32>(ECodec::CUSTOM), std::make_unique<TKafkaBatchCodec>());
-        const auto altered = TopicClient->AlterTopic(TOPIC_PATH, TAlterTopicSettings()
-            .SetSupportedCodecs({ECodec::CUSTOM}).ClientTimeout(TEST_TIMEOUT)).GetValueSync();
+        const auto altered =
+            TopicClient->AlterTopic(TOPIC_PATH, TAlterTopicSettings().SetSupportedCodecs({ ECodec::CUSTOM }).ClientTimeout(TEST_TIMEOUT))
+                .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(altered.GetStatus(), EStatus::SUCCESS, altered.GetIssues().ToString());
 
         constexpr i64 minTimestamp = std::numeric_limits<i64>::min();
         constexpr i64 maxTimestamp = std::numeric_limits<i64>::max();
-        const std::vector<std::string> payloads = {"small message", std::string(512_KB + 1, 'x')};
+        const std::vector<std::string> payloads = { "small message", std::string(512_KB + 1, 'x') };
         std::vector<TInstant> expectedTimestamps;
         auto writeSession = CreateWriteSession();
         TTestWriter writer(writeSession);
         i32 nextSequence = 1;
-        for (const auto compression : {NKafka::ECompressionType::NONE, NKafka::ECompressionType::GZIP, NKafka::ECompressionType::ZSTD}) {
-            for (const i64 baseTimestamp : {minTimestamp, maxTimestamp}) {
+        for (const auto compression : { NKafka::ECompressionType::NONE, NKafka::ECompressionType::GZIP, NKafka::ECompressionType::ZSTD }) {
+            for (const i64 baseTimestamp : { minTimestamp, maxTimestamp }) {
                 for (size_t i = 0; i < payloads.size(); ++i) {
                     NKafka::TKafkaRecordBatch batch;
                     batch.Magic = 2;
@@ -54,8 +55,8 @@ public:
                     const i64 timestamp = i == 0 ? baseTimestamp : (baseTimestamp == minTimestamp ? maxTimestamp : minTimestamp);
                     expectedTimestamps.push_back(TInstant::MilliSeconds(static_cast<ui64>(timestamp)));
                     const TString bytes = NKafka::WriteKafkaRecordBatch(batch);
-                    auto message = TWriteMessage::CompressedMessage(
-                        std::string_view(bytes.data(), bytes.size()), ECodec::CUSTOM, payloads[i].size());
+                    auto message =
+                        TWriteMessage::CompressedMessage(std::string_view(bytes.data(), bytes.size()), ECodec::CUSTOM, payloads[i].size());
                     message.SeqNo(nextSequence);
                     AssertAck(writer.Write(std::move(message), true), nextSequence, nextSequence - 1);
                     ++nextSequence;
@@ -78,11 +79,11 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     Y_UNIT_TEST_F(ReadMessagesAndCounters, TLocalTopicClientFixture) {
-        WriteTopicMessages({"first", "second"});
+        WriteTopicMessages({ "first", "second" });
         auto session = CreateReadSession();
         const auto sessionId = session->GetSessionId();
         UNIT_ASSERT(!sessionId.empty());
@@ -103,11 +104,10 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_F(ReadMessageMetadata, TLocalTopicClientFixture) {
-        auto writer = TopicClient->CreateSimpleBlockingWriteSession(WriteSettings()
-            .AppendSessionMeta("session-key", "session-value"));
+        auto writer = TopicClient->CreateSimpleBlockingWriteSession(WriteSettings().AppendSessionMeta("session-key", "session-value"));
         const auto createdAt = TInstant::MilliSeconds(1700000000123);
         auto message = TWriteMessage("metadata message");
-        message.SeqNo(42).CreateTimestamp(createdAt).MessageMeta({{"message-key", "message-value"}});
+        message.SeqNo(42).CreateTimestamp(createdAt).MessageMeta({ { "message-key", "message-value" } });
         UNIT_ASSERT(writer->Write(std::move(message), nullptr, TEST_TIMEOUT));
         UNIT_ASSERT(writer->Close(TEST_TIMEOUT));
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_TWIN_F(CommitMessageAndResumeConsumer, NativeSdk, TLocalTopicClientFixture) {
-        WriteTopicMessages({"committed", "remaining-1", "remaining-2"});
+        WriteTopicMessages({ "committed", "remaining-1", "remaining-2" });
         {
             auto session = NativeSdk ? TopicClient->CreateReadSession(ReadSettings()) : CreateReadSession();
             auto messages = ReadMessages(*session, 3);
@@ -166,8 +166,8 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
         Kikimr->GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
         constexpr char topicPath[] = "/Root/kafka-validation";
         CreateTopic(topicPath);
-        const auto altered = TopicClient->AlterTopic(topicPath, TAlterTopicSettings()
-            .SetSupportedCodecs({ECodec::KAFKA_BATCH})).GetValue(TEST_TIMEOUT);
+        const auto altered =
+            TopicClient->AlterTopic(topicPath, TAlterTopicSettings().SetSupportedCodecs({ ECodec::KAFKA_BATCH })).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(altered.GetStatus(), EStatus::SUCCESS, altered.GetIssues().ToString());
         NKafka::TKafkaRecordBatch batch;
         batch.Magic = 2;
@@ -185,8 +185,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
         const TString bytes = NKafka::WriteKafkaRecordBatch(batch);
         auto writeSession = TopicClient->CreateWriteSession(WriteSettings(topicPath).Codec(ECodec::KAFKA_BATCH));
         TTestWriter writer(writeSession);
-        auto message = TWriteMessage::CompressedMessage(
-            std::string_view(bytes.data(), bytes.size()), ECodec::KAFKA_BATCH, 18);
+        auto message = TWriteMessage::CompressedMessage(std::string_view(bytes.data(), bytes.size()), ECodec::KAFKA_BATCH, 18);
         message.SeqNo(1);
         AssertAck(writer.Write(std::move(message), true), 1, 0);
         UNIT_ASSERT(writeSession->Close(TEST_TIMEOUT));
@@ -209,7 +208,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_F(CommitDataEventAndRequestPartitionStatus, TLocalTopicClientFixture) {
-        WriteTopicMessages({"message"});
+        WriteTopicMessages({ "message" });
         auto session = CreateReadSession();
         auto data = WaitForReadEvent<TReadSessionEvent::TDataReceivedEvent>(*session);
         UNIT_ASSERT_VALUES_EQUAL(data.GetMessagesCount(), 1);
@@ -227,7 +226,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_TWIN_F(StartFromExplicitOffsetWithoutConsumer, NativeSdk, TLocalTopicClientFixture) {
-        WriteTopicMessages({"skip", "read-1", "read-2"});
+        WriteTopicMessages({ "skip", "read-1", "read-2" });
         auto settings = ReadSettings().WithoutConsumer();
         settings.Topics_[0].AppendPartitionIds(0);
         auto session = NativeSdk ? TopicClient->CreateReadSession(settings) : CreateReadSession(settings);
@@ -247,7 +246,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
 
     Y_UNIT_TEST_OCTET_F(CommitAfterExplicitReadOffset, LargeMessages, Gzip, NativeSdk, TLocalTopicClientFixture) {
         const std::string payload(LargeMessages ? 600 * 1024 : 16, 'x');
-        WriteTopicMessages({"skip", payload, "last"}, WriteSettings().Codec(Gzip ? ECodec::GZIP : ECodec::RAW));
+        WriteTopicMessages({ "skip", payload, "last" }, WriteSettings().Codec(Gzip ? ECodec::GZIP : ECodec::RAW));
         auto session = NativeSdk ? TopicClient->CreateReadSession(ReadSettings()) : CreateReadSession();
         auto start = WaitForReadEvent<TReadSessionEvent::TStartPartitionSessionEvent>(*session);
         start.Confirm(/* readOffset */ 1);
@@ -280,7 +279,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_QUAD_F(CommitAfterExplicitReadAndCommitOffsets, NativeSdk, Deferred, TLocalTopicClientFixture) {
-        WriteTopicMessages({"committed", "skipped", "remaining"});
+        WriteTopicMessages({ "committed", "skipped", "remaining" });
         auto session = NativeSdk ? TopicClient->CreateReadSession(ReadSettings()) : CreateReadSession();
         auto start = WaitForReadEvent<TReadSessionEvent::TStartPartitionSessionEvent>(*session);
         start.Confirm(/* readOffset */ 2, /* commitOffset */ 1);
@@ -320,8 +319,8 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     Y_UNIT_TEST_F(ReadSelectedPartition, TLocalTopicClientFixture) {
         constexpr char topic[] = "/Root/partitioned-topic";
         CreateTopic(topic, 2);
-        WriteTopicMessages({"partition-0"}, WriteSettings(topic).MessageGroupId("").PartitionId(0));
-        WriteTopicMessages({"partition-1"}, WriteSettings(topic).MessageGroupId("").PartitionId(1));
+        WriteTopicMessages({ "partition-0" }, WriteSettings(topic).MessageGroupId("").PartitionId(0));
+        WriteTopicMessages({ "partition-1" }, WriteSettings(topic).MessageGroupId("").PartitionId(1));
         auto settings = ReadSettings(topic);
         settings.Topics_[0].AppendPartitionIds(1);
         auto session = CreateReadSession(settings);
@@ -333,7 +332,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
 
     Y_UNIT_TEST_F(DecompressGzipMessages, TLocalTopicClientFixture) {
         const std::string payload(4096, 'x');
-        WriteTopicMessages({payload}, WriteSettings().Codec(ECodec::GZIP));
+        WriteTopicMessages({ payload }, WriteSettings().Codec(ECodec::GZIP));
         auto session = CreateReadSession();
         const auto messages = ReadMessages(*session, 1);
         UNIT_ASSERT(!messages[0].HasException());
@@ -347,7 +346,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_F(GetEventsWithCountAndByteLimits, TLocalTopicClientFixture) {
-        WriteTopicMessages({"message"});
+        WriteTopicMessages({ "message" });
         auto session = CreateReadSession();
         UNIT_ASSERT(session->WaitEvent().Wait(TEST_TIMEOUT));
         UNIT_ASSERT(session->GetEvents(TReadSessionGetEventSettings().MaxEventsCount(0)).empty());
@@ -375,4 +374,4 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

@@ -7,11 +7,11 @@ namespace NYql::NDq {
 namespace {
 
 TSourceContext::TPtr MakeSourceContext() {
-    return std::make_shared<TSourceContext>(NActors::TActorId{}, 1000000, nullptr,
-        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+    return std::make_shared<TSourceContext>(NActors::TActorId{}, 1000000, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr, nullptr);
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TestSourceContextRatio) {
     Y_UNIT_TEST(NothingDownloaded) {
@@ -44,4 +44,4 @@ Y_UNIT_TEST_SUITE(TestSourceContextRatio) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

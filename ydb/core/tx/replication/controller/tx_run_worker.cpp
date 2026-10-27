@@ -128,6 +128,13 @@ public:
 
         Self->WorkersWithHeartbeat.erase(Id);
         Self->PendingHeartbeats.erase(Id);
+        if (worker != Self->Workers.end() && worker->second.HasSession()) {
+            const auto session = Self->Sessions.find(worker->second.GetSession());
+            if (session != Self->Sessions.end()) {
+                session->second.DetachWorker(Id);
+            }
+        }
+
         Self->Workers.erase(Id);
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();

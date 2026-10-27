@@ -1,7 +1,6 @@
 #pragma once
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
 #include <util/generic/string.h>
 
 namespace NYql {
@@ -17,4 +16,4 @@ struct THttpHeader {
     TOptions Options;
 };
 
-}
+}   // namespace NYql

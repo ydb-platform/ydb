@@ -226,7 +226,7 @@ namespace NKikimr {
         uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope);
         Y_VERIFY_S((bufferId & 0x7) == 0, HullCtx->VCtx->VDiskLogPrefix);
         bufferId >>= 3;
-        Y_VERIFY_S(bufferId < (ui64(1) << 62), HullCtx->VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(bufferId <= TMemRecLogoBlob::MaxMemBlobId, HullCtx->VCtx->VDiskLogPrefix);
         memRec.SetMemBlob(bufferId, blobSize);
 
         Put(lsn, key, memRec);

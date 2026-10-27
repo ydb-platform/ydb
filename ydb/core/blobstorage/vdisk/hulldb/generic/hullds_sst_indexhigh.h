@@ -8,7 +8,7 @@
 
 namespace NKikimr {
 
-    // The high level of the LogoBlob SST index: one record per (tablet, channel, generation).
+    // The high level shared by the two-level and packed forms: one record per (tablet, channel, generation).
     struct TLogoBlobSstRecHigh {
         ui64 TabletId;
         ui64 ChannelGeneration; // Channel << 32 | Generation

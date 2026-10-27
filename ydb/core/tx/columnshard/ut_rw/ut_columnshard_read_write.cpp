@@ -2749,8 +2749,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             // Erasing missing keys is still delete work, even if the transaction is later aborted.
             constexpr ui64 lockId = 2;
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds,
-                NEvWrite::EModificationType::Delete, lockId));
+            UNIT_ASSERT(WriteData(
+                runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete, lockId));
             UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), 2 * numRows);
             TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, lockId);
             UNIT_ASSERT_VALUES_EQUAL(writer.Abort(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);

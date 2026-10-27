@@ -1,4 +1,5 @@
 **/*.tar.gz
+.generated/
 
 
 # START Ruler Generated Files

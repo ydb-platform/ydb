@@ -2,7 +2,7 @@
 
 В этой статье приведены примеры использования {{ ydb-short-name }} SDK для работы с [топиками](../../concepts/datamodel/topic.md).
 
-Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
+Фрагменты ниже взяты из полных исполняемых примеров, ссылки на которые приведены в следующем разделе. Приложения создают топики и читателей с уникальными именами и удаляют их после выполнения сценариев. Настройка подключения и вспомогательные функции находятся в этих приложениях.
 
 ## Примеры работы с топиками
 
@@ -10,31 +10,31 @@
 
 - C++
 
-  [Пример читателя на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/57e19f101afcfa49caab6a8fb24d6c222c362bd2/examples/ydb_tech/topic)
 
 - Go
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
 - Java
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/a220a4a6648b26136315e63349bccc5408e7841b/examples/ydb_tech/topic)
 
 - Python
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/0409ca98c5ee473919298ec09a2c4ec0d5e21a43/examples/ydb_tech/topic)
 
 - C#
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/783cfd6c1803bbd607577c5b59c4ae0cc9a5d9a7/examples/ydb_tech/topic)
 
 - JavaScript
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/e107f68250200a6ddfaa6074ccd1ec48ed1ae839/examples/ydb_tech/topic)
 
 - Rust
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/041636b79c6d607c6ce2e594b28bb510db514680/ydb/examples/ydb_tech/topic)
 
 - PHP
 
@@ -56,66 +56,19 @@
 
   Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
 
-  ```cpp
-  // Create driver instance.
-  auto driverConfig = NYdb::TDriverConfig()
-      .SetEndpoint(opts.Endpoint)
-      .SetDatabase(opts.Database)
-      .SetAuthToken(std::getenv("YDB_TOKEN"));
-
-  NYdb::TDriver driver(driverConfig);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания клиента:
 
-  ```cpp
-  NYdb::NTopic::TTopicClient topicClient(driver);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client]-[END topic_client]" %}
 
 - Go
 
   Для работы с топиками используется экземпляр драйвера {{ ydb-short-name }}, созданный с помощью `ydb.Open`. Клиент топиков доступен через метод `db.Topic()`.
 
-  ```go
-  package main
-
-  import (
-    "context"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-
-    // db.Topic() — клиент для работы с топиками
-    writer, err := db.Topic().StartWriter("topic-path")
-    if err != nil {
-      panic(err)
-    }
-
-    reader, err := db.Topic().StartReader("consumer-name",
-      topicoptions.ReadTopic("topic-path"),
-    )
-    if err != nil {
-      panic(err)
-    }
-    _ = writer
-    _ = reader
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Java
 
@@ -125,13 +78,7 @@
 
   Фрагмент кода приложения для инициализации транспорта {{ ydb-short-name }}:
 
-  ```java
-  try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
-          .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
-          .build()) {
-      // Use YDB transport
-  }
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
@@ -141,13 +88,7 @@
 
   Фрагмент кода приложения для создания клиента:
 
-  ```java
-  try (TopicClient topicClient = TopicClient.newClient(transport)
-                .setCompressionExecutor(compressionExecutor)
-                .build()) {
-    // Use topic client
-  }
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_client]-[END topic_client]" %}
 
   В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
   Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
@@ -160,22 +101,7 @@
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
 
-  ```c#
-  const string connectionString = "Host=localhost;Port=2136;Database=/local";
-
-  await using var topicClient = new TopicClient(connectionString);
-
-  await using var writer = new WriterBuilder<string>(connectionString, topicName)
-  {
-      ProducerId = "ProducerId_Example"
-  }.Build();
-
-  await using var reader = new ReaderBuilder<string>(connectionString)
-  {
-      ConsumerName = "Consumer_Example",
-      SubscribeSettings = { new SubscribeSettings(topicName) }
-  }.Build();
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Python
 
@@ -184,37 +110,11 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    import os
-    import ydb
-
-    driver_config = ydb.DriverConfig(
-        endpoint=os.environ["YDB_ENDPOINT"],
-        database=os.environ["YDB_DATABASE"],
-    )
-    driver = ydb.Driver(driver_config)
-    driver.wait(timeout=5)
-    # driver.topic_client — клиент для работы с топиками
-    writer = driver.topic_client.writer(topic_path)
-    reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    import os
-    import ydb
-
-    driver_config = ydb.DriverConfig(
-        endpoint=os.environ["YDB_ENDPOINT"],
-        database=os.environ["YDB_DATABASE"],
-    )
-    async with ydb.aio.Driver(driver_config) as driver:
-        await driver.wait(timeout=5)
-        # driver.topic_client — клиент для работы с топиками
-        writer = driver.topic_client.writer(topic_path)
-        reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   {% endlist %}
 
@@ -222,34 +122,11 @@
 
 - JavaScript
 
-  ```javascript
-  const t = topic(driver);
-
-  await using reader = t.createReader({
-    topic: "/Root/demo-topic",
-    consumer: "demo-consumer",
-  });
-
-  await using writer = t.createWriter({
-    topic: "/Root/demo-topic",
-    producer: "demo-producer",
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{ClientBuilder, YdbResult};
-
-  #[tokio::main]
-  async fn main() -> YdbResult<()> {
-      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?.client()?;
-      client.wait().await?;
-      let mut topic_client = client.topic_client();
-      // topic_client.create_reader(...), create_writer_with_params(...), ...
-      Ok(())
-  }
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - PHP
 
@@ -271,15 +148,7 @@
 
   Пример создания топика c тремя партициями и поддержкой кодека ZSTD:
 
-  ```cpp
-  auto settings = NYdb::NTopic::TCreateTopicSettings()
-      .PartitioningSettings(3, 3)
-      .AppendSupportedCodecs(NYdb::NTopic::ECodec::ZSTD);
-
-  auto status = topicClient
-      .CreateTopic("my-topic", settings)  // returns TFuture<TStatus>
-      .GetValueSync();
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Go
 
@@ -287,15 +156,7 @@
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
 
-  ```go
-  err := db.Topic().Create(ctx, "topic-path",
-    // optional
-    topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
-
-    // optional
-    topicoptions.CreateWithMinActivePartitions(3),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Python
 
@@ -304,21 +165,11 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    driver.topic_client.create_topic(topic_path,
-        supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
-        min_active_partitions=3,                                    # optional
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    await driver.topic_client.create_topic(topic_path,
-        supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
-        min_active_partitions=3,                                     # optional
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
 
   {% endlist %}
 
@@ -328,68 +179,21 @@
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
 
-  ```java
-  topicClient.createTopic(topicPath, CreateTopicSettings.newBuilder()
-                  // Optional
-                  .setSupportedCodecs(SupportedCodecs.newBuilder()
-                          .addCodec(Codec.RAW)
-                          .addCodec(Codec.GZIP)
-                          .build())
-                  // Optional
-                  .setPartitioningSettings(PartitioningSettings.newBuilder()
-                          .setMinActivePartitions(3)
-                          .build())
-                  .build());
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - C#
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций:
 
-  ```c#
-  await topicClient.CreateTopic(new CreateTopicSettings
-  {
-      Path = topicName,
-      Consumers = { new Consumer("Consumer_Example") },
-      SupportedCodecs = { Codec.Raw, Codec.Gzip },
-      PartitioningSettings = new PartitioningSettings
-      {
-          MinActivePartitions = 3
-      }
-  });
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - JavaScript
 
-  ```javascript
-  const topicService = driver.createClient(TopicServiceDefinition);
-  await topicService.createTopic(
-    create(CreateTopicRequestSchema, {
-      path: "/path-to-my-topic",
-      partitioningSettings: {
-        minActivePartitions: 1n,
-        maxActivePartitions: 100n,
-      },
-      consumers: [{ name: "my-consumer" }],
-    }),
-  );
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
-
-  topic_client
-      .create_topic(
-          "/local/my-topic".into(),
-          CreateTopicOptionsBuilder::default()
-              .min_active_partitions(3)
-              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
-              .build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - PHP
 
@@ -409,17 +213,7 @@
 
   Пример добавления [важного читателя](../../concepts/datamodel/topic#important-consumer) к топику и установки [времени хранения сообщений](../../concepts/datamodel/topic#retention-time) для топика в два дня:
 
-  ```cpp
-  auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
-      .BeginAddConsumer("my-consumer")
-          .Important(true)
-      .EndAddConsumer()
-      .SetRetentionPeriod(TDuration::Days(2));
-
-  auto status = topicClient
-      .AlterTopic("my-topic", alterSettings)  // returns TFuture<TStatus>
-      .GetValueSync();
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Go
 
@@ -429,14 +223,7 @@
 
   Пример добавления читателя к топику
 
-  ```go
-  err := db.Topic().Alter(ctx, "topic-path",
-    topicoptions.AlterWithAddConsumers(topictypes.Consumer{
-      Name:            "new-consumer",
-      SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
-    }),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Python
 
@@ -445,21 +232,11 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    driver.topic_client.alter_topic(topic_path,
-        set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
-        set_min_active_partitions=3,                                    # optional
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    await driver.topic_client.alter_topic(topic_path,
-        set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
-        set_min_active_partitions=3,                                     # optional
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
   {% endlist %}
 
@@ -469,17 +246,7 @@
 
   Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
-  ```java
-  topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
-                  .addAddConsumer(Consumer.newBuilder()
-                          .setName("new-consumer")
-                          .setSupportedCodecs(SupportedCodecs.newBuilder()
-                                  .addCodec(Codec.RAW)
-                                  .addCodec(Codec.GZIP)
-                                  .build())
-                          .build())
-                  .build());
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - C#
 
@@ -487,30 +254,11 @@
 
 - JavaScript
 
-  ```javascript
-  const topicService = driver.createClient(TopicServiceDefinition);
-  await topicService.alterTopic(
-    create(AlterTopicRequestSchema, {
-      path: "/path-to-my-topic",
-      addConsumers: [{ name: "my-consumer-2" }],
-    }),
-  );
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{AlterTopicOptionsBuilder, YdbResult};
-
-  topic_client
-      .alter_topic(
-          "/local/my-topic".into(),
-          AlterTopicOptionsBuilder::default()
-              .set_min_active_partitions(Some(5))
-              .build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - PHP
 
@@ -532,43 +280,24 @@
 
   Получить доступ к этому описанию можно так:
 
-  ```cpp
-  auto result = topicClient.DescribeTopic("my-topic").GetValueSync();
-  if (result.IsSuccess()) {
-      const auto& description = result.GetTopicDescription();
-      std::cout << "Topic description: " << GetProto(description) << std::endl;
-  }
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
   Существует отдельный метод для получения информации о читателе - `DescribeConsumer`.
 
 - Go
 
-  ```go
-    descResult, err := db.Topic().Describe(ctx, "topic-path")
-  if err != nil {
-    log.Fatalf("failed describe topic: %v", err)
-    return
-  }
-  fmt.Printf("describe: %#v\n", descResult)
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - Python
 
   {% list tabs %}
   - Native SDK
 
-    ```python
-    info = driver.topic_client.describe_topic(topic_path)
-    print(info)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    info = await driver.topic_client.describe_topic(topic_path)
-    print(info)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
   {% endlist %}
 
@@ -578,11 +307,7 @@
 
   Полный список полей описания можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
 
-  ```java
-  Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
-          .join();
-  TopicDescription description = topicDescriptionResult.getValue();
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - C#
 
@@ -590,27 +315,11 @@
 
 - JavaScript
 
-  ```javascript
-  const topicService = driver.createClient(TopicServiceDefinition);
-  await topicService.describeTopic(
-    create(DescribeTopicRequestSchema, {
-      path: "/path-to-my-topic",
-    }),
-  );
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{DescribeTopicOptionsBuilder, YdbResult};
-
-  let description = topic_client
-      .describe_topic(
-          "/local/my-topic".into(),
-          DescribeTopicOptionsBuilder::default().include_stats(true).build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - PHP
 
@@ -626,61 +335,40 @@
 
 - C++
 
-  ```cpp
-  auto status = topicClient.DropTopic("my-topic").GetValueSync();
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Go
 
-  ```go
-    err := db.Topic().Drop(ctx, "topic-path")
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Python
 
   {% list tabs %}
   - Native SDK
 
-    ```python
-    driver.topic_client.drop_topic(topic_path)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    await driver.topic_client.drop_topic(topic_path)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
   {% endlist %}
 
 - Java
 
-  ```java
-  topicClient.dropTopic(topicPath);
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - C#
 
-  ```c#
-  await topicClient.DropTopic(topicName);
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - JavaScript
 
-  ```javascript
-  const topicService = driver.createClient(TopicServiceDefinition);
-  await topicService.dropTopic(
-    create(DropTopicRequestSchema, {
-      path: "/path-to-my-topic",
-    }),
-  );
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Rust
 
-  ```rust
-  topic_client.drop_topic("/local/my-topic".into()).await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - PHP
 
@@ -711,15 +399,7 @@
 
     Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
-    ```cpp
-    std::string producerAndGroupID = "group-id";
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path("my-topic")
-        .ProducerId(producerAndGroupID)
-        .MessageGroupId(producerAndGroupID);
-
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   - ISimpleBlockingWriteSession
 
@@ -727,15 +407,7 @@
 
     Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
-    ```cpp
-    std::string producerAndGroupID = "group-id";
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path("my-topic")
-        .ProducerId(producerAndGroupID)
-        .MessageGroupId(producerAndGroupID);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer_blocking]-[END topic_start_writer_blocking]" %}
 
   - IProducer
 
@@ -751,43 +423,24 @@
 
     Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h#L10).
 
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        .Path("my-topic")
-        .ProducerIdPrefix("my-producer")
-        .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_producer]-[END topic_start_producer]" %}
 
   {% endlist %}
 
 - Go
 
-  ```go
-  producerAndGroupID := "group-id"
-  writer, err := db.Topic().StartWriter(producerAndGroupID, "topicName",
-    topicoptions.WithMessageGroupID(producerAndGroupID),
-  )
-  if err != nil {
-      return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - Python
 
   {% list tabs %}
   - Native SDK
 
-    ```python
-    writer = driver.topic_client.writer(topic_path)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    writer = driver.topic_client.writer(topic_path)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   {% endlist %}
 
@@ -799,103 +452,45 @@
 
     Инициализация настроек писателя:
 
-    ```java
-    String producerAndGroupID = "group-id";
-    WriterSettings settings = WriterSettings.newBuilder()
-          .setTopicPath(topicPath)
-          .setProducerId(producerAndGroupID)
-          .setMessageGroupId(producerAndGroupID)
-          .build();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
 
     Создание синхронного писателя:
 
-    ```java
-    SyncWriter writer = topicClient.createSyncWriter(settings);
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer]-[END topic_sync_writer]" %}
 
     После создания писателя его необходимо инициализировать. Для этого есть два метода:
 
     - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
 
-      ```java
-      writer.init();
-      ```
+      {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer_init]-[END topic_sync_writer_init]" %}
 
     - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
 
-      ```java
-      try {
-          writer.initAndWait();
-          logger.info("Init finished successfully");
-      } catch (Exception exception) {
-          logger.error("Exception while initializing writer: ", exception);
-          return;
-      }
-      ```
+      {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer_init_wait]-[END topic_sync_writer_init_wait]" %}
 
   - Асинхронный API
 
     Инициализация настроек писателя:
 
-    ```java
-    String producerAndGroupID = "group-id";
-    WriterSettings settings = WriterSettings.newBuilder()
-          .setTopicPath(topicPath)
-          .setProducerId(producerAndGroupID)
-          .setMessageGroupId(producerAndGroupID)
-          .build();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
 
     Создание и инициализация асинхронного писателя:
 
-    ```java
-    AsyncWriter writer = topicClient.createAsyncWriter(settings);
-
-    // Init in background
-    writer.init()
-            .thenRun(() -> logger.info("Init finished successfully"))
-            .exceptionally(ex -> {
-                logger.error("Init failed with ex: ", ex);
-                return null;
-            });
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_writer]-[END topic_async_writer]" %}
 
     {% endlist %}
 
 - C#
 
-  ```c#
-  await using var writer = new WriterBuilder<string>(connectionString, topicName)
-  {
-      ProducerId = "ProducerId_Example"
-  }.Build();
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - JavaScript
 
-  ```javascript
-  await using writer = createTopicWriter(driver, {
-    topic: topicName,
-    producer: producerName,
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
-
-  let writer: TopicWriter = topic_client
-      .create_writer_with_params(
-          TopicWriterOptionsBuilder::default()
-              .topic_path("/local/my-topic".into())
-              .producer_id("group-id".into())
-              .message_group_id("group-id".into())
-              .build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - PHP
 
@@ -925,24 +520,7 @@
 
     Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
 
-    ```cpp
-    // Event loop
-    while (true) {
-        // Get event
-        // May block for a while if write session is busy
-        std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
-
-        if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            session->Write(std::move(event.ContinuationToken), "This is yet another message.");
-
-        } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
-            std::cout << ackEvent->DebugString() << std::endl;
-
-        } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-            break;
-        }
-    }
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write]-[END topic_write]" %}
 
   - ISimpleBlockingWriteSession
 
@@ -950,11 +528,7 @@
 
     Отправка на сервер, как и у `IWriteSession`, выполняется в фоне. Чтобы дождаться завершения всех записей и закрыть сессию, вызовите `Close()`.
 
-    ```cpp
-    auto messageData = std::string("message");
-    NYdb::NTopic::TWriteMessage writeMessage(messageData);
-    session->Write(std::move(writeMessage));
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_blocking]-[END topic_write_blocking]" %}
 
   - IProducer
 
@@ -962,13 +536,7 @@
 
     `Flush` дожидается доставки накопленных данных на сервер; `Close` дожидается отправки оставшихся в буфере сообщений и завершает работу продюсера.
 
-    ```cpp
-    auto messageData = std::string("order-created");
-    // First argument is the partitioning key — the SDK chooses a partition by it.
-    NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
-    producer->Write(std::move(writeMessage));
-    producer->Flush().GetValueSync();
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_producer]-[END topic_write_producer]" %}
 
     Подробный пример см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
 
@@ -982,16 +550,7 @@
 
   По умолчанию Write выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне. Writer сам переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно. При получении ошибки, после которой невозможно продолжить работу, Writer останавливается и следующие вызовы Write будут завершаться с ошибкой.
 
-  ```go
-  err := writer.Write(ctx,
-    topicwriter.Message{Data: strings.NewReader("1")},
-    topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
-    topicwriter.Message{Data: strings.NewReader("3")},
-  )
-  if err != nil {
-    return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write]-[END topic_write]" %}
 
   Для записи по ключу в несколько партиций используйте `WithWriteToManyPartitions(...)` при создании писателя и заполняйте поле `Key` в `topicwriter.Message`.
 
@@ -1001,26 +560,7 @@
   - `KafkaHashPartitionChooser` — по аналогии с Kafka: MurmurHash ключа по модулю числа партиций. Удобно при миграции с Kafka. Не поддерживается при включённом автопартиционировании.
   - `WithWriterPartitionByPartitionID` — запись в партицию, указанную в поле `PartitionID` сообщения. Не комбинируется с маршрутизацией по ключу; при split партиции писатель нужно пересоздавать вручную.
 
-  ```go
-  writer, err := db.Topic().StartWriter(topicPath,
-    topicoptions.WithWriteToManyPartitions(
-      topicoptions.WithProducerIDPrefix("orders-producer"),
-      topicoptions.WithWriterPartitionByKey(topicoptions.BoundPartitionChooser()),
-    ),
-  )
-  if err != nil {
-    return err
-  }
-  defer func() { _ = writer.Close(context.Background()) }()
-
-  err = writer.Write(ctx, topicwriter.Message{
-    Key:  "user-42",
-    Data: bytes.NewReader([]byte("order-created")),
-  })
-  if err != nil {
-    return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_multiwriter]-[END topic_multiwriter]" %}
 
   Подробный пример с маршрутизацией по ключу, альтернативными стратегиями (`KafkaHash` и `PartitionID`) и транзакционным вариантом см. в репозитории [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topicwriter_to_many_partitions.go).
 
@@ -1031,41 +571,13 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    # Простая отправка сообщений, без явного указания метаданных.
-    # Удобно начинать, удобно использовать пока важно только содержимое сообщения.
-    writer = driver.topic_client.writer(topic_path)
-    writer.write("mess")  # Строки будут переданы в кодировке utf-8, так удобно отправлять
-                          # текстовые сообщения.
-    writer.write(bytes([1, 2, 3]))  # Эти байты будут отправлены "как есть", так удобно отправлять
-                                    # бинарные данные.
-    writer.write(["mess-1", "mess-2"])  # Здесь за один вызов отправляется несколько сообщений —
-                                         # так снижаются накладные расходы на внутренние процессы SDK,
-                                         # имеет смысл при большом потоке сообщений.
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
 
-    # Полная форма, используется, когда кроме содержимого сообщения нужно вручную задать и его свойства.
-    writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
-
-    writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
-    writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
-
-    # В полной форме так же можно отправлять несколько сообщений за один вызов функции.
-    # Это имеет смысл при большом потоке отправляемых сообщений — для снижения
-    # накладных расходов на внутренние вызовы SDK.
-    writer.write([
-      ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
-      ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
-      ])
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_manual]-[END topic_write_manual]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    writer = driver.topic_client.writer(topic_path)
-    await writer.write("mess")
-    await writer.write(bytes([1, 2, 3]))
-    await writer.write(["mess-1", "mess-2"])
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
 
   {% endlist %}
 
@@ -1082,25 +594,7 @@
     Например, могут возникать ошибки, приводящие к завершению работы писателя до того, как сообщения из очереди будут отправлены.
     Если нужно подтверждение успешной записи для каждого сообщения, используйте асинхронного писателя и проверяйте статус, возвращаемый методом `send`.
 
-    ```java
-    writer.send(Message.of("11".getBytes()));
-
-    long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
-    try {
-      writer.send(
-              Message.newBuilder()
-                      .setData("22".getBytes())
-                      .setCreateTimestamp(Instant.now().minusSeconds(5))
-                      .build(),
-              timeoutSeconds,
-              TimeUnit.SECONDS
-      );
-    } catch (TimeoutException exception) {
-      logger.error("Send queue is full. Couldn't put message into sending queue within {} seconds", timeoutSeconds);
-    } catch (InterruptedException | ExecutionException exception) {
-      logger.error("Couldn't put the message into sending queue due to exception: ", exception);
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_sync]-[END topic_write_sync]" %}
 
   - Асинхронный API
 
@@ -1111,14 +605,7 @@
     В таком случае стоит или пропускать сообщения, или выполнять повторные попытки записи через exponential backoff.
     Также можно увеличить размер клиентского буфера (`setMaxSendBufferMemorySize`), чтобы обрабатывать больший объем сообщений перед тем, как он заполнится.
 
-    ```java
-    try {
-      // Non-blocking. Throws QueueOverflowException if send queue is full
-      writer.send(Message.of("33".getBytes()));
-    } catch (QueueOverflowException exception) {
-      // Send queue is full. Need to retry with backoff or skip
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_async]-[END topic_write_async]" %}
 
   {% endlist %}
 
@@ -1126,37 +613,15 @@
 
   Асинхронная запись сообщения в топик.
 
-  ```c#
-  var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - JavaScript
 
-  ```javascript
-  // Пишет сообщение во внутренний буфер
-  writer.write(Buffer.from("Hello, world!", "utf-8"));
-
-  // Для немедленной отправки нужно вызвать flush
-  await writer.flush();
-
-  // Или закрыть писатель
-  await writer.close();
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{TopicWriterMessageBuilder, YdbResult};
-
-  writer
-      .write(
-          TopicWriterMessageBuilder::default()
-              .data(b"payload".to_vec())
-              .build()?,
-      )
-      .await?;
-  writer.stop().await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - PHP
 
@@ -1178,25 +643,7 @@
 
     Пример установки обработчика `TAcksEvent` для сессии записи:
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-      // other settings are set here
-      .EventHandlers(
-        NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
-          .AcksHandler(
-            [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-              for (const auto& ack : event.Acks) {
-                if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
-                  ackedSeqNo.insert(ack.SeqNo);
-                  std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
-                }
-              }
-            }
-          )
-      );
-
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
     В такой сессии записи события `TAcksEvent` не будут приходить пользователю в `GetEvent` / `GetEvents`, вместо этого SDK при получении подтверждений от сервера будет вызывать переданный обработчик. Аналогично можно настраивать обработчики на остальные типы событий.
 
@@ -1208,21 +655,7 @@
 
     Подтверждения от сервера приходят так же, как у `IWriteSession`: через обработчик `AcksHandler` в `TProducerSettings::EventHandlers`. Чтобы дождаться доставки накопленного буфера на сервер, вызовите `Flush()`.
 
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        .Path("my-topic")
-        .ProducerIdPrefix("my-producer")
-        .EventHandlers(
-            NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
-                .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                    // handle acknowledgements
-                })
-                })
-        );
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_producer_ack]-[END topic_producer_ack]" %}
 
   {% endlist %}
 
@@ -1230,22 +663,7 @@
 
   При подключении можно указать опцию синхронной записи сообщений - topicoptions.WithSyncWrite(true). Тогда Write будет возвращаться только после того как получит подтверждение с сервера о сохранении всех, сообщений переданных в вызове. При этом SDK так же как и обычно будет при необходимости переподключаться и повторять отправку сообщений. В этом режиме контекст управляет только временем ожидания ответа из SDK, т.е. даже после отмены контекста SDK продолжит попытки отправить сообщения.
 
-  ```go
-  producerAndGroupID := "group-id"
-  writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
-    topicoptions.WithMessageGroupID(producerAndGroupID),
-    topicoptions.WithSyncWrite(true),
-  )
-
-  err = writer.Write(ctx,
-    topicwriter.Message{Data: strings.NewReader("1")},
-    topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
-    topicwriter.Message{Data: strings.NewReader("3")},
-  )
-  if err != nil {
-    return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - Python
 
@@ -1256,35 +674,11 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    # Положить несколько сообщений во внутренний буфер, затем дождаться,
-    # пока все они будут доставлены до сервера.
-    for mess in messages:
-        writer.write(mess)
-
-    writer.flush()
-
-    # Можно отправить несколько сообщений и дождаться подтверждения на всю группу.
-    writer.write_with_ack(["mess-1", "mess-2"])
-
-    # Ожидание при отправке каждого сообщения — этот метод вернет результат только после получения
-    # подтверждения от сервера.
-    # Это самый медленный вариант отправки сообщений, используйте его только если такой режим
-    # действительно нужен.
-    writer.write_with_ack("message")
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    for mess in messages:
-        await writer.write(mess)
-
-    await writer.flush()
-
-    await writer.write_with_ack(["mess-1", "mess-2"])
-    await writer.write_with_ack("message")
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
   {% endlist %}
 
@@ -1293,47 +687,17 @@
   Метод `send` возвращает `CompletableFuture<WriteAck>`. Её успешное завершение означает подтверждение записи сервером.
   В структуре `WriteAck` содержится информация о seqNo, offset и статусе записи:
 
-  ```java
-  writer.send(Message.of(message))
-        .whenComplete((result, ex) -> {
-            if (ex != null) {
-                logger.error("Exception on writing message message: ", ex);
-            } else {
-                switch (result.getState()) {
-                    case WRITTEN:
-                        WriteAck.Details details = result.getDetails();
-                        StringBuilder str = new StringBuilder("Message was written successfully");
-                        if (details != null) {
-                            str.append(", offset: ").append(details.getOffset());
-                        }
-                        logger.debug(str.toString());
-                        break;
-                    case ALREADY_WRITTEN:
-                        logger.warn("Message has already been written");
-                        break;
-                    default:
-                        break;
-                }
-            }
-        });
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - C#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
 
-  ```c#
-  await writer.WriteAsync("Hello, Example YDB Topics!");
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
   В случае, если сервер недоступен, сообщения могут накапливаться в очереди в ожидании отправки. Для управления временем ожидания можно использовать токен отмены (`CancellationToken`). Однако, при таком подходе существует вероятность того, что пользователь может отменить отправку уже подтвержденного сообщения.
 
-  ```c#
-  var writeCts = new CancellationTokenSource();
-  writeCts.CancelAfter(TimeSpan.FromSeconds(3));
-
-  await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_deadline]-[END topic_write_deadline]" %}
 
 - JavaScript
 
@@ -1341,35 +705,11 @@
   - Превышение размера внутреннего буфера `maxBufferBytes` (значение по умолчанию = 256MiB).
   - По тику интервала периодической отправки `flushIntervalMs` (значение по умолчанию = 10ms).
 
-  ```javascript
-  await using writer = createTopicWriter(driver, {
-    topic: topicName,
-    producer: producerName,
-    // Callback that is called when writer receives an acknowledgment for a message.
-    onAck: (seqNo, status) => {
-      console.log("ACK", seqNo, status);
-    },
-  })
-
-  writer.write(Buffer.from("Hello, world!", "utf-8"));
-
-  // Чтобы получить последний записанный seqNo на сервере.
-  await writer.flush();
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - Rust
 
-  ```rust
-  use ydb::{TopicWriterMessageBuilder, YdbResult};
-
-  writer
-      .write_with_ack(
-          TopicWriterMessageBuilder::default()
-              .data(b"payload".to_vec())
-              .build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - PHP
 
@@ -1392,13 +732,7 @@
     Сжатие, которое используется при отправке сообщений методом `Write`, задаётся при [создании сессии записи](#start-writer) настройками `Codec` и `CompressionLevel`. По умолчанию выбирается кодек GZIP.
     Пример создания сессии записи без сжатия сообщений:
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-      // other settings are set here
-      .Codec(ECodec::RAW);
-
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
     Если необходимо в рамках сессии записи отправить сообщение, сжатое другим кодеком, можно использовать метод `WriteEncoded` с указанием кодека и размера расжатого сообщения. Для успешной записи этим способом используемый кодек должен быть разрешён в настройках топика.
 
@@ -1406,25 +740,13 @@
 
     Кодек задаётся при [создании сессии записи](#start-writer) в `TWriteSessionSettings` — те же настройки `Codec` и `CompressionLevel`, что и у `IWriteSession`. Метод `WriteEncoded` недоступен.
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        // other settings are set here
-        .Codec(ECodec::RAW);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_blocking]-[END topic_codec_blocking]" %}
 
   - IProducer
 
     Кодек задаётся в `TProducerSettings` при [создании продюсера](#start-writer) — те же настройки `Codec` и `CompressionLevel`, что и у `IWriteSession`.
 
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        // other settings are set here
-        .Codec(NYdb::NTopic::ECodec::RAW);
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_producer]-[END topic_codec_producer]" %}
 
   {% endlist %}
 
@@ -1434,13 +756,7 @@
 
   При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
-  ```go
-  producerAndGroupID := "group-id"
-  writer, _ := db.Topic().StartWriter(producerAndGroupID, "topicName",
-    topicoptions.WithMessageGroupID(producerAndGroupID),
-    topicoptions.WithCodec(topictypes.CodecGzip),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - Python
 
@@ -1448,23 +764,11 @@
 
   При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
-  ```python
-  writer = driver.topic_client.writer(topic_path,
-      codec=ydb.TopicCodec.GZIP,
-  )
-  ```
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - Java
 
-  ```java
-  String producerAndGroupID = "group-id";
-  WriterSettings settings = WriterSettings.newBuilder()
-          .setTopicPath(topicPath)
-          .setProducerId(producerAndGroupID)
-          .setMessageGroupId(producerAndGroupID)
-          .setCodec(Codec.ZSTD)
-          .build();
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - C#
 
@@ -1472,23 +776,15 @@
 
 - JavaScript
 
-  ```javascript
-  await using writer = t.createWriter({
-    codec: Codec.RAW,
-  });
+  JavaScript SDK принимает объект `CompressionCodec` с функциями `compress` и `decompress`. `RAW_CODEC` и `GZIP_CODEC` импортируются из `@ydbjs/topic/codec`. Для LZOP и пользовательских кодеков нужно передать реализацию; в полном примере определены `lzopCodec` и `customCodec`.
 
-  await using writer = t.createWriter({
-    codec: Codec.GZIP,
-  });
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec_raw]-[END topic_codec_raw]" %}
 
-  await using writer = t.createWriter({
-    codec: Codec.LZOP,
-  });
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec_gzip]-[END topic_codec_gzip]" %}
 
-  await using writer = t.createWriter({
-    codec: 10000, // CUSTOM (допустимый диапазон: 10000–19999)
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec_lzop]-[END topic_codec_lzop]" %}
+
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec_custom]-[END topic_codec_custom]" %}
 
 - Rust
 
@@ -1519,12 +815,7 @@
     Если в настройках сессии записи не указывается опция `ProducerId`, будет создана сессия записи без дедупликации.
     Пример создания такой сессии записи:
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath);
-
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup]-[END topic_no_dedup]" %}
 
     Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
@@ -1532,12 +823,7 @@
 
     Поведение такое же, как у `IWriteSession`: если не указывать `ProducerId`, сессия создаётся без дедупликации.
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup_blocking]-[END topic_no_dedup_blocking]" %}
 
   - IProducer
 
@@ -1588,52 +874,19 @@
 
     Метаданные задаются в объекте `TWriteMessage` и передаются в `Write()`:
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath)
-    // set all other settings;
-    ;
-
-    auto session = topicClient.CreateWriteSession(settings);
-
-    std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
-    NYdb::NTopic::TWriteMessage message("This is yet another message").MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"}
-    });
-
-    if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-        session->Write(std::move(event.ContinuationToken), std::move(message));
-    }
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   - ISimpleBlockingWriteSession
 
     Используется тот же `TWriteMessage`, что и у `IWriteSession`: метаданные задаются через `MessageMeta()` и передаются в `Write()`:
 
-    ```cpp
-    auto messageData = std::string("message-data");
-    NYdb::NTopic::TWriteMessage writeMessage(messageData);
-    writeMessage.MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"},
-    });
-    session->Write(std::move(writeMessage));
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_blocking]-[END topic_write_metadata_blocking]" %}
 
   - IProducer
 
     Как и у сессий записи, метаданные задаются в `TWriteMessage` через `MessageMeta()`. Отличие `IProducer` в том, что сообщение также содержит ключ партиционирования, по которому продюсер выбирает партицию:
 
-    ```cpp
-    auto messageData = std::string("message-data");
-    NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
-    writeMessage.MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"},
-    });
-    producer->Write(std::move(writeMessage));
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_producer]-[END topic_write_metadata_producer]" %}
 
   {% endlist %}
 
@@ -1641,27 +894,11 @@
 
   Метаданные задаются в поле `Metadata` структуры `topicwriter.Message`:
 
-  ```go
-  err := writer.Write(ctx, topicwriter.Message{
-    Data: strings.NewReader("message-data"),
-    Metadata: map[string][]byte{
-      "meta-key":    []byte("meta-value"),
-      "another-key": []byte("value"),
-    },
-  })
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   При чтении метаданные доступны в поле `Metadata` у сообщения:
 
-  ```go
-  msg, err := reader.ReadMessage(ctx)
-  if err != nil {
-    return err
-  }
-  for k, v := range msg.Metadata {
-    fmt.Printf("%s: %s\n", k, string(v))
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - Java
 
@@ -1669,35 +906,15 @@
 
   Можно передать сразу `List` таких объектов:
 
-  ```java
-  List<MetadataItem> metadataItems = Arrays.asList(
-          new MetadataItem("meta-key", "meta-value".getBytes()),
-          new MetadataItem("another-key", "value".getBytes())
-  );
-  writer.send(
-          Message.newBuilder()
-                  .setMetadataItems(metadataItems)
-                  .build()
-  );
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   Или добавлять каждый `MetadataItem` отдельно:
 
-  ```java
-  writer.send(
-          Message.newBuilder()
-                  .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
-                  .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
-                  .build()
-  );
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata_add]-[END topic_write_metadata_add]" %}
 
   При чтении эти метаданные сообщения получить, вызвав на нём метод `getMetadataItems()`:
 
-  ```java
-  Message message = reader.receive();
-  List<MetadataItem> metadata = message.getMetadataItems();
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - Python
 
@@ -1706,46 +923,25 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
-    writer.write(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    message = ydb.TopicWriterMessage(data="message-data", metadata_items={"meta-key": "meta-value"})
-    await writer.write(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   {% endlist %}
 
   Во время чтения метаданные можно получить из поля `metadata_items` объекта `PublicMessage`:
 
-  ```python
-  message = reader.receive_message()
-  for meta_key, meta_value in message.metadata_items.items():
-      print(f"{meta_key}: {meta_value}")
-  ```
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - C#
 
-  ```c#
-  await writer.WriteAsync(
-      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello, Example YDB Topics!")
-          { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
-  );
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 - JavaScript
 
-  ```javascript
-  writer.write(Buffer.from("Hello, world!", "utf-8"), {
-    metadataItems: {
-      "meta-key": new TextEncoder().encode("meta-value"),
-    },
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 - Rust
 
@@ -1771,47 +967,19 @@
 
     Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи.
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/57e19f101afcfa49caab6a8fb24d6c222c362bd2/examples/ydb_tech/topic)
 
-    ```c++
-    NYdb::NQuery::TQueryClient queryClient(driver);
+    Функция `NextToken` из полного примера ожидает `TReadyToAcceptEvent` и возвращает его `ContinuationToken`, как показано в цикле записи выше. Асинхронному writer этот токен нужен и при отправке сообщения в транзакции.
 
-    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-        auto beginTxResult = session.BeginTransaction().GetValueSync();
-        if (!beginTxResult.IsSuccess()) {
-            return beginTxResult;
-        }
-        auto tx = beginTxResult.GetTransaction();
-
-        NYdb::NTopic::TWriteMessage writeMessage("message");
-
-        topicSession->Write(std::move(writeMessage), tx);
-        return tx.Commit().GetValueSync();
-    }));
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   - ISimpleBlockingWriteSession
 
     Как и `IWriteSession`, `ISimpleBlockingWriteSession` поддерживает запись в транзакции. Так как у простого варианта нет `ContinuationToken`, объект транзакции передаётся вторым аргументом в `Write()`.
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/57e19f101afcfa49caab6a8fb24d6c222c362bd2/examples/ydb_tech/topic)
 
-    ```c++
-    NYdb::NQuery::TQueryClient queryClient(driver);
-
-    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-        auto beginTxResult = session.BeginTransaction().GetValueSync();
-        if (!beginTxResult.IsSuccess()) {
-            return beginTxResult;
-        }
-        auto tx = beginTxResult.GetTransaction();
-
-        NYdb::NTopic::TWriteMessage writeMessage("message");
-
-        topicSession->Write(std::move(writeMessage), &tx);
-        return tx.Commit().GetValueSync();
-    }));
-    ```
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx_blocking]-[END topic_write_tx_blocking]" %}
 
   - IProducer
 
@@ -1823,18 +991,9 @@
 
   Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter). После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
-  ```go
-  err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
-    writer, err := db.Topic().StartTransactionalWriter(tx, topicName)
-    if err != nil {
-      return err
-    }
-
-    return writer.Write(ctx, topicwriter.Message{Data: strings.NewReader("asd")})
-  })
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
 - Python
 
@@ -1842,46 +1001,18 @@
 
   В примере ниже нет явного вызова `tx.commit()` — он происходит неявно при успешном завершении лямбды `callee`.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/0409ca98c5ee473919298ec09a2c4ec0d5e21a43/examples/ydb_tech/topic)
 
   {% list tabs %}
   - Native SDK
 
-    ```python
-    with ydb.QuerySessionPool(driver) as session_pool:
-
-        def callee(tx: ydb.QueryTxContext):
-            tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
-
-            for i in range(message_count):
-                result_stream = tx.execute(query=f"select {i} as res;")
-                for result_set in result_stream:
-                    message = str(result_set.rows[0]["res"])
-                    tx_writer.write(ydb.TopicWriterMessage(message))
-                    print(f"Message {message} was written with tx.")
-
-        session_pool.retry_tx_sync(callee)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   - Native SDK (Asyncio)
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/0409ca98c5ee473919298ec09a2c4ec0d5e21a43/examples/ydb_tech/topic)
 
-    ```python
-    async with ydb.aio.QuerySessionPool(driver) as session_pool:
-
-        async def callee(tx: ydb.aio.QueryTxContext):
-            tx_writer: ydb.TopicTxWriterAsyncIO = driver.topic_client.tx_writer(tx, topic)
-
-            for i in range(message_count):
-                async with await tx.execute(query=f"select {i} as res;") as result_stream:
-                    async for result_set in result_stream:
-                        message = str(result_set.rows[0]["res"])
-                        await tx_writer.write(ydb.TopicWriterMessage(message))
-                        print(f"Message {result_set.rows[0]['res']} was written with tx.")
-
-        await session_pool.retry_tx_async(callee)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   {% endlist %}
 
@@ -1891,124 +1022,21 @@
 
   - Синхронный API
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/a220a4a6648b26136315e63349bccc5408e7841b/examples/ydb_tech/topic)
 
     В настройках `SendSettings` метода `send` можно указать транзакцию.
     Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
-    ```java
-    // creating a session in the table service
-    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-    if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get a session from the pool: {}", sessionResult);
-      return; // retry or shutdown
-    }
-    Session session = sessionResult.getValue();
-    // creating a transaction in the table service
-    // this transaction is not yet active and has no id
-    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-    // get message text within the transaction
-    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
-          .join();
-    if (!dataQueryResult.isSuccess()) {
-      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
-      return; // retry or shutdown
-    }
-    // now the transaction is active and has an id
-
-    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
-    byte[] message;
-    if (rsReader.next()) {
-      message = rsReader.getColumn(0).getBytes();
-    } else {
-      return; // retry or shutdown
-    }
-
-    writer.send(
-          Message.of(message),
-          SendSettings.newBuilder()
-                  .setTransaction(transaction)
-                  .build()
-    );
-
-    // flush to wait until all messages reach server before commit
-    writer.flush();
-
-    Status commitStatus = transaction.commit().join();
-    analyzeCommitStatus(commitStatus);
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_sync]-[END topic_write_tx_sync]" %}
 
   - Асинхронный API
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/a220a4a6648b26136315e63349bccc5408e7841b/examples/ydb_tech/topic)
 
     В настройках `SendSettings` метода `send` можно указать транзакцию.
     Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
-    ```java
-    // creating a session in the table service
-    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-    if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get a session from the pool: {}", sessionResult);
-      return; // retry or shutdown
-    }
-    Session session = sessionResult.getValue();
-    // creating a transaction in the table service
-    // this transaction is not yet active and has no id
-    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-    // get message text within the transaction
-    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
-          .join();
-    if (!dataQueryResult.isSuccess()) {
-      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
-      return; // retry or shutdown
-    }
-    // now the transaction is active and has an id
-
-    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
-    byte[] message;
-    if (rsReader.next()) {
-      message = rsReader.getColumn(0).getBytes();
-    } else {
-      return; // retry or shutdown
-    }
-
-    try {
-      writer.send(Message.newBuilder()
-                              .setData(message)
-                              .build(),
-                      SendSettings.newBuilder()
-                              .setTransaction(transaction)
-                              .build())
-              .whenComplete((result, ex) -> {
-                  if (ex != null) {
-                      logger.error("Exception while sending a message: ", ex);
-                  } else {
-                      switch (result.getState()) {
-                          case WRITTEN:
-                              WriteAck.Details details = result.getDetails();
-                              logger.info("Message was written successfully, offset: " + details.getOffset());
-                              break;
-                          case ALREADY_WRITTEN:
-                              logger.info("Message has already been written");
-                              break;
-                          default:
-                              break;
-                      }
-                  }
-              })
-              // Waiting for the message to reach the server before committing the transaction
-              .join();
-
-      Status commitStatus = transaction.commit().join();
-      analyzeCommitStatus(commitStatus);
-    } catch (QueueOverflowException exception) {
-      logger.error("Queue overflow exception while sending a message{}: ", index, exception);
-      // Send queue is full. Need to retry with backoff or skip
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_async]-[END topic_write_tx_async]" %}
 
   {% endlist %}
 
@@ -2053,24 +1081,13 @@
 
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .ConsumerName("my-consumer")
-      .AppendTopics("my-topic");
-
-  auto session = topicClient.CreateReadSession(settings);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Go
 
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
-  ```go
-  reader, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"))
-  if err != nil {
-      return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Python
 
@@ -2079,15 +1096,11 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
   {% endlist %}
 
@@ -2099,132 +1112,56 @@
 
     Инициализация настроек читателя
 
-    ```java
-    ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // читать с этой временной метки (опционально)
-                  .setMaxLag(Duration.ofMinutes(30)) // максимальное отставание от конца очереди (опционально)
-                  .build())
-          .build();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
 
     Создание синхронного читателя
 
-    ```java
-    SyncReader reader = topicClient.createSyncReader(settings);
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader]-[END topic_sync_reader]" %}
 
     После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
     - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
 
-    ```java
-    reader.init();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_background]-[END topic_sync_reader_background]" %}
 
     - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
 
-    ```java
-    try {
-        reader.initAndWait();
-        logger.info("Init finished successfully");
-    } catch (Exception exception) {
-        logger.error("Exception while initializing reader: ", exception);
-        return;
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_init]-[END topic_sync_reader_init]" %}
 
   - Асинхронный API
 
     Инициализация настроек читателя
 
-    ```java
-    ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // читать с этой временной метки (опционально)
-                  .setMaxLag(Duration.ofMinutes(30)) // максимальное отставание от конца очереди (опционально)
-                  .build())
-          .build();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
 
     Для асинхронного читателя, помимо общих настроек чтения `ReaderSettings`, понадобятся настройки обработчика событий `ReadEventHandlersSettings`, в которых необходимо передать экземпляр наследника `ReadEventHandler`.
     Он будет описывать, как должна происходить обработка различных событий, происходящих во время чтения.
 
-    ```java
-    ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
-          .setEventHandler(new Handler())
-          .build();
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_handler_settings]-[END topic_handler_settings]" %}
 
     Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений; по умолчанию используется внутренний поток SDK.
 
     Для реализации обработчика событий можно унаследоваться от `AbstractReadEventHandler` и переопределить метод `onMessages`.
     Метод `onMessages` вызывается каждый раз, когда SDK получает очередной пакет сообщений от сервера. В рамках одного вызова приходит один или несколько сообщений, которые можно подтвердить (`commit`) как по отдельности, так и после обработки всего пакета. Пример реализации:
 
-    ```java
-    private class Handler extends AbstractReadEventHandler {
-      @Override
-      public void onMessages(DataReceivedEvent event) {
-          for (Message message : event.getMessages()) {
-              StringBuilder str = new StringBuilder();
-              logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
-
-              process(message);
-
-              message.commit().thenRun(() -> {
-                  logger.info("Message committed");
-              });
-          }
-      }
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch_individual_commit]-[END topic_read_batch_individual_commit]" %}
 
     Создание и инициализация асинхронного читателя:
 
-    ```java
-    AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
-    // Init in background
-    reader.init()
-          .thenRun(() -> logger.info("Init finished successfully"))
-          .exceptionally(ex -> {
-              logger.error("Init failed with ex: ", ex);
-              return null;
-          });
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_reader]-[END topic_async_reader]" %}
 
   {% endlist %}
 
 - C#
 
-  ```c#
-  await using var reader = new ReaderBuilder<string>(connectionString)
-  {
-      ConsumerName = "Consumer_Example",
-      SubscribeSettings = { new SubscribeSettings(topicName) }
-  }.Build();
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - JavaScript
 
-  ```javascript
-  await using reader = createTopicReader(driver, {
-    topic: topicName,
-    consumer: consumerName,
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Rust
 
-  ```rust
-  use ydb::YdbResult;
-
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - PHP
 
@@ -2238,35 +1175,11 @@
 
 - C++
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .ConsumerName("my-consumer")
-      .AppendTopics("my-topic")
-      .AppendTopics(
-          NYdb::NTopic::TTopicReadSettings("my-specific-topic")
-              .ReadFromTimestamp(someTimestamp)
-      );
-
-  auto session = topicClient.CreateReadSession(settings);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - Go
 
-  ```go
-  reader, err := db.Topic().StartReader("my-consumer", []topicoptions.ReadSelector{
-      {
-          Path: "my-topic",
-      },
-      {
-          Path:       "my-specific-topic",
-          ReadFrom:   time.Date(2022, 7, 1, 10, 15, 0, 0, time.UTC),
-      },
-      },
-  )
-  if err != nil {
-      return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
   Также в примере выше задаётся время, с которого следует начинать читать сообщения.
 
@@ -2276,104 +1189,25 @@
 
 - Java
 
-  ```java
-  ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath("my-topic")
-                  .build())
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath("my-specific-topic")
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
-                  .setMaxLag(Duration.ofMinutes(30)) // Optional
-                  .build())
-          .build();
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - C#
 
-  ```c#
-  await using var reader = new ReaderBuilder<string>(connectionString)
-  {
-      ConsumerName = "Consumer_Example",
-      SubscribeSettings =
-      {
-          new SubscribeSettings(topicName),
-          new SubscribeSettings(topicName + "_another") { ReadFrom = DateTime.Now }
-      }
-  }.Build();
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - JavaScript
 
-  ```javascript
-  await using reader = createTopicReader(driver, {
-    topic: {
-      path: topicPath,
-      partitionIds: [1n, 2n, 3n],
-    },
-    consumer: consumerName,
-  });
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors_partitions]-[END topic_reader_selectors_partitions]" %}
 
-  await using reader = createTopicReader(driver, {
-    topic: {
-      path: topicPath,
-      maxLag: "1s", // number, import('ms').StringValue, protobuff Duration
-    },
-    consumer: consumerName,
-  });
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors_lag]-[END topic_reader_selectors_lag]" %}
 
-  await using reader = createTopicReader(driver, {
-    topic: {
-      path: topicPath,
-      readFrom: new Date(), // number, Date, protobuf Timestamp
-    },
-    consumer: consumerName,
-  });
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors_from]-[END topic_reader_selectors_from]" %}
 
-  await using reader = createTopicReader(driver, {
-    topic: [
-      {
-        path: topicPath,
-        partitionIds: [1n, 2n, 3n],
-      },
-      {
-        path: topicPath2,
-        maxLag: "1s",
-      },
-      {
-        path: topicPath3,
-        readFrom: new Date(),
-      },
-      // ...
-    ],
-    consumer: consumerName,
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors_multiple]-[END topic_reader_selectors_multiple]" %}
 
 - Rust
 
-  ```rust
-  use std::time::{Duration, SystemTime};
-
-  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
-
-  let mut reader = topic_client
-      .create_reader_with_params(
-          TopicReaderOptionsBuilder::default()
-              .consumer("my-consumer".into())
-              .topic(TopicSelectors(vec![
-                  TopicSelector::new("/local/my-topic"),
-                  TopicSelector {
-                      path: "/local/my-specific-topic".into(),
-                      partition_ids: None,
-                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
-                  },
-              ]))
-              .build()?,
-      )
-      .await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - PHP
 
@@ -2425,10 +1259,7 @@
 
   Полный пример чтения топика в транзакции с записью в таблицу: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
 
-  ```rust
-  let batch = reader.pop_batch_in_tx(&mut tx).await?;
-  // обработка batch.messages и commit транзакции
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 - PHP
 
@@ -2448,17 +1279,7 @@
 
 - Go
 
-  ```go
-  func SimpleReadMessages(ctx context.Context, r *topicreader.Reader) error {
-      for {
-          mess, err := r.ReadMessage(ctx)
-          if err != nil {
-              return err
-          }
-          processMessage(mess)
-      }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - Python
 
@@ -2466,19 +1287,11 @@
 
   - Native SDK
 
-    ```python
-    while True:
-        message = reader.receive_message()
-        process(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    while True:
-        message = await reader.receive_message()
-        process(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   {% endlist %}
 
@@ -2490,12 +1303,7 @@
 
     Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
 
-    ```java
-    while(true) {
-      Message message = reader.receive();
-      process(message);
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   - Асинхронный API
 
@@ -2505,29 +1313,11 @@
 
 - C#
 
-  ```c#
-  try
-  {
-      while (!readerCts.IsCancellationRequested)
-      {
-          var message = await reader.ReadAsync(readerCts.Token);
-
-          logger.LogInformation("Received message: [{MessageData}]", message.Data);
-      }
-  }
-  catch (OperationCanceledException)
-  {
-  }
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - JavaScript
 
-  ```javascript
-  for await (let batch of reader.read()) {
-    for await (let msg of batch) {
-    }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - Rust
 
@@ -2549,35 +1339,17 @@
 
   При установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений. Подтверждения чтения по умолчанию отправляться не будут.
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .EventHandlers_.SimpleDataHandlers(
-          [](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-              std::cout << "Get data event " << NYdb::NTopic::DebugString(event);
-          }
-      );
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
-  auto session = topicClient.CreateReadSession(settings);
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_session]-[END topic_read_batch_session]" %}
 
-  // Wait SessionClosed event.
-  session->GetEvent(/* block = */true);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_wait]-[END topic_read_batch_wait]" %}
 
   В этом примере после создания сессии основной поток дожидается завершения сессии со стороны сервера в методе `GetEvent`, другие типы событий приходить не будут.
 
 - Go
 
-  ```go
-  func SimpleReadBatches(ctx context.Context, r *topicreader.Reader) error {
-      for {
-          batch, err := r.ReadMessageBatch(ctx)
-          if err != nil {
-              return err
-          }
-          processBatch(batch)
-      }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - Python
 
@@ -2585,19 +1357,11 @@
 
   - Native SDK
 
-    ```python
-    while True:
-        batch = reader.receive_batch()
-        process(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    while True:
-        batch = await reader.receive_batch()
-        process(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   {% endlist %}
 
@@ -2613,45 +1377,17 @@
 
     Чтобы прочитать пакет сообщений без подтверждения обработки, используйте следующий код:
 
-    ```java
-    private class Handler extends AbstractReadEventHandler {
-      @Override
-      public void onMessages(DataReceivedEvent event) {
-          for (Message message : event.getMessages()) {
-              process(message);
-          }
-      }
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   {% endlist %}
 
 - C#
 
-  ```c#
-  try
-  {
-      while (!readerCts.IsCancellationRequested)
-      {
-          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
-
-          foreach (var message in batchMessages.Batch)
-          {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);
-          }
-      }
-  }
-  catch (OperationCanceledException)
-  {
-  }
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - JavaScript
 
-  ```javascript
-  for await (let batch of reader.read()) {
-  }
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - Rust
 
@@ -2683,18 +1419,7 @@
 
 - Go
 
-  ```go
-  func SimpleReadMessages(ctx context.Context, r *topicreader.Reader) error {
-      for {
-        mess, err := r.ReadMessage(ctx)
-        if err != nil {
-            return err
-        }
-        processMessage(mess)
-        r.Commit(mess.Context(), mess)
-      }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
   По умолчанию `Commit` — это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно с помощью вызова `Reader.Close()`.
 
@@ -2706,21 +1431,11 @@
 
   - Native SDK
 
-    ```python
-    while True:
-        message = reader.receive_message()
-        process(message)
-        reader.commit(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    while True:
-        message = await reader.receive_message()
-        process(message)
-        reader.commit(message)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
   {% endlist %}
 
@@ -2733,63 +1448,21 @@
   В случае ошибки коммита не следует пытаться его ретраить. Скорее всего, ошибка вызвана закрытием сессии.
   Читатель (необязательно этот же) сам создаст новую сессию для этой партиции и сообщение будет прочитано снова.
 
-  ```java
-  message.commit()
-         .whenComplete((result, ex) -> {
-             if (ex != null) {
-                 // Read session was probably closed, there is nothing we can do here.
-                 // Do not retry this commit on the same event.
-                 logger.error("exception while committing message: ", ex);
-             } else {
-                 logger.info("message committed successfully");
-             }
-         });
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - C#
 
-  ```c#
-  try
-  {
-      while (!readerCts.IsCancellationRequested)
-      {
-          var message = await reader.ReadAsync(readerCts.Token);
-
-          logger.LogInformation("Received message: [{MessageData}]", message.Data);
-
-          try
-          {
-              await message.CommitAsync();
-          }
-          catch (ReaderException e)
-          {
-              logger.LogError(e, "Failed to commit a message");
-          }
-      }
-  }
-  catch (OperationCanceledException)
-  {
-  }
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - JavaScript
 
-  ```javascript
-  for await (let batch of reader.read()) {
-    for (let msg of batch) {
-      await reader.commit(msg);
-    }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - Rust
 
-  ```rust
-  let batch = reader.read_batch().await?;
-  reader.commit(batch.get_commit_marker())?;
-  // или с ожиданием ack от сервера:
-  reader.commit_with_ack(batch.get_commit_marker()).await?;
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit_ack]-[END topic_read_commit_ack]" %}
 
 - PHP
 
@@ -2805,35 +1478,15 @@
 
   Аналогично [примеру выше](#no-commit), при установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений. Передача параметра `commitDataAfterProcessing = true` означает, что SDK будет отправлять на сервер подтверждения чтения всех сообщений после выполнения обработчика.
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .EventHandlers_.SimpleDataHandlers(
-          [](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-              std::cout << "Get data event " << NYdb::NTopic::DebugString(event);
-          }
-          , /* commitDataAfterProcessing = */true
-      );
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
-  auto session = topicClient.CreateReadSession(settings);
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_commit_session]-[END topic_read_batch_commit_session]" %}
 
-  // Wait SessionClosed event.
-  session->GetEvent(/* block = */true);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_commit_wait]-[END topic_read_batch_commit_wait]" %}
 
 - Go
 
-  ```go
-  func SimpleReadMessageBatch(ctx context.Context, r *topicreader.Reader) error {
-      for {
-        batch, err := r.ReadMessageBatch(ctx)
-        if err != nil {
-            return err
-        }
-        processBatch(batch)
-        r.Commit(batch.Context(), batch)
-      }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   По умолчанию `Commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
@@ -2843,21 +1496,11 @@
 
   - Native SDK
 
-    ```python
-    while True:
-        batch = reader.receive_batch()
-        process(batch)
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    while True:
-        batch = await reader.receive_batch()
-        process(batch)
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   {% endlist %}
 
@@ -2875,63 +1518,17 @@
 
     В обработчике `onMessages` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
 
-    ```java
-    @Override
-    public void onMessages(DataReceivedEvent event) {
-      for (Message message : event.getMessages()) {
-          process(message);
-      }
-      event.commit()
-             .whenComplete((result, ex) -> {
-                 if (ex != null) {
-                     // Read session was probably closed, there is nothing we can do here.
-                     // Do not retry this commit on the same message.
-                     logger.error("exception while committing message batch: ", ex);
-                 } else {
-                     logger.info("message batch committed successfully");
-                 }
-             });
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   {% endlist %}
 
 - C#
 
-  ```c#
-  try
-  {
-      while (!readerCts.IsCancellationRequested)
-      {
-          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
-
-          foreach (var message in batchMessages.Batch)
-          {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);
-          }
-
-          try
-          {
-              await batchMessages.CommitBatchAsync();
-          }
-          catch (ReaderException e)
-          {
-              logger.LogError(e, "Failed to commit a message");
-          }
-      }
-  }
-  catch (OperationCanceledException)
-  {
-  }
-  ```
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - JavaScript
 
-  ```javascript
-  for await (let batch of reader.read()) {
-    await reader.commit(batch);
-  }
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - Rust
 
@@ -2960,14 +1557,7 @@
 
   Пример установки обработчика:
 
-  ```cpp
-  settings.EventHandlers_.StartPartitionSessionHandler(
-      [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-          auto readFromOffset = GetOffsetToReadFrom(event.GetPartitionId());
-          event.Confirm(readFromOffset);
-      }
-  );
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
   Здесь `GetOffsetToReadFrom` - это часть примера, а не SDK. Используйте свой способ определить требуемую стартовую позицию чтения для партиции с данным partition id.
 
@@ -2979,55 +1569,11 @@
 
   В режиме читателя по умолчанию оффсеты до позиции, указанной через `res.StartFrom`, подтверждаются на сервере. После этого повторное чтение тех же сообщений путём сдвига позиции назад становится невозможным. Чтобы отключить автоматическое подтверждение, используйте режим без коммитов при создании читателя.
 
-  ```go
-  reader, err := db.Topic().StartReader(
-    consumerName,
-    topicoptions.ReadTopic(topicName),
-    topicoptions.WithReaderCommitMode(topicoptions.CommitModeNone),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
   {% endnote %}
 
-  ```go
-  func ReadWithExplicitPartitionStartStopHandlerAndOwnReadProgressStorage(ctx context.Context, db ydb.Connection) error {
-      readContext, stopReader := context.WithCancel(context.Background())
-      defer stopReader()
-
-      readStartPosition := func(
-          ctx context.Context,
-          req topicoptions.GetPartitionStartOffsetRequest,
-      ) (res topicoptions.GetPartitionStartOffsetResponse, err error) {
-          offset, err := readLastOffsetFromDB(ctx, req.Topic, req.PartitionID)
-          res.StartFrom(offset)
-
-          // Reader will stop if return err != nil
-          return res, err
-      }
-
-      r, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"),
-          topicoptions.WithGetPartitionStartOffset(readStartPosition),
-      )
-      if err != nil {
-          return err
-      }
-
-      go func() {
-          <-readContext.Done()
-          _ = r.Close(ctx)
-      }()
-
-      for {
-          batch, err := r.ReadMessageBatch(readContext)
-          if err != nil {
-              return err
-          }
-
-          processBatch(batch)
-          _ = externalSystemCommit(batch.Context(), batch.Topic(), batch.PartitionID(), batch.EndOffset())
-      }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset_storage]-[END topic_client_offset_storage]" %}
 
 - Python
 
@@ -3040,32 +1586,13 @@
   Для этого в метод `confirm` следует передать настройки `StartPartitionSessionSettings` с указанным оффсетом через `setReadOffset`.
   Также вызовом `setCommitOffset` можно указать оффсет, который следует считать закоммиченным.
 
-  ```java
-  @Override
-  public void onStartPartitionSession(StartPartitionSessionEvent event) {
-      event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset) // Long
-              .setCommitOffset(lastCommitOffset) // Long
-              .build());
-  }
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
   Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
 
 - JavaScript
 
-  ```javascript
-  await using reader = createTopicReader(driver, {
-    topic: topicName,
-    consumer: consumerName,
-    onPartitionSessionStart: (evt) => {
-      return {
-        readOffset: 0n,
-        commitOffset: 0n,
-      };
-    },
-  });
-  ```
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
 - C#
 
@@ -3093,17 +1620,7 @@
 
   В `NYdb::NTopic::TReadSessionSettings` вызовите `WithoutConsumer()`:
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .WithoutConsumer()
-      .AppendTopics(
-          NYdb::NTopic::TTopicReadSettings("topic-path")
-              .AppendPartitionIds(0)
-              .AppendPartitionIds(1)
-              .AppendPartitionIds(2));
-
-  auto readSession = topicClient.CreateReadSession(settings);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
   При переподключении прогресс чтения на сервере не сохраняется. Чтобы не начинать с начала, при каждом старте сессии чтения партиции передавайте смещение в `TStartPartitionSessionEvent::Confirm` — см. [хранение позиции на клиенте](#client-commit).
 
@@ -3111,43 +1628,17 @@
 
   Нужно передать пустую строку в качестве имени consumer и опцию `topicoptions.WithReaderWithoutConsumer(false)` (режим **экспериментальный**, см. [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) в репозитории SDK). В селекторе чтения укажите путь топика и список партиций. Коммиты сообщений в этом режиме недоступны (`CommitModeNone`); при переподключениях прогресс нужно восстанавливать на стороне клиента — см. [хранение позиции на клиенте](#client-commit).
 
-  ```go
-  reader, err := db.Topic().StartReader(
-    "",
-    topicoptions.ReadSelectors{{
-      Path:       "topic-path",
-      Partitions: []int64{0, 1, 2},
-    }},
-    topicoptions.WithReaderWithoutConsumer(false),
-  )
-  if err != nil {
-    return err
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 - Java
 
   Для чтения без Consumer'а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
 
-  ```java
-  ReaderSettings settings = ReaderSettings.newBuilder()
-          .withoutConsumer()
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath(TOPIC_NAME)
-                  .build())
-          .build();
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
   В таком случае нужно учитывать, что при переустановке соединения прогресс на сервере будет сброшен. Поэтому, чтобы не начинать чтение сначала, в SDK следует передавать offset начала чтения при каждом старте сессии чтения партиции:
 
-  ```java
-  @Override
-  public void onStartPartitionSession(StartPartitionSessionEvent event) {
-      event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset) // the last offset read by this client, Long
-              .build());
-  }
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer_offset]-[END topic_no_consumer_offset]" %}
 
 - Python
 
@@ -3158,22 +1649,9 @@
 
   Пример:
 
-  ```python
-  class CustomEventHandler(ydb.TopicReaderEvents.EventHandler):
-      def on_partition_get_start_offset(self, event: ydb.TopicReaderEvents.OnPartitionGetStartOffsetRequest):
-          return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(
-              start_offset=0,
-          )
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer_handler]-[END topic_no_consumer_handler]" %}
 
-  reader = driver.topic_client.reader(
-      topic=ydb.TopicReaderSelector(
-          path="topic-path",
-          partitions=[0, 1, 2],
-      ),
-      consumer=None,
-      event_handler=CustomEventHandler(),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 - C#
 
@@ -3203,31 +1681,9 @@
 
   Перед чтением из топика клиентский код должен передать в настройки получения событий из сессии ссылку на объект транзакции.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_reader/transaction/application.cpp)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/57e19f101afcfa49caab6a8fb24d6c222c362bd2/examples/ydb_tech/topic)
 
-  ```cpp
-  readSession->WaitEvent().Wait(TDuration::Seconds(1));
-
-  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&readSession](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-      auto beginTxResult = session.BeginTransaction(NYdb::Query::TTxSettings::SerializableRW()).GetValueSync();
-      if (!beginTxResult.IsSuccess()) {
-          return beginTxResult;
-      }
-      auto tx = beginTxResult.GetTransaction();
-
-      auto topicSettings = NYdb::NTopic::TReadSessionGetEventSettings()
-          .Block(false);
-          .Tx(tx);
-
-      auto events = readSession->GetEvents(topicSettings);
-
-      for (auto& event : events) {
-          // обработать событие и записать результаты в таблицу
-      }
-
-      return tx.Commit().GetValueSync();
-  }));
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
   {% note warning %}
 
@@ -3237,50 +1693,15 @@
 
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
 
-  ```cpp
-  std::optional<NYdb::NTopic::TStopPartitionSessionEvent> stopPartitionSession;
-
-  auto events = readSession->GetEvents(topicSettings);
-
-  for (auto& event : events) {
-      if (auto* e = std::get_if<NYdb::NTopic::TStopPartitionSessionEvent>(&event)) {
-          stopPartitionSessionEvent = std::move(*e);
-      } else {
-          // обработать событие и записать результаты в таблицу
-      }
-  }
-
-  auto commitResult = tx.Commit(commitSettings).GetValueSync();
-  if (!commitResult.IsSuccess()) {
-      return commitResult;
-  }
-
-  if (stopPartitionSessionEvent) {
-      stopPartitionSessionEvent->Commit();
-  }
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx_deferred_stop]-[END topic_read_tx_deferred_stop]" %}
 
 - Go
 
   Для чтения сообщений в рамках транзакции следует использовать метод [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx). Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку. Проще всего это сделать если использовать читателя в цикле.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
-  ```go
-  for {
-    err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
-      batch, err := reader.PopMessagesBatchTx(ctx, tx) // батч закоммитится при общем коммите транзакции
-      if err != nil {
-        return err
-      }
-
-      return processBatch(ctx, batch)
-    })
-    if err != nil {
-      handleError(err)
-    }
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 - Python
 
@@ -3290,35 +1711,15 @@
 
   - Native SDK
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/0409ca98c5ee473919298ec09a2c4ec0d5e21a43/examples/ydb_tech/topic)
 
-    ```python
-    with driver.topic_client.reader(topic, consumer) as reader:
-        with ydb.QuerySessionPool(driver) as session_pool:
-            for _ in range(message_count):
-
-                def callee(tx: ydb.QueryTxContext):
-                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
-
-                session_pool.retry_tx_sync(callee)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
   - Native SDK (Asyncio)
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/0409ca98c5ee473919298ec09a2c4ec0d5e21a43/examples/ydb_tech/topic)
 
-    ```python
-    async with driver.topic_client.reader(topic, consumer) as reader:
-        async with ydb.aio.QuerySessionPool(driver) as session_pool:
-            for _ in range(message_count):
-
-                async def callee(tx: ydb.aio.QueryTxContext):
-                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
-
-                await session_pool.retry_tx_async(callee)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
   {% endlist %}
 
@@ -3328,61 +1729,24 @@
 
   - Синхронный API
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/a220a4a6648b26136315e63349bccc5408e7841b/examples/ydb_tech/topic)
 
     В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
 
-    ```java
-    Message message = reader.receive(ReceiveSettings.newBuilder()
-          .setTransaction(transaction)
-          .build());
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_sync]-[END topic_read_tx_sync]" %}
 
     Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
     Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
   - Асинхронный API
 
-    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/a220a4a6648b26136315e63349bccc5408e7841b/examples/ydb_tech/topic)
 
     После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
     Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
     Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
 
-    ```java
-    @Override
-    public void onMessages(DataReceivedEvent event) {
-      for (Message message : event.getMessages()) {
-          // creating a session in the table service
-          Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-          if (!sessionResult.isSuccess()) {
-              logger.error("Couldn't get a session from the pool: {}", sessionResult);
-              return; // retry or shutdown
-          }
-          Session session = sessionResult.getValue();
-          // creating a transaction in the table service
-          // this transaction is not yet active and has no id
-          TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-          // do something else in the transaction
-          transaction.executeDataQuery("SELECT 1").join();
-          // now the transaction is active and has an id
-          // analyzeQueryResultIfNeeded();
-
-          Status updateStatus = reader.updateOffsetsInTransaction(transaction,
-                          message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
-                  // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
-                  .join();
-          if (!updateStatus.isSuccess()) {
-              logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
-              return; // retry or shutdown
-          }
-
-          Status commitStatus = transaction.commit().join();
-          analyzeCommitStatus(commitStatus);
-      }
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_async]-[END topic_read_tx_async]" %}
 
   {% endlist %}
 
@@ -3396,10 +1760,7 @@
 
   Полный пример чтения топика в транзакции с записью в таблицу: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
 
-  ```rust
-  let batch = reader.pop_batch_in_tx(&mut tx).await?;
-  // обработка batch.messages и commit транзакции
-  ```
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 - PHP
 
@@ -3429,30 +1790,13 @@
 
   Фрагмент цикла событий может выглядеть так:
 
-  ```cpp
-  auto event = readSession->GetEvent(/*block=*/true);
-  if (auto* stopPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-      stopPartitionSessionEvent->Confirm();
-  } else {
-    // other event types
-  }
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
 - Go
 
   Клиентский код сразу получает все имеющиеся в буфере (на стороне SDK) сообщения, даже если их не достаточно для формирования пакета при групповой обработке.
 
-  ```go
-  r, _ := db.Topic().StartReader("my-consumer", nil,
-      topicoptions.WithBatchReadMinCount(1000),
-  )
-
-  for {
-      batch, _ := r.ReadMessageBatch(ctx) // <- if partition soft stop batch can be less, then 1000
-      processBatch(batch)
-      _ = r.Commit(batch.Context(), batch)
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
 - Python
 
@@ -3462,21 +1806,11 @@
 
   - Native SDK
 
-    ```python
-    while True:
-        batch = reader.receive_batch()
-        process(batch)
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    while True:
-        batch = await reader.receive_batch()
-        process(batch)
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   {% endlist %}
 
@@ -3494,19 +1828,7 @@
     Для возможности реагировать на такое событие следует переопределить метод `onStopPartitionSession(StopPartitionSessionEvent event)` в объекте-наследнике `ReadEventHandler` (см [Подключение к топику для чтения сообщений](#start-reader)).
     `event.confirm()` обязательно должен быть вызван, т.к. сервер ожидает этого ответа для продолжения остановки.
 
-    ```java
-    @Override
-    public void onStopPartitionSession(StopPartitionSessionEvent event) {
-      logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
-              event.getCommittedOffset());
-      // This event means that no more messages will be received by server
-      // Received messages still can be read from ReaderBuffer
-      // Messages still can be committed, until confirm() method is called
-
-      // Confirm that session can be closed
-      event.confirm();
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   {% endlist %}
 
@@ -3542,35 +1864,13 @@
 
   Фрагмент цикла событий может выглядеть так:
 
-  ```cpp
-  auto event = readSession->GetEvent(/*block=*/true);
-  if (auto* partitionSessionClosedEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
-      if (partitionSessionClosedEvent->GetReason() == NYdb::NTopic::TPartitionSessionClosedEvent::EReason::ConnectionLost) {
-          std::cout << "Connection with partition was lost" << std::endl;
-      }
-  } else {
-    // other event types
-  }
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
 - Go
 
   При прерывании чтения контекст сообщения или пакета сообщений будет отменен.
 
-  ```go
-  ctx := batch.Context() // batch.Context() will cancel if partition revoke by server or connection broke
-  if len(batch.Messages) == 0 {
-      return
-  }
-
-  buf := &bytes.Buffer{}
-  for _, mess := range batch.Messages {
-      buf.Reset()
-      _, _ = buf.ReadFrom(mess)
-      _, _ = io.Copy(buf, mess)
-      writeMessagesToDB(ctx, buf.Bytes())
-  }
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
 - Python
 
@@ -3580,33 +1880,11 @@
 
   - Native SDK
 
-    ```python
-    def process_batch(batch):
-        for message in batch.messages:
-            if not batch.alive:
-                return False
-            process(message)
-        return True
-
-    batch = reader.receive_batch()
-    if process_batch(batch):
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    def process_batch(batch):
-        for message in batch.messages:
-            if not batch.alive:
-                return False
-            process(message)
-        return True
-
-    batch = await reader.receive_batch()
-    if process_batch(batch):
-        reader.commit(batch)
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   {% endlist %}
 
@@ -3620,12 +1898,7 @@
 
   - Асинхронный API
 
-    ```java
-    @Override
-    public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
-      logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
-    }
-    ```
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   {% endlist %}
 
@@ -3673,17 +1946,9 @@
 
   SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся в параметрах создания сессии чтения. По умолчанию используется режим совместимости.
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(true); // full support is enabled
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_reader_full]-[END topic_autoscale_reader_full]" %}
 
-  // or
-
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(false); // compatibility mode is enabled
-
-  auto readSession = topicClient.CreateReadSession(settings);
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_reader_compat]-[END topic_autoscale_reader_compat]" %}
 
   В режиме полной поддержки, когда все сообщения из партиции будут прочитаны, придёт событие `TEndPartitionSessionEvent`. После получения этого события в партиции больше не появится новых сообщений для чтения. Чтобы продолжить чтение из дочерних партиций, необходимо вызвать `Confirm()`, тем самым подтвердив, что приложение готово принимать сообщения из дочерних партиций. Если сообщения из всех партиций обрабатываются в одном потоке, то `Confirm()` можно вызвать сразу после получения `TEndPartitionSessionEvent`. Если обработка сообщений из разных партиций осуществляется в разных потоках, то следует завершить обработку сообщений, например, выполнить накопившийся батч, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызвать `Confirm()`.
 
@@ -3691,19 +1956,7 @@
 
   Фрагмент цикла событий может выглядеть так:
 
-  ```cpp
-  auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(true);
-
-  auto readSession = topicClient.CreateReadSession(settings);
-
-  auto event = readSession->GetEvent(/*block=*/true);
-  if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-      endPartitionSessionEvent->Confirm();
-  } else {
-    // other event types
-  }
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_end]-[END topic_autoscale_end]" %}
 
   В режиме совместимости отсутствует явный сигнал о завершении чтения из партиции, и сервер будет пытаться эвристически определить, что клиент обработал партицию до конца. Это может привести к задержке между завершением чтения из исходной партиции и началом чтения из её дочерних партиций.
 
@@ -3715,95 +1968,23 @@
 
   Включение автомасштабирования топика во время его создания производится с помощью опции `topicoptions.CreateWithAutoPartitioningSettings`:
 
-  ```go
-  import (
-    ...
-
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
-  )
-
-  err := db.Topic().Create(ctx,
-    "topic",
-    topicoptions.CreateWithAutoPartitioningSettings(
-      topictypes.AutoPartitioningSettings{
-        AutoPartitioningStrategy: topictypes.AutoPartitioningStrategyScaleUp,
-      },
-    ),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create_basic]-[END topic_autoscale_create_basic]" %}
 
   При необходимости в AutoPartitioningSettings можно задать и другие параметры:
 
-  ```go
-  err := db.Topic().Create(ctx,
-    "topic",
-    topicoptions.CreateWithAutoPartitioningSettings(
-      topictypes.AutoPartitioningSettings{
-        AutoPartitioningStrategy: topictypes.AutoPartitioningStrategyScaleUp,
-        AutoPartitioningWriteSpeedStrategy: topictypes.AutoPartitioningWriteSpeedStrategy{
-          StabilizationWindow:    time.Minute,
-          UpUtilizationPercent:   80,
-        },
-      },
-    ),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
   Включение автомасштабирования у существующего топика производится с помощью опции `topicoptions.AlterWithAutoPartitioningStrategy` у `.Topic().Alter`:
 
-  ```go
-  import (
-    ...
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_alter_basic]-[END topic_autoscale_alter_basic]" %}
 
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
-  )
-
-  err := db.Topic().Alter(
-    ctx,
-    "topic",
-    topicoptions.AlterWithAutoPartitioningStrategy(
-      topictypes.AutoPartitioningStrategyScaleUp,
-    ),
-  )
-
-  // другие опции
-  err := db.Topic().Alter(
-    ctx,
-    "topic",
-    topicoptions.AlterWithAutoPartitioningStrategy(
-      topictypes.AutoPartitioningStrategyScaleUp,
-    ),
-    topicoptions.AlterWithAutoPartitioningWriteSpeedStabilizationWindow(time.Minute),
-    topicoptions.AlterWithAutoPartitioningWriteSpeedUpUtilizationPercent(80),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
 
   SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся опцией `topicoptions.WithReaderSupportSplitMergePartitions` во время создания читателя. По умолчанию используется режим полной поддержки (`true`).
 
-  ```go
-  import (
-    ...
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_reader_full]-[END topic_autoscale_reader_full]" %}
 
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
-  )
-
-  // режим полной поддержки (обработка автомасштабирования в SDK, по умолчанию)
-  reader, err := db.Topic().StartReader(
-    "consumer",
-    topicoptions.ReadTopic("topic"),
-    topicoptions.WithReaderSupportSplitMergePartitions(true),
-  )
-
-  // режим совместимости (обработка автомасштабирования на сервере)
-  reader, err := db.Topic().StartReader(
-    "consumer",
-    topicoptions.ReadTopic("topic"),
-    topicoptions.WithReaderSupportSplitMergePartitions(false),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_reader_compat]-[END topic_autoscale_reader_compat]" %}
 
 - Python
 
@@ -3812,71 +1993,23 @@
   {% list tabs %}
   - Native SDK
 
-    ```python
-    driver.topic_client.create_topic(
-        topic,
-        consumers=[consumer],
-        min_active_partitions=10,
-        max_active_partitions=100,
-        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-            up_utilization_percent=80,
-            down_utilization_percent=20,
-            stabilization_window=datetime.timedelta(seconds=300),
-        ),
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    await driver.topic_client.create_topic(
-        topic,
-        consumers=[consumer],
-        min_active_partitions=10,
-        max_active_partitions=100,
-        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-            up_utilization_percent=80,
-            down_utilization_percent=20,
-            stabilization_window=datetime.timedelta(seconds=300),
-        ),
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
   {% endlist %}
 
   Внесение изменений в существующий топик производится с помощью аргумента `alter_auto_partitioning_settings` у `alter_topic`:
 
-  ```python
-      driver.topic_client.alter_topic(
-          topic_path,
-          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
-              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              set_up_utilization_percent=80,
-              set_down_utilization_percent=20,
-              set_stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
-  ```
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
 
   SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся аргументом `auto_partitioning_support` во время создания читателя. По умолчанию используется режим полной поддержки.
 
-  ```python
-  reader = driver.topic_client.reader(
-      topic,
-      consumer,
-      auto_partitioning_support=True, # Full support is enabled
-  )
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_reader_full]-[END topic_autoscale_reader_full]" %}
 
-  # or
-
-  reader = driver.topic_client.reader(
-      topic,
-      consumer,
-      auto_partitioning_support=False, # Compatibility mode is enabled
-  )
-  ```
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_reader_compat]-[END topic_autoscale_reader_compat]" %}
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
@@ -3914,70 +2047,23 @@
 
   Подтверждение обработки вне сессии чтения производится с помощью метода `NYdb::NTopic::TTopicClient::CommitOffset`:
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/topic/client.h>
-
-  NYdb::NTopic::TTopicClient topicClient(driver);
-
-  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
-      topicPath,
-      partitionId,
-      consumerName,
-      offset).GetValueSync());
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   Если в момент подтверждения существует активная сессия чтения (например через `CreateReadSession`), рекомендуется передать её идентификатор с помощью опции `ReadSessionId` в `NYdb::NTopic::TCommitOffsetSettings`. Это позволяет серверу не прерывать текущую сессию чтения:
 
-  ```cpp
-  // Получение идентификатора сессии чтения
-  std::string sessionId = readSession->GetSessionId();
+  В этой версии SDK `IReadSession::GetSessionId()` идентифицирует локальный объект SDK. Идентификатор активной серверной сессии берётся из статистики партиции, возвращаемой `DescribeConsumer`.
 
-  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
-      topicPath,
-      partitionId,
-      consumerName,
-      offset,
-      NYdb::NTopic::TCommitOffsetSettings()
-          .ReadSessionId(sessionId)
-  ).GetValueSync());
-  ```
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 
 - Go
 
   Подтверждение обработки вне читателя производится с помощью метода `db.Topic().CommitOffset`:
 
-  ```go
-  // Базовый способ — подтверждение оффсета без активной сессии чтения
-  err := db.Topic().CommitOffset(
-    ctx,
-    topicPath,
-    partitionID,
-    consumer,
-    offset,
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   Если в момент подтверждения существует активная сессия чтения (через `StartReader` или `StartListener`), рекомендуется передать её идентификатор с помощью опции `WithCommitOffsetReadSessionID`. Это позволяет серверу не прерывать текущую сессию чтения:
 
-  ```go
-  import (
-    // ...
-    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
-  )
-
-  // Получение идентификатора сессии чтения
-  sessionID := reader.ReadSessionID()
-  // или: sessionID := listener.ReadSessionID()
-
-  err = db.Topic().CommitOffset(
-    ctx,
-    topicPath,
-    partitionID,
-    consumer,
-    offset,
-    topicoptions.WithCommitOffsetReadSessionID(sessionID),
-  )
-  ```
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 
 - Python
 
@@ -3987,27 +2073,11 @@
 
   - Native SDK
 
-    ```python
-    driver.topic_client.commit_offset(
-        topic_path,
-        consumer_name,
-        partition_id,
-        offset,
-        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   - Native SDK (Asyncio)
 
-    ```python
-    await driver.topic_client.commit_offset(
-        topic_path,
-        consumer_name,
-        partition_id,
-        offset,
-        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
-    )
-    ```
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   {% endlist %}
 
@@ -4017,22 +2087,7 @@
 
 - Java
 
-  ```java
-  TopicClient client = ...;
-
-  String sessionID = reader.getSessionId();
-  // У AsyncReader идентификатор сессии можно получить при обработке события SessionStartedEvent
-
-  client.commitOffset(
-      topicPath,
-      CommitOffsetSettings.newBuilder()
-          .setReadSessionId(sessionID)
-          .setPartitionId(partitionID)
-          .setConsumer(consumer)
-          .setOffset(offset)
-          .build()
-  ).join().expectSuccess("Error commit!");
-  ```
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
 - C#
 

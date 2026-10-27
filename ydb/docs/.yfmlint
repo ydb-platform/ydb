@@ -66,6 +66,10 @@ log-levels:
 MD024:
   siblings_only: true
 
+# Executable SDK sources keep the indentation required by their language formatter.
+MD010:
+  code_blocks: false
+
 MD044:
   code_blocks: false
   names:

@@ -249,46 +249,6 @@
             },
             "formula": "build/yandex_specific/autocheck/contexts_difference/resources.json"
         },
-        "gdb": {
-            "executable": {
-                "gcore": [
-                    "gdb",
-                    "bin",
-                    "gcore"
-                ],
-                "gdb": [
-                    "gdb",
-                    "bin",
-                    "gdb"
-                ],
-                "gdbserver": [
-                    "gdb",
-                    "bin",
-                    "gdbserver"
-                ]
-            },
-            "formula": "build/external_resources/gdb/resources.json"
-        },
-        "gdbnew": {
-            "executable": {
-                "gcore": [
-                    "gdb",
-                    "bin",
-                    "gcore"
-                ],
-                "gdb": [
-                    "gdb",
-                    "bin",
-                    "gdb"
-                ],
-                "gdbserver": [
-                    "gdb",
-                    "bin",
-                    "gdbserver"
-                ]
-            },
-            "formula": "build/external_resources/gdb/resources.json"
-        },
         "golang": {
             "executable": {
                 "go": [
@@ -1154,27 +1114,6 @@
                 {
                     "default": false,
                     "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
                     },
@@ -1940,27 +1879,6 @@
                     },
                     "target": {
                         "arch": "armv8a_cortex_a53",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
                         "os": "LINUX"
                     }
                 },
@@ -2738,27 +2656,6 @@
                 {
                     "default": false,
                     "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv9a_grace",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
                     },
@@ -3185,98 +3082,10 @@
                 }
             }
         },
-        "gdb": {
-            "env": {
-                "TERMINFO": [
-                    "$(ROOT)/gdb/lib/terminfo"
-                ]
-            },
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                }
-            ],
-            "tools": {
-                "gdb": {
-                    "bottle": "gdb",
-                    "executable": "gdb"
-                }
-            }
-        },
-        "gdbnew": {
-            "env": {
-                "TERMINFO": [
-                    "$(ROOT)/gdb/lib/terminfo"
-                ]
-            },
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                }
-            ],
-            "tools": {
-                "gdbnew": {
-                    "bottle": "gdbnew",
-                    "executable": "gdb"
-                }
-            }
-        },
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.27.0"
+                "version": "1.27.1"
             },
             "platforms": [
                 {
@@ -3753,12 +3562,6 @@
         },
         "gcov": {
             "description": "Run gcov"
-        },
-        "gdb": {
-            "description": "Run gdb"
-        },
-        "gdbnew": {
-            "description": "Run gdb for Ubuntu 16.04 or later"
         },
         "go": {
             "description": "Run go tool"

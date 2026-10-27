@@ -158,7 +158,7 @@ void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerNodelistJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/nodelist", new TJsonHandler<TJsonNodeList>(TJsonNodeList::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/nodelist", new TJsonHandler<TJsonNodeList>(TJsonNodeList::GetSwagger()), 2);
 }
 
 void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers);

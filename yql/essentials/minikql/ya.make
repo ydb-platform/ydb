@@ -98,6 +98,7 @@ END()
 
 RECURSE(
     aligned_page_pool
+    async
     arrow
     codegen
     comp_nodes

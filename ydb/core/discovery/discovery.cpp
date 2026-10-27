@@ -215,6 +215,14 @@ namespace NDiscovery {
                 // single-pile cluster (converted from non-bridged one) may contain nodes without pile name
                 entry.SetBridgePileName(bridgeInfo->GetPile(implicitPileId)->Name);
             }
+            if (bridgeInfo) {
+                const auto *pile = bridgeInfo->ResolvePile(entry.GetBridgePileName());
+                if (pile && !NBridge::PileStateTraits(pile->State).RequiresConfigQuorum) {
+                    // Match TGRpcServersManager: these piles don't accept client requests, even if their board
+                    // publishers remain connected (as in HOT_STANDBY).
+                    continue;
+                }
+            }
             if (entry.GetSsl()) {
                 AddEndpoint(cachedMessageSsl, statesSsl, entry);
             } else {
@@ -475,6 +483,10 @@ namespace NDiscoveryPrivate {
                 }
             }
 
+            if ((*cachedData)->BridgeInfo != BridgeInfo) {
+                // A pile can stop serving requests without changing its endpoint-board entries.
+                (*cachedData)->UpdateCache(NameserviceResponse, BridgeInfo, EndpointId.GetOrElse({}));
+            }
             Send(ev->Sender, (*cachedData)->ToEvent(msg->ReturnSerializedMessage), 0, ev->Cookie);
         }
 

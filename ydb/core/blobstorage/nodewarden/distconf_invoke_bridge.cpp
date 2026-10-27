@@ -79,6 +79,7 @@ namespace NKikimr::NStorage {
                             throw TExError() << "Can't switch to NOT_SYNCHRONIZED_2 directly";
 
                         case NKikimrBridge::TClusterState::SUSPENDED:
+                        case NKikimrBridge::TClusterState::HOT_STANDBY:
                             // explicit SUSPENDED request is allowed
                             break;
 
@@ -135,7 +136,8 @@ namespace NKikimr::NStorage {
             switch (clusterState->GetPerPileState(changedPileIndex)) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                 case NKikimrBridge::TClusterState::SUSPENDED:
-                    // This pile no longer participates in replication.
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    // Writes to this pile are no longer required to succeed.
                     markPileUnsynced(changedPileIndex);
                     resetPileIndices.push_back(changedPileIndex);
                     sourceLost |= prevState == NKikimrBridge::TClusterState::SYNCHRONIZED;
@@ -184,7 +186,27 @@ namespace NKikimr::NStorage {
             ResetStaticGroupPileParts(&config, pileIds, clusterState->GetGeneration());
         }
 
-        StartProposition(&config, /*mindPrev=*/ false);
+        if (std::ranges::find(clusterState->GetPerPileState(), NKikimrBridge::TClusterState::HOT_STANDBY) !=
+                clusterState->GetPerPileState().end() &&
+                GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelHotStandby) {
+            // Older nodes don't understand the new state. Check connected participants before enabling it, and retain
+            // the requirement afterwards so that nodes returning later can't serve this cluster with old semantics.
+            *details->MutablePileRegistry() = Self->GetConfigPileRegistry(config);
+            details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelHotStandby);
+            THashSet<ui32> requiredNodeIds;
+            THashSet<ui32> ignoredNodeIds;
+            for (const auto& pile : Self->BridgeInfo->Piles) {
+                auto& nodes = NBridge::PileStateTraits(NBridge::GetPileState(*clusterState, pile.BridgePileId))
+                    .AllowsConnection ? requiredNodeIds : ignoredNodeIds;
+                nodes.insert(pile.StaticNodeIds.begin(), pile.StaticNodeIds.end());
+            }
+            RequireBridgeCapability(BridgeFeatureLevelHotStandby, std::move(requiredNodeIds), std::move(ignoredNodeIds),
+                [this, config = std::move(config)]() mutable {
+                    StartProposition(&config, /*mindPrev=*/ false);
+                });
+        } else {
+            StartProposition(&config, /*mindPrev=*/ false);
+        }
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {

@@ -40,6 +40,7 @@ namespace NKikimr::NStorage {
             "distconf-pile-ops", // BridgeFeatureLevelPileOps
             "distconf-non-uniform-storage", // BridgeFeatureLevelNonUniformStorage
             "distconf-pile-overrides", // BridgeFeatureLevelPileOverrides
+            "distconf-hot-standby", // BridgeFeatureLevelHotStandby
         };
         static_assert(DistconfKeys.size() == BridgeFeatureLevel + 1);
 

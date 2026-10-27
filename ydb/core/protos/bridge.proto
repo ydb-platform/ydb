@@ -13,6 +13,7 @@ message TClusterState {
         // listed in BridgeConfig, but has no resources in the cluster (not added yet, or already removed); takes no part in
         // any quorum, connections not allowed
         INACTIVE = 5;
+        HOT_STANDBY = 6; // connected, receives best-effort writes, takes no part in quorums; rejoin before promotion
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)

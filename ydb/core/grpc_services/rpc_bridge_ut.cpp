@@ -76,12 +76,12 @@ struct TSetup {
         Runtime.RegisterService(MakeGRpcServersManagerId(Runtime.GetNodeId(0)), manager);
     }
 
-    auto Start(bool badQuorum = false) {
+    auto Start(bool badQuorum = false, Ydb::Bridge::PileState::State pileState = Ydb::Bridge::PileState::DISCONNECTED) {
         Ydb::Bridge::UpdateClusterStateRequest request;
         NRpcService::SetRequestSyncOperationMode(request);
         auto *update = request.add_updates();
         update->set_pile_name("secondary");
-        update->set_state(Ydb::Bridge::PileState::DISCONNECTED);
+        update->set_state(pileState);
         if (badQuorum) {
             request.add_quorum_piles("unknown");
         }
@@ -187,6 +187,29 @@ void TestCompletion(ECompletion completion) {
 }
 
 Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
+    Y_UNIT_TEST(HotStandbyStateRoundTrip) {
+        TSetup setup;
+        auto [rpc, future] = setup.Start(false, Ydb::Bridge::PileState::HOT_STANDBY);
+        const auto invoke = setup.Runtime.GrabEdgeEventIf<NStorage::TEvNodeConfigInvokeOnRoot>(setup.NodeWarden,
+            [&](const auto& ev) { return ev->Sender == rpc; }, TDuration::Seconds(5));
+        UNIT_ASSERT(invoke);
+        const auto& state = invoke->Get()->Record.GetSwitchBridgeClusterState().GetNewClusterState();
+        UNIT_ASSERT_EQUAL(state.GetPerPileState(1), NKikimrBridge::TClusterState::HOT_STANDBY);
+        TBridgeInfo bridge;
+        bridge.Piles.resize(2);
+        bridge.Piles[0].Name = "primary";
+        bridge.Piles[1].Name = "secondary";
+        Ydb::Bridge::GetClusterStateResult publicState;
+        CopyFromInternalClusterState(state, bridge, publicState);
+        UNIT_ASSERT_VALUES_EQUAL(publicState.pile_states(1).pile_name(), "secondary");
+        UNIT_ASSERT_EQUAL(publicState.pile_states(1).state(), Ydb::Bridge::PileState::HOT_STANDBY);
+        auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        setup.Runtime.Send(new IEventHandle(rpc, setup.NodeWarden, response.release()), 0, true);
+        UNIT_ASSERT_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Started, 0);
+    }
+
     Y_UNIT_TEST(InvalidQuorumDoesNotDelayServerStop) {
         TSetup setup;
         auto [rpc, future] = setup.Start(true);

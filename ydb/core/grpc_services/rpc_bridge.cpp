@@ -42,6 +42,8 @@ namespace {
             switch (from.GetPerPileState(pileId.GetPileIndex())) {
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     return Ydb::Bridge::PileState::SUSPENDED;
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    return Ydb::Bridge::PileState::HOT_STANDBY;
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                     return Ydb::Bridge::PileState::DISCONNECTED;
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
@@ -289,6 +291,9 @@ private:
                     break;
                 case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::SUSPENDED;
+                    break;
+                case Ydb::Bridge::PileState::HOT_STANDBY:
+                    internalState = NKikimrBridge::TClusterState::HOT_STANDBY;
                     break;
                 case Ydb::Bridge::PileState::INACTIVE:
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, "Pile can't be switched to INACTIVE state, it has to be"

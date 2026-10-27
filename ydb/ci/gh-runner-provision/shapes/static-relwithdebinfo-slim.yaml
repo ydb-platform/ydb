@@ -1,0 +1,5 @@
+platform: standard-v4a
+cores: 32
+memory_gb: 128
+disk_gb: 2418
+preset: relwithdebinfo

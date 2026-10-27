@@ -1,0 +1,9 @@
+# Manual create only. Not in fleet/: poll and reconcile ignore this directory.
+shape: ../shapes/static-relwithdebinfo-fat.yaml
+name: static-relwithdebinfo-fat-a
+count: 1
+zone: ru-central1-a
+subnet_id: e9b1l2j8tlnpph34qcn8
+labels:
+  - auto-provisioned
+  - build-preset-relwithdebinfo-fat

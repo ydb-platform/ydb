@@ -269,7 +269,7 @@ struct TEnvironmentSetup {
     }
 
     std::unique_ptr<TTestActorSystem> MakeRuntime() {
-        TFeatureFlags featureFlags;
+        TFeatureFlags featureFlags = Settings.FeatureFlags;
         featureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
 
         auto domainsInfo = MakeIntrusive<TDomainsInfo>();

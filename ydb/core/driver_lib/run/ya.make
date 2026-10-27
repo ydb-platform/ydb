@@ -25,6 +25,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/datashard/hnsw
     contrib/libs/protobuf
     library/cpp/containers/absl
     library/cpp/getopt/small

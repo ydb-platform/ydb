@@ -302,8 +302,7 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 void TDataShard::Die(const TActorContext& ctx) {
     InvalidateHnswIndexes();
     if (HnswCacheMemoryTracker) {
-        Send(NMemory::MakeMemoryControllerId(),
-            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+        Send(MakeHnswCacheId(), new TEvHnswCache::TEvUnregister());
     }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
@@ -4668,7 +4667,7 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+    if (ev->Get()->SourceType == TEvHnswCache::TEvRegister::EventType) {
         // Some embedded runtimes, including tests, have no controller.
         // Distinguish that disabled cache from a pending first limit grant.
         if (HnswCacheMemoryTracker) {

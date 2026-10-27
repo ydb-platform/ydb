@@ -451,6 +451,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    ydb/core/tx/datashard/hnsw
     contrib/libs/zstd
     library/cpp/containers/absl
     library/cpp/containers/stack_vector

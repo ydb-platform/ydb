@@ -3,13 +3,14 @@
 #include <ydb/core/base/memory_controller_iface.h>
 #include <util/generic/algorithm.h>
 
+#include <memory>
 #include <mutex>
 #include <utility>
 
 namespace NKikimr::NDataShard {
 
-    // Per-tablet reservations for graphs, scan buffers and MVCC journals. The
-    // existing memory controller supplies the grant; graphs are not shared here.
+    // Node-wide reservations for immutable graphs, scan buffers and private
+    // MVCC journals, managed by the HNSW cache service.
     class THnswCacheMemoryTracker {
     public:
         void SetConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
@@ -37,6 +38,17 @@ namespace NKikimr::NDataShard {
         ui64 GetUsed() const noexcept {
             std::lock_guard guard(Mutex);
             return Used;
+        }
+
+        bool HasPendingPressure() const noexcept {
+            std::lock_guard guard(Mutex);
+            return Max(Used, PendingDemand) > Limit;
+        }
+
+        void SetReclaimable(ui64 bytes) {
+            std::lock_guard guard(Mutex);
+            Reclaimable = bytes;
+            Report();
         }
 
         bool TryAcquire(ui64 bytes) noexcept {
@@ -74,7 +86,8 @@ namespace NKikimr::NDataShard {
             if (Consumer) {
                 // Serialize reports with reservations: a release on a build/reader
                 // thread must not overwrite a newer report with stale usage.
-                Consumer->SetReport({.Used = Used, .Demand = Max(Used, PendingDemand)});
+                Consumer->SetReport({.Used = Used, .Demand = Max(Used, PendingDemand),
+                    .Reclaimable = Min(Used, Reclaimable)});
             }
         }
 
@@ -82,10 +95,27 @@ namespace NKikimr::NDataShard {
         ui64 Limit = 0;
         bool LimitKnown = false;
         ui64 Used = 0;
+        ui64 Reclaimable = 0;
         // Preserve the whole request when an unsuccessful build releases its
         // partial reservations. Cleared on completion, invalidation, or eviction.
         ui64 PendingDemand = 0;
         TIntrusivePtr<NMemory::IMemoryConsumer> Consumer;
     };
+
+    inline std::shared_ptr<void> TryReserveHnswMemory(
+            const std::shared_ptr<THnswCacheMemoryTracker>& tracker, ui64 bytes) {
+        struct TReservation {
+            std::shared_ptr<THnswCacheMemoryTracker> Tracker;
+            ui64 Bytes = 0;
+            ~TReservation() { Tracker->Release(Bytes); }
+        };
+        auto reservation = std::make_shared<TReservation>();
+        reservation->Tracker = tracker;
+        if (!tracker->TryAcquire(bytes)) {
+            return {};
+        }
+        reservation->Bytes = bytes;
+        return reservation;
+    }
 
 } // namespace NKikimr::NDataShard

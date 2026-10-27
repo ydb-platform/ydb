@@ -29,6 +29,7 @@
 #include "params.h"
 
 #include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -470,6 +471,10 @@ namespace similarity {
 
         void SetQueryTimeParams(const AnyParams &) override;
 
+        // Portable links over caller-owned data, restored without construction.
+        void SaveTopology(std::ostream& output) const;
+        void LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes);
+
     private:
         typedef std::vector<HnswNode *> ElementList;
         void baseSearchAlgorithmOld(KNNQuery<dist_t> *query, size_t ef);
@@ -499,6 +504,7 @@ namespace similarity {
         }
 
 
+        void OptimizeIndex();
         void SaveOptimizedIndex(std::ostream& output);
         void LoadOptimizedIndex(std::istream& input);
 

@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/datashard/hnsw
     library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base

@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/datashard/hnsw
     ydb/core/base
     ydb/core/tx/datashard/hnsw_index
     ydb/public/api/protos

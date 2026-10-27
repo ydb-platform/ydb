@@ -24,6 +24,7 @@
 #include "hnsw_index.h"
 #include "hnsw_index_build_actor.h"
 #include "hnsw_memory_tracker.h"
+#include "hnsw/cache.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -1951,10 +1952,7 @@ public:
     ui64 GetHnswCacheMemoryLimit() {
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
-            // Graphs, build buffers and MVCC journals share the node-wide
-            // SharedCache quota with the shared table-page cache.
-            Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvRegister(),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();
@@ -1965,37 +1963,23 @@ public:
     }
 
     std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
-        struct TReservation {
-            std::shared_ptr<THnswCacheMemoryTracker> Tracker;
-            ui64 Size = 0;
-
-            ~TReservation() {
-                if (Size) {
-                    Tracker->Release(Size);
-                }
-            }
-        };
-
         GetHnswCacheMemoryLimit();
-        auto reservation = std::make_shared<TReservation>();
-        reservation->Tracker = HnswCacheMemoryTracker;
-        if (!reservation->Tracker->TryAcquire(bytes)) {
-            return nullptr;
-        }
-        reservation->Size = bytes;
-        return reservation;
+        return TryReserveHnswMemory(HnswCacheMemoryTracker, bytes);
     }
 
-    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
-        Y_ENSURE(HnswCacheMemoryTracker);
-        HnswCacheMemoryTracker->SetConsumer(std::move(ev->Get()->Consumer));
+    void PublishHnswGraph(ui32 localTid);
+    void Handle(TEvHnswCache::TEvRegistered::TPtr& ev, const TActorContext&) {
+        // No reservation can succeed on the unknown-limit placeholder tracker.
+        Y_ENSURE(!HnswCacheMemoryTracker || !HnswCacheMemoryTracker->GetUsed());
+        HnswCacheMemoryTracker = ev->Get()->Tracker;
     }
 
-    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+    void Handle(NMemory::TEvConsumerLimit::TPtr&, const TActorContext&) {
         Y_ENSURE(HnswCacheMemoryTracker);
-        const ui64 limit = ev->Get()->LimitBytes;
-        const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
-        HnswCacheMemoryTracker->SetLimit(limit);
+        // The service installs grants before notifying clients. A delayed tablet
+        // notification must never overwrite a newer node-wide grant.
+        const ui64 limit = HnswCacheMemoryTracker->GetLimit();
+        const ui64 previousLimit = std::exchange(HnswLastMemoryLimit, limit);
         if (limit > previousLimit) {
             for (auto& [localTid, entry] : HnswIndexCache) {
                 if (entry.NextScanAttemptAt != TInstant::Max()) {
@@ -3162,6 +3146,7 @@ private:
     // Committed leader writes maintain versioned per-key deltas. Followers
     // retain the scan path until graph replication and readiness are implemented.
     struct THnswIndexCacheEntry {
+        TString GraphKey;
         static constexpr ui64 PendingTransactionBytes = 256;
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
@@ -3190,6 +3175,8 @@ private:
     ui64 NextHnswBuildToken = 0;
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
+    ui64 HnswLastMemoryLimit = 0;
+    ui64 NextHnswGraphId = 0;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -3666,7 +3653,7 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
-            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
@@ -3743,7 +3730,7 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
-            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
@@ -3861,7 +3848,7 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
-            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
         default:

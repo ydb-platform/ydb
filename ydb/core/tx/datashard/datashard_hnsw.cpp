@@ -401,6 +401,10 @@ namespace NKikimr::NDataShard {
         entry.Changes->Valid = false;
         entry.Changes = std::make_shared<THnswIndexChanges>();
         entry.Changes->Valid = false;
+        if (!entry.GraphKey.empty()) {
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvForget(std::move(entry.GraphKey)));
+            entry.GraphKey.clear();
+        }
         entry.Index.reset();
         entry.Retained.clear();
         entry.Generations.clear();
@@ -448,12 +452,7 @@ namespace NKikimr::NDataShard {
         }
         index->SetSnapshot(baseVersion, entry.Changes);
         Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
-        struct TOwnedIndex {
-            std::shared_ptr<void> Reservation;
-            std::shared_ptr<THnswIndex> Index;
-        };
-        auto owned = std::make_shared<TOwnedIndex>(TOwnedIndex{std::move(memoryReservation), std::move(index)});
-        index = std::shared_ptr<THnswIndex>(owned, owned->Index.get());
+        index->SetGraphReservation(std::move(memoryReservation));
         entry.Generations.push_back(index);
         if (entry.Index && entry.Index->GetBaseVersion() > baseVersion) {
             entry.Retained.push_back(std::move(index));
@@ -474,8 +473,21 @@ namespace NKikimr::NDataShard {
         entry.BuildObsolete = false;
         entry.NextScanAttemptAt = TInstant::Zero();
         HnswCacheMemoryTracker->ResetDemand();
+        PublishHnswGraph(localTid);
         PruneHnswIndexes();
         ScheduleHnswRebuild(localTid);
+    }
+
+    void TDataShard::PublishHnswGraph(ui32 localTid) {
+        auto& entry = HnswIndexCache.at(localTid);
+        // SelfId distinguishes tablet incarnations; the counter distinguishes
+        // replacement generations, including equal-base rebuilds.
+        entry.GraphKey = TStringBuilder() << SelfId() << ':' << localTid << ':' << ++NextHnswGraphId;
+        auto event = MakeHolder<TEvHnswCache::TEvPublish>();
+        event->Key = entry.GraphKey;
+        event->Graph = entry.Index->CreateView(entry.Index->GetBaseVersion(), std::make_shared<THnswIndexChanges>());
+        event->Settings = entry.Settings;
+        Send(MakeHnswCacheId(), event.Release());
     }
 
     void TDataShard::PruneHnswIndexes() {

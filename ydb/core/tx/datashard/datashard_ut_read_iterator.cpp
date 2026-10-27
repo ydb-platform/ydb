@@ -6573,14 +6573,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         const auto localTid = shard->GetUserTables().begin()->second->LocalTid;
         TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
         ui32 registrations = 0;
+        TActorId cacheActor;
         std::optional<ui64> limitOverride;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType
+                    && ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache) {
                 UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
+                cacheActor = ev->Sender;
                 ++registrations;
-            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == cacheActor) {
                 consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
-            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == shardActor && limitOverride) {
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == cacheActor && limitOverride) {
                 ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limitOverride;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -6633,9 +6636,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         )");
         const ui64 pinnedBytes = consumer->GetReport().Used;
         limitOverride = 0;
-        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
+        runtime.Send(new IEventHandle(cacheActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
         runtime.WaitFor("HNSW cache eviction", [&] { return !cached(); });
-        UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Used, pinnedBytes);
+        UNIT_ASSERT_GT(consumer->GetReport().Used, 0);
+        UNIT_ASSERT_LE(consumer->GetReport().Used, pinnedBytes);
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 3);
         pinned.reset();
         runtime.WaitFor("released HNSW reservations", [&] { return consumer->GetReport().Used == 0; });
@@ -7127,6 +7131,185 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT(fixture.Index());
             UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
         }
+    }
+
+    struct THnswLocalCacheFixture : THnswLifecycleFixture {
+        TActorId Client;
+        TActorId Cache = MakeHnswCacheId();
+        std::shared_ptr<THnswCacheMemoryTracker> Tracker;
+
+        THnswLocalCacheFixture()
+            : THnswLifecycleFixture(false, false)
+        {
+            auto& runtime = *Helper.Server->GetRuntime();
+            Client = runtime.AllocateEdgeActor();
+        }
+
+        std::shared_ptr<THnswCacheMemoryTracker> RegisterClient(TActorId client) {
+            auto& runtime = *Helper.Server->GetRuntime();
+            runtime.Send(new IEventHandle(Cache, client, new TEvHnswCache::TEvRegister()));
+            auto event = runtime.GrabEdgeEvent<TEvHnswCache::TEvRegistered>(client);
+            auto tracker = event->Get()->Tracker;
+            runtime.WaitFor("HNSW node cache memory grant", [&] { return tracker->HasLimit(); });
+            return tracker;
+        }
+
+        std::shared_ptr<THnswIndex> Build() {
+            TString error;
+            auto graph = THnswIndex::Build(Settings(), {
+                {"a", TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)},
+                {"b", TString("\x00\x00\x00\x00\x00\x00\x80\x3F\x01", 9)}}, 1_MB, error);
+            UNIT_ASSERT_C(graph, error);
+            auto reservation = TryReserveHnswMemory(Tracker, graph->EstimatedMemoryBytes());
+            UNIT_ASSERT(reservation);
+            graph->SetGraphReservation(std::move(reservation));
+            return graph;
+        }
+
+        void Publish(TString key, std::shared_ptr<THnswIndex> graph) {
+            auto event = MakeHolder<TEvHnswCache::TEvPublish>();
+            event->Key = std::move(key);
+            event->Graph = std::move(graph);
+            event->Settings = Settings();
+            Helper.Server->GetRuntime()->Send(new IEventHandle(Cache, Client, event.Release()));
+        }
+
+        auto Acquire(TString key, TActorId client, bool journal = false, bool incompatible = false) {
+            auto request = MakeHolder<TEvHnswCache::TEvAcquire>();
+            request->Key = std::move(key);
+            request->RequestId = 123;
+            request->Journal = journal;
+            request->Settings = Settings();
+            if (incompatible) {
+                request->Settings.set_m(24);
+            }
+            auto& runtime = *Helper.Server->GetRuntime();
+            runtime.Send(new IEventHandle(Cache, client, request.Release()));
+            return runtime.GrabEdgeEvent<TEvHnswCache::TEvAcquired>(client);
+        }
+    };
+
+    Y_UNIT_TEST(HnswLocalCacheSharesOneReservationAcrossClientsAndViews) {
+        THnswLocalCacheFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        const auto other = runtime.AllocateEdgeActor();
+        UNIT_ASSERT(fixture.RegisterClient(other) == fixture.Tracker);
+        auto original = fixture.Build();
+        const auto graphBytes = original->EstimatedMemoryBytes();
+        fixture.Publish("incarnation:1:graph:1", original);
+        std::shared_ptr<THnswIndex> borrowed;
+        {
+            auto response = fixture.Acquire("incarnation:1:graph:1", other);
+            UNIT_ASSERT_C(response->Get()->Error.empty(), response->Get()->Error);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->RequestId, 123u);
+            borrowed = response->Get()->Graph;
+        }
+        const auto charged = fixture.Tracker->GetUsed();
+        UNIT_ASSERT_GE(charged, graphBytes);
+        auto first = borrowed->CreateView({10, 0}, std::make_shared<THnswIndexChanges>());
+        auto second = borrowed->CreateView({20, 0}, std::make_shared<THnswIndexChanges>());
+        UNIT_ASSERT(first->SharesGraphWith(*second));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetUsed(), charged);
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, new TEvHnswCache::TEvUnregister()));
+        UNIT_ASSERT(!fixture.Acquire("incarnation:1:graph:1", other)->Get()->Error.empty());
+        original.reset();
+        borrowed.reset();
+        first.reset();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetUsed(), graphBytes);
+        second.reset();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetUsed(), 0u);
+    }
+
+    Y_UNIT_TEST(HnswLocalCacheRejectsGenerationReuseAndSettingsMismatch) {
+        THnswLocalCacheFixture fixture;
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        auto original = fixture.Build();
+        fixture.Publish("incarnation:1:graph:1", original);
+        auto replacement = fixture.Build();
+        fixture.Publish("incarnation:1:graph:1", replacement);
+        auto result = fixture.Acquire("incarnation:1:graph:1", fixture.Client);
+        UNIT_ASSERT(result->Get()->Error.empty());
+        UNIT_ASSERT(result->Get()->Graph->SharesGraphWith(*original));
+        UNIT_ASSERT(!result->Get()->Graph->SharesGraphWith(*replacement));
+        UNIT_ASSERT(!fixture.Acquire("incarnation:1:graph:1", fixture.Client, false, true)->Get()->Error.empty());
+        UNIT_ASSERT(!fixture.Acquire("incarnation:1:graph:1", fixture.Client, true)->Get()->Error.empty());
+        UNIT_ASSERT(!fixture.Acquire("incarnation:2:graph:1", fixture.Client)->Get()->Error.empty());
+    }
+
+    Y_UNIT_TEST(HnswLocalCacheEvictsWithoutReleasingPinnedStorage) {
+        THnswLocalCacheFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        auto graph = fixture.Build();
+        const auto graphBytes = graph->EstimatedMemoryBytes();
+        fixture.Publish("generation", graph);
+        auto pinned = fixture.Acquire("generation", fixture.Client)->Get()->Graph->CreateView(
+            {10, 0}, std::make_shared<THnswIndexChanges>());
+        graph.reset();
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, new NMemory::TEvConsumerLimit(0)));
+        // The owner's still-live generation remains discoverable until it
+        // handles the pressure notification and invalidates its publication.
+        UNIT_ASSERT(fixture.Acquire("generation", fixture.Client)->Get()->Error.empty());
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, new TEvHnswCache::TEvForget("generation")));
+        UNIT_ASSERT(!fixture.Acquire("generation", fixture.Client)->Get()->Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetUsed(), graphBytes);
+        UNIT_ASSERT(!TryReserveHnswMemory(fixture.Tracker, 1));
+        pinned.reset();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetUsed(), 0u);
+    }
+
+    Y_UNIT_TEST(HnswLocalCacheRejectsUnchargedPublication) {
+        THnswLocalCacheFixture fixture;
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        TString error;
+        auto uncharged = THnswIndex::Build(fixture.Settings(), {}, 1_MB, error, true);
+        UNIT_ASSERT_C(uncharged, error);
+        fixture.Publish("uncharged", std::move(uncharged));
+        UNIT_ASSERT(!fixture.Acquire("uncharged", fixture.Client)->Get()->Error.empty());
+        auto graph = fixture.Build();
+        fixture.Tracker->SetLimit(fixture.Tracker->GetUsed());
+        fixture.Publish("no-metadata-budget", std::move(graph));
+        UNIT_ASSERT(!fixture.Acquire("no-metadata-budget", fixture.Client)->Get()->Error.empty());
+    }
+
+    Y_UNIT_TEST(HnswLocalCachePreservesJournalAndChecksObjectType) {
+        THnswLocalCacheFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        auto journal = std::make_shared<THnswJournalSnapshot>();
+        journal->Changes.push_back({"key", {10, 1}, std::nullopt});
+        journal->Reservation = TryReserveHnswMemory(fixture.Tracker, 4096);
+        auto event = MakeHolder<TEvHnswCache::TEvPublish>();
+        event->Key = "journal";
+        event->Journal = journal;
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, event.Release()));
+        auto result = fixture.Acquire("journal", fixture.Client, true);
+        UNIT_ASSERT_C(result->Get()->Error.empty(), result->Get()->Error);
+        UNIT_ASSERT(result->Get()->Journal == journal);
+        UNIT_ASSERT(!result->Get()->Graph);
+        UNIT_ASSERT(!fixture.Acquire("journal", fixture.Client)->Get()->Error.empty());
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, new TEvHnswCache::TEvForget("journal")));
+        UNIT_ASSERT(!fixture.Acquire("journal", fixture.Client, true)->Get()->Error.empty());
+    }
+
+    Y_UNIT_TEST(HnswLocalCacheDisabledDoesNotRegisterMemoryConsumer) {
+        THnswLocalCacheFixture fixture;
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableHnswIndex(false);
+        }
+        ui32 registrations = 0;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            registrations += ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType;
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Tracker->GetLimit(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 0u);
+        auto result = fixture.Acquire("generation", fixture.Client);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "EnableHnswIndex");
     }
 
     Y_UNIT_TEST(HnswExplicitMetadataDisableSurvivesRestart) {

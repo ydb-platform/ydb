@@ -198,7 +198,7 @@ do { \
 /**/
 #else
 #define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
-    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "",
+    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "",   \
         {"stream", stream})
 #endif
 

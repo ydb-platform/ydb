@@ -36,9 +36,9 @@ private:
 #define LOG_SQS_BASE(actorCtxOrSystem, priority, stream) \
     LOG_LOG_S(actorCtxOrSystem, priority, NKikimrServices::SQS, stream)
 
-#define RLOG_SQS_REQ_BASE(actorCtxOrSystem, priority, requestId, stream) \
-    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, NKikimrServices::SQS, NKikimr::NSQS::RequestIdSample(requestId), "Request",
-        {"requestId", requestId},
+#define RLOG_SQS_REQ_BASE(actorCtxOrSystem, priority, requestId, stream)                                                                \
+    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, NKikimrServices::SQS, NKikimr::NSQS::RequestIdSample(requestId), "Request", \
+        {"requestId", requestId},                                                                                                       \
         {"stream", stream})
 
 #define RLOG_SQS_BASE(actorCtxOrSystem, priority, stream) \

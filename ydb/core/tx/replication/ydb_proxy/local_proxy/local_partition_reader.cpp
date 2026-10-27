@@ -258,7 +258,7 @@ private:
         return proto;
     }
 
-    void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) try {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -304,7 +304,7 @@ private:
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
-            auto proto = GetDeserializedData(result.GetData());
+            auto proto = GetDeserializedData(result.GetData());   // may rethrow exception
 
             auto messageMeta = MakeIntrusive<NYdb::NTopic::TMessageMeta>();
             for (auto& v : *proto.MutableMessageMeta()) {
@@ -330,7 +330,7 @@ private:
             bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
             if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
                 const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-                data = codec->Decompress(proto.GetData());
+                data = codec->Decompress(proto.GetData());   // may throw exception
                 isCompressed = false;
             } else {
                 data = std::move(*proto.MutableData());
@@ -350,6 +350,8 @@ private:
         Send(request.Sender, new TEvYdbProxy::TEvReadTopicResponse(PartitionId, std::move(messages)), 0, request.Cookie);
 
         DoWork();
+    } catch(...) {
+        return OnError(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
     }
 
     STATEFN(StateWaitData) {

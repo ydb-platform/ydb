@@ -221,6 +221,7 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
+        PREBUILD: ${{ inputs.prebuild }}
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
@@ -453,24 +454,8 @@ runs:
         analytics track runner_info --kind info --runner
         analytics flush
 
-        if [ "${{ inputs.prebuild }}" = "true" ]; then
-          echo "Prebuild: ya make -A --build-only-test-deps (no test run), then tests use local cache"
-          analytics start ya_prebuild
-          set +e
-          ./ya make "${params[@]}" --build-only-test-deps \
-            ${GRAPH_PATH:+--build-custom-json=$GRAPH_PATH} \
-            ${CONTEXT_PATH:+--custom-context=$CONTEXT_PATH} \
-            $YA_MAKE_TARGET
-          PREBUILD_RC=$?
-          set -e
-          if [ $PREBUILD_RC -eq 0 ]; then
-            analytics end ya_prebuild
-          else
-            analytics end ya_prebuild --rc "$PREBUILD_RC" --error "ya prebuild rc=${PREBUILD_RC}"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            echo "Prebuild ya make failed with rc=$PREBUILD_RC" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
-            exit $PREBUILD_RC
-          fi
+        if [ "${PREBUILD}" = "true" ]; then
+          . .github/actions/test_ya/prebuild.sh
         fi
 
         if [ true = ${{ inputs.run_tests }} ]; then

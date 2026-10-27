@@ -6,6 +6,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/protos
+    ydb/core/control
     ydb/core/protos
 )
 

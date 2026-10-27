@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
@@ -385,7 +386,12 @@ protected:
             KqpCtx.GetOptimizerHints(),
             enableShuffleElimination,
             &KqpCtx.ShufflingOrderingsByJoinLabels,
-            &KqpCtx.CBOStats
+            &KqpCtx.CBOStats,
+            [trace = KqpCtx.GetCompileTrace()](const std::function<void()>& search) {
+                // Exponential in the number of joins at worst, so it is a phase.
+                TCompileTraceScope scope(trace, TCompileTraceLevels::Phase, "Search join order");
+                search();
+            }
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;

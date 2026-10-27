@@ -36,6 +36,15 @@ struct TCompileTraceLevels {
     };
 };
 
+// Attributes set on a span when it starts.
+using TCompileTraceAttributes = TVector<std::pair<TString, TString>>;
+
+// Which optimizer optimized the query, on its "Optimize query" phase. A compilation
+// that falls back from the new RBO has one phase of each.
+inline constexpr TStringBuf OptimizerAttribute = "ydb.kqp.optimizer";
+inline constexpr TStringBuf NewRboOptimizer = "new_rbo";
+inline constexpr TStringBuf OldRboOptimizer = "old_rbo";
+
 // Spans of a single query compilation, all in the flow of the compiler. Regions
 // may stay open across asynchronous waits; scope spans record synchronous work.
 // The innermost open region or scope parents new compiler work.
@@ -71,7 +80,8 @@ public:
     // stages placed around groups of transformers of a pipeline. Regions of one
     // group follow each other: opening a region ends the open regions of its
     // group, unless it is open itself (after a restart of the pipeline).
-    void BeginRegion(ui8 verbosity, const TString& name, const void* group);
+    void BeginRegion(ui8 verbosity, const TString& name, const void* group,
+        const TCompileTraceAttributes& attributes = {});
     // Ends the region of the group together with the regions opened inside it.
     void EndRegion(TStringBuf name, const void* group, bool success = true);
 

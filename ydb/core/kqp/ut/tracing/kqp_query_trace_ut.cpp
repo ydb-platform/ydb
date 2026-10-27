@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/tracing/test_util/kqp_trace_test_helpers.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
@@ -778,6 +779,14 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return WaitForExternalTrace(runtime, traceparent, {"Get query plan", "Compile query", "Build explain plan"});
     }
 
+    void AssertOptimizer(const TTraceSnapshot& snapshot, TStringBuf optimizer) {
+        const auto* optimize = FindSpan(snapshot, "Optimize query");
+        UNIT_ASSERT_C(optimize, snapshot.PrintTraces());
+        const auto* attribute = FindAttribute(*optimize, NKqp::OptimizerAttribute);
+        UNIT_ASSERT_C(attribute, optimize->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(attribute->value().string_value(), optimizer);
+    }
+
     Y_UNIT_TEST(NewRboCompilationTrace) {
         NKqp::TKikimrRunner kikimr(NewRboTracingSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -792,6 +801,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             AssertDescendant(snapshot, phase, "Compile query");
             AssertStatus(snapshot, phase, NTraceProto::Status::STATUS_CODE_OK);
         }
+        AssertOptimizer(snapshot, NKqp::NewRboOptimizer);
         // The passes of the restarting loops are steps of the loop spans.
         for (const TStringBuf pass : {"Annotate IO", "Annotate types", "Apply provider optimizations"}) {
             AssertDescendant(snapshot, pass, "Prepare logical query");
@@ -904,6 +914,78 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertFlowsNest(snapshot, "Get query plan");
     }
 
+    NKqp::TKikimrSettings OldRboTracingSettings() {
+        auto settings = ExternalTracingSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        return settings;
+    }
+
+    Y_UNIT_TEST(OldRboCompilationTrace) {
+        NKqp::TKikimrRunner kikimr(OldRboTracingSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        RegisterUploader(runtime);
+        auto client = kikimr.GetQueryClient();
+        CreateJoinTables(client);
+        const auto snapshot = ExplainJoinQuery(runtime, client, "00-99999999999999999999999999999999-9999999999999999-01");
+
+        // The old RBO has phases of its own, named as the new RBO's where the work is the same.
+        AssertOptimizer(snapshot, NKqp::OldRboOptimizer);
+        for (const TStringBuf phase : {"Prepare logical query", "Prepare physical query"}) {
+            AssertDescendant(snapshot, phase, "Compile query");
+        }
+        for (const TStringBuf pass : {"Annotate IO", "Annotate types", "Apply provider optimizations"}) {
+            AssertDescendant(snapshot, pass, "Prepare logical query");
+        }
+        for (const TStringBuf phase : {"Build KQL query", "Optimize query", "Convert to physical plan", "Compile physical query",
+                "Build explain plan"}) {
+            AssertDescendant(snapshot, phase, "Prepare physical query");
+            AssertStatus(snapshot, phase, NTraceProto::Status::STATUS_CODE_OK);
+        }
+        AssertDescendant(snapshot, "Search join order", "Optimize query");
+        for (const TStringBuf step : {"Build transactions", "Build physical query", "Peephole physical stages"}) {
+            AssertDescendant(snapshot, step, "Convert to physical plan");
+            AssertStatus(snapshot, step, NTraceProto::Status::STATUS_CODE_OK);
+        }
+        AssertDescendant(snapshot, "Compile OLAP program", "Compile physical query");
+        for (const TStringBuf name : {"Annotate KQL query", "Rewrite select", "Run new RBO"}) {
+            UNIT_ASSERT_C(!FindSpan(snapshot, name), name << ": " << snapshot.PrintTraces());
+        }
+        // Its pipeline restarts from the optimization when a later stage changes the query: the phases of each
+        // round follow each other.
+        for (const auto& span : snapshot.Spans) {
+            if (span.name() == "Optimize query" || span.name() == "Convert to physical plan") {
+                const auto* parent = FindParent(snapshot, span);
+                UNIT_ASSERT_C(parent && parent->name() == "Prepare physical query", snapshot.PrintTraces());
+            }
+        }
+        AssertFlowsNest(snapshot, "Get query plan");
+    }
+
+    Y_UNIT_TEST(OldRboDefaultLevelTrace) {
+        auto settings = OldRboTracingSettings();
+        settings.AppConfig.MutableTracingConfig()->MutableExternalThrottling(0)->SetLevel(
+            TComponentTracingLevels::ProductionVerbose);
+        NKqp::TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        RegisterUploader(runtime);
+        auto client = kikimr.GetQueryClient();
+        CreateJoinTables(client);
+        const auto snapshot = ExplainJoinQuery(runtime, client, "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01");
+
+        // At the production level the old RBO shows by its phases and the optimizer attribute; its steps are not recorded.
+        AssertOptimizer(snapshot, NKqp::OldRboOptimizer);
+        for (const TStringBuf phase : {"Optimize query", "Convert to physical plan", "Compile physical query", "Build explain plan"}) {
+            AssertDescendant(snapshot, phase, "Prepare physical query");
+        }
+        AssertDescendant(snapshot, "Search join order", "Optimize query");
+        for (const TStringBuf step : {"Annotate IO", "Build KQL query", "Build transactions", "Build physical query",
+                "Peephole physical stages"}) {
+            UNIT_ASSERT_C(!FindSpan(snapshot, step), step << ": " << snapshot.PrintTraces());
+        }
+        AssertFlowsNest(snapshot, "Get query plan");
+    }
+
     Y_UNIT_TEST(NewRboFailedConversionTrace) {
         NKqp::TKikimrRunner kikimr(NewRboTracingSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -958,6 +1040,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }), 2, snapshot.PrintTraces());
         UNIT_ASSERT_C(std::ranges::any_of(snapshot.Spans, [](const auto& span) {
             return span.status().code() == NTraceProto::Status::STATUS_CODE_ERROR;
+        }), snapshot.PrintTraces());
+        // The retry is optimized by the old RBO.
+        UNIT_ASSERT_C(std::ranges::any_of(snapshot.Spans, [](const auto& span) {
+            const auto* optimizer = FindAttribute(span, NKqp::OptimizerAttribute);
+            return span.name() == "Optimize query" && optimizer && optimizer->value().string_value() == NKqp::OldRboOptimizer;
         }), snapshot.PrintTraces());
     }
 

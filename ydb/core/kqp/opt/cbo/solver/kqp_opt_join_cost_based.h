@@ -11,6 +11,9 @@ namespace NKikimr::NKqp {
 using TProviderCollectFunction =
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>;
 
+// Runs the join order search it is given, so that a caller can measure it.
+using TJoinSearchRunner = std::function<void(const std::function<void()>& search)>;
+
 bool KqpCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TKqpStatsStore& kqpStats,
@@ -52,7 +55,8 @@ NYql::NNodes::TExprBase KqpOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints = {},
     bool enableShuffleElimination = false,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
-    TCBOOptimizerStats* cboStats = nullptr
+    TCBOOptimizerStats* cboStats = nullptr,
+    const TJoinSearchRunner& runSearch = {}
 );
 
 void CollectInterestingOrderingsFromJoinTree(

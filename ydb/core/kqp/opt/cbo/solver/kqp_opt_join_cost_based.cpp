@@ -664,7 +664,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TCBOOptimizerStats* cboStats
+    TCBOOptimizerStats* cboStats,
+    const TJoinSearchRunner& runSearch
 ) {
     if (optLevel <= 1) {
         return node;
@@ -735,9 +736,14 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    {
+    const auto search = [&] {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
         joinTree = opt.JoinSearch(joinTree, hints, cboStats);
+    };
+    if (runSearch) {
+        runSearch(search);
+    } else {
+        search();
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

@@ -83,7 +83,8 @@ void FinishCompileDependency(NWilson::TSpan& span, bool futureSuccess, bool oper
     }
 }
 
-void TCompileTrace::BeginRegion(ui8 verbosity, const TString& name, const void* group) {
+void TCompileTrace::BeginRegion(ui8 verbosity, const TString& name, const void* group,
+        const TCompileTraceAttributes& attributes) {
     if (Finished) {
         return;
     }
@@ -101,6 +102,9 @@ void TCompileTrace::BeginRegion(ui8 verbosity, const TString& name, const void* 
     auto span = StartSpan(verbosity, name);
     if (!span) {
         return;
+    }
+    for (const auto& [key, value] : attributes) {
+        span.Attribute(key, value);
     }
     Push(span);
     Regions.push_back({name, group, std::move(span)});

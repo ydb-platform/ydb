@@ -572,9 +572,10 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     }
 }
 
-// A deny becomes false. A NULL input would have made the kernel NULL. WHERE drops both, but a
-// projection, NOT, or Coalesce(_, true) would see a different value. Only a filter, or an AND chain
-// that itself only feeds a filter, may receive the checks.
+// Checkers attach only when this kernel feeds a Filter, or an AND chain that itself feeds a Filter.
+// Re2.Match returns false for a NULL input, so in WHERE an index deny and the kernel agree.
+// ApplyToFilter, which drops the portion, is set only for that filter consumer. A projection keeps
+// the kernel result.
 bool FeedsFilter(const TGraphNode* node) {
     if (!node || node->GetOutputEdges().size() != 1) {
         return false;

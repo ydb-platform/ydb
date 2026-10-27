@@ -1466,6 +1466,9 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasPaused(), !expectedInitialScan);
             UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasStandBy(), expectedInitialScan);
             if (!expectedInitialScan) {
+                // Resuming restarts source actors; let the initial stream creation commit first.
+                UNIT_ASSERT_C(WaitFor([&] { return SourceStreamsReady(env, info, 1); }),
+                    "Source stream setup did not finish before resume");
                 auto resume = MakeAlterReplicationRequest(info, 100);
                 resume->Record.MutableSwitchState()->MutableStandBy();
                 UNIT_ASSERT_VALUES_EQUAL(env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId,

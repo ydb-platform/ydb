@@ -2486,7 +2486,10 @@ public:
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
-                std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
+                std::unordered_set<TNodeId> prevFilterNodeIds;
+                if (!FilterGroupIds.empty()) {
+                    prevFilterNodeIds.swap(FilterNodeIds);
+                }
                 std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
                 for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
                     if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {

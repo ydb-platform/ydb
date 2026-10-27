@@ -159,7 +159,8 @@ namespace NTable {
     public:
         virtual EScan BeginKey(TArrayRef<const TCell>) = 0;
         virtual EScan BeginDeltas() = 0;
-        virtual EScan Feed(const TRow&, ui64) = 0;
+        // Uncommitted delta of txId, savepointSeqNum is 0 when the delta has none
+        virtual EScan Feed(const TRow&, ui64 txId, ui32 savepointSeqNum) = 0;
         virtual EScan Feed(ELockMode, ui64) = 0;
         virtual EScan EndDeltas() = 0;
         virtual EScan Feed(const TRow&, TRowVersion&) = 0;

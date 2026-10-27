@@ -100,10 +100,12 @@ namespace NTest {
             return *this;
         }
 
-        TDbExec& ReadTx(ui64 txId) {
+        // Reads own changes of txId, skipping its deltas with savepoint seq nums above the bound
+        TDbExec& ReadTx(ui64 txId, ui32 maxVisibleSavepointSeqNum = Max<ui32>()) {
             DoBegin(false);
 
             ReadTxId = txId;
+            ReadMaxVisibleSavepointSeqNum = maxVisibleSavepointSeqNum;
 
             return *this;
         }
@@ -142,6 +144,14 @@ namespace NTest {
             Y_ENSURE(OnTx != EOnTx::None);
 
             Base->RemoveTx(table, txId);
+
+            return *this;
+        }
+
+        TDbExec& RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum) {
+            Y_ENSURE(OnTx != EOnTx::None);
+
+            Base->RemoveTxOps(table, txId, fromSavepointSeqNum, toSavepointSeqNum);
 
             return *this;
         }
@@ -228,7 +238,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId };
+            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId, ReadMaxVisibleSavepointSeqNum };
 
             return check.To(CurrentStep()), check;
         }
@@ -237,7 +247,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckIter check{ *Base, { nullptr, 0, true }, table, Scheme, ReadVersion, ReadTxId, ENext::Data };
+            TCheckIter check{ *Base, { nullptr, 0, true }, table, Scheme, ReadVersion, ReadTxId, ReadMaxVisibleSavepointSeqNum, ENext::Data };
 
             return check.To(CurrentStep()), check;
         }
@@ -246,7 +256,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId };
+            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId, ReadMaxVisibleSavepointSeqNum };
 
             return check.To(CurrentStep()), check;
         }
@@ -257,10 +267,7 @@ namespace NTest {
             const NTest::TRowTool tool(RowSchemeFor(table));
             auto pair = tool.Split(row, true, false);
 
-            ITransactionMapPtr txMap;
-            if (ReadTxId != 0 && Base->HasOpenTx(table, ReadTxId)) {
-                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
-            }
+            auto txMap = MakeReadTxMap(*Base, table, ReadTxId, ReadMaxVisibleSavepointSeqNum);
 
             return Base->SelectRowVersion(table, pair.Key, 0, txMap);
         }
@@ -529,6 +536,7 @@ namespace NTest {
             ReadVersion = TRowVersion::Max();
             WriteVersion = TRowVersion::Min();
             ReadTxId = 0;
+            ReadMaxVisibleSavepointSeqNum = Max<ui32>();
             WriteTxId = 0;
             WriteSavepointSeqNum = 0;
 
@@ -549,6 +557,7 @@ namespace NTest {
         TRowVersion ReadVersion = TRowVersion::Max();
         TRowVersion WriteVersion = TRowVersion::Min();
         ui64 ReadTxId = 0;
+        ui32 ReadMaxVisibleSavepointSeqNum = Max<ui32>();
         ui64 WriteTxId = 0;
         ui32 WriteSavepointSeqNum = 0;
     };

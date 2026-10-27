@@ -1,5 +1,7 @@
 #pragma once
 
+#include "wrap_dbase.h"
+
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
@@ -11,13 +13,15 @@ namespace NTest {
 
         TWrapDbSelect(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
                 TRowVersion snapshot = TRowVersion::Max(),
-                ui64 readTxId = 0)
+                ui64 readTxId = 0,
+                ui32 readMaxVisibleSavepointSeqNum = Max<ui32>())
             : Scheme(std::move(scheme))
             , Remap_(TRemap::Full(*Scheme))
             , Base(base)
             , Table(table)
             , Snapshot(snapshot)
             , ReadTxId(readTxId)
+            , ReadMaxVisibleSavepointSeqNum(readMaxVisibleSavepointSeqNum)
         {
 
         }
@@ -46,10 +50,7 @@ namespace NTest {
         {
             Y_ENSURE(seek == ESeek::Exact, "Db Select(...) is a point lookup");
 
-            ITransactionMapPtr txMap;
-            if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {
-                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
-            }
+            auto txMap = MakeReadTxMap(Base, Table, ReadTxId, ReadMaxVisibleSavepointSeqNum);
 
             return (Ready = Base.Select(Table, key, Scheme->Tags(), State, /* readFlags */ 0, Snapshot, txMap));
         }
@@ -73,6 +74,7 @@ namespace NTest {
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
         const ui64 ReadTxId;
+        const ui32 ReadMaxVisibleSavepointSeqNum;
         EReady Ready = EReady::Gone;
         TRowState State;
     };

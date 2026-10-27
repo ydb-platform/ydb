@@ -129,12 +129,12 @@ namespace NTable {
             KeyState.LockTxId = lockTxId;
         }
 
-        void AddKeyDelta(const TRowState& row, ui64 txId)
+        void AddKeyDelta(const TRowState& row, ui64 txId, ui32 savepointSeqNum = 0)
         {
             Y_ENSURE(KeyState.Written == 0, "Cannot add deltas after committed versions");
             Y_ENSURE(txId != 0, "Cannot add delta with txId == 0");
 
-            WriteDeltaRow(row, txId);
+            WriteDeltaRow(row, txId, savepointSeqNum);
         }
 
         void AddKeyVersion(const TRowState& row, TRowVersion version)
@@ -203,7 +203,7 @@ namespace NTable {
             ++KeyState.Written;
         }
 
-        void WriteDeltaRow(const TRowState& row, ui64 txId)
+        void WriteDeltaRow(const TRowState& row, ui64 txId, ui32 savepointSeqNum = 0)
         {
             Y_ENSURE(Phase == 0, "WriteDeltaRow called after Finish");
 
@@ -212,7 +212,7 @@ namespace NTable {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
+                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId, savepointSeqNum);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? (WriteBTreeIndexV2 ? g.BTreeIndexV2.CalcSize(groupKey) : g.BTreeIndexV1.CalcSize(groupKey)) : 0;
                 overheadBytes += (
@@ -251,11 +251,15 @@ namespace NTable {
                 Current.RowLocks = true;
             }
 
+            if (savepointSeqNum) {
+                Current.SavepointSeqNums = true;
+            }
+
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
+                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId, savepointSeqNum);
             }
 
             KeyState.LockMode = ELockMode::None;
@@ -715,6 +719,9 @@ namespace NTable {
 
                 if (Current.RowLocks)
                     head = Max(head, ui32(29) /* Persistent row locks present */);
+
+                if (Current.SavepointSeqNums)
+                    head = Max(head, NTable::SavepointSeqNumEvolution /* Deltas with savepoint seq nums present */);
 
                 abi->SetTail(head);
                 abi->SetHead(ui32(NTable::ECompatibility::Edge));
@@ -1309,6 +1316,7 @@ namespace NTable {
 
             bool Versioned = false;
             bool RowLocks = false;
+            bool SavepointSeqNums = false;
         } Current;
 
         TIntrusivePtr<TSlices> Slices;

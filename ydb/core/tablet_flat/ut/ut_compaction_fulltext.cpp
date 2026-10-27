@@ -185,10 +185,11 @@ namespace {
             return EScan::Feed;
         }
 
-        EScan Feed(const TRow &row, ui64 txId) override {
-            auto res = Deltas.try_emplace(txId, row);
+        EScan Feed(const TRow &row, ui64 txId, ui32 savepointSeqNum) override {
+            const NTabletFlatExecutor::TCompactDeltaKey key(txId, savepointSeqNum);
+            auto res = Deltas.try_emplace(key, row);
             if (res.second) {
-                DeltasOrder.emplace_back(txId);
+                DeltasOrder.emplace_back(key);
             } else if (!res.first->second.IsFinalized()) {
                 res.first->second.Merge(row);
             }
@@ -235,8 +236,8 @@ namespace {
         TIntrusivePtr<TPartWriter> Writer;
         THolder<NTabletFlatExecutor::TCompactCfg> CompactCfg;
         std::unique_ptr<NTabletFlatExecutor::TFulltextCompact> FtState;
-        THashMap<ui64, TRow> Deltas;
-        TSmallVec<ui64> DeltasOrder;
+        THashMap<NTabletFlatExecutor::TCompactDeltaKey, TRow> Deltas;
+        TSmallVec<NTabletFlatExecutor::TCompactDeltaKey> DeltasOrder;
         bool IsLocked = false;
     };
 

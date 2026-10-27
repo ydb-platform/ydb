@@ -17,7 +17,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/digest/city.h>
+#include <array>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -511,8 +511,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     TConstArrayRef<TActorId> SelectReplicas(TPathId pathId, TStringBuf path) {
         SelectionReplicaCache.clear();
 
-        const ui64 pathHash = CityHash64(path);
-        const ui64 idHash = pathId.Hash();
+        const ui64 pathKey = GetSchemeBoardSelectionKey(path);
+        const ui64 idKey = GetSchemeBoardSelectionKey(pathId);
 
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             if (ShouldIgnore(GroupInfo->RingGroups[ringGroupIndex])) {
@@ -520,10 +520,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
             TStateStorageInfo::TSelection selection;
 
-            GroupInfo->SelectReplicas(pathHash, &selection, ringGroupIndex);
+            GroupInfo->SelectReplicas(pathKey, &selection, ringGroupIndex);
             SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-            GroupInfo->SelectReplicas(idHash, &selection, ringGroupIndex);
+            GroupInfo->SelectReplicas(idKey, &selection, ringGroupIndex);
             for (const TActorId& replica : selection) {
                 if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
                     SelectionReplicaCache.emplace_back(replica);
@@ -761,16 +761,16 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     }
 
     bool CheckQuorum(TPathId pathId, TStringBuf path, const THashSet<TActorId>& ackedPopulators) const {
-        const std::array hashes = {CityHash64(path), pathId.Hash()};
+        const std::array keys = {GetSchemeBoardSelectionKey(path), GetSchemeBoardSelectionKey(pathId)};
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
             if (ShouldIgnoreInQuorum(ringGroup)) {
                 continue;
             }
 
-            for (ui64 hash : hashes) {
+            for (ui64 key : keys) {
                 TStateStorageInfo::TSelection selection;
-                GroupInfo->SelectReplicas(hash, &selection, ringGroupIndex);
+                GroupInfo->SelectReplicas(key, &selection, ringGroupIndex);
                 ui32 acks = 0;
                 for (const auto& replica : selection) {
                     const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);

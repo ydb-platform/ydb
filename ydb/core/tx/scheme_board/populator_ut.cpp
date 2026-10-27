@@ -13,7 +13,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <util/digest/city.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
@@ -456,7 +455,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(ReplayUsesCurrentDescriptionPath) {
         TTestBasicRuntime runtime;
-        TStateStorageInfo::TRingGroup group;
+        TStateStorageInfo::TRingGroup group{};
         group.NToSelect = 3;
         constexpr size_t replicaCount = 7;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
@@ -482,9 +481,9 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         auto select = [&](const TString& path) {
             THashSet<TActorId> selected;
             TStateStorageInfo::TSelection selection;
-            info->SelectReplicas(CityHash64(path), &selection, 0);
+            info->SelectReplicas(GetSchemeBoardSelectionKey(path), &selection, 0);
             selected.insert(selection.begin(), selection.end());
-            info->SelectReplicas(pathId.Hash(), &selection, 0);
+            info->SelectReplicas(GetSchemeBoardSelectionKey(pathId), &selection, 0);
             selected.insert(selection.begin(), selection.end());
             return selected;
         };
@@ -559,17 +558,17 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(childToService.size(), replicaCount);
 
-        auto select = [&](ui64 hash) {
+        auto select = [&](ui64 key) {
             TStateStorageInfo::TSelection selection;
-            info->SelectReplicas(hash, &selection, 0);
+            info->SelectReplicas(key, &selection, 0);
             return THashSet<TActorId>(selection.begin(), selection.end());
         };
-        const auto idSelection = select(pathId.Hash());
+        const auto idSelection = select(GetSchemeBoardSelectionKey(pathId));
         TString path;
         THashSet<TActorId> pathSelection;
         for (size_t i = 0; i != 1000; ++i) {
             path = TStringBuilder() << "/Root/TestPath" << i;
-            pathSelection = select(CityHash64(path));
+            pathSelection = select(GetSchemeBoardSelectionKey(path));
             size_t pathOnly = 0;
             for (const auto& replica : pathSelection) {
                 pathOnly += !idSelection.contains(replica);

@@ -132,7 +132,7 @@
 * [query run](../../reference/ydb-cli/workload-query.md#run)
 * [kv run](../../reference/ydb-cli/workload-kv.md#run)
 * [stock run](../../reference/ydb-cli/commands/workload/stock.md#run)
-* [topic run](../../reference/ydb-cli/workload-topic.md#run)
+* [topic run](../../reference/ydb-cli/workload-topic.md)
 * [transfer run](../../reference/ydb-cli/workload-transfer.md#run)
 
 ## Очистка {#cleanup}
@@ -158,7 +158,7 @@
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
 * [query clean](../../reference/ydb-cli/workload-query.md#cleanup)
-* [kv clean](../../reference/ydb-cli/workload-kv.md#cleanup)
-* [stock clean](../../reference/ydb-cli/commands/workload/stock.md#cleanup)
-* [topic clean](../../reference/ydb-cli/workload-topic.md#cleanup)
-* [transfer clean](../../reference/ydb-cli/workload-transfer.md#cleanup)
+* [kv clean](../../reference/ydb-cli/workload-kv.md#clean)
+* stock clean
+* [topic clean](../../reference/ydb-cli/workload-topic.md#clean)
+* [transfer clean](../../reference/ydb-cli/workload-transfer.md#clean)

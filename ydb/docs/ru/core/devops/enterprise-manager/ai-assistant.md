@@ -33,7 +33,7 @@
 
 ## Настройте доступ к модели {#configure-model-access}
 
-`ydb_em_ai_model_token_name` — это имя записи [tokenator](../../concepts/glossary.md#tokenator), которую Gateway использует для запросов к модели.
+`ydb_em_ai_model_token_name` — это имя записи tokenator, которую Gateway использует для запросов к модели.
 
 Пример записи tokenator:
 

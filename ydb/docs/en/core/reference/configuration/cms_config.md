@@ -23,4 +23,4 @@ cms_config:
 | `tenant_limits.disabled_nodes_ratio_limit` | `13` | Maximum percentage of [database nodes](../../concepts/glossary.md#database-node) that can be simultaneously unavailable or blocked. |
 | `cluster_limits.disabled_nodes_limit` | — | Maximum number of [cluster](../../concepts/glossary.md#cluster) nodes that can be simultaneously unavailable or blocked. |
 | `cluster_limits.disabled_nodes_ratio_limit` | `13` | Maximum percentage of [cluster](../../concepts/glossary.md#cluster) nodes that can be simultaneously unavailable. |
-| `disable_maintenance` | `false` | Flag that [suspends](../../devops/concepts/maintenance-without-downtime.md#disable-maintenance) new cluster maintenance operations. |
+| `disable_maintenance` | `false` | Flag that suspends new cluster maintenance operations. |

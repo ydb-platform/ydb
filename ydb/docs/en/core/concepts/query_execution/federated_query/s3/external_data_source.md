@@ -85,7 +85,7 @@ Where:
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
 * `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported; more details [in the section](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files.
-* `compression` — the [compression format](formats.md#compression_formats) of the files.
+* `compression` — the [compression format](formats.md#compression) of the files.
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 * `format_settings` — optional [format settings](#format_settings)
 
@@ -135,7 +135,7 @@ Where:
 * `object_storage_connection_name` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
 * `file_path` — the path to the file or files inside the bucket. Wildcards `*` are supported. For more information, see [{#T}](#path_format).
 * `file_format` — the [data format](formats.md#formats) in the files. All formats except `raw` and `json_as_string` are supported.
-* `compression` — the [compression format](formats.md#compression_formats) of the files.
+* `compression` — the [compression format](formats.md#compression) of the files.
 
 As a result of executing such a query, the names and types of fields will be inferred.
 

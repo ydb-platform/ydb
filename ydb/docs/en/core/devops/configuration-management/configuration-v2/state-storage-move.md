@@ -28,7 +28,7 @@ As an example, consider a {{ ydb-short-name }} cluster where node 1 is part of S
     ...
     ```
 
-    A [static node](../../../devops/configuration-management/configuration-v2/config-settings.md#hosts) is configured and running on the host with `node_id:1`, which is a part of State Storage. Suppose we need to decommission this host.
+    A [static node](../../../reference/configuration/hosts.md) is configured and running on the host with `node_id:1`, which is a part of State Storage. Suppose we need to decommission this host.
 
     To replace `node_id:1`, we use another host with a static node deployed on it with `node_id:10`.
 

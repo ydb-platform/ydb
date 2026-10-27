@@ -6,7 +6,7 @@ Before diving into `BATCH UPDATE`, it is recommended to familiarize yourself wit
 
 {% endnote %}
 
-`BATCH UPDATE` allows to update records in large tables while minimizing the risk of lock invalidation and transaction rollback by weakening guarantees. Specifically, data updates are performed as a series of transactions for each [partition](../../../concepts/datamodel/table.md#partitioning) of the specified table separately, processing 10 000 rows per iteration. Each query processes up to 10 partitions concurrently.
+`BATCH UPDATE` allows to update records in large tables while minimizing the risk of lock invalidation and transaction rollback by weakening guarantees. Specifically, data updates are performed as a series of transactions for each [partition](../../../concepts/datamodel/table.md#partitioning_row_table) of the specified table separately, processing 10 000 rows per iteration. Each query processes up to 10 partitions concurrently.
 
 This query, like the standard `UPDATE`, executes synchronously and returns a status. If an error occurs or the client disconnects, the data update stops, and the applied changes are not rolled back.
 

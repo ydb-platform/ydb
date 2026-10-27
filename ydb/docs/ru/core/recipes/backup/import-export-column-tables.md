@@ -128,7 +128,7 @@ SELECT * FROM `external/backup/lineitem_sql`;
 ### Предварительные требования
 
 - Установленный PySpark версии 4.0.1, установить можно по [инструкции](https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
-- Наличие [gRPC-эндпоинта](../../concepts/connect.md#эндпоинт-endpoint) для подключения к базе данных {{ ydb-short-name }}.
+- Наличие [gRPC-эндпоинта](../../concepts/connect.md#endpoint) для подключения к базе данных {{ ydb-short-name }}.
 - [Реквизиты доступа](../../reference/ydb-cli/connect.md#command-line-pars) {{ ydb-short-name }} с правами на чтение/запись.
 - Настроенный сетевой доступ с узлов кластера {{ ydb-short-name }} к объектному хранилищу. В примере используется endpoint `storage.yandexcloud.net` — необходимо обеспечить доступ к нему по порту 443.
 - В примерах используются данные теста производительности TPC-H. Инструкция по загрузке тестовых данных доступна в соответствующем [разделе](../../reference/ydb-cli/workload-tpch.md) руководства.

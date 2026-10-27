@@ -548,7 +548,7 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 * Added the `{{ ydb-cli }} workload topic` command for generating the load that reads messages from topics and writes messages to topics.
 * Added the [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options) option for the `{{ ydb-cli }} scheme rmdir` command. Use it to delete a directory recursively, with all its content.
 * Added support for the `topic` and `coordination node` types in the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.
-* Added the [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) option for the `{{ ydb-cli }} topic consumer` command. Use it to commit messages you have read.
+* Added the [--commit](reference/ydb-cli/topic-read.md#basic-optional-parameters) option for the `{{ ydb-cli }} topic consumer` command. Use it to commit messages you have read.
 * Added the [--columns](reference/ydb-cli/export-import/import-file.md#optional) option for the `{{ ydb-cli }} import file csv|tsv` command. Use it as an alternative to the file header when specifying a column list.
 * Added the [--newline-delimited](reference/ydb-cli/export-import/import-file.md#optional) option for the `{{ ydb-cli }} import file csv|tsv` command. Use it to make sure that your data is newline-free. This option streamlines import by reading data from several file sections in parallel.
 

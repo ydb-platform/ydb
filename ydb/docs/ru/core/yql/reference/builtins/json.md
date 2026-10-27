@@ -502,7 +502,7 @@ JsonPath поддерживает предикаты - выражения, во�
 
 #### `like_regex`
 
-Предикат `like_regex` позволяет проверить строку на соответствие регулярному выражению. Синтаксис регулярных выражений такой же как в [Hyperscan UDF](../udf/list/hyperscan.md) и [REGEXP](../syntax/expressions.md#regexp).
+Предикат `like_regex` позволяет проверить строку на соответствие регулярному выражению. Синтаксис регулярных выражений такой же как в [Hyperscan UDF](../udf/list/hyperscan.md) и [REGEXP](../syntax/expressions.md#check-match).
 
 ##### Синтаксис
 

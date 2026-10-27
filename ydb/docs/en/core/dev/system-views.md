@@ -52,8 +52,8 @@ View structure:
 | `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instant |
 | `LastTtlRowsErased` | Number of partition rows deleted during the last TTL cleanup | `Uint64` | Instant |
 | `LocksAcquired` | Number of acquired [locks](../contributor/datashard-locks-and-change-visibility.md). | `Uint64` | Cumulative |
-| `LocksWholeShard` | Number of set [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#whole-shard-locks). | `Uint64` | Cumulative |
-| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#broken-locks). | `Uint64` | Cumulative |
+| `LocksWholeShard` | Number of set [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#limitations). | `Uint64` | Cumulative |
+| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#how-locks-are-used-for-reads). | `Uint64` | Cumulative |
 
 ### Query examples {#partitions-examples}
 
@@ -661,7 +661,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | User [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | User [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates whether login is allowed for this user; used for explicit blocking by an administrator. Independent of `IsLockedOut`.<br />Type: `Bool`. |
 | `IsLockedOut` | Indicates that this user is automatically blocked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | User creation time.<br />Type: `Timestamp`. |
@@ -680,7 +680,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | Group [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Group [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Information about group membership
 
@@ -695,7 +695,7 @@ Table structure:
 | `GroupSid` | Group SID.<br />Type: `Utf8`.<br />Key: `0`. |
 | `MemberSid` | Group member SID. Can be either a user SID or a group SID.<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Information about access rights
+### Information about access rights {#information-about-access-rights}
 
 The views contain a list of granted [access rights](../concepts/glossary.md#access-right).
 

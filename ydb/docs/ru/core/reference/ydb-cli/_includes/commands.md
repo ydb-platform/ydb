@@ -149,7 +149,7 @@ workload mixed clean | Удаление [таблиц](../../../concepts/glossar
 [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Отправка заказов с одинаковыми продуктами в `Stock` нагрузке
 [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Выборка заказов случайного клиента в `Stock` нагрузке
 [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Выборка заказов 10000-го клиента в `Stock` нагрузке
-[workload stock clean](../commands/workload/stock.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
+workload stock clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
 [workload topic init](../workload-topic.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) для `Topic` нагрузки
 [workload topic run full](../workload-topic.md#run-full) | Выполнение полной нагрузки на [топик](../../../concepts/glossary.md#topic) с одновременным чтением и записью сообщений в `Topic` нагрузке
 [workload topic run read](../workload-topic.md#run-read) | Выполнение нагрузки на чтение сообщений из [топика](../../../concepts/glossary.md#topic) в `Topic` нагрузке

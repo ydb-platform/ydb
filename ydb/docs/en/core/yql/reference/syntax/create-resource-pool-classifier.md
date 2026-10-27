@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL CLASSIFIER
 
-`CREATE RESOURCE POOL CLASSIFIER` creates a [resource pool classifier](../../../concepts/glossary.md#resource-pool-classifier.md).
+`CREATE RESOURCE POOL CLASSIFIER` creates a [resource pool classifier](../../../concepts/glossary.md#resource-pool-classifier).
 
 ## Syntax
 

@@ -148,7 +148,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Submitting orders with the same products in the `Stock` workload |
 | [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Selecting orders for a random customer in the `Stock` workload |
 | [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Selecting orders for the 10,000th customer in the `Stock` workload |
-| [workload stock clean](../commands/workload/stock.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
+| workload stock clean | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
 | [workload topic init](../workload-topic.md#init) | Creating and initializing a [topic](../../../concepts/glossary.md#topic) for the `Topic` workload |
 | [workload topic run full](../workload-topic.md#run-full) | Performing a full load on a [topic](../../../concepts/glossary.md#topic) with simultaneous message reading and writing in the `Topic` workload |
 | [workload topic run read](../workload-topic.md#run-read) | Performing a load for reading messages from a [topic](../../../concepts/glossary.md#topic) in the `Topic` workload |

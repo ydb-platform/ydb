@@ -46,7 +46,7 @@ For more details on configuring NFS for backup and recovery, see the recipe [Bac
 
 {% note info %}
 
-The speed of backup and restore operations to/from S3-compatible storage or NFS is tuned to minimize the impact on user load. To control the operation speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+The speed of backup and restore operations to/from S3-compatible storage or NFS is tuned to minimize the impact on user load. To control the operation speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md).
 
 {% endnote %}
 

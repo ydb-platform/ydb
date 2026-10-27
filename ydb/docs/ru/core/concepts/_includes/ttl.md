@@ -27,7 +27,7 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
 
 *BRO* обладает следующими свойствами:
 
-* Единицей параллельности является [партиция таблицы](../datamodel/table.md#partitioning).
+* Единицей параллельности является [партиция таблицы](../datamodel/table.md#partitioning_row_table).
 * Для таблиц со [вторичными индексами](../query_execution/secondary_indexes.md) стадия удаления является [распределенной транзакцией](../transactions.md#distributed-tx).
 
 ## Гарантии {#guarantees}

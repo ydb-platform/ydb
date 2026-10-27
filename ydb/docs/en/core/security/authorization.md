@@ -7,7 +7,7 @@ Authorization in {{ ydb-short-name }} is based on the following concepts:
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
 * [Access rights](../concepts/glossary.md#access-right)
-* [Access list](../concepts/glossary.md#access-acl)
+* [Access list](../concepts/glossary.md#access-control-list)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
@@ -48,7 +48,7 @@ For more information about initial deployment:
 
 {{ ydb-short-name }} allows working with [users](../concepts/glossary.md#access-user) from different directories and systems, and they are distinguished by [SID](../concepts/glossary.md#access-sid) using a suffix.
 
-The suffix `@<auth-domain>` identifies the “user source”, within which the uniqueness of all user logins or identifiers is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user SIDs will be `user1@ldap` and `user2@ldap`.<br/>
+The suffix `@<auth-domain>` identifies the “user source”, within which the uniqueness of all user logins or identifiers is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap), user SIDs will be `user1@ldap` and `user2@ldap`.<br/>
 Local users have an empty auth-domain. If a user SID does not contain a suffix, it refers to a local user created and existing directly in the {{ ydb-short-name }} cluster.
 
 ## Group {#group}
@@ -74,7 +74,7 @@ To create, modify, and delete [groups](../concepts/glossary.md#access-group), th
 
 [Access rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of rights — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all rights granted to [access subjects](../concepts/glossary.md#subject) (users and groups) on the object.
+Each access object has a list of rights — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — it stores all rights granted to [access subjects](../concepts/glossary.md#access-subject) (users and groups) on the object.
 
 By default, rights are inherited from parents to descendants along the access object tree.
 

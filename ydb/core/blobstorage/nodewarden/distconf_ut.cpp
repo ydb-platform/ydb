@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <ydb/core/base/nodestate.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tabletid.h>
@@ -9917,6 +9918,74 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(3, 1, 3), 9, {1, 2, 3, 4, 5, 6, 7, 8, 9});
         CheckStateStorage(GenerateDCStateStorage(3, 1, 18), 9, {1, 2, 3, 19, 20, 21, 37, 38, 39});
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
+    }
+
+    Y_UNIT_TEST(GenerateConfigUsesSmallestDCIndependentOfHealthOrder) {
+        struct TDcSpec {
+            TString Name;
+            ui32 Nodes;
+            ui32 State;
+        };
+        const std::array<TDcSpec, 3> specs = {{
+            {"bad-large", 3, NKikimr::BAD},
+            {"good-small", 1, NKikimr::GOOD},
+            {"good-large", 3, NKikimr::GOOD},
+        }};
+        const std::array<std::array<ui32, 3>, 6> permutations = {{
+            {{0, 1, 2}},
+            {{0, 2, 1}},
+            {{1, 0, 2}},
+            {{1, 2, 0}},
+            {{2, 0, 1}},
+            {{2, 1, 0}},
+        }};
+
+        for (const auto& permutation : permutations) {
+            NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+            NKikimrBlobStorage::TStorageConfig config;
+            ui32 nodeId = 1;
+            for (ui32 specIndex : permutation) {
+                const auto& spec = specs[specIndex];
+                for (ui32 i : xrange(spec.Nodes)) {
+                    auto* node = config.AddAllNodes();
+                    node->SetNodeId(nodeId);
+                    node->MutableLocation()->SetDataCenter(spec.Name);
+                    node->MutableLocation()->SetRack("rack-" + std::to_string(i));
+                    keeper.SelfHealNodesState[nodeId++] = spec.State;
+                }
+            }
+
+            NKikimrConfig::TStateStorageConfig generated;
+            std::unordered_set<ui32> usedNodes;
+            const bool goodConfig = keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+                true, 0, 0, 1000);
+
+            UNIT_ASSERT(!goodConfig);
+            UNIT_ASSERT_VALUES_EQUAL(generated.RingGroupsSize(), 1);
+            const auto& group = generated.GetRingGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetNToSelect(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(group.RingSize(), 3);
+            for (const auto& ring : group.GetRing()) {
+                UNIT_ASSERT_VALUES_EQUAL(ring.NodeSize(), 1);
+            }
+        }
+
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        NKikimrBlobStorage::TStorageConfig config;
+        ui32 nodeId = 1;
+        for (const auto& spec : specs) {
+            for (ui32 i : xrange(spec.Nodes)) {
+                auto* node = config.AddAllNodes();
+                node->SetNodeId(nodeId);
+                node->MutableLocation()->SetDataCenter(spec.Name);
+                node->MutableLocation()->SetRack("rack-" + std::to_string(i));
+                keeper.SelfHealNodesState[nodeId++] = spec.State;
+            }
+        }
+        NKikimrConfig::TStateStorageConfig generated;
+        std::unordered_set<ui32> usedNodes;
+        UNIT_ASSERT(!keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+            true, /*overrideReplicasInRingCount=*/2, /*overrideRingsCount=*/9, 1000));
     }
 
     void CheckStateStorage2(const NKikimrConfig::TStateStorageConfig& ss, std::string expected) {

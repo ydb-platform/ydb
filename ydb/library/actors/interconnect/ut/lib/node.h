@@ -11,12 +11,9 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
-<<<<<<< HEAD
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
-=======
 #include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
->>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -79,18 +76,11 @@ public:
         }
         setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
-<<<<<<< HEAD
-        if (common->Settings.V2.Enable) {
-            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
-            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
-            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
-=======
         if (common->Settings.V2.Threads) {
             // Mirror production: the engine is created up front whenever Threads is non-zero (regardless of
             // Settings.V2.Enable, which only gates handshake negotiation and may be flipped at runtime) and
             // published in Common; OnActorSystemCreated installs its actor-system client. Shard
             // count is overridable via YDB_IC_V2_SHARDS so tests can force many connections onto one ring.
->>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
                 common->Settings.V2.Threads = FromString<ui32>(s);
             }

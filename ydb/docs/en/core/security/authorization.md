@@ -86,8 +86,8 @@ The following types of YQL queries are used to manage rights:
 The following CLI commands are used to manage rights:
 
 * [chown](../reference/ydb-cli/commands/scheme-permissions.md#chown)
-* [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant,-revoke)
-* [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant,-revoke)
+* [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
+* [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
 * [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
 * [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
 * [clear-inheritance](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance)

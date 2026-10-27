@@ -74,8 +74,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | [scheme mkdir](../commands/dir.md#mkdir) | Creating a directory |
 | [scheme permissions chown](../commands/scheme-permissions.md#chown) | Change object owner |
 | [scheme permissions clear](../commands/scheme-permissions.md#clear) | Clear permissions |
-| [scheme permissions grant](../commands/scheme-permissions.md#grant,-revoke) | Grant permission |
-| [scheme permissions revoke](../commands/scheme-permissions.md#grant,-revoke) | Revoke permission |
+| [scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Grant permission |
+| [scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Revoke permission |
 | [scheme permissions set](../commands/scheme-permissions.md#set) | Set permissions |
 | [scheme permissions list](../commands/scheme-permissions.md#list) | View permissions |
 | [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Disable permission inheritance |

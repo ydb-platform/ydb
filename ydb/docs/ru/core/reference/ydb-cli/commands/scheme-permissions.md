@@ -28,7 +28,7 @@ permissions                 Modify permissions
 Все команды имеют дополнительный параметр, который для них не критичен:
 `--timeout ms` - технологический параметр, задающий таймаут на отклик сервера.
 
-## grant, revoke
+## grant, revoke {#grant-revoke}
 
 Команды `grant` и `revoke` позволяют установить и отозвать, соответственно, права доступа к объектам схемы для пользователя или группы пользователей. По сути, это аналоги соответствующих YQL-команд [GRANT](../../../yql/reference/syntax/grant.md) и [REVOKE](../../../yql/reference/syntax/revoke.md).
 
@@ -64,7 +64,7 @@ permissions                 Modify permissions
 {{ ydb-cli }} [connection options] scheme permissions set  [options...] <path> <subject>
 ```
 
-Значения всех параметров полностью идентичны командам [`grant`, `revoke`](#grant,-revoke). Однако ключевое отличие команды `set` от `grant` и `revoke` заключается в установке на указанный объект ровно тех прав доступа, которые перечислены в параметрах `-p (--permission)`. Другие права для указанного пользователя или группы будут отозваны.
+Значения всех параметров полностью идентичны командам [`grant`, `revoke`](#grant-revoke). Однако ключевое отличие команды `set` от `grant` и `revoke` заключается в установке на указанный объект ровно тех прав доступа, которые перечислены в параметрах `-p (--permission)`. Другие права для указанного пользователя или группы будут отозваны.
 
 Например, ранее пользователю `testuser` на объект `'/Root/db1'` были выданы права `"ydb.granular.select_row"`, `"ydb.granular.update_row"`, `"ydb.granular.erase_row"`, `"ydb.granular.read_attributes"`, `"ydb.granular.write_attributes"`, `"ydb.granular.create_directory"`.
 Тогда в результате выполнения команды все права на указанный объект будут отозваны (как будто для каждого из прав вызывали `revoke`) и останется только право `"ydb.granular.select_row"` — непосредственно указанное в команде `set`:

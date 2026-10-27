@@ -24,18 +24,18 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
                 const auto& portion = i->GetPortionInfo();
-                const TAddress* matched = nullptr;
+                std::vector<TAddress> matched;
                 for (const auto& address : RequestedAddresses) {
                     if (address.GetTabletId() == TabletId && address.GetPortionId() == portion.GetPortionId() &&
                         address.GetPathId() == portion.GetPathId()) {
-                        matched = &address;
-                        break;
+                        matched.push_back(address);
                     }
                 }
-                AFL_VERIFY(matched);
-                const TAddress address = *matched;
-                AFL_VERIFY(RequestedAddresses.erase(address));
-                objects.emplace(address, std::move(i));
+                AFL_VERIFY(!matched.empty());
+                for (const auto& address : matched) {
+                    AFL_VERIFY(RequestedAddresses.erase(address));
+                    AFL_VERIFY(objects.emplace(address, i).second);
+                }
             }
             Callback->OnReceiveData(TabletId, Cookie, std::move(objects), std::move(RequestedAddresses), {});
         }

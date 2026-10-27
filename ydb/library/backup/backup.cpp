@@ -1125,7 +1125,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsInternalDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -1247,7 +1247,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy && !dbIt.IsSystemDir()) {
+                if (!avoidCopy && !dbIt.IsInternalDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }

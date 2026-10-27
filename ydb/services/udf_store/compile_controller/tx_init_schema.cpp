@@ -2,11 +2,12 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmCompileController::TTxInitSchema : public TTxBase {
+class TWasmCompileController::TTxInitSchema: public TTxBase {
 public:
     explicit TTxInitSchema(TWasmCompileController* self)
         : TTxBase("TxInitSchema", self)
-    {}
+    {
+    }
 
     TTxType GetTxType() const override {
         return TXTYPE_INIT_SCHEMA;
@@ -27,4 +28,4 @@ void TWasmCompileController::RunTxInitSchema(const TActorContext& ctx) {
     Execute(new TTxInitSchema(this), ctx);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -25,6 +25,8 @@ Distconf uses both quorums (A and B) to store configuration:
 
 When performing failover, the administrator puts the cluster into mode `PRIMARY/DISCONNECTED` or `DISCONNECTED/PRIMARY`. In this mode, the configuration of shared components is stored only on the quorum of the `PRIMARY` pile.
 
+For clusters with more than two piles, emergency failover can move several unavailable piles to `DISCONNECTED` in a single `UpdateClusterState` request, together with selecting a new `PRIMARY` from an already synchronized pile. Repeated `--pile` options of the [failover command](../reference/ydb-cli/commands/bridge/failover.md) produce this single update. Applying these transitions separately can leave another unavailable pile required by the intermediate configuration, preventing a quorum. Quorum checks use the new configuration: disconnected piles are excluded, while node and storage quorum requirements within the remaining participating piles stay unchanged.
+
 To start recovery, the administrator puts the pair of the live pile and the failed pile into mode `PRIMARY/NOT_SYNCHRONIZED`. This configuration is stored on all quorums.
 
 Writing configuration is forbidden if the new configuration is incompatible with the last one stored on the node. For example, a transition from `PRIMARY/DISCONNECTED` to `DISCONNECTED/PRIMARY` is not allowed. This prevents a situation where pile A and pile B simultaneously switch to modes that both claim the `PRIMARY` role.
@@ -48,6 +50,8 @@ The dsproxy-proxy of a static group changes its operating mode according to the 
 In mode `PRIMARY/SYNCHRONIZED`, writes are performed synchronously to both groups; reads are performed from the `PRIMARY`, and each read issues a ping request to the second group to ensure timely detection of link failure or a change in that group's operating mode.
 
 In mode `PRIMARY/DISCONNECTED`, reads and writes are performed only in the `PRIMARY` group.
+
+A node learns that a pile has been disconnected when the new configuration reaches it. Until then, its dsproxy-proxy keeps writing to the disconnected pile and may return its replies to reads, which can miss writes already made by nodes that know about the disconnect. For a planned disconnect, when the pile stays reachable, this window is bounded only by how fast the configuration reaches each node; once a node gets it, its interconnect also tears down the sessions to the disconnected pile. Generation numbers can't close the window, because the disconnected pile never learns the new ones. In an unplanned failover, the disconnected pile is unreachable, so the window doesn't arise.
 
 In mode `PRIMARY/NOT_SYNCHRONIZED`, dsproxy-proxy supports several submodes that determine which kinds of writes are performed in the `NOT_SYNCHRONIZED` group:
 

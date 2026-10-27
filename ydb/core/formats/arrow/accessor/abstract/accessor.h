@@ -262,6 +262,9 @@ private:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
         return std::nullopt;
     }
+    virtual std::optional<bool> DoHasNulls() const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -365,6 +368,11 @@ public:
         return result;
     }
 
+    // nullopt: cannot cheaply determine, unknown; false: no null values; true: at least one null
+    std::optional<bool> HasNulls() const {
+        return DoHasNulls();
+    }
+
     virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
         return true;
     }
@@ -376,8 +384,9 @@ public:
         DoVisitValues(visitor);
     }
 
-    // Optimized version of VisitValues for consumers that do not care about order, positions, nulls and duplicate
+    // Optimized version of VisitValues for consumers that do not care about order, positions and duplicate
     // multiplicity. For implementations that do not have an optimized version it is the same as VisitValues.
+    // Null values are visited if present.
     void VisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
         DoVisitDistinctValues(visitor);
     }

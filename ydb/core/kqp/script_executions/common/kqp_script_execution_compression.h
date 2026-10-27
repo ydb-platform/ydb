@@ -1,11 +1,10 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <util/generic/string.h>
-
 namespace NBlockCodecs {
-    struct ICodec;
+struct ICodec;
 }
 
 namespace NKikimr::NKqp {
@@ -38,4 +37,4 @@ struct TScriptArtifacts {
 
 TScriptArtifacts CompressScriptArtifacts(const std::optional<TString>& ast, const std::optional<TString>& plan, const TCompressor& compressor);
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

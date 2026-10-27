@@ -60,14 +60,26 @@ public:
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TPileStateUpdate> state;
                 uint64_t generation = 0;
+                bool conversionInProgress = false;
+                std::optional<TPendingPileOperation> pendingPileOperation;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
                         state = StateFromProto(result);
                         generation = result.generation();
+                        conversionInProgress = result.conversion_in_progress();
+                        if (result.has_pending_pile_operation()) {
+                            const auto& op = result.pending_pile_operation();
+                            pendingPileOperation.emplace(TPendingPileOperation{
+                                .PileName = op.pile_name(),
+                                .Kind = static_cast<TPendingPileOperation::EKind>(op.kind()),
+                                .ErrorReason = op.error_reason(),
+                            });
+                        }
                     }
                 }
-                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), std::move(generation)));
+                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
+                    conversionInProgress, std::move(pendingPileOperation)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(
@@ -79,6 +91,36 @@ public:
             TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
+    }
+
+    TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
+        request.set_skip_storage_pool_conversion(settings.SkipStoragePoolConversion_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncConvertToBridge,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus AddPile(const std::string& pileName, const TAddPileSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::AddPileRequest>(settings);
+        request.set_pile_name(pileName);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::AddPileRequest, Ydb::Bridge::AddPileResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncAddPile,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::RemovePileRequest>(settings);
+        request.set_pile_name(pileName);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::RemovePileRequest, Ydb::Bridge::RemovePileResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncRemovePile,
+            TRpcRequestSettings::Make(settings));
     }
 };
 
@@ -95,6 +137,18 @@ TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdat
 
 TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStateSettings& settings) {
     return Impl_->GetClusterState(settings);
+}
+
+TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& settings) {
+    return Impl_->ConvertToBridge(settings);
+}
+
+TAsyncStatus TBridgeClient::AddPile(const std::string& pileName, const TAddPileSettings& settings) {
+    return Impl_->AddPile(pileName, settings);
+}
+
+TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
+    return Impl_->RemovePile(pileName, settings);
 }
 
 }

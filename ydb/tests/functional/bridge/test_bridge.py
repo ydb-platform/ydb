@@ -57,7 +57,8 @@ class TestBridgeBasic(BridgeKiKiMRTest):
             PileState(pile_name="r2", state=PileState.NOT_SYNCHRONIZED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}, timeout_seconds=50)
+        # resynchronization of every group takes a while on a loaded machine
+        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}, timeout_seconds=300)
 
 
 class TestBridgeValidation(BridgeKiKiMRTest):

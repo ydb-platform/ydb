@@ -2,6 +2,7 @@
 #include "node_warden_impl.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 
 #include <ydb/core/blob_depot/agent/agent.h>
@@ -275,8 +276,23 @@ namespace NKikimr::NStorage {
                     ? DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType())
                     : nullptr;
 
-                if (info && info->BlobDepotId && !group.AgentProxy) {
-                    // re-register proxy as an agent
+                if (info && !info->IsInlinePile() && info->IsBridged()) {
+                    // the group has lost its inline pile, the bridge proxy stops the DS proxy of that pile itself
+                    group.InlinePileProxy = false;
+                }
+                if (info && info->IsInlinePile() && !group.InlinePileProxy) {
+                    // the group has just been converted into the bridged one, it becomes an inline pile; put bridge
+                    // proxy in front of the running DS proxy, the latter will serve the inline pile; this also happens
+                    // when the proxy was started before the group info arrived
+                    Y_ABORT_UNLESS(!group.AgentProxy);
+                    group.InlinePileProxy = true;
+                    TActorSystem *as = TActivationContext::ActorSystem();
+                    group.ProxyId = Register(CreateInlinePileBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
+                        AppData()->SystemPoolId);
+                    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+                }
+                if (info && info->BlobDepotId.value_or(0) && !group.AgentProxy) {
+                    // re-register proxy as an agent; for inline pile, the agent is put in front of the bridge proxy
                     group.AgentProxy = true;
                     TActorSystem *as = TActivationContext::ActorSystem();
                     group.ProxyId = Register(NBlobDepot::CreateBlobDepotAgent(groupId, info, group.ProxyId),
@@ -292,8 +308,12 @@ namespace NKikimr::NStorage {
 
             if (const auto& info = group.Info) {
                 Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
+                TVector<TVDiskRecord*> disks;
                 for (auto& vdisk : group.VDisksOfGroup) {
-                    UpdateGroupInfoForDisk(vdisk, info);
+                    disks.push_back(&vdisk);
+                }
+                for (auto* vdisk : disks) {
+                    UpdateGroupInfoForDisk(*vdisk, info);
                 }
             }
 
@@ -311,7 +331,7 @@ namespace NKikimr::NStorage {
 
                 for (auto& [timestamp, ev] : queue) {
                     THolder<IEventHandle> tmp(ev.release());
-                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                    TActivationContext::Forward(tmp, tmp->GetForwardOnNondeliveryRecipient());
                 }
 
                 GroupPendingQueue.erase(it);
@@ -346,31 +366,50 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
+            bool isStatic, bool comprehensive) {
+        std::unordered_set<ui32> seenGroupIds;
         for (const auto& group : serviceSet.GetGroups()) {
             const ui32 groupId = group.GetGroupID();
             if (group.GetEntityStatus() == NKikimrBlobStorage::DESTROY) {
-                if (EjectedGroups.insert(groupId).second) {
-                    TGroupRecord& group = Groups[groupId];
-                    YDB_LOG_DEBUG("Destroying group",
-                        {"marker", "NW99"},
-                        {"groupId", groupId},
-                        {"proxyId", group.ProxyId});
-                    if (group.ProxyId) {
-                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
-                    }
-                    if (group.GroupResolver) {
-                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
-                    }
-                    Groups.erase(groupId);
-                    Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
-
-                    // report group deletion to whiteboard
-                    Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));
-                }
+                EjectGroup(groupId);
             } else {
+                if (isStatic) {
+                    seenGroupIds.insert(groupId);
+                }
                 ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
             }
+        }
+        if (isStatic && comprehensive) {
+            for (const ui32 groupId : StaticGroupIds) {
+                if (!seenGroupIds.contains(groupId)) {
+                    EjectGroup(groupId);
+                }
+            }
+            StaticGroupIds = std::move(seenGroupIds);
+        } else if (isStatic) {
+            StaticGroupIds.insert(seenGroupIds.begin(), seenGroupIds.end());
+        }
+    }
+
+    void TNodeWarden::EjectGroup(ui32 groupId) {
+        if (EjectedGroups.insert(groupId).second) {
+            TGroupRecord& group = Groups[groupId];
+            YDB_LOG_DEBUG("Destroying group",
+                {"marker", "NW99"},
+                {"groupId", groupId},
+                {"proxyId", group.ProxyId});
+            if (group.ProxyId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
+            }
+            if (group.GroupResolver) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            }
+            Groups.erase(groupId);
+            Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
+
+            // report group deletion to whiteboard
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));
         }
     }
 
@@ -492,8 +531,8 @@ namespace NKikimr::NStorage {
             return;
         }
         auto& syncer = const_cast<TWorkingSyncer&>(*it);
-        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration) {
-            return; // generation mismatch
+        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration || ev->Sender != syncer.ActorId) {
+            return; // completion from a stopped or replaced syncer
         }
 
         syncer.Finished = true;
@@ -511,7 +550,11 @@ namespace NKikimr::NStorage {
             TWorkingSyncer& syncer, bool forceProgress) {
         auto *item = update->AddSyncers();
         syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
-        item->SetBridgeProxyGroupGeneration(syncer.PendingBridgeProxyGroupGeneration);
+        // Completion and progress belong to the generation actually processed by the actor.
+        // A newer assignment can arrive before its group configuration, including across reconnects.
+        item->SetBridgeProxyGroupGeneration(syncer.SyncerDataStats
+            ? syncer.BridgeProxyGroupGeneration
+            : syncer.PendingBridgeProxyGroupGeneration);
         syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
         syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
         if (syncer.Finished) {

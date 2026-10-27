@@ -9,4 +9,4 @@ class IGraphTransformer;
 
 TAutoPtr<IGraphTransformer> CreateS3DataSinkConstraintTransformer(TIntrusivePtr<TS3State> state);
 
-} // namespace NYql
+}   // namespace NYql

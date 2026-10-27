@@ -3,29 +3,32 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 TString DatabaseIdToDatabase(TStringBuf databaseId) {
     TStringBuf id;
     TStringBuf database;
-    return databaseId.TrySplit("/", id, database)
-        ? CanonizePath(TString(database))     // Serverless
-        : CanonizePath(TString(databaseId));  // Dedicated
+    return databaseId.TrySplit("/", id, database) ? CanonizePath(TString(database))   // Serverless
+                                                  : CanonizePath(TString(databaseId));   // Dedicated
+}
+
+bool IsServerlessDatabaseId(TStringBuf databaseId) {
+    const TStringBuf prefix = databaseId.Before('/');
+    return prefix.size() < databaseId.size() && prefix.EndsWith(':');
 }
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     NYql::TIssue rootIssue(message);
 
     if (issues.Empty()) {
-        return {rootIssue};
+        return { rootIssue };
     }
 
     if (issues.Size() == 1) {
         const auto& issue = *issues.begin();
         rootIssue.SetCode(issue.GetCode(), issue.GetSeverity());
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-        return {rootIssue};
+        return { rootIssue };
     }
 
     rootIssue.SetCode(0, NYql::ESeverity::TSeverityIds_ESeverityId_S_INFO);
@@ -37,7 +40,7 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
 
-    return {rootIssue};
+    return { rootIssue };
 }
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig) {
@@ -80,4 +83,4 @@ NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorklo
     return poolSettings;
 }
 
-}  // NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

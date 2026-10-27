@@ -12,13 +12,19 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
-#include <atomic>
 #include <util/generic/bitops.h>
+#include <util/stream/format.h>
+#include <util/system/backtrace.h>
+
+#include <atomic>
+#include <limits>
+#include <mutex>
 
 namespace NKikimr::NKqp {
 
 namespace {
 
+// Everything is taken from the resource manager, see FeatureFlags.EnableComputeSchedulerMemory
 class TQueryQuotaManager final : public IQueryQuotaManager {
 public:
     explicit TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx)
@@ -42,7 +48,8 @@ public:
         }
     }
 
-    NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory) override {
+    // the elastic memory is the demand for the compute scheduler, the resource manager has no use for it
+    NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory, ui64 /* elasticMemory */) override {
         auto result = Tx->ResourceManager->AllocateResources(*Tx, 0,
             NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits, .ExternalMemory = externalMemory});
         if (result) {
@@ -53,7 +60,7 @@ public:
         return result;
     }
 
-    void FreeTasks(ui64 executionUnits, ui64 externalMemory) override {
+    void FreeTasks(ui64 executionUnits, ui64 externalMemory, ui64 /* elasticMemory */) override {
         // uncounted before the release: never more than the tx holds
         const ui64 prevUnits = ExecutionUnits.fetch_sub(executionUnits);
         const ui64 prevExternal = ExternalMemory.fetch_sub(externalMemory);
@@ -133,10 +140,273 @@ private:
     std::atomic<ui64> MaxAllocatedMemory = 0;
 };
 
+// The execution units are taken from the resource manager, the memory - from the compute scheduler
+class TSchedulerQueryQuotaManager final : public IQueryQuotaManager {
+public:
+    TSchedulerQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory, ui64 taskMemory)
+        : Tx(std::move(tx))
+        , Memory(std::move(memory))
+        , TaskMemory(taskMemory)
+    {
+        Y_ABORT_UNLESS(Tx && Tx->ResourceManager && Tx->Counters);
+    }
+
+    // the task and channel quota managers keep it alive: their Memory is back by now. The external memory left is the
+    // one of the channels and of the tasks whose compute actors did not terminate
+    ~TSchedulerQueryQuotaManager() override {
+        const ui64 externalMemory = ExternalMemory.load();
+        const ui64 allocatedMemory = AllocatedMemory.load();
+        Y_DEBUG_ABORT_UNLESS(allocatedMemory == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
+            Tx->TxId, allocatedMemory - externalMemory);
+        // the Memory not freed is returned anyway: otherwise it's lost for the pool and the node till the restart
+        if (allocatedMemory > externalMemory) {
+            FreeQuota(allocatedMemory - externalMemory);
+        }
+        FreeTasks(ExecutionUnits.load(), externalMemory, ElasticMemory.load());
+
+        delete MaxAllocationBacktrace.load();
+    }
+
+    NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory, ui64 elasticMemory) override {
+        // the execution units first, then the memory
+        auto result = Tx->ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits});
+        if (!result) {
+            return result;
+        }
+
+        const ui64 memory = externalMemory + executionUnits * TaskMemory;
+        if (!TryIncreaseUsage(memory, /* isOptional = */ false)) {
+            Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits});
+            Tx->Counters->RmNotEnoughMemory->Inc();
+            AckFailedAllocation(memory);
+            result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, TStringBuilder()
+                << "TxId: " << Tx->TxId << ". Not enough memory for query, requested: " << memory << ". " << MemoryConsumptionDetails());
+            return result;
+        }
+
+        if (Memory && memory + elasticMemory) {
+            Memory->IncreaseDemand(memory + elasticMemory);
+        }
+        ExecutionUnits.fetch_add(executionUnits);
+        ExternalMemory.fetch_add(externalMemory);
+        ElasticMemory.fetch_add(elasticMemory);
+        Allocated(externalMemory);
+        Tx->Counters->RmExternalMemory->Add(externalMemory);
+        return result;
+    }
+
+    void FreeTasks(ui64 executionUnits, ui64 externalMemory, ui64 elasticMemory) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prevUnits = ExecutionUnits.fetch_sub(executionUnits);
+        const ui64 prevExternal = ExternalMemory.fetch_sub(externalMemory);
+        const ui64 prevElastic = ElasticMemory.fetch_sub(elasticMemory);
+        const ui64 prevAllocated = AllocatedMemory.fetch_sub(externalMemory);
+        Y_DEBUG_ABORT_UNLESS(prevUnits >= executionUnits && prevExternal >= externalMemory && prevElastic >= elasticMemory
+            && prevAllocated >= externalMemory,
+            "TxId: %" PRIu64 ", freeing %" PRIu64 " execution units of %" PRIu64 ", %" PRIu64 " bytes of external memory of %" PRIu64
+            ", %" PRIu64 " bytes of elastic memory of %" PRIu64,
+            Tx->TxId, executionUnits, prevUnits, externalMemory, prevExternal, elasticMemory, prevElastic);
+
+        const ui64 memory = externalMemory + executionUnits * TaskMemory;
+        DecreaseUsage(memory);
+        if (Memory && memory + elasticMemory) {
+            Memory->DecreaseDemand(memory + elasticMemory);
+        }
+        Tx->Counters->RmExternalMemory->Sub(externalMemory);
+        if (executionUnits) {
+            Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits});
+        }
+    }
+
+    const TIntrusivePtr<NRm::TTxState>& GetTx() const override {
+        return Tx;
+    }
+
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
+        if (!TryIncreaseUsage(memorySize, isOptional)) {
+            // an optional refusal is the spilling signal of the caller, not a failure: not counted as one and not
+            // recorded (the last failed allocation is reported on OOM), the caller logs it
+            if (isOptional) {
+                Tx->Counters->RmOptionalMemoryRefused->Inc();
+            } else {
+                Tx->Counters->RmNotEnoughMemory->Inc();
+                AckFailedAllocation(memorySize);
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"memory", memorySize});
+            }
+
+            return false;
+        }
+
+        Allocated(memorySize);
+        Tx->Counters->RmMemory->Add(memorySize);
+        Tx->Counters->RmExtraMemAllocs->Inc();
+        AckAllocation(memorySize);
+        return true;
+    }
+
+    void FreeQuota(ui64 memorySize) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prev = AllocatedMemory.fetch_sub(memorySize);
+        Y_DEBUG_ABORT_UNLESS(prev >= memorySize, "TxId: %" PRIu64 ", freeing %" PRIu64 " bytes of %" PRIu64 " allocated",
+            Tx->TxId, memorySize, prev);
+        DecreaseUsage(memorySize);
+        Tx->Counters->RmMemory->Sub(memorySize);
+        Tx->Counters->RmExtraMemFree->Inc();
+    }
+
+    ui64 GetCurrentQuota() const override {
+        return AllocatedMemory.load();
+    }
+
+    ui64 GetMaxMemorySize() const override {
+        return MaxAllocatedMemory.load();
+    }
+
+    // See NScheduler::TSchedulableMemory::GetAvailability
+    i64 GetMemoryAvailability() const override {
+        return Memory ? Memory->GetAvailability() : std::numeric_limits<i64>::max();
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
+
+        auto res = TStringBuilder() << "TxMemoryInfo { "
+            << "TxId: " << Tx->TxId
+            << ", Database: " << Tx->Database;
+
+        if (!Tx->PoolId.empty()) {
+            res << ", PoolId: " << Tx->PoolId;
+        }
+
+        if (Tx->CollectBacktrace) {
+            backtraceLock.lock();
+        }
+
+        const ui64 externalMemory = ExternalMemory.load();
+        const ui64 allocatedMemory = AllocatedMemory.load();
+        res << ", tx initially granted memory: " << HumanReadableSize(externalMemory + ExecutionUnits.load() * TaskMemory, SF_BYTES)
+            << ", tx expected elastic memory: " << HumanReadableSize(ElasticMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(allocatedMemory > externalMemory ? allocatedMemory - externalMemory : 0, SF_BYTES)
+            << ", tx largest successful memory allocation: " << HumanReadableSize(MaxAllocationSize.load(), SF_BYTES)
+            << ", tx last failed memory allocation: " << HumanReadableSize(FailedAllocationSize.load(), SF_BYTES)
+            << ", tx total execution units: " << ExecutionUnits.load()
+            << ", memory availability: " << GetMemoryAvailability()
+            << ", started at: " << Tx->CreatedAt
+            << " }" << Endl;
+
+        if (Tx->CollectBacktrace && HasFailedAllocationBacktrace.load()) {
+            res << "TxFailedAllocationBacktrace:" << Endl << FailedAllocationBacktrace.PrintToString();
+        }
+
+        if (Tx->CollectBacktrace) {
+            backtraceLock.unlock();
+        }
+
+        if (Tx->CollectBacktrace && MaxAllocationBacktrace.load()) {
+            res << "TxMaxAllocationBacktrace:" << Endl << MaxAllocationBacktrace.load()->PrintToString();
+        }
+
+        return res;
+    }
+
+private:
+    bool TryIncreaseUsage(ui64 bytes, bool isOptional) {
+        return !Memory || Memory->TryIncreaseUsage(bytes, isOptional);
+    }
+
+    void DecreaseUsage(ui64 bytes) {
+        if (Memory && bytes) {
+            Memory->DecreaseUsage(bytes);
+        }
+    }
+
+    // counted after the grant: never more than the tx holds
+    void Allocated(ui64 bytes) {
+        const ui64 allocated = AllocatedMemory.fetch_add(bytes) + bytes;
+        ui64 peak = MaxAllocatedMemory.load();
+        while (peak < allocated && !MaxAllocatedMemory.compare_exchange_weak(peak, allocated)) {
+        }
+    }
+
+    void AckAllocation(ui64 memory) {
+        auto* oldBacktrace = MaxAllocationBacktrace.load();
+        ui64 maxAllocation = MaxAllocationSize.load();
+        bool exchanged = false;
+
+        while (maxAllocation < memory && !exchanged) {
+            exchanged = MaxAllocationSize.compare_exchange_weak(maxAllocation, memory);
+        }
+
+        if (exchanged && Tx->CollectBacktrace) {
+            auto* newBacktrace = new TBackTrace();
+            newBacktrace->Capture();
+            if (MaxAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
+                // XXX(ilezhankin): technically it's possible to have a race with `MemoryConsumptionDetails()`, but it's very unlikely.
+                delete oldBacktrace;
+            } else {
+                delete newBacktrace;
+            }
+        }
+    }
+
+    void AckFailedAllocation(ui64 memory) {
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
+
+        if (Tx->CollectBacktrace) {
+            backtraceLock.lock();
+        }
+
+        FailedAllocationSize = memory;
+
+        if (Tx->CollectBacktrace) {
+            FailedAllocationBacktrace.Capture();
+            HasFailedAllocationBacktrace = true;
+            backtraceLock.unlock();
+        }
+    }
+
+    const TIntrusivePtr<NRm::TTxState> Tx;
+    const NScheduler::TSchedulableMemoryPtr Memory;
+    // Fixed for the whole life of the tx, so that a config change between the allocation and the release doesn't
+    // break the accounting
+    const ui64 TaskMemory;
+
+    // not returned yet
+    std::atomic<ui64> ExecutionUnits = 0;
+    std::atomic<ui64> ExternalMemory = 0;
+    std::atomic<ui64> ElasticMemory = 0;
+    // Memory + ExternalMemory
+    std::atomic<ui64> AllocatedMemory = 0;
+    std::atomic<ui64> MaxAllocatedMemory = 0;
+
+    // the statistics of Memory for the out-of-memory reports
+    std::atomic<ui64> MaxAllocationSize = 0;
+
+    // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
+    std::atomic<TBackTrace*> MaxAllocationBacktrace = nullptr;
+
+    // NOTE: it's hard to maintain atomic pointer in case of tracking the last failed allocation backtrace,
+    //       because while we try to print one - the new last may emerge and delete previous.
+    mutable std::mutex BacktraceMutex;
+    std::atomic<ui64> FailedAllocationSize = 0; // protected by BacktraceMutex (only if CollectBacktrace == true)
+    TBackTrace FailedAllocationBacktrace;       // protected by BacktraceMutex
+    std::atomic<bool> HasFailedAllocationBacktrace = false;
+};
+
 } // namespace
 
 TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx) {
     return std::make_shared<TQueryQuotaManager>(std::move(tx));
+}
+
+TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory,
+    ui64 taskMemory) {
+    return std::make_shared<TSchedulerQueryQuotaManager>(std::move(tx), std::move(memory), taskMemory);
 }
 
 // for CA/task, is NOT thread safe
@@ -229,7 +499,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
-    // Node level memory availability of the tx (see NRm::TTxState::GetMemoryAvailability) plus the locally
+    // Node level memory availability of the tx (see IQueryQuotaManager::GetMemoryAvailability) plus the locally
     // prepaid quota. Channels do not spill on a negative value, but propagate it as back pressure,
     // see TInputDescriptor::MemoryPressure.
     i64 GetMemoryAvailability() const override {
@@ -356,6 +626,17 @@ public:
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
 
+        // TODO: not expected - such a query is not in the scheduler, so the memory limit of its pool isn't applied
+        if (databaseId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID && NScheduler::IsMemoryScheduled()) {
+            YDB_LOG_ERROR_COMP(NKikimrServices::KQP_NODE, "Query of a resource pool without the database id",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", txId},
+                {"requester", executerId},
+                {"poolId", poolId});
+            Y_DEBUG_ABORT("TxId: %" PRIu64 ", query of the resource pool %s without the database id", txId, poolId.c_str());
+        }
+
         NScheduler::NHdrf::NDynamic::TQueryPtr query;
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || CaFactory_->AccountDefaultPoolInScheduler.load())) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
@@ -424,14 +705,26 @@ public:
         auto lightLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
         auto heavyLimit = CaFactory_->MkqlHeavyProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
+
+        // The initial memory (M) of a task is the limit it's started with, the elastic one (E) - what it's expected to grow by
+        struct TTaskMemory {
+            ui64 Initial = 0;
+            ui64 Elastic = 0;
+        };
+        auto taskMemoryOf = [&](const NYql::NDqProto::TDqTask& dqTask) {
+            const ui64 initialLimit = !EnableSmallComputeMemoryAllocations && IsHeavyProgram(dqTask) ? heavyLimit : lightLimit;
+            return TTaskMemory{
+                .Initial = initialLimit,
+                .Elastic = EstimateTaskElasticMemory(dqTask, initialLimit, lightLimit, heavyLimit),
+            };
+        };
+
         ui64 externalMemory = 0;
-        if (EnableSmallComputeMemoryAllocations) {
-            externalMemory = tasksCount * lightLimit;
-        } else {
-            for (const auto& dqTask: msg.GetTasks()) {
-                auto& taskOpts = dqTask.GetProgram().GetSettings();
-                externalMemory += taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation() ? heavyLimit : lightLimit;
-            }
+        ui64 elasticMemory = 0;
+        for (const auto& dqTask: msg.GetTasks()) {
+            const auto taskMemory = taskMemoryOf(dqTask);
+            externalMemory += taskMemory.Initial;
+            elasticMemory += taskMemory.Elastic;
         }
         ui64 channelMemory = 0;
 
@@ -442,14 +735,22 @@ public:
                 channelMemory = tasksCount * lightLimit;
                 externalMemory += channelMemory;
             }
-            QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
-                poolId, msg.GetMemoryPoolPercent(),
-                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
+            if (NScheduler::IsMemoryScheduled()) {
+                // the pool limits the memory in the scheduler, not in the resource manager
+                QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                    poolId, /* memoryPoolPercent */ 100.0, msg.GetDatabase(), CaFactory_->GetVerboseMemoryLimitException()),
+                    NScheduler::CreateSchedulableMemory(query, databaseId, poolId, CaFactory_->ElasticMemoryPercent),
+                    CaFactory_->TaskMemory);
+            } else {
+                QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                    poolId, msg.GetMemoryPoolPercent(),
+                    msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
+            }
         }
 
         // the tasks and the channels start with their part of it; a task returns its part when its compute actor
         // terminates, the rest is returned when the query quota manager dies
-        auto rmResult = QueryQuotaManager->AllocateTasks(tasksCount, externalMemory);
+        auto rmResult = QueryQuotaManager->AllocateTasks(tasksCount, externalMemory, elasticMemory);
 
         if (!rmResult) {
             ReplyError(msg, rmResult.GetStatus(), ev->Cookie, rmResult.GetFailReason());
@@ -489,8 +790,8 @@ public:
 
             const auto taskId = dqTask.GetId();
 
-            auto& taskOpts = dqTask.GetProgram().GetSettings();
-            auto initialMemoryLimit = !EnableSmallComputeMemoryAllocations && (taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()) ? heavyLimit : lightLimit;
+            const auto taskMemory = taskMemoryOf(dqTask);
+            const auto initialMemoryLimit = taskMemory.Initial;
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
@@ -518,6 +819,7 @@ public:
                 .State = State_, // pass state to later inform when task is finished
                 .QueryQuotaManager = QueryQuotaManager,
                 .InitialMemoryLimit = initialMemoryLimit,
+                .ElasticMemory = taskMemory.Elastic,
                 .Database = msg.GetDatabase(),
                 .Query = query,
                 .UseBatchPool = msg.GetUseBatchPool(),

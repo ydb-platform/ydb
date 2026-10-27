@@ -19,4 +19,4 @@ TString JoinPath(const TString& basePath, const TString& path) {
     return prefixPathSplit.Reconstruct();
 }
 
-} // namespace NFq
+}   // namespace NFq

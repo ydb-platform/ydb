@@ -45,7 +45,7 @@ void AppendPath(TStringBuilder& result, TStringBuf component) {
     }
 }
 
-} // namespace
+}   // namespace
 
 TString GetRateLimiterResourcePath(TStringBuf cloud, TStringBuf folder, TStringBuf query) {
     TStringBuilder result;
@@ -61,4 +61,4 @@ TString GetRateLimiterResourcePath(TStringBuf cloud) {
     return result;
 }
 
-} // namespace NFq
+}   // namespace NFq

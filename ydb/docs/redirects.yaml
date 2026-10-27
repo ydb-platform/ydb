@@ -50,8 +50,11 @@ common:
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible.md
-    to: /devops/ansible/initial-deployment.md
+  # Keep legacy Ansible URLs direct; the overview preserves old section anchors.
+  - from: ^/getting_started/ansible(?:\.md|\.html)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index.md
+  - from: ^/devops/(?:deployment-options/)?ansible/initial-deployment(?:\.md|\.html)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index.md
   - from: /troubleshooting/system_views_cluster.md
     to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md

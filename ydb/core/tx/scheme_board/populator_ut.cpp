@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(PathAndPathIdSelectionsRequireSeparateQuorums) {
         TTestBasicRuntime runtime;
-        TStateStorageInfo::TRingGroup group;
+        TStateStorageInfo::TRingGroup group{};
         group.NToSelect = 3;
         constexpr size_t replicaCount = 7;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));

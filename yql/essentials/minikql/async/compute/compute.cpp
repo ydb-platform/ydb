@@ -1,4 +1,5 @@
 #include "program.h"
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -23,19 +24,24 @@ struct TFrame {
     std::vector<bool> Done;
     std::vector<ui32> Stack;
     std::optional<TOperationId> Operation;
+    std::optional<TString> ReplayDescriptor;
+    std::optional<TResult> RestoredResult;
+    std::shared_ptr<TMemoryReservation> RestoredMemory;
     bool AdmissionWait = false;
     ui64 AdmissionTurn = 0;
 };
 
-class TAsyncMap final: public TMutableComputationNode<TAsyncMap> {
-    using TBase = TMutableComputationNode<TAsyncMap>;
+class TAsyncMap final: public TStatefulSourceComputationNode<TAsyncMap, true> {
+    using TBase = TStatefulSourceComputationNode<TAsyncMap, true>;
 
 public:
-    TAsyncMap(TComputationMutables& mutables, IComputationNode* source, TProgram program, std::vector<TStep> steps)
+    TAsyncMap(TComputationMutables& mutables, IComputationNode* source, TProgram program, std::vector<TStep> steps, TType* rowType, TString metadata)
         : TBase(mutables)
         , Source_(source)
         , Program_(std::move(program))
         , Steps_(std::move(steps))
+        , RowType_(rowType)
+        , Metadata_(std::move(metadata))
     {
     }
 
@@ -48,8 +54,10 @@ public:
             , Source_(std::move(source))
             , Map_(map)
         {
+            Services_->RegisterParticipant(Map_.ValueIndex_, [this] { return Frames_.empty() && !Failed_; });
         }
         ~TStream() override {
+            Services_->UnregisterParticipant(Map_.ValueIndex_);
             for (auto& frame : Frames_) {
                 if (frame.Operation) {
                     Services_->CancelAndForget(*frame.Operation);
@@ -69,6 +77,7 @@ public:
         }
 
         void Step(TFrame& frame) {
+            Services_->CheckpointProgress();
             const ui32 index = frame.Stack.back();
             const auto& step = Map_.Steps_[index];
             const auto& ins = step.Instruction;
@@ -137,9 +146,13 @@ public:
                 finish(step.Fragment->GetValue(Ctx_));
                 return;
             }
-            if (frame.Operation) {
-                auto result = Services_->TakeResult(*frame.Operation);
+            if (frame.Operation || frame.RestoredResult) {
+                auto result = frame.RestoredResult ? std::move(frame.RestoredResult) : Services_->TakeResult(*frame.Operation);
+                frame.RestoredResult.reset();
                 MKQL_ENSURE(result, "Resuming an async operation without a result");
+                if (frame.RestoredMemory) {
+                    result->Reservation = std::move(frame.RestoredMemory);
+                }
                 frame.Operation.reset();
                 // Error payloads may contain secrets; do not interpolate them.
                 MKQL_ENSURE(result->Outcome == EOutcome::Success, "Async operation failed, outcome=" << static_cast<int>(result->Outcome) << ", code=" << static_cast<int>(result->Error));
@@ -152,9 +165,16 @@ public:
             TRequest request{.Operation = ins.Operation,
                              .Payload = TString(packer.Pack(frame.Values[input])),
                              .MaxResponseBytes = ins.MaxResponseBytes};
+            if (frame.ReplayDescriptor) {
+                request = Services_->GetReplayCodec(ins.Provider).Decode(*frame.ReplayDescriptor);
+                MKQL_ENSURE(request.Operation == ins.Operation && request.MaxResponseBytes == ins.MaxResponseBytes && !request.Deadline && !request.Reservation,
+                            "Replay codec changed the invocation contract");
+            }
             auto submitted = Services_->Submit(ins.Provider, std::move(request));
             switch (submitted.Status) {
                 case EAdmission::Accepted:
+                    frame.ReplayDescriptor.reset();
+                    frame.RestoredMemory.reset();
                     frame.Operation = submitted.Id;
                     frame.AdmissionWait = false;
                     return;
@@ -176,6 +196,7 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+            Services_->EnsureCanExecute();
             MKQL_ENSURE(!Failed_, "AsyncMap execution has failed");
             try {
                 Services_->AccountAllocatorBytes(Ctx_.HolderFactory.GetMemoryUsed());
@@ -204,6 +225,7 @@ public:
             }
             while (true) {
                 if (!Frames_.empty() && Frames_.front().Stack.empty()) {
+                    Services_->CheckpointProgress();
                     result = std::move(Frames_.front().Values[Map_.Program_.Root]);
                     Frames_.pop_front();
                     if (FrameCursor_) {
@@ -234,7 +256,7 @@ public:
                     didWork = true;
                 }
                 const bool runnable = std::any_of(Frames_.begin(), Frames_.end(), [&](const auto& frame) { return Runnable(frame); });
-                const ui64 frameBytes = sizeof(TFrame) + 64 + Map_.Steps_.size() * (sizeof(NUdf::TUnboxedValue) + sizeof(ui32) + 1);
+                const ui64 frameBytes = FrameBytes();
                 if (!runnable && !Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames && !SourceReservation_) {
                     // Reserve the destination before starting a possibly nested
                     // Fetch, and retain it across Yield. Source completion must
@@ -258,6 +280,7 @@ public:
                     NUdf::TUnboxedValue row;
                     switch (Source_.Fetch(row)) {
                         case NUdf::EFetchStatus::Finish:
+                            Services_->CheckpointProgress();
                             SourceReservation_.reset();
                             SourceFetchCharged_ = false;
                             Finished_ = true;
@@ -267,6 +290,7 @@ public:
                             SourceWaitTurn_ = Services_->GetTurn();
                             break;
                         case NUdf::EFetchStatus::Ok: {
+                            Services_->CheckpointProgress();
                             SourceFetchCharged_ = false;
                             TFrame frame;
                             frame.Reservation = std::move(SourceReservation_);
@@ -289,17 +313,153 @@ public:
             }
         }
 
+        bool HasListItems() const final {
+            return false;
+        }
         ui32 GetTraverseCount() const final {
             return 1;
         }
         NUdf::TUnboxedValue GetTraverseItem(ui32) const final {
             return Source_;
         }
-        NUdf::TUnboxedValue Save() const final {
-            MKQL_ENSURE(false, "AsyncMap checkpoint is not supported until D4");
+        ui64 FrameBytes() const {
+            return sizeof(TFrame) + 64 + Map_.Steps_.size() * (sizeof(NUdf::TUnboxedValue) + sizeof(ui32) + 1);
         }
-        void Load(const NUdf::TStringRef&) final {
-            MKQL_ENSURE(false, "AsyncMap checkpoint is not supported until D4");
+        NUdf::TUnboxedValue Save() const final {
+            MKQL_ENSURE(!Failed_, "Cannot save failed AsyncMap");
+            TString out;
+            WriteUi32(out, 1);
+            WriteString(out, Map_.Metadata_);
+            WriteBool(out, Finished_);
+            WriteBool(out, SourceFetchCharged_);
+            WriteBool(out, bool(SourceReservation_));
+            WriteUi32(out, FrameCursor_);
+            WriteUi32(out, Frames_.size());
+            for (const auto& frame : Frames_) {
+                TValuePacker rowPacker(false, Map_.RowType_);
+                WriteString(out, rowPacker.Pack(frame.Row));
+                for (ui32 i = 0; i < Map_.Steps_.size(); ++i) {
+                    WriteBool(out, frame.Done[i]);
+                    if (frame.Done[i]) {
+                        TValuePacker packer(false, Map_.Steps_[i].Type);
+                        WriteString(out, packer.Pack(frame.Values[i]));
+                    }
+                }
+                WriteUi32(out, frame.Stack.size());
+                for (auto index : frame.Stack) {
+                    WriteUi32(out, index);
+                }
+                const TResult* result = frame.RestoredResult ? &*frame.RestoredResult : frame.Operation ? Services_->PeekResult(*frame.Operation)
+                                                                                                        : nullptr;
+                const bool pending = frame.Operation || frame.ReplayDescriptor;
+                WriteByte(out, result ? 2 : pending ? 1
+                                                    : 0);
+                if (result) {
+                    WriteUi32(out, static_cast<ui32>(result->Outcome));
+                    WriteUi32(out, static_cast<ui32>(result->Error));
+                    WriteString(out, result->Outcome == EOutcome::Success ? std::string_view(result->Payload) : std::string_view{});
+                } else if (pending) {
+                    MKQL_ENSURE(Services_->GetCheckpointMode() == ECheckpointMode::Replay, "Pending frame requires Replay");
+                    const auto& ins = Map_.Steps_[frame.Stack.back()].Instruction;
+                    const auto& codec = Services_->GetReplayCodec(ins.Provider);
+                    WriteString(out, codec.Contract());
+                    if (frame.ReplayDescriptor) {
+                        WriteString(out, *frame.ReplayDescriptor);
+                    } else {
+                        const auto input = ins.Dependencies[0];
+                        TValuePacker packer(false, Map_.Steps_[input].Type);
+                        WriteString(out, codec.Encode({.Operation = ins.Operation,
+                                                       .Payload = TString(packer.Pack(frame.Values[input])),
+                                                       .MaxResponseBytes = ins.MaxResponseBytes}));
+                    }
+                }
+                Services_->CheckSnapshotSize(out.size());
+            }
+            return MakeString(out);
+        }
+        bool Load2(const NUdf::TUnboxedValue& state) final {
+            TString bytes;
+            auto it = state.GetListIterator();
+            NUdf::TUnboxedValue part;
+            while (it.Next(part)) {
+                bytes += part.AsStringRef();
+                Services_->CheckSnapshotSize(bytes.size());
+            }
+            Load(NUdf::TStringRef(bytes));
+            return true;
+        }
+        void Load(const NUdf::TStringRef& state) final {
+            MKQL_ENSURE(Frames_.empty(), "AsyncMap must be fresh on restore");
+            TStringBuf in(state);
+            Services_->CheckSnapshotSize(in.size());
+            MKQL_ENSURE(ReadUi32(in) == 1 && ReadString(in) == std::string_view(Map_.Metadata_), "Incompatible AsyncMap state");
+            Finished_ = ReadBool(in);
+            SourceFetchCharged_ = ReadBool(in);
+            if (ReadBool(in)) {
+                SourceReservation_ = Services_->TryReserveFrame(FrameBytes());
+                MKQL_ENSURE(SourceReservation_, "Insufficient memory for restored source frame");
+            }
+            FrameCursor_ = ReadUi32(in);
+            const auto count = ReadUi32(in);
+            MKQL_ENSURE(count <= Map_.Program_.MaxFrames && (!count ? !FrameCursor_ : FrameCursor_ < count), "Invalid saved frame count/cursor");
+            for (ui32 n = 0; n < count; ++n) {
+                TFrame frame;
+                frame.Reservation = Services_->TryReserveFrame(FrameBytes());
+                MKQL_ENSURE(frame.Reservation, "Insufficient memory for restored frame");
+                TValuePacker rowPacker(false, Map_.RowType_);
+                auto unpack = [&](TValuePacker& packer) {
+                    const auto data = ReadString(in);
+                    return packer.Unpack(TStringBuf(data.data(), data.size()), Ctx_.HolderFactory);
+                };
+                frame.Row = unpack(rowPacker);
+                frame.Values.resize(Map_.Steps_.size());
+                frame.Done.resize(Map_.Steps_.size());
+                for (ui32 i = 0; i < Map_.Steps_.size(); ++i) {
+                    frame.Done[i] = ReadBool(in);
+                    if (frame.Done[i]) {
+                        TValuePacker packer(false, Map_.Steps_[i].Type);
+                        frame.Values[i] = unpack(packer);
+                    }
+                }
+                const auto depth = ReadUi32(in);
+                MKQL_ENSURE(depth <= Map_.Steps_.size(), "Invalid saved continuation depth");
+                for (ui32 i = 0; i < depth; ++i) {
+                    auto index = ReadUi32(in);
+                    MKQL_ENSURE(index < Map_.Steps_.size(), "Invalid saved continuation position");
+                    MKQL_ENSURE(i ? index < frame.Stack.back() : index == Map_.Program_.Root, "Invalid saved continuation path");
+                    frame.Stack.push_back(index);
+                }
+                MKQL_ENSURE(depth || frame.Done[Map_.Program_.Root], "Incomplete saved result");
+                auto kind = ReadByte(in);
+                MKQL_ENSURE(kind <= 2, "Invalid saved invocation state");
+                if (kind) {
+                    MKQL_ENSURE(depth && !frame.Done[frame.Stack.back()] && Map_.Steps_[frame.Stack.back()].Instruction.Kind == EInstruction::Invoke,
+                                "Invalid pending invocation position");
+                    const auto& ins = Map_.Steps_[frame.Stack.back()].Instruction;
+                    MKQL_ENSURE(frame.Done[ins.Dependencies[0]], "Pending invocation has no argument");
+                    if (kind == 1) {
+                        MKQL_ENSURE(Services_->GetCheckpointMode() == ECheckpointMode::Replay, "Pending state requires Replay");
+                        const auto& codec = Services_->GetReplayCodec(ins.Provider);
+                        MKQL_ENSURE(ReadString(in) == std::string_view(codec.Contract()), "Incompatible replay codec");
+                        frame.ReplayDescriptor = TString(ReadString(in));
+                    } else {
+                        TResult result;
+                        const auto outcome = ReadUi32(in);
+                        const auto error = ReadUi32(in);
+                        MKQL_ENSURE(outcome <= static_cast<ui32>(EOutcome::Timeout) && error <= static_cast<ui32>(EError::StartFailed), "Invalid saved outcome");
+                        result.Outcome = static_cast<EOutcome>(outcome);
+                        result.Error = static_cast<EError>(error);
+                        result.Payload = TString(ReadString(in));
+                        MKQL_ENSURE(result.Payload.size() <= ins.MaxResponseBytes, "Saved response exceeds limit");
+                        frame.RestoredResult = std::move(result);
+                    }
+                    frame.RestoredMemory = Services_->TryReserveFrame(frame.ReplayDescriptor ? frame.ReplayDescriptor->size() : frame.RestoredResult->Payload.size());
+                    MKQL_ENSURE(frame.RestoredMemory, "Insufficient memory for restored descriptor");
+                }
+                Frames_.push_back(std::move(frame));
+            }
+            MKQL_ENSURE(in.empty(), "Trailing AsyncMap state bytes");
+            Services_->AccountAllocatorBytes(Ctx_.HolderFactory.GetMemoryUsed());
         }
 
         TComputationContext& Ctx_;
@@ -316,18 +476,44 @@ public:
         ui64 SourceWaitTurn_ = 0;
     };
 
+    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const override {
+        MKQL_ENSURE(!ctx.ExecuteLLVM, "AsyncMap requires interpreted execution");
+        auto& value = ValueRef(ctx);
+        if (value.IsInvalid()) {
+            value = DoCalculate(ctx);
+        } else if (value.IsBoxed() && value.HasListItems()) {
+            NUdf::TUnboxedValue stream = DoCalculate(ctx);
+            stream.Load2(value);
+            value = std::move(stream);
+        }
+        return value;
+    }
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         MKQL_ENSURE(ctx.AsyncServices, "AsyncMap requires task-owned async execution services");
         MKQL_ENSURE(!ctx.ExecuteLLVM, "AsyncMap requires interpreted execution in D2");
+        if (ctx.AsyncServices->GetCheckpointMode() != ECheckpointMode::Disabled) {
+            CheckAsyncValueType(RowType_);
+        }
         for (const auto& step : Steps_) {
             if (step.Instruction.Kind == EInstruction::Invoke) {
                 MKQL_ENSURE(ctx.AsyncServices->HasProvider(step.Instruction.Provider), "Missing async provider: " << step.Instruction.Provider);
+                if (ctx.AsyncServices->GetCheckpointMode() == ECheckpointMode::Replay) {
+                    ctx.AsyncServices->GetReplayCodec(step.Instruction.Provider);
+                }
             }
         }
         return ctx.HolderFactory.Create<TStream>(ctx, Source_->GetValue(ctx), *this);
     }
 
 private:
+    void InitNode(TComputationContext& ctx) const override {
+        TBase::InitNode(ctx);
+        ctx.AsyncStateLoaders.push_back([this, &ctx] {
+            if (!ValueRef(ctx).IsInvalid()) {
+                GetValue(ctx);
+            }
+        });
+    }
     void RegisterDependencies() const final {
         DependsOn(Source_);
         for (const auto& step : Steps_) {
@@ -344,6 +530,8 @@ private:
     IComputationNode* const Source_;
     const TProgram Program_;
     const std::vector<TStep> Steps_;
+    TType* const RowType_;
+    const TString Metadata_;
 };
 
 } // namespace
@@ -379,7 +567,8 @@ IComputationNode* WrapAsyncMap(TCallable& callable, const TComputationNodeFactor
         steps.push_back(std::move(step));
     }
     ctx.Mutables.HasAsyncComputation = true;
-    return new TAsyncMap(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), std::move(program), std::move(steps));
+    return new TAsyncMap(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), std::move(program), std::move(steps),
+                         AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType())->GetItemType(), metadata);
 }
 
 } // namespace NKikimr::NMiniKQL::NAsync

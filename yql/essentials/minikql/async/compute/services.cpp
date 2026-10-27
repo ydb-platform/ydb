@@ -1,4 +1,7 @@
 #include "compute.h"
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <map>
+#include <set>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
@@ -34,6 +37,29 @@ struct TExecutionServices::TImpl {
     size_t Steps = 0;
     ui64 Turn = 0;
     bool Closed = false;
+    THashMap<TString, std::shared_ptr<const IReplayCodec>> Codecs;
+    std::map<ui32, std::function<bool()>> Participants;
+    std::set<ui32> ExpectedParticipants;
+    ui64 CheckpointId = 0;
+    ui64 LastCheckpointId = 0;
+    ui64 SnapshotRevision = 0;
+    ui64 Produced = 0;
+    ui64 Acknowledged = 0;
+    bool InputCut = false;
+    bool Saving = false;
+    bool Saved = false;
+    bool Durable = false;
+    bool Restoring = false;
+    bool Parsed = false;
+    std::shared_ptr<TMemoryReservation> SnapshotMemory;
+    bool Drained() const {
+        for (const auto& [id, drained] : Participants) {
+            if (!drained()) {
+                return false;
+            }
+        }
+        return Live.empty();
+    }
 
     TImpl(TWakeup enqueue, size_t budget, TLimits limits, TExecutionSettings settings)
         : Gate(std::make_shared<TWakeupGate>(std::move(enqueue)))
@@ -72,6 +98,7 @@ bool TExecutionServices::HasProvider(TStringBuf name) const {
     return Impl_->Providers.contains(name);
 }
 void TExecutionServices::BeginTurn() {
+    EnsureCanExecute();
     Y_ENSURE(!Impl_->Closed, "Async execution is closed");
     // Clear BEFORE processing. A completion racing Drain, or a budget rerun
     // requested during this turn, must be able to post the next event.
@@ -148,6 +175,7 @@ ui64 TExecutionServices::GetTurn() const {
     return Impl_->Turn;
 }
 TSubmission TExecutionServices::Submit(TStringBuf provider, TRequest request) {
+    EnsureCanExecute();
     auto submission = Impl_->Context.Submit(provider, std::move(request));
     if (submission.Status == EAdmission::Accepted) {
         Impl_->Live.insert(submission.Id.Sequence);
@@ -182,12 +210,176 @@ void TExecutionServices::Shutdown() {
     Impl_->Closed = true;
     Impl_->Gate->Closed.store(true);
     Impl_->Context.Shutdown();
+    Impl_->SnapshotMemory.reset();
     Impl_->Live.clear();
     Impl_->Ready.clear();
     Impl_->Drain();
 }
 TStats TExecutionServices::GetStats() const {
     return Impl_->Context.GetStats();
+}
+
+void TExecutionServices::RegisterReplayCodec(TString provider, std::shared_ptr<const IReplayCodec> codec) {
+    Y_ENSURE(!Impl_->Turn && codec && !codec->Contract().empty(), "Invalid replay codec registration");
+    Y_ENSURE(Impl_->Codecs.emplace(std::move(provider), std::move(codec)).second, "Duplicate replay codec");
+}
+const IReplayCodec& TExecutionServices::GetReplayCodec(TStringBuf provider) const {
+    auto it = Impl_->Codecs.find(provider);
+    Y_ENSURE(it != Impl_->Codecs.end(), "Replay requires an explicit provider codec");
+    return *it->second;
+}
+ECheckpointMode TExecutionServices::GetCheckpointMode() const {
+    return Impl_->Settings.Checkpoint.Mode;
+}
+ui64 TExecutionServices::GetGeneration() const {
+    return Impl_->Context.GetGeneration();
+}
+const TResult* TExecutionServices::PeekResult(TOperationId id) const {
+    return IsReady(id) ? &Impl_->Ready.at(id.Sequence) : nullptr;
+}
+void TExecutionServices::RegisterParticipant(ui32 id, std::function<bool()> drained) {
+    Y_ENSURE(!Impl_->Saving && Impl_->Participants.emplace(id, std::move(drained)).second, "Duplicate checkpoint participant");
+}
+void TExecutionServices::UnregisterParticipant(ui32 id) {
+    Impl_->Participants.erase(id);
+}
+void TExecutionServices::BeginCheckpoint(ui64 id) {
+    EnsureCanExecute();
+    Y_ENSURE(GetCheckpointMode() != ECheckpointMode::Disabled && !Impl_->Settings.Checkpoint.PlanFingerprint.empty(), "Async checkpoint is not configured");
+    Y_ENSURE(id > Impl_->LastCheckpointId && !Impl_->CheckpointId, "Invalid checkpoint boundary");
+    Impl_->LastCheckpointId = Impl_->CheckpointId = id;
+    Impl_->InputCut = Impl_->Saved = Impl_->Durable = false;
+}
+void TExecutionServices::EstablishInputCut(ui64 id) {
+    Y_ENSURE(id && id == Impl_->CheckpointId && !Impl_->Restoring, "Invalid input cut");
+    Impl_->InputCut = true;
+}
+bool TExecutionServices::IsInputPaused() const {
+    return Impl_->CheckpointId || Impl_->Restoring;
+}
+ui64 TExecutionServices::OutputProduced() {
+    CheckpointProgress();
+    return ++Impl_->Produced;
+}
+void TExecutionServices::OutputAcknowledged(ui64 generation, ui64 sequence) {
+    if (generation != GetGeneration()) {
+        return;
+    }
+    Y_ENSURE(sequence == Impl_->Acknowledged + 1 && sequence <= Impl_->Produced, "Invalid downstream acknowledgement");
+    Impl_->Acknowledged = sequence;
+}
+bool TExecutionServices::CanSaveCheckpoint() const {
+    return !Impl_->Participants.empty() && !Impl_->Closed && !Impl_->Restoring && !Impl_->Saving && !Impl_->Saved && Impl_->CheckpointId && Impl_->InputCut &&
+           Impl_->Produced == Impl_->Acknowledged &&
+           (GetCheckpointMode() == ECheckpointMode::Replay || Impl_->Drained());
+}
+TSnapshotId TExecutionServices::GetSnapshotId() const {
+    Y_ENSURE(Impl_->Saved, "Checkpoint snapshot is not saved");
+    return {GetGeneration(), Impl_->CheckpointId, Impl_->SnapshotRevision};
+}
+bool TExecutionServices::SnapshotStored(TSnapshotId id) {
+    if (Impl_->Closed || !Impl_->Saved || id != GetSnapshotId()) {
+        return false;
+    }
+    // Caller has transferred snapshot bytes to bounded checkpoint storage.
+    Impl_->SnapshotMemory.reset();
+    Impl_->Durable = true;
+    return true;
+}
+bool TExecutionServices::CanForwardWatermark() const {
+    return !Impl_->Restoring && !Impl_->Closed && Impl_->Produced == Impl_->Acknowledged && Impl_->Drained();
+}
+bool TExecutionServices::CanForwardBoundary() const {
+    return Impl_->CheckpointId && Impl_->Saved && Impl_->Durable && CanForwardWatermark();
+}
+void TExecutionServices::ReleaseBoundary() {
+    Y_ENSURE(CanForwardBoundary(), "Checkpoint cannot overtake pending output");
+    Impl_->CheckpointId = 0;
+    RequestRerun();
+}
+void TExecutionServices::EnsureCanExecute() const {
+    Y_ENSURE(!Impl_->Restoring && !Impl_->Saving && !Impl_->Closed && !(Impl_->Saved && Impl_->SnapshotMemory),
+             "Async execution is suspended for restore/save or closed");
+}
+void TExecutionServices::CheckpointProgress() {
+    EnsureCanExecute();
+    // A replay snapshot is a recovery cut, not permission to attach later output
+    // to an earlier barrier. Without an engine channel-cut codec, recapture a
+    // drained image before forwarding the barrier (conservative Drain fallback).
+    Impl_->Saved = Impl_->Durable = false;
+}
+TString TExecutionServices::BeforeSave() {
+    Y_ENSURE(CanSaveCheckpoint(), "Async checkpoint requires a consistent input/output cut and ready participants");
+    Impl_->Saving = true;
+    ++Impl_->SnapshotRevision;
+    const auto bytes = Impl_->Settings.Checkpoint.MaxSnapshotBytes;
+    Y_ENSURE(bytes && bytes <= Impl_->Context.GetQuota()->GetLimit() / 3, "Snapshot memory limit");
+    Impl_->SnapshotMemory = Impl_->Context.GetQuota()->TryReserve(3 * bytes);
+    Y_ENSURE(Impl_->SnapshotMemory, "Snapshot memory limit");
+    TString header;
+    WriteString(header, "DQ-ASYNC");
+    WriteUi32(header, 1);
+    WriteString(header, Impl_->Settings.Checkpoint.PlanFingerprint);
+    WriteUi32(header, static_cast<ui32>(GetCheckpointMode()));
+    WriteUi64(header, Impl_->CheckpointId);
+    WriteUi32(header, Impl_->Participants.size());
+    for (const auto& [id, _] : Impl_->Participants) {
+        WriteUi32(header, id);
+    }
+    return header;
+}
+void TExecutionServices::CheckSnapshotSize(ui64 bytes) const {
+    Y_ENSURE(bytes <= Impl_->Settings.Checkpoint.MaxSnapshotBytes, "Async snapshot exceeds size limit");
+}
+void TExecutionServices::AfterSave() {
+    Impl_->Saving = false;
+    Impl_->Saved = true;
+}
+void TExecutionServices::AbortSave() noexcept {
+    if (!Impl_->Saving) {
+        return;
+    }
+    Impl_->Saving = false;
+    Impl_->SnapshotMemory.reset();
+}
+void TExecutionServices::BeforeLoad(TStringBuf header, ui64 bytes) {
+    Y_ENSURE(!Impl_->Turn && Impl_->Participants.empty() && !Impl_->Restoring && !Impl_->Closed && !Impl_->CheckpointId,
+             "Restore requires a fresh execution generation before materialization");
+    // Poison execution even on a malformed snapshot; discard this graph on error.
+    Impl_->Restoring = true;
+    CheckSnapshotSize(bytes);
+    auto encoded = ReadString(header);
+    header = TStringBuf(encoded.data(), encoded.size());
+    Y_ENSURE(bytes <= Impl_->Context.GetQuota()->GetLimit() / 3, "Restore memory limit");
+    Impl_->SnapshotMemory = Impl_->Context.GetQuota()->TryReserve(3 * bytes);
+    Y_ENSURE(Impl_->SnapshotMemory, "Restore memory limit");
+    Y_ENSURE(GetCheckpointMode() != ECheckpointMode::Disabled && !Impl_->Settings.Checkpoint.PlanFingerprint.empty(), "Async checkpoint is not configured");
+    Y_ENSURE(ReadString(header) == "DQ-ASYNC" && ReadUi32(header) == 1, "Incompatible async checkpoint version");
+    Y_ENSURE(ReadString(header) == std::string_view(Impl_->Settings.Checkpoint.PlanFingerprint), "Incompatible async checkpoint plan");
+    Y_ENSURE(ReadUi32(header) == static_cast<ui32>(GetCheckpointMode()), "Incompatible async checkpoint mode");
+    Impl_->LastCheckpointId = Impl_->CheckpointId = ReadUi64(header);
+    Y_ENSURE(Impl_->CheckpointId, "Invalid checkpoint id");
+    const auto count = ReadUi32(header);
+    Y_ENSURE(count <= header.size(), "Invalid checkpoint participant count");
+    for (ui32 i = 0; i < count; ++i) {
+        Y_ENSURE(Impl_->ExpectedParticipants.insert(ReadUi32(header)).second, "Duplicate saved participant");
+    }
+    Y_ENSURE(header.empty(), "Trailing async checkpoint bytes");
+}
+void TExecutionServices::AfterLoad() {
+    Impl_->Parsed = true;
+}
+void TExecutionServices::CompleteRestore() {
+    Y_ENSURE(Impl_->Restoring && Impl_->Parsed, "Graph state has not been restored");
+    std::set<ui32> actual;
+    for (const auto& [id, _] : Impl_->Participants) {
+        actual.insert(id);
+    }
+    Y_ENSURE(actual == Impl_->ExpectedParticipants, "Checkpoint participants do not match materialized graph");
+    Impl_->SnapshotMemory.reset();
+    Impl_->Restoring = false;
+    Impl_->InputCut = Impl_->Saved = Impl_->Durable = true;
+    RequestRerun();
 }
 
 } // namespace NKikimr::NMiniKQL::NAsync

@@ -112,9 +112,11 @@ ownership, wakeup, accounting and metrics details.
 ## Unsupported execution modes
 
 The pattern must use `OptLLVM=OFF`; D2 rejects codegen rather than generating a
-synchronous wrapper. Graph SaveGraphState/LoadGraphState explicitly reject async
-computation until the D4 checkpoint/replay contract exists. Do not enable this
-path in a checkpointed engine before that integration.
+synchronous wrapper. Async checkpoint requires explicit execution settings and an
+owner cut protocol; without them SaveGraphState/LoadGraphState fail explicitly.
+[D4 checkpoint and restore](CHECKPOINT.md) covers serializable frames, Drain,
+opt-in Replay codecs and conservative barrier ordering. Production checkpoint
+coordinator/channel integration remains D6; it is not enabled by this library.
 
 ## Tests
 

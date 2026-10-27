@@ -9,6 +9,9 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <atomic>
 #include <thread>
 #include <deque>
@@ -47,6 +50,101 @@ TExecutionSettings DeterministicSettings() {
     return settings;
 }
 
+// A real serializable source cursor, not an Iterator restarted at row zero.
+// The engine adapter is responsible for establishing this input cut in D6.
+class TCheckpointSource final: public TStatefulSourceComputationNode<TCheckpointSource, true> {
+    using TBase = TStatefulSourceComputationNode<TCheckpointSource, true>;
+    class TStream final: public TComputationValue<TStream> {
+    public:
+        TStream(TMemoryUsageInfo* memory, ui64 count, std::shared_ptr<TExecutionServices> services)
+            : TComputationValue<TStream>(memory)
+            , Count(count)
+            , Services(std::move(services))
+        {
+        }
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& out) override {
+            if (Services->IsInputPaused()) {
+                return NUdf::EFetchStatus::Yield;
+            }
+            if (Position == Count) {
+                return NUdf::EFetchStatus::Finish;
+            }
+            out = NUdf::TUnboxedValuePod(++Position);
+            return NUdf::EFetchStatus::Ok;
+        }
+        bool HasListItems() const override {
+            return false;
+        }
+        NUdf::TUnboxedValue Save() const override {
+            TString bytes;
+            WriteUi64(bytes, Position);
+            return MakeString(bytes);
+        }
+        bool Load2(const NUdf::TUnboxedValue& value) override {
+            TString bytes;
+            auto it = value.GetListIterator();
+            NUdf::TUnboxedValue chunk;
+            while (it.Next(chunk)) {
+                bytes += chunk.AsStringRef();
+            }
+            TStringBuf in(bytes);
+            Position = ReadUi64(in);
+            MKQL_ENSURE(Position <= Count && in.empty(), "Invalid test source state");
+            return true;
+        }
+        ui64 Position = 0;
+        const ui64 Count;
+        const std::shared_ptr<TExecutionServices> Services;
+    };
+
+public:
+    TCheckpointSource(TComputationMutables& mutables, ui64 count)
+        : TBase(mutables)
+        , Count(count)
+    {
+    }
+    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const override {
+        auto& value = ValueRef(ctx);
+        if (value.IsInvalid()) {
+            value = ctx.HolderFactory.Create<TStream>(Count, ctx.AsyncServices);
+        } else if (value.HasListItems()) {
+            NUdf::TUnboxedValue stream = ctx.HolderFactory.Create<TStream>(Count, ctx.AsyncServices);
+            stream.Load2(value);
+            value = std::move(stream);
+        }
+        return value;
+    }
+
+private:
+    void RegisterDependencies() const override {
+    }
+    const ui64 Count;
+};
+IComputationNode* CheckpointTestFactory(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    if (callable.GetType()->GetName() == "CheckpointTestSource") {
+        return new TCheckpointSource(ctx.Mutables, AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().Get<ui64>());
+    }
+    return nullptr;
+}
+struct TEchoReplayCodec final: IReplayCodec {
+    TString Contract() const override {
+        return "test-echo/v1";
+    }
+    TString Encode(const TRequest& request) const override {
+        UNIT_ASSERT_VALUES_EQUAL(request.Operation, "echo");
+        return request.Payload;
+    }
+    TRequest Decode(TStringBuf descriptor) const override {
+        return {.Operation = "echo", .Payload = TString(descriptor), .MaxResponseBytes = 1024};
+    }
+};
+TExecutionSettings CheckpointSettings(ECheckpointMode mode) {
+    auto settings = DeterministicSettings();
+    settings.Checkpoint.Mode = mode;
+    settings.Checkpoint.PlanFingerprint = "test-graph/v1";
+    return settings;
+}
+
 struct TFixture {
     TSetup<false> Setup;
     std::atomic<size_t> Events = 0;
@@ -57,6 +155,8 @@ struct TFixture {
     NUdf::TUnboxedValue Stream;
     std::vector<NUdf::TUnboxedValue> Output;
     bool Finished = false;
+    bool AckOutputs = true;
+    std::deque<ui64> Unacked;
 
     explicit TFixture(size_t quantum = 1000, TLimits limits = {}, TExecutionSettings settings = DeterministicSettings())
         : Services(std::make_shared<TExecutionServices>([this](ui64) { ++Events; }, quantum, limits, std::move(settings)))
@@ -96,15 +196,59 @@ struct TFixture {
         }
         BuildProgram(program);
     }
-    void BuildProgram(TRuntimeNode program, TString llvm = "OFF") {
+    void BuildProgram(TRuntimeNode program, TString llvm = "OFF", bool materialize = true) {
         Setup.Explorer.Walk(program.GetNode(), Setup.Env->GetNodeStack());
-        TComputationPatternOpts opts(Setup.Alloc.Ref(), *Setup.Env, GetTestFactory(), Setup.FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception, llvm, EGraphPerProcess::Multi);
+        TComputationPatternOpts opts(Setup.Alloc.Ref(), *Setup.Env, GetTestFactory(CheckpointTestFactory), Setup.FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception, llvm, EGraphPerProcess::Multi);
         Setup.Pattern = MakeComputationPattern(Setup.Explorer, program, {}, opts);
         auto execution = opts.ToComputationOptions(*Setup.RandomProvider, *Setup.TimeProvider);
         execution.AsyncServices = Services;
+        if (Services->GetCheckpointMode() != ECheckpointMode::Disabled) {
+            execution.AsyncCheckpoint = Services;
+        }
         Graph = Setup.Pattern->Clone(execution);
         Graph->Prepare();
+        if (materialize) {
+            Stream = Graph->GetValue();
+        }
+    }
+    template <class F>
+    void BuildCheckpoint(ui64 count, F body, bool materialize = true, ui32 window = 16, ui32 depth = 1, bool flow = false) {
+        auto* type = Pb().NewDataLiteral<ui64>(0).GetStaticType();
+        TCallableBuilder source(Pb().GetTypeEnvironment(), "CheckpointTestSource", TStreamType::Create(type, Pb().GetTypeEnvironment()), true);
+        source.Add(Pb().NewDataLiteral<ui64>(count));
+        auto program = TRuntimeNode(source.Build(), false);
+        if (flow) {
+            program = Pb().ToFlow(program, {});
+        }
+        for (ui32 i = 0; i < depth; ++i) {
+            auto row = Pb().Arg(type);
+            program = BuildAsyncMap(Pb(), program, row, body(row), Registry, window);
+        }
+        if (flow) {
+            program = Pb().FromFlow(program);
+        }
+        BuildProgram(DeserializeRuntimeNode(SerializeRuntimeNode(program, *Setup.Env), *Setup.Env), "OFF", materialize);
+    }
+    void EnableReplay() {
+        Services->RegisterReplayCodec("native", std::make_shared<TEchoReplayCodec>());
+    }
+    void AckAll() {
+        while (!Unacked.empty()) {
+            Services->OutputAcknowledged(Services->GetGeneration(), Unacked.front());
+            Unacked.pop_front();
+        }
+    }
+    void Cut(ui64 id = 1) {
+        Services->BeginCheckpoint(id);
+        Services->EstablishInputCut(id);
+    }
+    void Restore(TStringBuf snapshot) {
+        Graph->LoadGraphState(snapshot);
+        UNIT_ASSERT(Provider->Calls.empty());
         Stream = Graph->GetValue();
+        UNIT_ASSERT(Provider->Calls.empty());
+        Services->CompleteRestore();
+        UNIT_ASSERT(Provider->Calls.empty());
     }
     void BuildNested(std::vector<ui64> input, ui32 depth, bool flow = false) {
         std::vector<TRuntimeNode> rows;
@@ -137,6 +281,12 @@ struct TFixture {
             auto status = Stream.Fetch(value);
             if (status == NUdf::EFetchStatus::Ok) {
                 Output.push_back(std::move(value));
+                if (Services->GetCheckpointMode() != ECheckpointMode::Disabled) {
+                    Unacked.push_back(Services->OutputProduced());
+                    if (AckOutputs) {
+                        AckAll();
+                    }
+                }
                 continue;
             }
             Finished = status == NUdf::EFetchStatus::Finish;
@@ -198,6 +348,519 @@ struct TYqlFixture {
 };
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(TAsyncCheckpoint) {
+Y_UNIT_TEST(DrainWaitsForRpcAndSlowDownstream) {
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Drain));
+        f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 16);
+        f.Cut();
+        UNIT_ASSERT(!f.Services->CanSaveCheckpoint());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "consistent input/output cut");
+        f.AckOutputs = false;
+        for (size_t i = 0; i < 16; ++i) {
+            f.Provider->Reply(i);
+        }
+        f.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+        UNIT_ASSERT(!f.Services->CanSaveCheckpoint());
+        UNIT_ASSERT(!f.Services->CanForwardWatermark());
+        f.AckAll();
+        UNIT_ASSERT(f.Services->CanSaveCheckpoint());
+        snapshot = f.Graph->SaveGraphState();
+        UNIT_ASSERT(!f.Services->CanForwardBoundary());
+        f.Services->SnapshotStored(f.Services->GetSnapshotId());
+        UNIT_ASSERT(f.Services->CanForwardBoundary());
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Drain));
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(snapshot);
+    UNIT_ASSERT(f.Services->CanForwardBoundary());
+    f.Services->ReleaseBoundary();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 184);
+    for (ui64 i = 0; i < 184; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 17);
+    }
+}
+Y_UNIT_TEST(Replay200RowsPendingAndCompletedWithoutApplyingWithLateOldCallbacks) {
+    TString snapshot;
+    std::shared_ptr<TProvider> old;
+    ui64 generation;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        old = f.Provider;
+        generation = f.Services->GetGeneration();
+        for (size_t i = 1; i < 16; i += 2) {
+            old->Reply(i);
+        }
+        // Owner has received results but has not resumed any frame.
+        f.Services->BeginTurn();
+        f.Services->EndTurn();
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+        f.Services->SnapshotStored(f.Services->GetSnapshotId());
+        UNIT_ASSERT(!f.Services->CanForwardBoundary());
+        UNIT_ASSERT(!f.Services->CanForwardWatermark());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(f.Services->ReleaseBoundary(), yexception, "cannot overtake");
+        auto immutable = snapshot;
+        old->Reply(0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot, immutable);
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(snapshot);
+    UNIT_ASSERT(f.Services->GetGeneration() != generation);
+    for (size_t i = 0; i < old->Calls.size(); ++i) {
+        old->Reply(i);
+    }
+    f.AckOutputs = false;
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 8); // only unfinished calls replay
+    UNIT_ASSERT(!f.Services->CanForwardBoundary());
+    f.Services->OutputAcknowledged(generation, 1); // stale generation cannot release output
+    UNIT_ASSERT(!f.Services->CanForwardWatermark());
+    f.AckAll();
+    UNIT_ASSERT(!f.Services->CanForwardBoundary()); // the old pending image is stale
+    UNIT_ASSERT(!f.Graph->SaveGraphState().empty());
+    f.Services->SnapshotStored(f.Services->GetSnapshotId());
+    UNIT_ASSERT(f.Services->CanForwardBoundary());
+    f.Services->ReleaseBoundary();
+    f.AckOutputs = true;
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 200);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 192);
+    for (ui64 i = 0; i < 200; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+    }
+}
+Y_UNIT_TEST(ReplayNestedFramesAtCpuYield) {
+    TString snapshot;
+    {
+        TFixture f(1, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, true, 4, 3);
+        f.Turn();
+        f.Pump();
+        UNIT_ASSERT(!f.Provider->Calls.empty());
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+    }
+    TFixture f(1, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, false, 4, 3);
+    f.Restore(snapshot);
+    f.Pump();
+    UNIT_ASSERT(!f.Services->CanForwardBoundary());
+    UNIT_ASSERT(!f.Graph->SaveGraphState().empty());
+    f.Services->SnapshotStored(f.Services->GetSnapshotId());
+    UNIT_ASSERT(f.Services->CanForwardBoundary());
+    f.Services->ReleaseBoundary();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 200);
+    for (ui64 i = 0; i < 200; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+    }
+}
+Y_UNIT_TEST(ReplayRequiresCodecAndExplicitInputCut) {
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); }), yexception, "explicit provider codec");
+    UNIT_ASSERT(f.Provider->Calls.empty());
+}
+Y_UNIT_TEST(SnapshotRequiresInputCut) {
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Drain));
+    f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); });
+    f.Services->BeginCheckpoint(1);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "consistent input/output cut");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Services->EstablishInputCut(2), yexception, "Invalid input cut");
+    f.Services->EstablishInputCut(1);
+    UNIT_ASSERT(!f.Graph->SaveGraphState().empty());
+}
+Y_UNIT_TEST(InvalidSnapshotPlanModeVersionAndTruncationFailWithoutIo) {
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->LoadGraphState(snapshot), yexception, "fresh execution generation");
+    }
+    for (ui32 variant = 0; variant < 4; ++variant) {
+        auto settings = CheckpointSettings(variant == 0 ? ECheckpointMode::Drain : ECheckpointMode::Replay);
+        if (variant == 1) {
+            settings.Checkpoint.PlanFingerprint = "other-plan";
+        }
+        TFixture f(1000, {}, settings);
+        f.EnableReplay();
+        f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); }, false);
+        auto bad = snapshot;
+        if (variant == 2) {
+            bad[bad.find("DQ-ASYNC")] = 'X';
+        }
+        if (variant == 3) {
+            bad.resize(bad.size() - 1);
+        }
+        UNIT_ASSERT_EXCEPTION(f.Graph->LoadGraphState(bad), yexception);
+        UNIT_ASSERT(f.Provider->Calls.empty());
+        UNIT_ASSERT_EXCEPTION(f.Services->BeginTurn(), yexception);
+    }
+}
+Y_UNIT_TEST(RestoreMustCompleteBeforeResume) {
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); }, false);
+    f.Graph->LoadGraphState(snapshot);
+    UNIT_ASSERT_EXCEPTION(f.Services->BeginTurn(), yexception);
+    f.Stream = f.Graph->GetValue();
+    UNIT_ASSERT_EXCEPTION(f.Turn(), yexception);
+    f.Services->CompleteRestore();
+    f.Turn();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 16);
+}
+Y_UNIT_TEST(SnapshotMemoryAndSizeLimitsReleaseOnFailure) {
+    auto settings = CheckpointSettings(ECheckpointMode::Replay);
+    settings.Checkpoint.MaxSnapshotBytes = 64;
+    TFixture f(1000, {}, settings);
+    f.EnableReplay();
+    f.BuildCheckpoint(20, [&](auto row) { return f.Echo(row); });
+    f.Turn();
+    f.Cut();
+    auto before = f.Services->GetSchedulerStats().MemoryBytes;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "size limit");
+    UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().MemoryBytes, before);
+    UNIT_ASSERT(f.Services->CanSaveCheckpoint());
+}
+Y_UNIT_TEST(CompletedBranchIsNotReevaluatedOnReplay) {
+    TString snapshot;
+    auto body = [](TFixture& f, TRuntimeNode row) {
+        return f.Pb().If(f.Pb().Equals(f.Echo(row), f.Pb().NewDataLiteral<ui64>(1)),
+                         f.Echo(f.Pb().Add(row, f.Pb().NewDataLiteral<ui64>(10))),
+                         f.Echo(f.Pb().Add(row, f.Pb().NewDataLiteral<ui64>(100))));
+    };
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(1, [&](auto row) { return body(f, row); });
+        f.Turn();
+        f.Provider->Reply(0);
+        f.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 2);
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(1, [&](auto row) { return body(f, row); }, false);
+    f.Restore(snapshot);
+    f.Pump();
+    f.Check({11});
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+}
+Y_UNIT_TEST(SavedTerminalErrorIsNotRetriedOrDisclosed) {
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(1, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        f.Provider->Calls[0]->Fail("sensitive-provider-error");
+        f.Provider->Calls[0]->Release();
+        f.Services->BeginTurn();
+        f.Services->EndTurn();
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+        UNIT_ASSERT(!snapshot.Contains("sensitive-provider-error"));
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.BuildCheckpoint(1, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(snapshot);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Turn(), yexception, "Async operation failed, outcome=1, code=1");
+    UNIT_ASSERT(f.Provider->Calls.empty());
+}
+Y_UNIT_TEST(LegacySynchronousGraphStateHasNoAsyncEnvelope) {
+    TString snapshot;
+    {
+        TFixture f;
+        // A checkpointable synchronous source exercises the legacy graph format.
+        TCallableBuilder source(f.Pb().GetTypeEnvironment(), "CheckpointTestSource",
+                                TStreamType::Create(f.Pb().NewDataLiteral<ui64>(0).GetStaticType(), f.Pb().GetTypeEnvironment()), true);
+        source.Add(f.Pb().NewDataLiteral<ui64>(3));
+        f.BuildProgram(TRuntimeNode(source.Build(), false));
+        NUdf::TUnboxedValue value;
+        UNIT_ASSERT(f.Stream.Fetch(value) == NUdf::EFetchStatus::Ok);
+        snapshot = f.Graph->SaveGraphState();
+        TStringBuf in(snapshot);
+        const auto size = ReadUi64(in);
+        UNIT_ASSERT_VALUES_EQUAL(size, in.size());
+        UNIT_ASSERT_VALUES_EQUAL(ReadUi64(in), 1);
+        UNIT_ASSERT(in.empty());
+    }
+    TFixture f;
+    TCallableBuilder source(f.Pb().GetTypeEnvironment(), "CheckpointTestSource",
+                            TStreamType::Create(f.Pb().NewDataLiteral<ui64>(0).GetStaticType(), f.Pb().GetTypeEnvironment()), true);
+    source.Add(f.Pb().NewDataLiteral<ui64>(3));
+    f.BuildProgram(TRuntimeNode(source.Build(), false), "OFF", false);
+    f.Graph->LoadGraphState(snapshot);
+    f.Stream = f.Graph->GetValue();
+    f.Turn();
+    f.Check({2, 3});
+}
+Y_UNIT_TEST(RestoredPendingOperationsAreRebatched) {
+    struct TBatch final: IBatchProvider {
+        std::vector<std::vector<TBatchItem>> Batches;
+        bool Inline = false;
+        TString GetBatchKey(const TRequest&) const override {
+            return "compatible";
+        }
+        size_t GetMaxBatchSize() const noexcept override {
+            return 8;
+        }
+        void StartBatch(std::vector<TBatchItem> items) override {
+            Batches.push_back(std::move(items));
+            if (Inline) {
+                for (const auto& item : Batches.back()) {
+                    item.Completion->Complete(item.Request->Payload);
+                    item.Completion->Release();
+                }
+            }
+        }
+        void Cancel(TOperationId) noexcept override {
+        }
+    };
+    auto setup = [](TFixture& f, std::shared_ptr<TBatch> batch, bool materialize) {
+        f.Services->RegisterProvider("batch", batch);
+        f.Services->RegisterReplayCodec("batch", std::make_shared<TEchoReplayCodec>());
+        auto* type = f.Pb().NewDataLiteral<ui64>(0).GetStaticType();
+        f.Registry.Register({"BatchEcho", type, type, "batch", "echo", 1024});
+        f.BuildCheckpoint(16, [&](auto row) { return f.Registry.Call(f.Pb(), "BatchEcho", row); }, materialize);
+    };
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        auto batch = std::make_shared<TBatch>();
+        setup(f, batch, true);
+        f.Turn();
+        UNIT_ASSERT_VALUES_EQUAL(batch->Batches.size(), 2);
+        for (const auto& b : batch->Batches) {
+            UNIT_ASSERT_VALUES_EQUAL(b.size(), 8);
+        }
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    auto batch = std::make_shared<TBatch>();
+    batch->Inline = true;
+    setup(f, batch, false);
+    f.Restore(snapshot);
+    UNIT_ASSERT(batch->Batches.empty());
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(batch->Batches.size(), 2);
+    for (const auto& b : batch->Batches) {
+        UNIT_ASSERT_VALUES_EQUAL(b.size(), 8);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+    for (ui64 i = 0; i < 16; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+    }
+}
+
+Y_UNIT_TEST(ReplayFlowAndOneStepContinuation) {
+    for (bool pending : {false, true}) {
+        TString snapshot;
+        {
+            TFixture f(1, {}, CheckpointSettings(ECheckpointMode::Replay));
+            f.EnableReplay();
+            f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, true, 4, 2, true);
+            f.Turn();
+            if (pending) {
+                f.Pump();
+            }
+            f.Cut();
+            snapshot = f.Graph->SaveGraphState();
+        }
+        TFixture f(1, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.Provider->Inline = true;
+        f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, false, 4, 2, true);
+        f.Restore(snapshot);
+        f.Pump();
+        if (f.Services->CanSaveCheckpoint()) {
+            f.Graph->SaveGraphState();
+            f.Services->SnapshotStored(f.Services->GetSnapshotId());
+        }
+        UNIT_ASSERT(f.Services->CanForwardBoundary());
+        f.Services->ReleaseBoundary();
+        f.Pump();
+        UNIT_ASSERT(f.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 200);
+        for (ui64 i = 0; i < 200; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+        }
+    }
+}
+Y_UNIT_TEST(QueuedDescriptorsRestoreUnderConcurrencyLimit) {
+    auto settings = CheckpointSettings(ECheckpointMode::Replay);
+    settings.Scheduler.MaxInFlight = 1;
+    TString snapshot;
+    {
+        TFixture f(1000, {}, settings);
+        f.EnableReplay();
+        f.BuildCheckpoint(16, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().Queued, 15);
+        f.Cut();
+        snapshot = f.Graph->SaveGraphState();
+    }
+    TFixture f(1000, {}, settings);
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(16, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(snapshot);
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 16);
+    for (ui64 i = 0; i < 16; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+    }
+}
+Y_UNIT_TEST(StaleReplayImageCannotCommitLaterOutputAndNewImageRestoresExactlyOnce) {
+    TString committed;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        f.Cut();
+        f.Graph->SaveGraphState();
+        const auto memory = f.Services->GetSchedulerStats().MemoryBytes;
+        UNIT_ASSERT_EXCEPTION(f.Graph->SaveGraphState(), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().MemoryBytes, memory);
+        UNIT_ASSERT_EXCEPTION(f.Services->BeginTurn(), yexception); // snapshot not handed off yet
+        f.Services->SnapshotStored(f.Services->GetSnapshotId());
+        for (size_t i = 0; i < 16; ++i) {
+            f.Provider->Reply(i);
+        }
+        f.Pump();
+        UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+        UNIT_ASSERT(!f.Services->CanForwardBoundary());
+        UNIT_ASSERT_EXCEPTION(f.Services->ReleaseBoundary(), yexception);
+        committed = f.Graph->SaveGraphState();
+        f.Services->SnapshotStored(f.Services->GetSnapshotId());
+        UNIT_ASSERT(f.Services->CanForwardBoundary());
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(200, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(committed);
+    UNIT_ASSERT(f.Services->CanForwardBoundary());
+    f.Services->ReleaseBoundary();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 184);
+    for (ui64 i = 0; i < 184; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 17);
+    }
+}
+
+Y_UNIT_TEST(CompletionThreadRacesImmutableSnapshot) {
+    TString snapshot;
+    {
+        TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+        f.EnableReplay();
+        f.BuildCheckpoint(16, [&](auto row) { return f.Echo(row); });
+        f.Turn();
+        f.Cut();
+        std::atomic<bool> start = false;
+        std::thread callback([&] {
+            while (!start.load()) {
+                std::this_thread::yield();
+            }
+            for (size_t i = 0; i < 16; ++i) {
+                f.Provider->Reply(i);
+            }
+        });
+        start.store(true);
+        try {
+            snapshot = f.Graph->SaveGraphState();
+        } catch (...) {
+            callback.join();
+            throw;
+        }
+        callback.join();
+        // Completions were never drained by the owner: their replay is explicit.
+        UNIT_ASSERT(f.Output.empty());
+        f.Services->SnapshotStored(f.Services->GetSnapshotId());
+    }
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.Provider->Inline = true;
+    f.BuildCheckpoint(16, [&](auto row) { return f.Echo(row); }, false);
+    f.Restore(snapshot);
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 16);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 16);
+    for (ui64 i = 0; i < 16; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i + 1);
+    }
+}
+
+Y_UNIT_TEST(LateStorageAcknowledgementCannotConfirmAnotherSnapshot) {
+    TFixture f(1000, {}, CheckpointSettings(ECheckpointMode::Replay));
+    f.EnableReplay();
+    f.BuildCheckpoint(16, [&](auto row) { return f.Echo(row); });
+    f.Turn();
+    f.Cut();
+    f.Graph->SaveGraphState();
+    const auto old = f.Services->GetSnapshotId();
+    UNIT_ASSERT(f.Services->SnapshotStored(old));
+    for (size_t i = 0; i < 16; ++i) {
+        f.Provider->Reply(i);
+    }
+    f.Pump();
+    f.Graph->SaveGraphState();
+    const auto fresh = f.Services->GetSnapshotId();
+    UNIT_ASSERT(fresh != old);
+    const auto memory = f.Services->GetSchedulerStats().MemoryBytes;
+    UNIT_ASSERT(!f.Services->SnapshotStored(old));
+    auto wrongGeneration = fresh;
+    ++wrongGeneration.Generation;
+    UNIT_ASSERT(!f.Services->SnapshotStored(wrongGeneration));
+    UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().MemoryBytes, memory);
+    UNIT_ASSERT(!f.Services->CanForwardBoundary());
+    UNIT_ASSERT(f.Services->SnapshotStored(fresh));
+    UNIT_ASSERT(f.Services->CanForwardBoundary());
+}
+
+} // Y_UNIT_TEST_SUITE(TAsyncCheckpoint)
 
 Y_UNIT_TEST_SUITE(TResumableComputation) {
 Y_UNIT_TEST(CpuQuantumMakesProgressWhenFirstCheckIsExpired) {
@@ -818,12 +1481,12 @@ Y_UNIT_TEST(DroppingGraphCancelsFramesWithoutWaitingForProvider) {
     f.Provider->Reply(1);
     UNIT_ASSERT_VALUES_EQUAL(f.Services->GetStats().ReservedPayloadBytes, 0);
 }
-Y_UNIT_TEST(CheckpointAndLlvmAreExplicitlyRejected) {
+Y_UNIT_TEST(UnconfiguredCheckpointAndLlvmAreExplicitlyRejected) {
     TFixture f;
     f.Build({1}, [&](auto row) { return f.Echo(row); });
     f.Turn();
-    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "until D4");
-    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->LoadGraphState(""), yexception, "until D4");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "not configured");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->LoadGraphState(""), yexception, "not configured");
     f.Graph->SetExecuteLLVM(true);
     // A late switch cannot bypass the runtime check on a fresh stream.
     f.Stream.Clear();

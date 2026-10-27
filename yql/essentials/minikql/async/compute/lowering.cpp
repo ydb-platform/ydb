@@ -5,25 +5,23 @@
 #include <util/stream/str.h>
 
 namespace NKikimr::NMiniKQL::NAsync {
-namespace {
-
-void CheckValueType(TType* type) {
+void CheckAsyncValueType(TType* type) {
     switch (type->GetKind()) {
         case TType::EKind::Data:
             return;
         case TType::EKind::Optional:
-            return CheckValueType(static_cast<TOptionalType*>(type)->GetItemType());
+            return CheckAsyncValueType(static_cast<TOptionalType*>(type)->GetItemType());
         case TType::EKind::Struct: {
             auto* s = static_cast<TStructType*>(type);
             for (ui32 i = 0; i < s->GetMembersCount(); ++i) {
-                CheckValueType(s->GetMemberType(i));
+                CheckAsyncValueType(s->GetMemberType(i));
             }
             return;
         }
         case TType::EKind::Tuple: {
             auto* t = static_cast<TTupleType*>(type);
             for (ui32 i = 0; i < t->GetElementsCount(); ++i) {
-                CheckValueType(t->GetElementType(i));
+                CheckAsyncValueType(t->GetElementType(i));
             }
             return;
         }
@@ -31,6 +29,8 @@ void CheckValueType(TType* type) {
             MKQL_ENSURE(false, "Async row expression supports Data/Optional/Struct/Tuple only; Resource, list, block and higher-order contexts require explicit lowering");
     }
 }
+
+namespace {
 
 class TLowering {
 public:
@@ -75,7 +75,7 @@ private:
         if (auto it = Slots_.find(node.GetNode()); it != Slots_.end()) {
             return it->second;
         }
-        CheckValueType(node.GetStaticType());
+        CheckAsyncValueType(node.GetStaticType());
         TInstruction ins;
         TRuntimeNode fragment = node;
         auto bind = [&](TRuntimeNode child) {
@@ -196,8 +196,8 @@ private:
 
 void TCallableRegistry::Register(TCallableDescriptor descriptor) {
     MKQL_ENSURE(!descriptor.Name.empty() && descriptor.InputType && descriptor.ResultType && !descriptor.Provider.empty() && !descriptor.Operation.empty(), "Incomplete async callable descriptor");
-    CheckValueType(descriptor.InputType);
-    CheckValueType(descriptor.ResultType);
+    CheckAsyncValueType(descriptor.InputType);
+    CheckAsyncValueType(descriptor.ResultType);
     const auto name = descriptor.Name;
     MKQL_ENSURE(Descriptors_.emplace(name, std::move(descriptor)).second, "Duplicate async callable: " << name);
 }

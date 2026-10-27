@@ -1,3 +1,4 @@
+#include "mkql_async_checkpoint.h"
 #include "mkql_computation_node_holders.h"
 #include "mkql_computation_node_holders_codegen.h"
 #include "mkql_value_builder.h"
@@ -750,63 +751,85 @@ public:
     }
 
     TString SaveGraphState() override {
-        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation, "Async computation checkpoint is not supported until D4");
         Prepare();
+        auto* checkpoint = PatternNodes_->GetMutables().HasAsyncComputation ? Ctx_->AsyncCheckpoint.get() : nullptr;
+        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation || checkpoint, "Async checkpoint is not configured");
 
         TString result;
-        for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
-            const NUdf::TUnboxedValuePod& mutableValue = Ctx_->MutableValues[i];
-            if (mutableValue.IsInvalid()) {
-                WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
-            } else if (mutableValue.IsBoxed()) {
-                TList<TString> taskState;
-                size_t taskStateSize = 0;
-
-                auto saveList = [&](auto& list) {
-                    auto listIt = list.GetListIterator();
-                    NUdf::TUnboxedValue str;
-                    while (listIt.Next(str)) {
-                        const TStringBuf strRef = str.AsStringRef();
-                        taskStateSize += strRef.Size();
-                        taskState.push_back({});
-                        taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
-                    }
-                };
-                bool isList = mutableValue.HasListItems();
-                NUdf::TUnboxedValue list;
-                if (isList) { // No load was done during previous runs.
-                    saveList(mutableValue);
-                } else {
-                    NUdf::TUnboxedValue saved = mutableValue.Save();
-                    if (saved.IsString() || saved.IsEmbedded()) { // Old version.
-                        const TStringBuf savedBuf = saved.AsStringRef();
-                        taskState.push_back({});
-                        taskState.back().AppendNoAlias(savedBuf.Data(), savedBuf.Size());
-                        taskStateSize = savedBuf.Size();
-                    } else {
-                        saveList(saved);
-                    }
-                }
-                WriteUi64(result, taskStateSize);
-                for (auto it = taskState.begin(); it != taskState.end();) {
-                    result.AppendNoAlias(it->data(), it->size());
-                    it = taskState.erase(it);
-                }
-            } else { // No load was done during previous runs (if any).
-                MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()),
-                            "State is expected to have data or invalid value");
-                const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
-                WriteUi64(result, savedRef.Size());
-                result.AppendNoAlias(savedRef.Data(), savedRef.Size());
+        try {
+            if (checkpoint) {
+                WriteString(result, checkpoint->BeforeSave());
             }
+            for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
+                const NUdf::TUnboxedValuePod& mutableValue = Ctx_->MutableValues[i];
+                if (mutableValue.IsInvalid()) {
+                    WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
+                } else if (mutableValue.IsBoxed()) {
+                    TList<TString> taskState;
+                    size_t taskStateSize = 0;
+
+                    auto saveList = [&](auto& list) {
+                        auto listIt = list.GetListIterator();
+                        NUdf::TUnboxedValue str;
+                        while (listIt.Next(str)) {
+                            const TStringBuf strRef = str.AsStringRef();
+                            taskStateSize += strRef.Size();
+                            taskState.push_back({});
+                            taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
+                        }
+                    };
+                    bool isList = mutableValue.HasListItems();
+                    NUdf::TUnboxedValue list;
+                    if (isList) { // No load was done during previous runs.
+                        saveList(mutableValue);
+                    } else {
+                        NUdf::TUnboxedValue saved = mutableValue.Save();
+                        if (saved.IsString() || saved.IsEmbedded()) { // Old version.
+                            const TStringBuf savedBuf = saved.AsStringRef();
+                            taskState.push_back({});
+                            taskState.back().AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                            taskStateSize = savedBuf.Size();
+                        } else {
+                            saveList(saved);
+                        }
+                    }
+                    WriteUi64(result, taskStateSize);
+                    for (auto it = taskState.begin(); it != taskState.end();) {
+                        result.AppendNoAlias(it->data(), it->size());
+                        it = taskState.erase(it);
+                    }
+                } else { // No load was done during previous runs (if any).
+                    MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()),
+                                "State is expected to have data or invalid value");
+                    const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
+                    WriteUi64(result, savedRef.Size());
+                    result.AppendNoAlias(savedRef.Data(), savedRef.Size());
+                }
+                if (checkpoint) {
+                    checkpoint->CheckSnapshotSize(result.size());
+                }
+            }
+            if (checkpoint) {
+                checkpoint->AfterSave();
+            }
+        } catch (...) {
+            if (checkpoint) {
+                checkpoint->AbortSave();
+            }
+            throw;
         }
         return result;
     }
 
     void LoadGraphState(TStringBuf state) override {
-        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation, "Async computation checkpoint is not supported until D4");
         Prepare();
+        auto* checkpoint = PatternNodes_->GetMutables().HasAsyncComputation ? Ctx_->AsyncCheckpoint.get() : nullptr;
+        MKQL_ENSURE(!PatternNodes_->GetMutables().HasAsyncComputation || checkpoint, "Async checkpoint is not configured");
 
+        if (checkpoint) {
+            checkpoint->BeforeLoad(state, state.size());
+            ReadString(state);
+        }
         for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
             if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size,
@@ -819,6 +842,12 @@ public:
         }
 
         MKQL_ENSURE(state.Empty(), "Serialized state is corrupted - extra bytes left: " << state.Size());
+        if (checkpoint) {
+            for (const auto& load : Ctx_->AsyncStateLoaders) {
+                load();
+            }
+            checkpoint->AfterLoad();
+        }
     }
 
     TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() override {

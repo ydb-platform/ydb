@@ -5,6 +5,8 @@
 
 namespace NKikimr::NMiniKQL::NAsync {
 
+void CheckAsyncValueType(TType* type);
+
 // All indices refer to immutable MKQL nodes/slots, never runtime pointers.
 // A new async occurrence has its own slot; sharing the same expression node
 // explicitly shares the saved value within one invocation only.

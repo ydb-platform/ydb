@@ -19,6 +19,7 @@
 namespace NKikimrSchemeOp {
     enum EPathState : int;
     class TBuildIndexOutcome;
+    class TDrop;
 }
 
 namespace NKikimrTxDataShard {
@@ -87,6 +88,8 @@ struct TTxState {
     // uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
+    // Accepted DROP options, persisted in TxInFlightV2::ExtraBytes for replay.
+    std::shared_ptr<NKikimrSchemeOp::TDrop> DropReplication;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

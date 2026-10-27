@@ -2274,11 +2274,24 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         Cascade,
     };
 
+    enum class EForceDropRecovery {
+        None,
+        BeforeDrop,
+        DuringDrop,
+    };
+
     void CheckForceDropAfterDone(EForceDropDestination destinationMode) {
-        for (const bool restart : {false, true}) {
+        for (const auto recovery : {EForceDropRecovery::None, EForceDropRecovery::BeforeDrop, EForceDropRecovery::DuringDrop}) {
             TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
             auto& runtime = env.GetRuntime();
             const auto info = StartReplication(env);
+            const auto waitDone = [&](TStringBuf stage) {
+                UNIT_ASSERT_C(WaitFor([&] {
+                    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                    return DescribeReplication(env, info)->Get()->Record.GetState().HasDone();
+                }, 150, TDuration::Zero()), "recovery=" << ui32(recovery) << " stage=" << stage << " state="
+                    << DescribeReplication(env, info)->Get()->Record.GetState().DebugString());
+            };
             const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
             const auto destination = env.GetPathId("/Root/replica1");
             CreateSourceTable(env, "unrelated");
@@ -2307,29 +2320,83 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                     "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');").GetValueSync();
             });
             UNIT_ASSERT_C(done.IsSuccess(), done.GetIssues().ToString());
-            AssertEventuallyDone(env, info);
+            waitDone("initial DONE");
             AssertDestinationWritable(env);
             // DONE cancels the pre-DONE resolver; keep detecting new lookups.
             credentials.Pending.clear();
-            if (restart) {
+            if (recovery == EForceDropRecovery::BeforeDrop) {
                 RestartController(env, info.ControllerId);
-                AssertEventuallyDone(env, info);
+                waitDone("reloaded DONE");
             }
             ui32 sourceRequests = 0;
             auto observer = runtime.AddObserver<TEvYdbProxy::TEvAlterTableRequest>([&](auto&) {
                 ++sourceRequests;
             });
+            TAutoPtr<IEventHandle> schemaRequest;
+            TAutoPtr<IEventHandle> localCompletion;
+            TAutoPtr<IEventHandle> controllerCompletion;
+            auto completionObserver = runtime.AddObserver<TEvController::TEvDropReplicationResult>([&](auto& ev) {
+                controllerCompletion.Reset(ev.Release());
+            });
+            bool holdRequest = recovery == EForceDropRecovery::DuringDrop;
+            auto replayObserver = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+                if (holdRequest && ev->GetTypeRewrite() == TEvController::TEvDropReplication::EventType) {
+                    schemaRequest = std::move(ev);
+                } else if (recovery == EForceDropRecovery::DuringDrop
+                    && (ev->GetTypeRewrite() == TEvPrivate::TEvDropStreamResult::EventType
+                        || ev->GetTypeRewrite() == TEvPrivate::TEvDropDstResult::EventType))
+                {
+                    localCompletion = std::move(ev);
+                }
+            });
             const auto query = TStringBuilder() << "DROP ASYNC REPLICATION `/Root/replication`"
                 << (destinationMode == EForceDropDestination::Cascade ? " CASCADE" : "") << " FORCE;";
-            const auto dropped = env.RunCall([&] {
-                return session.ExecuteSchemeQuery(query,
-                    NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15))).GetValueSync();
-            });
-            UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+            auto drop = session.ExecuteSchemeQuery(query,
+                NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
+            if (recovery == EForceDropRecovery::DuringDrop) {
+                runtime.WaitFor("DROP before controller admission", [&] { return bool(schemaRequest); }, TDuration::Seconds(30));
+                const auto oldSender = schemaRequest->Sender;
+                RebootTablet(runtime, info.PathId.OwnerId, env.GetSender());
+                runtime.WaitFor("DROP replayed by restarted SchemeShard", [&] {
+                    return schemaRequest && schemaRequest->Sender != oldSender;
+                }, TDuration::Seconds(30));
+                holdRequest = false;
+                runtime.Send(schemaRequest.Release());
+                runtime.WaitFor("DROP after durable controller admission", [&] { return bool(localCompletion); }, TDuration::Seconds(30));
+                NTestSuiteTargetDiscoveryResults::AssertPersistedCounts(env, info, 1);
+                UNIT_ASSERT_VALUES_EQUAL(ReadPersistedStreamState(runtime, info.ControllerId,
+                    TWorkerId::Parse(run->Get()->Record.GetWorker())), ui32(TReplication::EStreamState::Removed));
+                replayObserver.Remove();
+                localCompletion.Reset();
+                RestartController(env, info.ControllerId);
+            }
+            runtime.WaitFor("DROP controller completion", [&] { return bool(controllerCompletion); }, TDuration::Seconds(30));
             UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
                 == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             NTestSuiteTargetDiscoveryResults::AssertPersistedCounts(env, info, 0);
+            for (const auto* table : {"Workers", "SchemaBarrierWorkers", "IndexBuildWorkers"}) {
+                const auto result = ReadControllerQuery(runtime, info.ControllerId, Sprintf(R"((
+                    (let range '('('ReplicationId (Uint64 '1) (Uint64 '1)) '('TargetId (Null) (Void)) '('WorkerId (Null) (Void))))
+                    (return (AsList (SetResult 'Rows (SelectRange '%s range '('ReplicationId) '())))))
+                )", table));
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize(), 0, table);
+            }
+            // Public DROP deletes the controller tablet after this reply.
+            RebootTablet(runtime, info.ControllerId, env.GetSender());
+            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
+                == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
+            completionObserver.Remove();
+            runtime.Send(controllerCompletion.Release());
+            const auto dropped = env.RunCall([&] { return drop.GetValueSync(); });
+            UNIT_ASSERT_C(dropped.IsSuccess() || (recovery == EForceDropRecovery::DuringDrop
+                && dropped.GetStatus() == NYdb::EStatus::UNAVAILABLE
+                && dropped.GetIssues().ToString().find("Connection to tablet was lost") != std::string::npos),
+                dropped.GetIssues().ToString());
+            UNIT_ASSERT_C(WaitFor([&] {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
+            }, 150, TDuration::Zero()), "FORCE DROP did not commit, recovery=" << ui32(recovery));
+            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
             if (destinationMode == EForceDropDestination::Cascade) {
                 UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
             } else {
@@ -2342,9 +2409,6 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 });
                 UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
             }
-            RebootTablet(runtime, info.ControllerId, env.GetSender());
-            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-                == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/unrelated").GetSchemeStatus(), NKikimrScheme::StatusSuccess);
             UNIT_ASSERT(credentials.Pending.empty());

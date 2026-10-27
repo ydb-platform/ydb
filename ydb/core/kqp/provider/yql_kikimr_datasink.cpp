@@ -1754,13 +1754,16 @@ public:
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();
-                } else if (mode == "drop" || mode == "dropCascade") {
+                } else if (mode == "drop" || mode == "dropCascade" || mode == "dropForce" || mode == "dropCascadeForce") {
                     return Build<TKiDropReplication>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Replication().Build(key.GetReplicationPath())
                         .Cascade<TCoAtom>()
-                            .Value(mode == "dropCascade")
+                            .Value(mode == "dropCascade" || mode == "dropCascadeForce")
+                            .Build()
+                        .SourceCleanup<TCoAtom>()
+                            .Value(mode == "dropForce" || mode == "dropCascadeForce" ? "abandon" : "drop")
                             .Build()
                         .Done()
                         .Ptr();

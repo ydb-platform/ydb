@@ -26,6 +26,7 @@
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
@@ -1552,6 +1553,7 @@ struct TAlterReplicationSettings {
 struct TDropReplicationSettings {
     TString Name;
     bool Cascade = false;
+    NKikimrReplication::ESourceCleanupPolicy SourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {

@@ -200,6 +200,7 @@ private:
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
+    void RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId);
 
     // local transactions
     class TTxInitSchema;

@@ -2320,9 +2320,19 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 }
 
 class TDropAsyncReplication final: public TAsyncReplication {
+    static TString GetMode(EDropAsyncReplicationMode mode) {
+        switch (mode) {
+        case EDropAsyncReplicationMode::Drop: return "drop";
+        case EDropAsyncReplicationMode::DropCascade: return "dropCascade";
+        case EDropAsyncReplicationMode::DropForce: return "dropForce";
+        case EDropAsyncReplicationMode::DropCascadeForce: return "dropCascadeForce";
+        }
+        Y_UNREACHABLE();
+    }
+
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, EDropAsyncReplicationMode mode, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, GetMode(mode), context)
     {
     }
 
@@ -2333,8 +2343,8 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, EDropAsyncReplicationMode mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {

@@ -1601,7 +1601,14 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+enum class EDropAsyncReplicationMode {
+    Drop,
+    DropCascade,
+    DropForce,
+    DropCascadeForce,
+};
+
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, EDropAsyncReplicationMode mode, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
 TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);

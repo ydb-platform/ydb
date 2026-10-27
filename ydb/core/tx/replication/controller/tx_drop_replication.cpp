@@ -151,7 +151,9 @@ public:
                 target->Shutdown(ctx);
             }
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                ? TReplication::EStreamState::Removed
+                : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );

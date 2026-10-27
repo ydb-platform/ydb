@@ -966,9 +966,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            const auto mode = node.HasBlock6()
+                ? (node.HasBlock5() ? EDropAsyncReplicationMode::DropCascadeForce : EDropAsyncReplicationMode::DropForce)
+                : (node.HasBlock5() ? EDropAsyncReplicationMode::DropCascade : EDropAsyncReplicationMode::Drop);
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx_.Pos(),
                                                                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
-                                                                   node.HasBlock5(), context));
+                                                                   mode, context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore35: {

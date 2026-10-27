@@ -253,10 +253,16 @@ message TEvAlterReplicationResult {
     optional EStatus Status = 3;
 }
 
+enum ESourceCleanupPolicy {
+    SOURCE_CLEANUP_POLICY_DROP = 0;
+    SOURCE_CLEANUP_POLICY_ABANDON = 1;
+}
+
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional bool Cascade = 3 [default = true];
+    optional ESourceCleanupPolicy SourceCleanup = 4 [default = SOURCE_CLEANUP_POLICY_DROP];
 }
 
 message TEvDropReplicationResult {

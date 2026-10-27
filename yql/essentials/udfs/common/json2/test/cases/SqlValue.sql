@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 -- Plain cases
 $path = Json2::CompilePath("strict $.x");
 $empty_object = CAST("{}" as Json);

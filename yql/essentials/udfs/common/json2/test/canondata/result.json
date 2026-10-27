@@ -1,42 +1,42 @@
 {
-    "test.test[AsJsonNode]": [
+    "test.test[AsJsonNode-Results]": [
         {
-            "uri": "file://test.test_AsJsonNode_/results.txt"
+            "uri": "file://test.test_AsJsonNode-Results_/results.txt"
         }
     ],
-    "test.test[SerializeParse]": [
+    "test.test[SerializeParse-Results]": [
         {
-            "uri": "file://test.test_SerializeParse_/results.txt"
+            "uri": "file://test.test_SerializeParse-Results_/results.txt"
         }
     ],
-    "test.test[SqlExists]": [
+    "test.test[SqlExists-Results]": [
         {
-            "uri": "file://test.test_SqlExists_/results.txt"
+            "uri": "file://test.test_SqlExists-Results_/results.txt"
         }
     ],
-    "test.test[SqlQueryError]": [
+    "test.test[SqlQuery-Results]": [
         {
-            "uri": "file://test.test_SqlQueryError_/extracted"
+            "uri": "file://test.test_SqlQuery-Results_/results.txt"
         }
     ],
-    "test.test[SqlQuery]": [
+    "test.test[SqlQueryError-Results]": [
         {
-            "uri": "file://test.test_SqlQuery_/results.txt"
+            "uri": "file://test.test_SqlQueryError-Results_/extracted"
         }
     ],
-    "test.test[SqlTryExistsError]": [
+    "test.test[SqlTryExists-Results]": [
         {
-            "uri": "file://test.test_SqlTryExistsError_/extracted"
+            "uri": "file://test.test_SqlTryExists-Results_/results.txt"
         }
     ],
-    "test.test[SqlTryExists]": [
+    "test.test[SqlTryExistsError-Results]": [
         {
-            "uri": "file://test.test_SqlTryExists_/results.txt"
+            "uri": "file://test.test_SqlTryExistsError-Results_/extracted"
         }
     ],
-    "test.test[SqlValue]": [
+    "test.test[SqlValue-Results]": [
         {
-            "uri": "file://test.test_SqlValue_/results.txt"
+            "uri": "file://test.test_SqlValue-Results_/results.txt"
         }
     ]
 }

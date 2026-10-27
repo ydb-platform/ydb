@@ -136,9 +136,13 @@ void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan) {
         return;
     }
     if (current->IsCallable("NamedApply") && current->ChildrenSize() >= 2 && IsRe2Udf(current->Head(), "Re2.Options")) {
-        if (const auto* positional = UnwrapQuote(current->Child(1))) {
-            ScanPositionalOptions(*positional, scan);
+        // The positional arguments must be a list or tuple node; any other node could hide a setting.
+        const auto* positional = UnwrapQuote(current->Child(1));
+        if (!positional || !(positional->IsList() || positional->IsCallable({"AsTuple", "Tuple"}))) {
+            scan.Unsupported = true;
+            return;
         }
+        ScanPositionalOptions(*positional, scan);
         if (scan.Unsupported) {
             return;
         }
@@ -313,6 +317,9 @@ std::optional<TLikeHint> TryParseLikeHint(const NYql::TExprNode& predicate) {
     }
 
     const auto& udf = NYql::SkipCallables(located->Apply->Head(), {"AssumeStrict"});
+    if (udf.ChildrenSize() < 2) {
+        return std::nullopt;
+    }
     const auto* runConfig = UnwrapQuote(udf.Child(1));
     if (!runConfig || runConfig->ChildrenSize() < 2) {
         return std::nullopt;

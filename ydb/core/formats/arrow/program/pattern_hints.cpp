@@ -8,6 +8,9 @@ namespace NKikimr::NArrow::NSSA {
 
 namespace {
 
+// A literal fragment of the pattern. AtStart and AtEnd say whether it is anchored to the pattern's
+// start or end. SplitLiteralRuns cuts the pattern on wildcards; PiecesOf cuts a run again on bytes
+// the index cannot probe, keeping an anchor only while the fragment is still that end of the run.
 struct TLiteralRun {
     TString Bytes;
     bool AtStart = false;
@@ -58,12 +61,6 @@ std::optional<std::vector<TLiteralRun>> SplitLiteralRuns(const TStringBuf patter
     return runs;
 }
 
-struct TPiece {
-    TString Bytes;
-    bool AtStart = false;
-    bool AtEnd = false;
-};
-
 // RE2 cycle-folds 'k' to U+212A (Kelvin) and 's' to U+017F (long s): CycleFoldRune in
 // contrib/libs/re2/re2/parse.cc, table in contrib/libs/re2/re2/unicode_casefold.h.
 // The bloom folds ASCII only, so a probe that contains these letters can miss a matching portion.
@@ -71,19 +68,18 @@ bool BreaksCaseInsensitiveProbe(const unsigned char c) {
     return c >= 128 || c == 'k' || c == 'K' || c == 's' || c == 'S';
 }
 
-// Case-sensitive: the whole run. Case-insensitive: ASCII pieces, split on bytes the bloom cannot
-// probe. A piece keeps an anchor only when it is still the corresponding end of the run.
-std::vector<TPiece> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
+// Case-sensitive: the whole run. Case-insensitive: ASCII pieces, split on bytes the bloom cannot probe.
+std::vector<TLiteralRun> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
     if (caseSensitive) {
-        return {TPiece{run.Bytes, run.AtStart, run.AtEnd}};
+        return {run};
     }
-    std::vector<TPiece> pieces;
+    std::vector<TLiteralRun> pieces;
     TString current;
     bool atStart = run.AtStart;
     for (const char c : run.Bytes) {
         if (BreaksCaseInsensitiveProbe(static_cast<unsigned char>(c))) {
             if (!current.empty()) {
-                pieces.push_back(TPiece{std::move(current), atStart, false});
+                pieces.push_back(TLiteralRun{std::move(current), atStart, false});
                 current.clear();
             }
             atStart = false;
@@ -92,7 +88,7 @@ std::vector<TPiece> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
         current.push_back(c);
     }
     if (!current.empty()) {
-        pieces.push_back(TPiece{std::move(current), atStart, run.AtEnd});
+        pieces.push_back(TLiteralRun{std::move(current), atStart, run.AtEnd});
     }
     return pieces;
 }

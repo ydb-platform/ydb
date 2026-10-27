@@ -2332,12 +2332,10 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         }
     };
 
-    enum class EAdmission { Enabled, Disabled };
     enum class ESchemaChanges { Disabled, Enabled };
 
-    NTestHelpers::TFeatureFlags ForceDropFlags(EAdmission admission, ESchemaChanges schema = ESchemaChanges::Disabled) {
+    NTestHelpers::TFeatureFlags ForceDropFlags(ESchemaChanges schema = ESchemaChanges::Disabled) {
         NTestHelpers::TFeatureFlags flags;
-        flags.FeatureFlags.SetEnableAsyncReplicationForceDrop(admission == EAdmission::Enabled);
         flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(schema == ESchemaChanges::Enabled);
         return flags;
     }
@@ -2355,8 +2353,8 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         std::unique_ptr<TSourceAccessBlocker> Source;
         EWorkerState WorkerState = EWorkerState::Attached;
 
-        explicit TSqlEnv(EAdmission admission = EAdmission::Enabled, ESchemaChanges schema = ESchemaChanges::Disabled)
-            : TTestEnv(ForceDropFlags(admission, schema), true, NTestHelpers::ERuntimeMode::Simulated)
+        explicit TSqlEnv(ESchemaChanges schema = ESchemaChanges::Disabled)
+            : TTestEnv(ForceDropFlags(schema), true, NTestHelpers::ERuntimeMode::Simulated)
             , Info(StartReplication(*this))
             , Worker(TWorkerId::Parse(GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(GetSender())
                 ->Get()->Record.GetWorker()))
@@ -2531,7 +2529,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
 
 
     Y_UNIT_TEST_TWIN(ForceRemovesCompletedBarrierBeforeLostReplyRestart, Cascade) {
-        TSqlEnv env(EAdmission::Enabled, ESchemaChanges::Enabled);
+        TSqlEnv env(ESchemaChanges::Enabled);
         auto& runtime = env.GetRuntime();
         const auto schema = MakeSchemaChange();
         env.SendAsync(env.Info.ControllerId, MakeSchemaChangeReport(env.Worker, schema));
@@ -2588,7 +2586,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
     }
 
     Y_UNIT_TEST_TWIN(ForceSettlesAbsentSavedDdlOwnerAfterRestart, Replacement) {
-        TSqlEnv env(EAdmission::Enabled, ESchemaChanges::Enabled);
+        TSqlEnv env(ESchemaChanges::Enabled);
         auto& runtime = env.GetRuntime();
         TAutoPtr<IEventHandle> held;
         bool hold = true;
@@ -2647,7 +2645,7 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
     }
 
     Y_UNIT_TEST_TWIN(ForceRetiresLateNormalSiblingErrorDuringLocalDdl, Restart) {
-        TTestEnv env(ForceDropFlags(EAdmission::Enabled, ESchemaChanges::Enabled), true, NTestHelpers::ERuntimeMode::Simulated);
+        TTestEnv env(ForceDropFlags(ESchemaChanges::Enabled), true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const auto info = StartReplication(env, 2);
         const auto first = TWorkerId::Parse(runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender())->Get()->Record.GetWorker());
@@ -2787,12 +2785,11 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         }
     };
 
-    // Durable controller choice survives schema/controller restarts and gate-off.
-    Y_UNIT_TEST_TWIN(AcceptedIntentSurvivesSchemeShardResendAndGateOff, ControllerRestart) {
+    // Durable controller choice survives schema/controller restarts.
+    Y_UNIT_TEST_TWIN(AcceptedIntentSurvivesSchemeShardResend, ControllerRestart) {
         TPendingCascade pending;
         auto& env = pending.Env;
         auto& runtime = env.GetRuntime();
-        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationForceDrop(false);
         const auto forwards = pending.Forwards;
         if constexpr (ControllerRestart) {
             RestartController(env, env.Info.ControllerId);
@@ -2901,61 +2898,103 @@ Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
     }
 
-    // A new frontend must not send a FORCE field to an old schema handler
-    // while admission is disabled: unknown fields there mean ordinary DROP.
-    Y_UNIT_TEST(DefaultOffRejectsBeforeSchemaForwarding) {
-        TSqlEnv env(EAdmission::Disabled);
+    // Explicit FORCE is sufficient admission; the fixture leaves all feature
+    // flags at their defaults except the independently owned schema option.
+    Y_UNIT_TEST(ForceAdmittedWithoutFeatureFlag) {
+        TSqlEnv env;
         env.Done();
+        env.Source = std::make_unique<TSourceAccessBlocker>(env);
         ui32 schemaDrops = 0;
         auto observer = env.GetRuntime().AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
             [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
                 for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                    if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplication
-                        || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplicationCascade)
-                    {
+                    if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplication) {
+                        UNIT_ASSERT(tx.GetDrop().GetReplicationMode() == NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL);
                         ++schemaDrops;
                     }
                 }
             });
-        const auto result = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(schemaDrops, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(env.SourceStreamPath), env.SourceStream);
-        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication`;");
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` FORCE;");
         UNIT_ASSERT(schemaDrops > 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        AssertDestinationWritable(env);
+        env.AssertSourceRetained();
     }
 
-    // Prepared DDL must recheck fresh admission before execution, even when
-    // its compilation saw the flag enabled and a future peer may be older.
-    Y_UNIT_TEST(GateDisabledAfterCompileDoesNotReachSchema) {
+    // The public Query Service path must admit explicit FORCE as well as the
+    // SchemeQuery API. A remaining physical-executor gate also rejects it.
+    Y_UNIT_TEST(QueryServiceForceAdmittedWithoutFeatureFlag) {
         TSqlEnv env;
         env.Done();
-        ui32 compiled = 0;
-        ui32 schemaDrops = 0;
-        auto observer = env.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
-            if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvCompileResponse::EventType) {
-                ++compiled;
-                env.GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationForceDrop(false);
-            }
-            if (ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
-                for (const auto& tx : ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>()->Record.GetTransaction()) {
-                    if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropReplication) {
-                        ++schemaDrops;
-                    }
-                }
-            }
-        });
+        env.Source = std::make_unique<TSourceAccessBlocker>(env);
         NYdb::NQuery::TQueryClient client(env.GetDriver());
         const auto result = env.RunCall([&] {
             return client.ExecuteQuery("DROP ASYNC REPLICATION `/Root/replication` FORCE;",
                 NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         });
-        UNIT_ASSERT(compiled > 0);
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(schemaDrops, 0);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        AssertDestinationWritable(env);
+        env.AssertSourceRetained();
+    }
+
+    // Fresh raw SchemeShard proposals bypass both SQL admission paths.
+    auto ProposeDrop(TSqlEnv& env, NKikimrSchemeOp::EOperationType operation, const NKikimrSchemeOp::TDrop& drop) {
+        const auto allocated = env.Send<TEvTxUserProxy::TEvAllocateTxIdResult>(
+            MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId());
+        const auto txId = allocated->Get()->TxId;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, env.Info.PathId.OwnerId);
+        auto* tx = request->Record.AddTransaction();
+        tx->SetWorkingDir("/Root");
+        tx->SetOperationType(operation);
+        tx->MutableDrop()->CopyFrom(drop);
+        auto response = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            env.Info.PathId.OwnerId, std::move(request));
+        return std::make_pair(txId, std::move(response));
+    }
+
+    Y_UNIT_TEST_TWIN(DirectSchemeForceAdmittedWithoutFeatureFlag, Cascade) {
+        TSqlEnv env;
+        env.Done();
+        env.Source = std::make_unique<TSourceAccessBlocker>(env);
+        NKikimrSchemeOp::TDrop drop;
+        drop.SetName("replication");
+        drop.SetReplicationMode(NKikimrReplication::DROP_REPLICATION_FORCE_LOCAL);
+        const auto [txId, response] = ProposeDrop(env, Cascade
+            ? NKikimrSchemeOp::ESchemeOpDropReplicationCascade : NKikimrSchemeOp::ESchemeOpDropReplication, drop);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+            response->Get()->Record.ShortDebugString());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(env.Info.PathId.OwnerId,
+            MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(txId));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        if constexpr (Cascade) {
+            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+            AssertDestinationWritable(env);
+        }
+        env.AssertSourceRetained();
+    }
+
+    Y_UNIT_TEST_TWIN(DirectSchemeRejectsUnknownModeWithoutChangingDonePath, WrongWireType) {
+        TSqlEnv env;
+        env.Done();
+        env.Source = std::make_unique<TSourceAccessBlocker>(env);
+        NKikimrSchemeOp::TDrop drop;
+        drop.SetName("replication");
+        TString wire = drop.SerializeAsString();
+        wire.append(WrongWireType ? "\x22\x01x" : "\x20\x63", WrongWireType ? 3 : 2);
+        UNIT_ASSERT(drop.ParseFromString(wire));
+        const auto [txId, response] = ProposeDrop(env, NKikimrSchemeOp::ESchemeOpDropReplication, drop);
+        Y_UNUSED(txId);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::StatusInvalidParameter,
+            response->Get()->Record.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+        env.AssertSourceRetained();
     }
 
     // Literal wire values exercise old/new handlers, including proto2 unknown

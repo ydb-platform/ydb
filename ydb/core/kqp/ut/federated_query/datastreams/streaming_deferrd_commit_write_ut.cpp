@@ -169,8 +169,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.ExtPublicationId, publicationExtId);
             UNIT_ASSERT_VALUES_EQUAL(info.WriterIdentity, publicationWriter);
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(info.Destinations[0].TopicPath,
-                TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(
+                info.Destinations[0].TopicPath, TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName);
         }
 
         Sleep(TDuration::Seconds(1));

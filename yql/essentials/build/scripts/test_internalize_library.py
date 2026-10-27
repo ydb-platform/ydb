@@ -6,10 +6,10 @@ import sys
 import tempfile
 import unittest
 
-from internalize_udf import internalize
+from internalize_library import internalize
 
 
-class InternalizeUdfTest(unittest.TestCase):
+class InternalizeLibraryTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(dir=self.work_dir)
         self.addCleanup(self.temporary.cleanup)
@@ -75,7 +75,7 @@ class InternalizeUdfTest(unittest.TestCase):
         else:
             self.run_tool('llvm-ar', 'rcs', original, entry, terminator, helper, initializer)
         output = self.path / f'{name}.a'
-        internalize(self.toolchain, original, output, name, self.path, globals_archive)
+        internalize(self.toolchain, original, output, name, self.path, [f'GetStaticUdfLibrary_{name}'], globals_archive)
         return output
 
     def test_multiple_udfs_link_and_run(self):
@@ -123,7 +123,7 @@ class InternalizeUdfTest(unittest.TestCase):
                     subprocess.run(
                         [
                             sys.executable,
-                            Path(__file__).with_name('internalize_udf.py').resolve(),
+                            Path(__file__).with_name('internalize_library.py').resolve(),
                             '--archiver',
                             (self.tools / 'llvm-ar').resolve(),
                             '--input',
@@ -132,6 +132,8 @@ class InternalizeUdfTest(unittest.TestCase):
                             output,
                             '--module-name',
                             'readonly',
+                            '--exports',
+                            'GetStaticUdfLibrary_readonly',
                             '--work-dir',
                             work_dir,
                         ],
@@ -147,7 +149,9 @@ class InternalizeUdfTest(unittest.TestCase):
     def test_missing_entry_point_rejected(self):
         source = self.compile('missing', 'int InternalGlobal = 0;')
         with self.assertRaisesRegex(ValueError, 'Expected only GetStaticUdfLibrary_missing'):
-            internalize(self.toolchain, source, self.path / 'missing.a', 'missing', self.path)
+            internalize(
+                self.toolchain, source, self.path / 'missing.a', 'missing', self.path, ['GetStaticUdfLibrary_missing']
+            )
 
     def test_non_pic_thread_local_storage_rejected(self):
         entry = self.compile(
@@ -160,7 +164,7 @@ class InternalizeUdfTest(unittest.TestCase):
         )
         output = self.path / 'tls.a'
         with self.assertRaises(subprocess.CalledProcessError):
-            internalize(self.toolchain, entry, output, 'tls', self.path)
+            internalize(self.toolchain, entry, output, 'tls', self.path, ['GetStaticUdfLibrary_tls'])
         self.assertFalse(output.exists())
 
     def test_pic_thread_local_storage_links_into_shared_library(self):
@@ -172,7 +176,7 @@ class InternalizeUdfTest(unittest.TestCase):
             ''',
         )
         archive = self.path / 'tls.a'
-        internalize(self.toolchain, entry, archive, 'tls', self.path)
+        internalize(self.toolchain, entry, archive, 'tls', self.path, ['GetStaticUdfLibrary_tls'])
         library = self.path / 'tls.so'
         self.run_tool('ld.lld', '-shared', '--whole-archive', archive, '-o', library)
         loaded = ctypes.CDLL(str(library))
@@ -226,7 +230,9 @@ class InternalizeUdfTest(unittest.TestCase):
         self.run_tool('llvm-ar', 'rcs', globals_archive, entry)
         self.run_tool('llvm-ar', 'rcs', dependencies, begin, end)
         archive = self.path / f'runtime{suffix}.a'
-        internalize(self.toolchain, dependencies, archive, 'runtime', self.path, globals_archive)
+        internalize(
+            self.toolchain, dependencies, archive, 'runtime', self.path, ['GetStaticUdfLibrary_runtime'], globals_archive
+        )
         self.assertEqual(
             self.run_tool('llvm-ar', 't', dependencies).splitlines(),
             [f'crtbegin.c{suffix}.o', f'crtend.c{suffix}.o'],
@@ -272,7 +278,7 @@ class InternalizeUdfTest(unittest.TestCase):
             'c',
         )
         archive = self.path / 'common.a'
-        internalize(self.toolchain, entry, archive, 'common', self.path)
+        internalize(self.toolchain, entry, archive, 'common', self.path, ['GetStaticUdfLibrary_common'])
         symbols = self.run_tool('llvm-nm', '--format=posix', archive)
         self.assertNotIn('Counter C ', symbols)
         library = self.path / 'common.so'
@@ -297,7 +303,7 @@ class InternalizeUdfTest(unittest.TestCase):
                 '-fsanitize=address',
             )
             archive = self.path / f'{name}.a'
-            internalize(self.toolchain, entry, archive, name, self.path)
+            internalize(self.toolchain, entry, archive, name, self.path, [f'GetStaticUdfLibrary_{name}'])
             archives.append(archive)
         runtime = self.compile(
             'asan_runtime',
@@ -332,8 +338,51 @@ class InternalizeUdfTest(unittest.TestCase):
 
     def test_invalid_module_name_rejected(self):
         for name in ('', 'bad-name', '0module'):
-            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'Invalid UDF name'):
-                internalize(self.toolchain, '', '', name, self.path)
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'Invalid library name'):
+                internalize(self.toolchain, '', '', name, self.path, ['EntryPoint'])
+
+    def test_explicit_exports_extract_dependency_members(self):
+        first = self.compile('first_export', 'extern "C" int First() { return 17; } int Hidden = 9;')
+        second = self.compile('second_export', 'extern "C" int Second() { return 29; }')
+        dependencies = self.path / 'exports.a'
+        globals_archive = self.path / 'exports.globals.a'
+        self.run_tool('llvm-ar', 'rcs', dependencies, first, second)
+        self.run_tool('llvm-ar', 'rcs', globals_archive)
+        archive = self.path / 'exports_internalized.a'
+        internalize(
+            self.toolchain,
+            dependencies,
+            archive,
+            'exports',
+            self.path,
+            ['First', 'Second'],
+            globals_archive,
+        )
+        symbols = self.run_tool('llvm-nm', '--defined-only', '--extern-only', '--format=posix', archive)
+        names = {line.split()[0] for line in symbols.splitlines() if line and not line.endswith(':')}
+        self.assertEqual(names, {'First', 'Second'})
+        library = self.path / 'exports.so'
+        self.run_tool('ld.lld', '-shared', '--whole-archive', archive, '-o', library)
+        loaded = ctypes.CDLL(str(library))
+        self.assertEqual(loaded.First(), 17)
+        self.assertEqual(loaded.Second(), 29)
+
+    def test_invalid_exports_rejected(self):
+        for exports in ([], [''], ['bad-name'], ['First\nSecond'], ['0first']):
+            with self.subTest(exports=exports), self.assertRaisesRegex(ValueError, 'C export symbols'):
+                internalize(self.toolchain, '', '', 'exports', self.path, exports)
+
+    def test_missing_explicit_export_rejected(self):
+        source = self.compile('one_export', 'extern "C" int First() { return 17; }')
+        with self.assertRaisesRegex(ValueError, 'Expected only First, Missing'):
+            internalize(
+                self.toolchain,
+                source,
+                self.path / 'missing.a',
+                'exports',
+                self.path,
+                ['First', 'Missing'],
+            )
 
 
 if __name__ == '__main__':
@@ -342,6 +391,6 @@ if __name__ == '__main__':
     parser.add_argument('--work-dir', required=True)
     args, remaining = parser.parse_known_args()
     Path(args.work_dir).mkdir(parents=True, exist_ok=True)
-    InternalizeUdfTest.toolchain = args.toolchain
-    InternalizeUdfTest.work_dir = args.work_dir
+    InternalizeLibraryTest.toolchain = args.toolchain
+    InternalizeLibraryTest.work_dir = args.work_dir
     unittest.main(argv=[__file__, *remaining])

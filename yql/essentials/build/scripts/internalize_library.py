@@ -17,7 +17,7 @@ def allocate_common_symbols(tools, source, temporary):
     # LLD leaves COMMON unallocated in -r mode. Localizing such a symbol makes
     # the final linker interpret its alignment as an absolute address.
     alignment = max(symbol['Value'] for symbol in common)
-    lines = [f'SECTIONS {{ .bss.yql_udf_common (NOLOAD) : ALIGN({alignment}) {{']
+    lines = [f'SECTIONS {{ .bss.yql_internalized_common (NOLOAD) : ALIGN({alignment}) {{']
     for symbol in common:
         lines.append(f'. = ALIGN({symbol["Value"]});')
         lines.append(f'{json.dumps(symbol["Name"]["Name"])} = .;')
@@ -30,7 +30,7 @@ def allocate_common_symbols(tools, source, temporary):
     return allocated
 
 
-def check_exports(tools, module, entry_point):
+def check_exports(tools, module, exports):
     symbols = subprocess.check_output(
         [
             tools / 'llvm-nm',
@@ -42,22 +42,23 @@ def check_exports(tools, module, entry_point):
         text=True,
     )
     names = {line.split()[0] for line in symbols.splitlines() if line}
-    if names != {entry_point}:
-        raise ValueError(f'Expected only {entry_point} to be public, got {sorted(names)}')
+    if names != set(exports):
+        raise ValueError(f'Expected only {", ".join(exports)} to be public, got {sorted(names)}')
 
 
-def internalize(toolchain, source, output, module_name, work_dir, globals_archive=None):
+def internalize(toolchain, source, output, module_name, work_dir, exports, globals_archive=None):
     if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', module_name):
-        raise ValueError(f'Invalid UDF name: {module_name!r}')
+        raise ValueError(f'Invalid library name: {module_name!r}')
+    if not exports or any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', name) for name in exports):
+        raise ValueError(f'Expected non-empty C export symbols, got {exports!r}')
     tools = Path(toolchain) / 'bin'
-    entry_point = f'GetStaticUdfLibrary_{module_name}'
     Path(work_dir).mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=work_dir) as temporary:
         temporary = Path(temporary)
         merged = temporary / 'merged.o'
         module = temporary / 'module.o'
         keep = temporary / 'exports.txt'
-        keep.write_text(entry_point + '\n')
+        keep.write_text('\n'.join(exports) + '\n')
         if globals_archive:
             dependencies = temporary / 'dependencies.a'
             shutil.copyfile(source, dependencies)
@@ -78,7 +79,8 @@ def internalize(toolchain, source, output, module_name, work_dir, globals_archiv
             )
             source = dependencies
         # GLOBAL objects must survive even when nothing refers to their constructors.
-        # Ordinary dependency members are selected on demand, as in the shared UDF link.
+        # Ordinary dependency members are selected on demand. Exports may belong
+        # to a PEERDIR archive rather than the producer's GLOBAL objects.
         inputs = (
             ['--whole-archive', globals_archive, '--no-whole-archive', source]
             if globals_archive
@@ -92,6 +94,7 @@ def internalize(toolchain, source, output, module_name, work_dir, globals_archiv
                 '-r',
                 '--force-group-allocation',
                 '--unique',
+                *[f'--undefined={name}' for name in exports],
                 *inputs,
                 '-o',
                 merged,
@@ -99,7 +102,7 @@ def internalize(toolchain, source, output, module_name, work_dir, globals_archiv
             check=True,
         )
         merged = allocate_common_symbols(tools, merged, temporary)
-        # Each localized ASan registration flag must guard only this UDF's
+        # Each localized ASan registration flag must guard only this library's
         # metadata, rather than registering the host's entire range again.
         asan_section = f'asan_globals_{module_name}'
         subprocess.run(
@@ -115,7 +118,7 @@ def internalize(toolchain, source, output, module_name, work_dir, globals_archiv
             ],
             check=True,
         )
-        check_exports(tools, module, entry_point)
+        check_exports(tools, module, exports)
         # PEERDIR consumers may be shared libraries. Reject executable-only
         # relocations before publishing an archive that such hosts cannot link.
         subprocess.run([tools / 'ld.lld', '-shared', module, '-o', temporary / 'shared-check.so'], check=True)
@@ -129,6 +132,7 @@ def main():
     parser.add_argument('--input', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--module-name', required=True)
+    parser.add_argument('--exports', nargs='+', required=True)
     parser.add_argument('--globals')
     parser.add_argument(
         '--work-dir', required=True, help='Temporary directory, relative to the output archive directory'
@@ -140,6 +144,7 @@ def main():
         args.output,
         args.module_name,
         Path(args.output).resolve().parent / args.work_dir,
+        args.exports,
         args.globals,
     )
 

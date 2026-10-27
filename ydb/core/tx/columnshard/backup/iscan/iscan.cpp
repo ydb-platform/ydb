@@ -479,6 +479,15 @@ public:
 
     void Handle(const TEvPrivate::TEvBackupExportState::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
+        if (event.State == NTable::EScan::Reset) {
+            Fail(
+                "ColumnShard export failed: uploader requested a scan reset (EScan::Reset), but restarting the scan is not supported. "
+                "A possible cause is S3 throttling (HTTP 429 TooManyRequests); check uploader logs for the original error. "
+                "Reduce S3 load and start a new export, for example: "
+                "ydb -e <endpoint> -d <database> export s3 --s3-endpoint <s3-endpoint> --bucket <bucket> "
+                "--item source=<table>,destination=<new-prefix>. Increasing --retries does not enable scan resets.");
+            return;
+        }
         if (event.State == NTable::EScan::Final) {
             SendFinalResult();
             return;

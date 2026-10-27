@@ -28,6 +28,8 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 using namespace NColumnShard;
@@ -40,8 +42,11 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 Y_UNIT_TEST_SUITE(BackupWithRestart) {
     [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind,
-        const TString& txBody, const ui64 txId, bool rebootAfterForward = false) {
+        const TString& txBody, const ui64 txId, bool rebootAfterForward = false, std::optional<TMessageSeqNo> seqNo = std::nullopt) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
+        if (seqNo) {
+            *event->Record.MutableSeqNo() = seqNo->SerializeToProto();
+        }
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 
@@ -54,6 +59,9 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             runtime.SimulateSleep(TDuration::MilliSeconds(100));
             Cerr << "Retrying propose after reboot, txId: " << txId << Endl;
             auto retryEvent = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
+            if (seqNo) {
+                *retryEvent->Record.MutableSeqNo() = seqNo->SerializeToProto();
+            }
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, retryEvent.release());
         }
 
@@ -184,6 +192,88 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
 
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+    }
+
+    Y_UNIT_TEST_DUO(NotifyCompletedBackupAfterRepropose, Reboot) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        NKikimrTxColumnShard::TBackupTxBody txBody;
+        auto& backupTask = *txBody.MutableBackupTask();
+        backupTask.SetTableName("abcde");
+        backupTask.SetTableId(tableId);
+        backupTask.SetSnapshotStep(planStep.Val());
+        backupTask.SetSnapshotTxId(txId);
+        backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
+        backupTask.MutableS3Settings()->SetBucket("test");
+
+        auto& table = *backupTask.MutableTable();
+        auto& tableDescription = *table.MutableColumnTableDescription();
+        tableDescription.SetColumnShardCount(4);
+        auto& schemaBackup = *tableDescription.MutableSchema();
+        auto& col1 = *schemaBackup.MutableColumns()->Add();
+        col1.SetName("key1");
+        col1.SetType("Uint64");
+        auto& col2 = *schemaBackup.MutableColumns()->Add();
+        col2.SetName("key2");
+        col2.SetType("Uint64");
+        auto& col3 = *schemaBackup.MutableColumns()->Add();
+        col3.SetName("field");
+        col3.SetType("Utf8");
+        table.MutableSelf();
+
+        const ui64 backupTxId = ++txId;
+        const TMessageSeqNo seqNo(1, 1);
+        const TString serializedTxBody = txBody.SerializeAsString();
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, serializedTxBody, backupTxId, false, seqNo);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), false, true);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        // A delayed retry of the propose for a completed backup is a stale duplicate: it must be dropped without a reply
+        // and without creating a new operator, which would never be planned again and would hide the persisted result
+        // from TEvNotifyTxCompletion.
+        {
+            auto retry = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, serializedTxBody);
+            *retry->Record.MutableSeqNo() = seqNo.SerializeToProto();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, retry.release());
+            UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        }
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 0u);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a retry propose");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
         VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 

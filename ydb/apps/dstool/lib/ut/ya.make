@@ -6,6 +6,7 @@ TEST_SRCS(
     test_pdisk_location_filter.py
     test_capacity_metrics.py
     test_connection_tokens.py
+    test_connection_login.py
     test_nbs_dbg_like_load.py
     test_cluster_balance.py
     test_cluster_reanimate.py

@@ -7,6 +7,7 @@ import sys
 import grpc
 import struct
 import fnmatch
+import getpass
 import os
 import os.path
 import ssl
@@ -24,9 +25,11 @@ import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
+import ydb.public.api.protos.ydb_auth_pb2 as ydb_auth
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 import ydb.public.api.protos.ydb_bridge_common_pb2 as ydb_bridge_common
 import ydb.public.api.protos.draft.ydb_distributed_storage_pb2 as ydb_distributed_storage
+from ydb.public.api.grpc import ydb_auth_v1_pb2_grpc as auth_grpc_server
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc_server
 from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
@@ -108,6 +111,8 @@ class ConnectionParams:
         self.cadata = None
         self.insecure = None
         self.parser = None
+        self.user = None
+        self.password = None
         self.http_endpoints = dict()
         self.grpc_endpoints = dict()
         self.args = None
@@ -203,6 +208,69 @@ class ConnectionParams:
         else:
             return default_token_type, token_value
 
+    def parse_login(self, user, password_file, no_password):
+        if self.token is not None:
+            if password_file is not None:
+                password_file.close()
+            return
+
+        self.user = user or os.getenv('YDB_USER')
+        if not self.user:
+            if password_file is not None or no_password:
+                if password_file is not None:
+                    password_file.close()
+                raise InvalidParameterError(
+                    self.parser, '--user', '', 'User name is required for password authentication'
+                )
+            return
+
+        if password_file is not None:
+            with password_file:
+                self.password = password_file.readline().rstrip('\r\n')
+        elif no_password:
+            self.password = ''
+        else:
+            self.password = os.getenv('YDB_PASSWORD')
+
+    def login(self):
+        if self.token is not None or self.user is None:
+            return
+
+        # Never retry password login over plaintext when a TLS endpoint was supplied.
+        grpc_endpoints = list(self.grpc_endpoints.values())
+        http_endpoints = list(self.http_endpoints.values())
+        endpoints = (
+            [endpoint for endpoint in grpc_endpoints if endpoint.protocol == 'grpcs']
+            or [endpoint for endpoint in http_endpoints if endpoint.protocol == 'https']
+            or grpc_endpoints
+            or http_endpoints
+        )
+        endpoints = [
+            EndpointInfo(
+                'grpcs' if endpoint.protocol in ('grpcs', 'https') else 'grpc',
+                endpoint.host,
+                endpoint.grpc_port,
+                endpoint.mon_port,
+            )
+            for endpoint in endpoints
+        ]
+        if not endpoints:
+            raise QueryError('Login requires an endpoint')
+
+        if self.password is None:
+            self.password = getpass.getpass(f'Enter password for user {self.user}: ')
+
+        request = ydb_auth.LoginRequest(user=self.user, password=self.password)
+        response = invoke_grpc('Login', request, stub_factory=auth_grpc_server.AuthServiceStub, endpoints=endpoints)
+        if not response.operation.ready or response.operation.status != StatusIds.SUCCESS:
+            issues = '; '.join(issue.message for issue in response.operation.issues)
+            raise QueryError('Login failed%s' % (': ' + issues if issues else ''))
+
+        result = ydb_auth.LoginResult()
+        if not response.operation.result.Unpack(result) or not result.token:
+            raise QueryError('Login returned no authentication token')
+        self.assign_token(('Login', result.token))
+
     def apply_args(self, args, with_localhost=True):
         self.args = args
         self.grpc_port = args.grpc_port
@@ -229,7 +297,11 @@ class ConnectionParams:
         if 'http' not in protocols and 'https' in protocols:
             self.mon_protocol = 'https'
 
-        self.parse_token(args.token_file, args.iam_token_file)
+        if args.token_file or args.iam_token_file:
+            self.parse_token(args.token_file, args.iam_token_file)
+        elif not (args.user or args.password_file is not None or args.no_password):
+            self.parse_token(args.token_file, args.iam_token_file)
+        self.parse_login(args.user, args.password_file, args.no_password)
         self.domain = 1
         self.verbose = args.verbose or args.debug
         self.debug = args.debug
@@ -237,6 +309,7 @@ class ConnectionParams:
         self.http_timeout = args.http_timeout
         self.cafile = args.cafile
         self.insecure = args.insecure
+        self.login()
 
     def add_host_access_options(self, parser, with_endpoint=True):
         self.parser = parser
@@ -249,11 +322,36 @@ class ConnectionParams:
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
         token_group = g.add_mutually_exclusive_group()
-        token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
-        token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
-        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
-                                                                                  'If this parameter is empty, the default roots will be used.')
-        g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
+        token_group.add_argument(
+            '--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file'
+        )
+        token_group.add_argument(
+            '--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file'
+        )
+        token_group.add_argument(
+            '--user', type=str, metavar='NAME', help='User name to authenticate with. Use NAME@ldap for LDAP users.'
+        )
+        password_group = g.add_mutually_exclusive_group()
+        password_group.add_argument(
+            '--password-file', type=FileType(encoding='utf-8'), metavar='PATH', help='Path to password file'
+        )
+        password_group.add_argument(
+            '--no-password', action='store_true', help='Use an empty password for the specified user'
+        )
+        g.add_argument(
+            '--ca-file',
+            metavar='PATH',
+            dest='cafile',
+            type=str,
+            help='File containing PEM encoded root certificates for SSL/TLS connections. '
+            'If this parameter is empty, the default roots will be used.',
+        )
+        g.add_argument(
+            '--http-timeout',
+            type=int,
+            default=5,
+            help='Timeout for blocking socket I/O operations during HTTP(s) queries',
+        )
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')
 
 
@@ -585,7 +683,11 @@ def invoke_grpc(
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
     if connection_params.debug:
-        p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        p = (
+            '<redacted>'
+            if func == 'Login'
+            else ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        )
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, endpoint.host, endpoint.grpc_port,
               endpoint.protocol), file=sys.stderr)
 
@@ -598,7 +700,7 @@ def invoke_grpc(
                 res = getattr(stub, func)(*params, metadata=metadata)
             if result_handler is not None:
                 res = result_handler(res)
-            elif connection_params.debug:
+            elif connection_params.debug and func != 'Login':
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
             return res
         except grpc.RpcError as e:
@@ -606,11 +708,11 @@ def invoke_grpc(
                 raise DistributedStorageUnavailable(
                     'gRPC method %s is unavailable at %s: %s'
                     % (func, endpoint.host_with_grpc_port, e.details())) from e
-            if connection_params.debug:
+            if connection_params.debug and func != 'Login':
                 print('ERROR: exception %s' % e, file=sys.stderr)
             raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
         except Exception as e:
-            if connection_params.debug:
+            if connection_params.debug and func != 'Login':
                 print('ERROR: exception %s' % e, file=sys.stderr)
             raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
 

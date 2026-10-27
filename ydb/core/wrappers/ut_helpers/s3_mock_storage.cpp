@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/string/builder.h>
+
+#include <optional>
 #include <util/string/cast.h>
 
 namespace NKikimr::NWrappers::NTestHelpers {
@@ -19,6 +21,11 @@ using TResult = TS3Mock::TStorage::TResult;
 
 TString ToTString(const Aws::String& value) {
     return TString(value.data(), value.size());
+}
+
+// The key of a response event, as the S3 client fills it from the request
+std::optional<TString> KeyOf(const Aws::String& key) {
+    return ToTString(key);
 }
 
 // What the S3 client makes of an error response of the HTTP mock: a 404 with a body names its error code (NoSuchKey,
@@ -79,7 +86,7 @@ public:
 
         auto read = Storage->Read(Path(request.GetKey()), &rangeValue, false);
         if (read.Status != TStatus::Ok) {
-            Reply(ev->Sender, std::make_unique<TEvGetObjectResponse>(request.GetKey(), range,
+            Reply(ev->Sender, std::make_unique<TEvGetObjectResponse>(KeyOf(request.GetKey()), range,
                 TEvGetObjectResponse::TOutcome(MakeError(read, false))));
             return;
         }
@@ -88,13 +95,13 @@ public:
         result.SetContentLength(read.Body.size());
         result.SetAcceptRanges("bytes");
         result.SetContentRange((TStringBuilder() << "bytes " << read.Range.first << "-" << read.Range.second << "/" << read.ObjectSize).c_str());
-        Reply(ev->Sender, std::make_unique<TEvGetObjectResponse>(request.GetKey(), range,
+        Reply(ev->Sender, std::make_unique<TEvGetObjectResponse>(KeyOf(request.GetKey()), range,
             TEvGetObjectResponse::TOutcome(std::move(result)), std::move(read.Body)));
     }
 
     void Execute(TEvHeadObjectRequest::TPtr& ev) const override {
         const auto& request = ev->Get()->GetRequest();
-        Reply(ev->Sender, std::make_unique<TEvHeadObjectResponse>(request.GetKey(), Head(request.GetKey())));
+        Reply(ev->Sender, std::make_unique<TEvHeadObjectResponse>(KeyOf(request.GetKey()), Head(request.GetKey())));
     }
 
     void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
@@ -108,7 +115,7 @@ public:
         const auto put = Storage->Put(Path(request.GetKey()), ev->Get()->Body);
         Aws::S3::Model::PutObjectResult result;
         result.SetETag(put.ETag.c_str());
-        Reply(ev->Sender, std::make_unique<TEvPutObjectResponse>(request.GetKey(), TEvPutObjectResponse::TOutcome(std::move(result))));
+        Reply(ev->Sender, std::make_unique<TEvPutObjectResponse>(KeyOf(request.GetKey()), TEvPutObjectResponse::TOutcome(std::move(result))));
     }
 
     void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {
@@ -117,7 +124,7 @@ public:
         TEvDeleteObjectResponse::TOutcome outcome = deleted.Status == TStatus::Ok
             ? TEvDeleteObjectResponse::TOutcome(Aws::S3::Model::DeleteObjectResult())
             : TEvDeleteObjectResponse::TOutcome(MakeError(deleted, true));
-        Reply(ev->Sender, std::make_unique<TEvDeleteObjectResponse>(request.GetKey(), std::move(outcome)));
+        Reply(ev->Sender, std::make_unique<TEvDeleteObjectResponse>(KeyOf(request.GetKey()), std::move(outcome)));
     }
 
     void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override {
@@ -132,7 +139,7 @@ public:
         Aws::S3::Model::CreateMultipartUploadResult result;
         result.SetKey(request.GetKey());
         result.SetUploadId(created.UploadId.c_str());
-        Reply(ev->Sender, std::make_unique<TEvCreateMultipartUploadResponse>(request.GetKey(),
+        Reply(ev->Sender, std::make_unique<TEvCreateMultipartUploadResponse>(KeyOf(request.GetKey()),
             TEvCreateMultipartUploadResponse::TOutcome(std::move(result))));
     }
 
@@ -148,7 +155,7 @@ public:
             result.SetETag(uploaded.ETag.c_str());
             return TEvUploadPartResponse::TOutcome(std::move(result));
         }();
-        Reply(ev->Sender, std::make_unique<TEvUploadPartResponse>(request.GetKey(), std::move(outcome)));
+        Reply(ev->Sender, std::make_unique<TEvUploadPartResponse>(KeyOf(request.GetKey()), std::move(outcome)));
     }
 
     void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override {
@@ -167,7 +174,7 @@ public:
             result.SetCopyPartResult(std::move(part));
             return TEvUploadPartCopyResponse::TOutcome(std::move(result));
         }();
-        Reply(ev->Sender, std::make_unique<TEvUploadPartCopyResponse>(request.GetKey(), std::move(outcome)));
+        Reply(ev->Sender, std::make_unique<TEvUploadPartCopyResponse>(KeyOf(request.GetKey()), std::move(outcome)));
     }
 
     void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override {
@@ -198,7 +205,7 @@ public:
             result.SetETag(completed.ETag.c_str());
             return TEvCompleteMultipartUploadResponse::TOutcome(std::move(result));
         }();
-        Reply(ev->Sender, std::make_unique<TEvCompleteMultipartUploadResponse>(request.GetKey(), std::move(outcome)));
+        Reply(ev->Sender, std::make_unique<TEvCompleteMultipartUploadResponse>(KeyOf(request.GetKey()), std::move(outcome)));
     }
 
     void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override {
@@ -207,7 +214,7 @@ public:
         TEvAbortMultipartUploadResponse::TOutcome outcome = aborted.Status == TStatus::Ok
             ? TEvAbortMultipartUploadResponse::TOutcome(Aws::S3::Model::AbortMultipartUploadResult())
             : TEvAbortMultipartUploadResponse::TOutcome(MakeError(aborted, false));
-        Reply(ev->Sender, std::make_unique<TEvAbortMultipartUploadResponse>(request.GetKey(), std::move(outcome)));
+        Reply(ev->Sender, std::make_unique<TEvAbortMultipartUploadResponse>(KeyOf(request.GetKey()), std::move(outcome)));
     }
 
 private:

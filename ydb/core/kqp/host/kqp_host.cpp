@@ -2293,22 +2293,50 @@ private:
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 
+        // Compilation spans of the pipeline phases. The logical phases run in a loop
+        // that restarts until the query stops changing: a phase span covers the loop,
+        // and the passes of its phases are steps in it.
+        static const char phases = 0;
+        static const char passes = 0;
+        const auto queryCtx = SessionCtx->QueryPtr();
+        const auto beginTrace = [&](const TString& name) {
+            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, name, &phases);
+        };
+        const auto endTrace = [&](const TString& name) {
+            return CreateCompileTraceEnd(queryCtx, name, &phases);
+        };
+        const auto beginPass = [&](const TString& name) {
+            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Step, name, &passes);
+        };
+        const auto endPass = [&](const TString& name) {
+            return CreateCompileTraceEnd(queryCtx, name, &passes);
+        };
+
         YqlTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
+            .Add(beginTrace("Prepare logical query"), "TraceBeginPrepareLogicalQuery")
+            .Add(beginPass("Annotate IO"), "TraceBeginIOAnnotation")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
+            .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
+            .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
+            .Add(endPass("Annotate types"), "TraceEndTypeAnnotation")
+            .Add(beginPass("Apply provider optimizations"), "TraceBeginProviderOptimization")
             .AddOptimization(true, false)
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
+            .Add(endPass("Apply provider optimizations"), "TraceEndProviderOptimization")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+            .Add(beginTrace("Prepare physical query"), "TraceBeginPreparePhysicalQuery")
             .AddRun(&NullProgressWriter)
+            .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
             .Build();
 
         auto typesCtx = TypesCtx;
@@ -2354,25 +2382,6 @@ private:
                 },
                 false
             );
-
-        // Compilation spans of the pipeline phases. The logical phases run in a loop
-        // that restarts until the query stops changing: a phase span covers the loop,
-        // and the passes of its phases are steps in it.
-        static const char phases = 0;
-        static const char passes = 0;
-        const auto queryCtx = SessionCtx->QueryPtr();
-        const auto beginTrace = [&](const TString& name) {
-            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, name, &phases);
-        };
-        const auto endTrace = [&](const TString& name) {
-            return CreateCompileTraceEnd(queryCtx, name, &phases);
-        };
-        const auto beginPass = [&](const TString& name) {
-            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Step, name, &passes);
-        };
-        const auto endPass = [&](const TString& name) {
-            return CreateCompileTraceEnd(queryCtx, name, &passes);
-        };
 
         YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()

@@ -358,8 +358,19 @@ private:
     {
         TCompileTraceScope traceScope(sessionCtx->QueryPtr()->CompileTrace.Get(), TCompileTraceLevels::Step,
             "Create transformer pipelines");
-        auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
-            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
+        const auto queryCtx = sessionCtx->QueryPtr();
+        const auto traced = [&](TAutoPtr<IGraphTransformer>&& transformer, const TString& name,
+                ui8 verbosity = TCompileTraceLevels::Phase) {
+            return CreateCompileTraceTransformer(std::move(transformer), queryCtx, verbosity, name);
+        };
+        const TCompileTraceAttributes oldRbo{{TString(OptimizerAttribute), TString(OldRboOptimizer)}};
+        const TCompileTraceAttributes newRbo{{TString(OptimizerAttribute), TString(NewRboOptimizer)}};
+        // The old RBO's pipeline restarts from its optimization when a later stage changes the query. Its
+        // optimization and conversion phases follow each other, so a restart ends the conversion in progress.
+        static const char oldRboPhases = 0;
+
+        auto preparedExplainTransformer = traced(CreateKqpExplainPreparedTransformer(
+            Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx), "Build explain plan");
 
         sessionCtx->SetInternalTypeAnnTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), Config));
 
@@ -426,25 +437,29 @@ private:
             .Add(CreateKqpTxsPeepholeTransformer(*typesCtx, Config, OptimizeCtx), "Peephole")
             .Build(false);
 
-        TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+        auto compilePhysicalQuery = traced(TAutoPtr<IGraphTransformer>(new TCompilePhysicalQueryTransformer(Cluster,
             SessionCtx->GetDatabase(),
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,
             funcRegistry,
-            Config));
+            Config)), "Compile physical query");
 
         Transformer = CreateCompositeGraphTransformer(
             {
+                // Its logical and physical rules run in one restarting loop, which is one phase.
+                TTransformStage{ CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, "Optimize query", &oldRboPhases, oldRbo), "TraceBeginOptimizeQuery", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalOptimizeTransformer, "PhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalOptimize"),
-                TTransformStage{ physicalBuildTxsTransformer, "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, "Convert to physical plan", &oldRboPhases), "TraceBeginConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ traced(std::move(physicalBuildTxsTransformer), "Build transactions", TCompileTraceLevels::Step), "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildTxs"),
-                TTransformStage{ physicalBuildQueryTransformer, "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ traced(std::move(physicalBuildQueryTransformer), "Build physical query", TCompileTraceLevels::Step), "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildQuery"),
                 TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "SaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
-                TTransformStage{ physicalPeepholeTransformer, "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ traced(std::move(physicalPeepholeTransformer), "Peephole physical stages", TCompileTraceLevels::Step), "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalPeephole"),
+                TTransformStage{ CreateCompileTraceEnd(queryCtx, "Convert to physical plan", &oldRboPhases), "TraceEndConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ compilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ preparedExplainTransformer, "ExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or if explain-only
             },
@@ -453,10 +468,6 @@ private:
 
         // Create a NewRBO composite transformer only if the special flag is enabled.
         if (Config->GetEnableNewRBO()) {
-            const auto traced = [queryCtx = sessionCtx->QueryPtr()](TAutoPtr<IGraphTransformer>&& transformer,
-                    const TString& name, ui8 verbosity = TCompileTraceLevels::Phase) {
-                return CreateCompileTraceTransformer(std::move(transformer), queryCtx, verbosity, name);
-            };
             // The optimization runs in a loop that restarts until the query stops changing:
             // a phase span covers the loop, and its passes are steps in it.
             static const char optimization = 0;
@@ -484,7 +495,7 @@ private:
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
                 .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Phase, "Optimize query",
-                    &optimization), "TraceBeginOptimizeQuery")
+                    &optimization, newRbo), "TraceBeginOptimizeQuery")
                 .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Step, "Annotate KQL query",
                     &passes), "TraceBeginAnnotateKqlQuery")
                 .AddPreTypeAnnotation()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <yql/essentials/core/yql_graph_transformer.h>
 
@@ -15,7 +16,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateCompileTraceTransformer(TAutoPtr<NYql::I
 // between them, for groups of transformers added by TTransformationPipeline.
 // The regions of one pipeline share the group (see TCompileTrace::BeginRegion).
 TAutoPtr<NYql::IGraphTransformer> CreateCompileTraceBegin(TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
-    ui8 verbosity, TString name, const void* group);
+    ui8 verbosity, TString name, const void* group, TCompileTraceAttributes attributes = {});
 TAutoPtr<NYql::IGraphTransformer> CreateCompileTraceEnd(TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
     TString name, const void* group);
 

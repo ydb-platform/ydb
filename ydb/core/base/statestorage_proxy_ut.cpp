@@ -23,6 +23,9 @@ public:
     TVector<TActorId> Requests;
     TVector<TActorId> Replicas;
     TVector<ui64> ReplicaCookies;
+    THashSet<TActorId> DropChildRepliesFrom;
+    bool DropChildPassAway = false;
+    ui32 DroppedChildReplyCount = 0;
     ui32 ReplyCount = 0;
     ui32 SignatureUpdateCount = 0;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
@@ -57,6 +60,17 @@ public:
         }
         auto proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
+            if (event->Recipient != Edge) {
+                if (event->GetTypeRewrite() == TEvStateStorage::TEvInfo::EventType
+                        && DropChildRepliesFrom.contains(event->Sender)) {
+                    ++DroppedChildReplyCount;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                if (event->GetTypeRewrite() == TEvStateStorage::TEvRingGroupPassAway::EventType
+                        && DropChildPassAway) {
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
             if (event->Recipient == Edge) {
                 if (event->GetTypeRewrite() == TEvStateStorage::TEvInfo::EventType) {
                     auto* reply = event->Get<TEvStateStorage::TEvInfo>();
@@ -159,6 +173,9 @@ public:
     TVector<TActorId> Requests;
     TVector<TActorId> Replicas;
     TVector<ui64> ReplicaCookies;
+    THashSet<TActorId> DropChildRepliesFrom;
+    bool DropChildPassAway = false;
+    ui32 DroppedChildReplyCount = 0;
     ui32 ReplyCount = 0;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
 
@@ -189,6 +206,17 @@ public:
 
         auto proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
+            if (event->Recipient != Edge) {
+                if (event->GetTypeRewrite() == TEvStateStorage::TEvInfo::EventType
+                        && DropChildRepliesFrom.contains(event->Sender)) {
+                    ++DroppedChildReplyCount;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                if (event->GetTypeRewrite() == TEvStateStorage::TEvRingGroupPassAway::EventType
+                        && DropChildPassAway) {
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
             if (event->Recipient == Edge && event->GetTypeRewrite() == TEvStateStorage::TEvInfo::EventType) {
                 auto* reply = event->Get<TEvStateStorage::TEvInfo>();
                 ++ReplyCount;
@@ -216,9 +244,9 @@ public:
         Runtime.SendAsync(new IEventHandle(Requests[index], Replicas[index], reply.Release()));
     }
 
-    void Elapse() {
-        Runtime.Schedule(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), TDuration::MilliSeconds(1));
-        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvents::TEvWakeup>(Edge, TDuration::Seconds(1)));
+    void Elapse(TDuration duration = TDuration::MilliSeconds(1)) {
+        Runtime.Schedule(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), duration);
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvents::TEvWakeup>(Edge, duration + TDuration::Seconds(1)));
     }
 };
 
@@ -302,6 +330,34 @@ void CheckSuccessfulLockWaits(TEvStateStorage::TProxyOptions::ESigWaitMode mode)
     f.Elapse();
     UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
+}
+
+void CheckIncompleteLockShutdown(bool safetyTimeout, bool partialSuccess, bool race = false) {
+    TLockFixture f;
+    // Suppress child exit notifications to exercise the parent's safety timer.
+    f.DropChildPassAway = safetyTimeout;
+    f.DropChildRepliesFrom.insert(f.Requests[3]);
+    if (partialSuccess) {
+        const auto& leader = race ? f.OtherLeader : f.Leader;
+        const ui32 generation = TLockFixture::Generation + (race ? 1 : 0);
+        f.Reply(0, leader, generation);
+        f.Reply(1, leader, generation);
+        f.Elapse();
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 0);
+    } else {
+        f.DropChildRepliesFrom.insert(f.Requests[0]);
+    }
+
+    f.Elapse(TDuration::Seconds(30));
+    f.Elapse();
+    UNIT_ASSERT_VALUES_EQUAL(f.DroppedChildReplyCount, partialSuccess ? 1 : 2);
+    if (safetyTimeout) {
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 0);
+        f.Elapse(TDuration::Seconds(30));
+        f.Elapse();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(f.Status, race ? NKikimrProto::RACE : NKikimrProto::TIMEOUT);
 }
 
 } // namespace
@@ -600,6 +656,29 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         f.ExpectReply(NKikimrProto::RACE);
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
     }
+
+    Y_UNIT_TEST(ShutdownKeepsKnownStateWhenAnotherRingGroupReplyIsLost) {
+        for (bool safetyTimeout : {false, true}) {
+            TLookupFixture f(TEvStateStorage::TProxyOptions::SigSync, 3);
+            f.DropChildPassAway = safetyTimeout;
+            f.DropChildRepliesFrom.insert(f.Requests[10]);
+            for (ui32 i = 0; i < 5; ++i) {
+                f.KnownLeader(i);
+                f.Fail(i + 5);
+            }
+            f.ExpectPending();
+            for (ui32 i = 10; i < 15; ++i) {
+                f.Fail(i);
+            }
+            if (safetyTimeout) {
+                f.ExpectPending();
+                f.Elapse(TDuration::Seconds(60));
+            }
+            f.ExpectReply(NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(f.DroppedChildReplyCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
@@ -623,6 +702,46 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
         f.Elapse();
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::RACE);
+    }
+
+    Y_UNIT_TEST(SafetyTimeoutWithoutChildRepliesReturnsTimeout) {
+        CheckIncompleteLockShutdown(true, false);
+    }
+
+    Y_UNIT_TEST(SafetyTimeoutAfterPartialSuccessReturnsTimeout) {
+        CheckIncompleteLockShutdown(true, true);
+    }
+
+    Y_UNIT_TEST(AllChildrenExitWithoutRepliesReturnsTimeout) {
+        CheckIncompleteLockShutdown(false, false);
+    }
+
+    Y_UNIT_TEST(AllChildrenExitAfterPartialSuccessReturnsTimeout) {
+        CheckIncompleteLockShutdown(false, true);
+    }
+
+    Y_UNIT_TEST(ShutdownKeepsRaceWhenAnotherRingGroupReplyIsLost) {
+        for (bool safetyTimeout : {false, true}) {
+            CheckIncompleteLockShutdown(safetyTimeout, true, true);
+        }
+    }
+
+    Y_UNIT_TEST(ShutdownDoesNotReplyAgainAfterSuccess) {
+        for (bool safetyTimeout : {false, true}) {
+            TLockFixture f(TEvStateStorage::TProxyOptions::SigAsync);
+            f.DropChildPassAway = safetyTimeout;
+            for (ui32 i : {0u, 1u, 3u, 4u}) {
+                f.Reply(i, f.Leader, TLockFixture::Generation);
+            }
+            f.Elapse();
+            UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
+
+            f.Elapse(TDuration::Seconds(60));
+            f.Elapse();
+            UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
+        }
     }
 }
 

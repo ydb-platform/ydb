@@ -1003,7 +1003,9 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void Timeout() {
         if (!Replied) {
-            Reply(AggregatedStatus);
+            // Missing ring-group replies must not turn a mutation into a success.
+            MergeStatus(NKikimrProto::TIMEOUT);
+            Reply(RequestKind == ERequestKind::Lookup && HasState ? StateStatus : AggregatedStatus);
         }
         PassAway();
     }
@@ -1011,10 +1013,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
         RingGroupPassAwayCounter++;
         if (RingGroupPassAwayCounter >= RingGroupActors.size()) {
-            if (!Replied) {
-                Reply(AggregatedStatus);
-            }
-            PassAway();
+            Timeout();
         }
     }
 

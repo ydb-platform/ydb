@@ -1108,7 +1108,7 @@ endDiskTypeCheck:   ;
             const auto& dc = item.GetName();
             Y_ENSURE_BT(!dc.empty() && dataCenters.contains(dc), "unknown distconf data center " << dc);
             Y_ENSURE_BT(configuredDataCenters.insert(dc).second, "duplicate distconf data center " << dc);
-            if (item.HasState() && item.GetState() == NKikimrConfig::TStaticNameserviceConfig::TNode::EXCLUDED) {
+            if (item.HasState() && item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
                 excludedDataCenters.insert(dc);
             }
         }
@@ -1134,7 +1134,7 @@ endDiskTypeCheck:   ;
 
         for (const auto& node : config.GetNameserviceConfig().GetNode()) {
             const auto& location = node.HasLocation() ? node.GetLocation() : node.GetWalleLocation();
-            Y_ENSURE_BT(!node.HasDistconfState() || node.GetDistconfState() != NKikimrConfig::TStaticNameserviceConfig::TNode::ACTIVE
+            Y_ENSURE_BT(!node.HasDistconfState() || node.GetDistconfState() != NKikimrBlobStorage::TDistconfState::ACTIVE
                     || !excludedDataCenters.contains(location.GetDataCenter()),
                 "active distconf host is in an excluded data center: node_id " << node.GetNodeId());
         }

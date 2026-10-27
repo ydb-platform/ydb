@@ -2,6 +2,13 @@ syntax = "proto3";
 
 package NKikimrBlobStorage;
 
+message TDistconfState {
+    enum E {
+        ACTIVE = 0;
+        EXCLUDED = 1;
+    }
+}
+
 // Enum defining PDisk underlying drive type (rotational or solid state)
 enum EPDiskType {
     ROT = 0; // rotational drives (HDD)

@@ -148,6 +148,7 @@ namespace NKikimr::NStorage {
             auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
             request->Record.MutableQueryConfig()->SetRequireFresh(true);
             request->Record.MutableQueryConfig()->SetRefillNodeId(SelfId().NodeId());
+            request->Record.MutableQueryConfig()->SetSupportsDistconfStates(true);
             Waiting = true;
             Send(Keeper->SelfId(), request.release(), 0, ++RequestCookie);
             TActivationContext::Schedule(TDuration::Seconds(30),
@@ -341,6 +342,49 @@ namespace NKikimr::NStorage {
             return ResolveNodePileId(registry, location).value_or(TBridgePileId());
         };
 
+        ExcludedNodeIds.clear();
+        const auto& config = StorageConfig ? *StorageConfig : *BaseConfig;
+        const auto& startup = Cfg->SelfManagementConfig ? *Cfg->SelfManagementConfig : BaseConfig->GetSelfManagementConfig();
+        THashMap<ui32, EDistconfState> configuredHostStates;
+        for (const auto& node : BaseConfig->GetAllNodes()) {
+            if (node.HasDistconfState()) {
+                configuredHostStates.emplace(node.GetNodeId(), node.GetDistconfState());
+            }
+        }
+        THashMap<TString, EDistconfState> persistedDataCenterStates;
+        for (const auto& item : config.GetSelfManagementConfig().GetDataCenterStates()) {
+            if (item.HasState()) {
+                persistedDataCenterStates.emplace(item.GetName(), item.GetState());
+            }
+        }
+        THashMap<TString, std::optional<EDistconfState>> configuredDataCenterStates;
+        for (const auto& item : startup.GetDataCenterStates()) {
+            std::optional<EDistconfState> state;
+            if (item.HasState()) {
+                state = item.GetState();
+            }
+            configuredDataCenterStates.emplace(item.GetName(), state);
+        }
+        const auto findState = [](const auto& states, const auto& key) -> std::optional<EDistconfState> {
+            if (const auto it = states.find(key); it != states.end()) {
+                return it->second;
+            }
+            return std::nullopt;
+        };
+        for (const auto& node : config.GetAllNodes()) {
+            std::optional<EDistconfState> persistedHostState;
+            if (node.HasDistconfState()) {
+                persistedHostState = node.GetDistconfState();
+            }
+            const auto& dataCenter = node.GetLocation().GetDataCenter();
+            if (ResolveDistconfNodeState(findState(configuredHostStates, node.GetNodeId()),
+                    findState(configuredDataCenterStates, dataCenter), persistedHostState,
+                    findState(persistedDataCenterStates, dataCenter), startup.GetOverrideDistconfState())
+                    == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
+                ExcludedNodeIds.insert(node.GetNodeId());
+            }
+        }
+
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
             TBridgePileId expectedBridgePileId;
@@ -353,7 +397,7 @@ namespace NKikimr::NStorage {
 
             std::vector<ui32> nodeIds;
             for (const auto& [item, location] : newNodeList) {
-                if (resolvePileId(location) == expectedBridgePileId) {
+                if (!IsDistconfNodeExcluded(item.NodeId()) && resolvePileId(location) == expectedBridgePileId) {
                     nodeIds.push_back(item.NodeId());
                 }
             }
@@ -363,6 +407,7 @@ namespace NKikimr::NStorage {
 
         // find this node in new node list
         const ui32 selfNodeId = SelfId().NodeId();
+        const bool selfExcluded = IsDistconfNodeExcluded(selfNodeId);
         bool found = false;
         for (const auto& [item, location] : newNodeList) {
             if (item.NodeId() == selfNodeId) {
@@ -389,6 +434,10 @@ namespace NKikimr::NStorage {
             AllNodeIds.emplace(nodeId, item);
             Hosts.emplace(std::get<0>(item), std::get<1>(item));
 
+            if (selfExcluded || IsDistconfNodeExcluded(nodeId)) {
+                continue;
+            }
+
             // check if node is from the same pile (as this one)
             const TBridgePileId bridgePileId = resolvePileId(location);
             if (bridgePileId == SelfNodeBridgePileId) {
@@ -410,6 +459,14 @@ namespace NKikimr::NStorage {
         // check if some nodes were deleted -- we have to unbind them
         THashSet<ui32> addedNodeIds;
         bool bindingReset = false;
+        if (Binding && (selfExcluded || IsDistconfNodeExcluded(Binding->NodeId)
+                || IsDistconfNodeExcluded(Binding->RootNodeId)
+                || (Binding->RootNodeId && RequiresDistconfStateSupport() && !Binding->SupportsDistconfStates))) {
+            AbortBinding("node excluded", true, false);
+        }
+        if (RootProbe && (selfExcluded || IsDistconfNodeExcluded(RootProbe->NodeId))) {
+            AbortRootProbe();
+        }
         auto applyChanges = [&](const auto& prev, auto& cur) {
             std::ranges::sort(cur);
             for (auto prevIt = prev.cbegin(), curIt = cur.cbegin(); prevIt != prev.cend() || curIt != cur.cend(); ) {
@@ -417,6 +474,10 @@ namespace NKikimr::NStorage {
                     addedNodeIds.insert(*curIt++);
                 } else if (curIt == cur.cend() || *prevIt < *curIt) { // node deleted
                     const ui32 nodeId = *prevIt++;
+                    if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()
+                            && (selfExcluded || IsDistconfNodeExcluded(nodeId))) {
+                        SendEvent(nodeId, it->second, TEvNodeConfigReversePush::MakeRejected());
+                    }
                     UnbindNode(nodeId, "node vanished");
                     if (Binding && Binding->NodeId == nodeId) {
                         bindingReset = true;
@@ -433,6 +494,21 @@ namespace NKikimr::NStorage {
         applyChanges(NodeIdsForOtherPilesOutgoingBinding, nodeIdsForOtherPilesOutgoingBinding);
         if (bindingReset) {
             AbortBinding("node vanished");
+        }
+
+        std::vector<ui32> excludedSubtrees;
+        if (RequiresDistconfStateSupport()) {
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                if (!info.SupportsDistconfStates || std::ranges::any_of(info.BoundNodeIds, [&](const auto& node) {
+                        return IsDistconfNodeExcluded(node.NodeId());
+                    })) {
+                    excludedSubtrees.push_back(nodeId);
+                }
+            }
+        }
+        for (const ui32 nodeId : excludedSubtrees) {
+            SendEvent(nodeId, DirectBoundNodes.at(nodeId), TEvNodeConfigReversePush::MakeRejected());
+            UnbindNode(nodeId, "subtree contains excluded node");
         }
 
         NodeIdsForOutgoingBinding = std::move(nodeIdsForOutgoingBinding);
@@ -478,7 +554,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
             return;
         }
 
@@ -518,6 +594,10 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::StartBinding(ui32 nodeId) {
         Y_ABORT_UNLESS(!Binding);
 
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(nodeId)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(nodeId != SelfId().NodeId());
         Binding.emplace(nodeId, ++BindingCookie);
         TActivationContext::Schedule(BindRequestTimeout, new IEventHandle(TEvPrivate::EvBindingTimeout, 0,
@@ -548,6 +628,7 @@ namespace NKikimr::NStorage {
         record.SetInitial(true);
         record.SetSubtreeHeight(GetSubtreeHeight());
         record.SetSupportsMetadataOnlyCollect(true);
+        record.SetSupportsDistconfStates(true);
         if (IsBridged() && StorageConfig->GetGeneration()
             && ((!LocalCommittedStorageConfig
                     || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
@@ -580,6 +661,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::StartRootProbe(ui32 nodeId) {
         Y_ABORT_UNLESS(Scepter && !Binding && !RootProbe);
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(nodeId)) {
+            return;
+        }
         RootProbe.emplace(nodeId, ++BindingCookie);
         if (const TActorId sessionId = SubscribeToPeerNode(nodeId, {})) {
             SendRootProbe(sessionId);
@@ -914,6 +998,15 @@ namespace NKikimr::NStorage {
             return; // possible race with unbinding
         }
 
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(senderNodeId)
+                || IsDistconfNodeExcluded(record.GetRootNodeId())
+                || (!record.GetSupportsDistconfStates() && (RequiresDistconfStateSupport()
+                    || (record.HasCommittedStorageConfig()
+                        && RequiresDistconfStateSupport(record.GetCommittedStorageConfig()))))) {
+            AbortBinding("node excluded");
+            return;
+        }
+
         auto isTargeted = [](const TScatterTaskOrigin& origin) { return std::holds_alternative<TScatterTaskOriginTargeted>(origin); };
         Y_ABORT_UNLESS(Binding->RootNodeId || std::ranges::all_of(ScatterTasks | std::views::values, isTargeted, &TScatterTask::Origin));
 
@@ -939,6 +1032,7 @@ namespace NKikimr::NStorage {
 
             if (Binding) {
                 Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                Binding->SupportsDistconfStates = record.GetSupportsDistconfStates();
                 if (!Binding->SupportsDirectRootQueries) {
                     CancelBindingLiveness();
                 }
@@ -958,6 +1052,10 @@ namespace NKikimr::NStorage {
             FanOutReversePush(nullptr); // no configuration change, but root node has been updated
         }
         RequestConfigRefill();
+
+        if (!Binding || !Binding->Expected(*ev)) {
+            return;
+        }
 
         std::unique_ptr<TEvNodeConfigPush> pendingPush;
         auto getPendingPushRecord = [&] {
@@ -984,6 +1082,34 @@ namespace NKikimr::NStorage {
         if (pendingPush) {
             SendEvent(*Binding, std::move(pendingPush));
         }
+    }
+
+    bool TDistributedConfigKeeper::IsDistconfNodeExcluded(ui32 nodeId) const {
+        return ExcludedNodeIds.contains(nodeId);
+    }
+
+    bool TDistributedConfigKeeper::RequiresDistconfStateSupport() const {
+        return !ExcludedNodeIds.empty() || HasPendingDistconfStateProposal
+            || (StorageConfig && RequiresDistconfStateSupport(*StorageConfig));
+    }
+
+    bool TDistributedConfigKeeper::RequiresDistconfStateSupport(
+            const NKikimrBlobStorage::TStorageConfig& config) {
+        const auto excluded = [](const auto& snapshot) {
+            for (const auto& node : snapshot.GetAllNodes()) {
+                if (node.HasDistconfState() && node.GetDistconfState() == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
+                    return true;
+                }
+            }
+            for (const auto& item : snapshot.GetSelfManagementConfig().GetDataCenterStates()) {
+                if (item.HasState() && item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return config.GetForcedDistconfState() || excluded(config)
+            || (config.HasPrevConfig() && excluded(config.GetPrevConfig()));
     }
 
     TBindQueue *TDistributedConfigKeeper::GetBindQueue(ui32 nodeId) {
@@ -1118,6 +1244,19 @@ namespace NKikimr::NStorage {
             {"storageConfigGeneration", StorageConfig ? (i64)StorageConfig->GetGeneration() : -1},
             {"knownNode", knownNode});
 
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(senderNodeId)
+                || (record.GetInitial() && RequiresDistconfStateSupport() && !record.GetSupportsDistconfStates())
+                || (!ExcludedNodeIds.empty() && std::ranges::any_of(record.GetBoundNodes(), [&](const auto& item) {
+                    return IsDistconfNodeExcluded(item.GetNodeId().GetNodeId());
+                }))) {
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            if (const auto it = DirectBoundNodes.find(senderNodeId);
+                    it != DirectBoundNodes.end() && it->second.Expected(*ev)) {
+                UnbindNode(senderNodeId, "subtree contains excluded node");
+            }
+            return;
+        }
+
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
@@ -1214,6 +1353,9 @@ namespace NKikimr::NStorage {
         }
         if (record.HasSubtreeHeight()) {
             info.ReportedSubtreeHeight = record.GetSubtreeHeight();
+        }
+        if (record.GetInitial()) {
+            info.SupportsDistconfStates = record.GetSupportsDistconfStates();
         }
         if (record.HasSupportsMetadataOnlyCollect()) {
             info.SupportsMetadataOnlyCollect = record.GetSupportsMetadataOnlyCollect();
@@ -1343,14 +1485,20 @@ namespace NKikimr::NStorage {
                 SendEvent(*Binding, std::move(pushEv));
             }
 
-            // abort all unprocessed scatter tasks
-            for (const ui64 cookie : info.ScatterTasks) {
-                AbortScatterTask(cookie, nodeId);
-            }
-
+            auto scatterTasks = std::move(info.ScatterTasks);
             DirectBoundNodes.erase(it);
-
             UnsubscribeQueue.insert(nodeId);
+
+            for (const ui64 cookie : scatterTasks) {
+                const auto task = ScatterTasks.find(cookie);
+                Y_ABORT_UNLESS(task != ScatterTasks.end());
+                Y_ABORT_UNLESS(task->second.PendingNodes.erase(nodeId) == 1);
+            }
+            for (const ui64 cookie : scatterTasks) {
+                if (const auto task = ScatterTasks.find(cookie); task != ScatterTasks.end()) {
+                    CheckCompleteScatterTask(task);
+                }
+            }
         }
     }
 

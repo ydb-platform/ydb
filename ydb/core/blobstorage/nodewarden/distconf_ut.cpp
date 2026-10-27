@@ -17,8 +17,11 @@
 
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
 
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/dynamic_message.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/scope.h>
@@ -93,6 +96,10 @@ namespace {
         if (bridgeConfig) {
             config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(*bridgeConfig);
         }
+        if (storageConfig.HasSelfManagementConfig()) {
+            config->SelfManagementConfig =
+                std::make_unique<NKikimrConfig::TSelfManagementConfig>(storageConfig.GetSelfManagementConfig());
+        }
         config->NameserviceConfig = std::make_unique<NKikimrConfig::TStaticNameserviceConfig>();
         for (const auto& node : storageConfig.GetAllNodes()) {
             auto *nsNode = config->NameserviceConfig->AddNode();
@@ -101,6 +108,9 @@ namespace {
             nsNode->SetInterconnectHost(node.GetHost());
             nsNode->SetPort(node.GetPort());
             nsNode->MutableLocation()->CopyFrom(node.GetLocation());
+            if (node.HasDistconfState()) {
+                nsNode->SetDistconfState(node.GetDistconfState());
+            }
         }
         return config;
     }
@@ -391,6 +401,460 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_C(converged, "binding tree did not converge before the deadline");
         CheckStaysConverged(runtime, keeperIds);
         return *rootNodeId;
+    }
+
+    Y_UNIT_TEST(DeriveCopiesDistconfStatesWithoutOverrideFlag) {
+        using TState = NKikimrBlobStorage::TDistconfState;
+        auto config = MakeStorageConfig(2);
+        NKikimrConfig::TAppConfig app;
+        app.MutableBlobStorageConfig()->CopyFrom(config.GetBlobStorageConfig());
+        app.MutableNameserviceConfig()->CopyFrom(*MakeNodeWardenConfig(config)->NameserviceConfig);
+        app.MutableNameserviceConfig()->MutableNode(0)->SetDistconfState(TState::EXCLUDED);
+        auto* settings = app.MutableSelfManagementConfig();
+        settings->SetEnabled(true);
+        settings->SetOverrideDistconfState(true);
+        auto* dc = settings->AddDataCenterStates();
+        dc->SetName("dc-2");
+        dc->SetState(TState::EXCLUDED);
+        TString error;
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(app, &config, &error), error);
+        UNIT_ASSERT(config.GetAllNodes(0).HasDistconfState());
+        UNIT_ASSERT(config.GetAllNodes(0).GetDistconfState() == TState::EXCLUDED);
+        UNIT_ASSERT(!config.GetAllNodes(1).HasDistconfState());
+        UNIT_ASSERT(!config.GetSelfManagementConfig().HasOverrideDistconfState());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetSelfManagementConfig().GetDataCenterStates(0).GetName(), "dc-2");
+        UNIT_ASSERT(config.GetSelfManagementConfig().GetDataCenterStates(0).GetState() == TState::EXCLUDED);
+        const auto accepted = config;
+        app.MutableNameserviceConfig()->MutableNode(0)->ClearDistconfState();
+        settings->ClearDataCenterStates();
+        settings->SetOverrideDistconfState(false);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(app, &config, &error), error);
+        UNIT_ASSERT_VALUES_EQUAL(config.SerializeAsString(), accepted.SerializeAsString());
+    }
+
+    Y_UNIT_TEST(MergeDistconfStatesPreservesPresenceAndPriority) {
+        using TState = NKikimrBlobStorage::TDistconfState;
+        using TKeeper = NStorage::TDistributedConfigKeeper;
+        auto persisted = MakeStorageConfig(2);
+        persisted.MutableAllNodes(0)->SetDistconfState(TState::EXCLUDED);
+        auto* dc = persisted.MutableSelfManagementConfig()->AddDataCenterStates();
+        dc->SetName("dc-2");
+        dc->SetState(TState::EXCLUDED);
+        auto configured = MakeStorageConfig(2);
+        auto target = persisted;
+        TKeeper::MergeDistconfStates(configured, persisted, &target, true);
+        UNIT_ASSERT_VALUES_EQUAL(target.SerializeAsString(), persisted.SerializeAsString());
+        configured.MutableAllNodes(0)->SetDistconfState(TState::ACTIVE);
+        dc = configured.MutableSelfManagementConfig()->AddDataCenterStates();
+        dc->SetName("dc-2");
+        dc->SetState(TState::ACTIVE);
+        for (bool overrideState : {false, true}) {
+            target = persisted;
+            TKeeper::MergeDistconfStates(configured, persisted, &target, overrideState);
+            const auto expected = overrideState ? TState::ACTIVE : TState::EXCLUDED;
+            UNIT_ASSERT(target.GetAllNodes(0).HasDistconfState());
+            UNIT_ASSERT(target.GetAllNodes(0).GetDistconfState() == expected);
+            UNIT_ASSERT(!target.GetAllNodes(1).HasDistconfState());
+            UNIT_ASSERT(target.GetSelfManagementConfig().GetDataCenterStates(0).HasState());
+            UNIT_ASSERT(target.GetSelfManagementConfig().GetDataCenterStates(0).GetState() == expected);
+        }
+    }
+
+    Y_UNIT_TEST(StartupDistconfOverrideWithoutQuorumKeepsMetadata) {
+        using TState = NKikimrBlobStorage::TDistconfState;
+        auto committed = MakeStorageConfig(3, 7);
+        committed.MutableSelfManagementConfig()->SetEnabled(true);
+        committed.MutableAllNodes(0)->SetDistconfState(TState::ACTIVE);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        auto startup = committed;
+        startup.MutableAllNodes(0)->SetDistconfState(TState::EXCLUDED);
+        startup.MutableSelfManagementConfig()->SetOverrideDistconfState(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&startup);
+        TNodeWardenTestState state;
+        auto& metadata = state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_1"}];
+        metadata.MutableCommittedStorageConfig()->CopyFrom(committed);
+        const TString before = metadata.SerializeAsString();
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        const TActorId keeper = RegisterKeeper(runtime, startup, 1, state);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(1); }));
+        UNIT_ASSERT(runtime.WrapInActorContext(keeper, [&](IActor* actor) {
+            const auto* configKeeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+            UNIT_ASSERT(configKeeper->IsDistconfNodeExcluded(1));
+            UNIT_ASSERT(!configKeeper->IsDistconfNodeExcluded(4));
+        }));
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        UNIT_ASSERT(!FindConvergedRoot(runtime, {keeper}));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.SerializeAsString(), before);
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(1)->SerializeAsString(), committed.SerializeAsString());
+        UNIT_ASSERT(NStorage::TDistributedConfigKeeper::CheckFingerprint(metadata.GetCommittedStorageConfig()));
+    }
+
+    Y_UNIT_TEST(DistconfStatesCommitAndSurviveRestart) {
+        using TState = NKikimrBlobStorage::TDistconfState;
+        auto committed = MakeStorageConfig(3, 3);
+        committed.MutableSelfManagementConfig()->SetEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        for (ui32 nodeId : {1, 3}) {
+            state.Metadata[std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"}]
+                .MutableCommittedStorageConfig()->CopyFrom(committed);
+        }
+        auto& metadata = state.Metadata.at(std::pair<ui32, TString>{1, "/dev/disk1_1"});
+        TString acceptedFingerprint;
+        for (bool restart : {false, true}) {
+            auto startup = committed;
+            if (!restart) {
+                startup.MutableAllNodes(1)->SetDistconfState(TState::EXCLUDED);
+                startup.MutableSelfManagementConfig()->SetOverrideDistconfState(true);
+                auto* dc = startup.MutableSelfManagementConfig()->AddDataCenterStates();
+                dc->SetName("dc-2");
+                dc->SetState(TState::EXCLUDED);
+            }
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&startup);
+            state.NodeWardenConfigs.clear();
+            TTestActorSystem runtime(3);
+            runtime.Start();
+            Y_DEFER { runtime.Stop(); };
+            const TActorId keeper = RegisterKeeper(runtime, startup, 1, state);
+            RegisterKeeper(runtime, startup, 3, state);
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return state.NodeWardenConfigs.contains(1) && metadata.GetCommittedStorageConfig().GetGeneration() == 4
+                    && state.Metadata.at(std::pair<ui32, TString>{3, "/dev/disk3_1"})
+                        .GetCommittedStorageConfig().GetGeneration() == 4;
+            }));
+            const auto saved = metadata.GetCommittedStorageConfig();
+            UNIT_ASSERT(saved.GetAllNodes(1).HasDistconfState());
+            UNIT_ASSERT(saved.GetAllNodes(1).GetDistconfState() == TState::EXCLUDED);
+            UNIT_ASSERT(saved.GetSelfManagementConfig().GetDataCenterStates(0).GetState() == TState::EXCLUDED);
+            UNIT_ASSERT(!saved.GetSelfManagementConfig().HasOverrideDistconfState());
+            UNIT_ASSERT(saved.GetPrevConfig().GetFingerprint() == committed.GetFingerprint());
+            UNIT_ASSERT(NStorage::TDistributedConfigKeeper::CheckFingerprint(saved));
+            UNIT_ASSERT(runtime.WrapInActorContext(keeper, [&](IActor* actor) {
+                UNIT_ASSERT(static_cast<NStorage::TDistributedConfigKeeper*>(actor)->IsDistconfNodeExcluded(2));
+            }));
+            SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetCommittedStorageConfig().GetGeneration(), 4);
+            if (restart) {
+                UNIT_ASSERT_VALUES_EQUAL(saved.GetFingerprint(), acceptedFingerprint);
+            } else {
+                acceptedFingerprint = saved.GetFingerprint();
+            }
+        }
+    }
+
+    void ExcludeDistconfNode(NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId, bool dataCenter = false) {
+        if (dataCenter) {
+            auto* state = config.MutableSelfManagementConfig()->AddDataCenterStates();
+            state->SetName(config.GetAllNodes(nodeId - 1).GetLocation().GetDataCenter());
+            state->SetState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        } else {
+            config.MutableAllNodes(nodeId - 1)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+    }
+
+    bool DistconfDetached(TTestActorSystem& runtime, TActorId keeperId) {
+        bool detached = false;
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor* actor) {
+            const auto* keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+            detached = !keeper->PartOfNodeQuorum() && !keeper->GetSubtreeHeight();
+        }));
+        return detached;
+    }
+
+    void ApplyDistconfConfig(TTestActorSystem& runtime, TActorId keeperId,
+                            const NKikimrBlobStorage::TStorageConfig& config) {
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor* actor) {
+            auto* keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+            keeper->ApplyStorageConfig(config);
+            keeper->ReconcileNodeRole();
+        }));
+    }
+
+    void CheckStartupDistconfExclusion(bool dataCenter) {
+        auto config = MakeStorageConfig(3, 1, {1});
+        ExcludeDistconfNode(config, 2, dataCenter);
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        ui32 excludedPushes = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType
+                && (nodeId == 2 || ev->Sender.NodeId() == 2)) {
+                ++excludedPushes;
+            }
+            return true;
+        };
+        const TActorId first = RegisterKeeper(runtime, config, 1, state);
+        const TActorId excluded = RegisterKeeper(runtime, config, 2, state);
+        const TActorId third = RegisterKeeper(runtime, config, 3, state);
+        const std::vector active{first, third};
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, active) == 1; }));
+        for (TActorId keeperId : active) {
+            UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor* actor) {
+                UNIT_ASSERT(!static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetBindQueue(2));
+            }));
+        }
+        UNIT_ASSERT(runtime.WrapInActorContext(first, [&](IActor* actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->StartBinding(2);
+        }));
+        UNIT_ASSERT(runtime.WrapInActorContext(excluded, [&](IActor* actor) {
+            auto* keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+            UNIT_ASSERT(!keeper->GetBindQueue(1));
+            UNIT_ASSERT(!keeper->GetBindQueue(3));
+            keeper->StartBinding(1);
+        }));
+        CheckStaysConverged(runtime, active);
+        UNIT_ASSERT(DistconfDetached(runtime, excluded));
+        UNIT_ASSERT_VALUES_EQUAL(excludedPushes, 0);
+        UNIT_ASSERT(!QueryKeeper(runtime, excluded, true).HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, first).GetQueryConfig().GetConfig().AllNodesSize(), 3);
+    }
+
+    Y_UNIT_TEST(StartupExcludedHostDoesNotJoinBindingTree) {
+        CheckStartupDistconfExclusion(false);
+    }
+
+    Y_UNIT_TEST(StartupExcludedDataCenterDoesNotJoinBindingTree) {
+        CheckStartupDistconfExclusion(true);
+    }
+
+    void CheckExcludedDistconfBindingRejected(ui32 excludedNodeId, bool supportsStates = true,
+                                               bool includeDescendant = true) {
+        auto config = MakeStorageConfig(3, 1, {1});
+        ExcludeDistconfNode(config, excludedNodeId);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        const TActorId keeperId = RegisterKeeper(runtime, config, 1, state);
+        const TActorId sender = runtime.Register(new TIgnoreActor, 2);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(2), sender);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(1); }));
+        bool rejected = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 2 && ev->InterconnectSession
+                && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                rejected |= ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRejected();
+            }
+            return true;
+        };
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        push->Record.SetInitial(true);
+        push->Record.SetSupportsDistconfStates(supportsStates);
+        for (ui32 nodeId : {2, 3}) {
+            if (nodeId == 3 && !includeDescendant) {
+                continue;
+            }
+            auto* node = push->Record.AddBoundNodes();
+            node->MutableNodeId()->CopyFrom(config.GetAllNodes(nodeId - 1));
+            node->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(config));
+        }
+        runtime.Send(new IEventHandle(keeperId, sender, push.release(), 0, 1), 2);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return rejected; }));
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor* actor) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetSubtreeHeight(), 0);
+        }));
+        if (excludedNodeId == 1) {
+            UNIT_ASSERT(DistconfDetached(runtime, keeperId));
+            UNIT_ASSERT(!QueryKeeper(runtime, keeperId, true).HasScepter());
+        }
+    }
+
+    Y_UNIT_TEST(ExcludedSenderAndClaimedDescendantAreRejected) {
+        CheckExcludedDistconfBindingRejected(2);
+        CheckExcludedDistconfBindingRejected(3);
+    }
+
+    Y_UNIT_TEST(ExcludedSelfRejectsBindingAndCannotBecomeRoot) {
+        CheckExcludedDistconfBindingRejected(1);
+    }
+
+    Y_UNIT_TEST(DistconfExclusionsRejectLegacyBindingPeer) {
+        CheckExcludedDistconfBindingRejected(3, false, false);
+    }
+
+    void CheckLiveDistconfExclusion(ui32 applyOnNode, bool dataCenter) {
+        auto original = MakeStorageConfig(3, 1, {1});
+        original.MutableSelfManagementConfig()->SetEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&original);
+        auto updated = original;
+        updated.SetGeneration(2);
+        ExcludeDistconfNode(updated, 2, dataCenter);
+        TNodeWardenTestState state;
+        state.RequiredParentNodeIds = {{1, 0}, {2, 1}, {3, 2}};
+        for (ui32 nodeId : {1, 2, 3}) {
+            state.Metadata[std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"}]
+                .MutableCommittedStorageConfig()->CopyFrom(original);
+        }
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId : {1, 2, 3}) {
+            keepers.push_back(RegisterKeeper(runtime, original, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        bool chainReady = false;
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            runtime.WrapInActorContext(keepers[0], [&](IActor* actor) {
+                chainReady = static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetSubtreeHeight() == 2;
+            });
+            return chainReady;
+        }));
+        ui32 unbinds = 0;
+        ui32 rejections = 0;
+        bool cacheRequest = false;
+        bool excludedParentDetached = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 sender = ev->Sender.NodeId();
+            if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigUnbind::EventType
+                && sender == (applyOnNode == 3 ? 3u : 2u) && nodeId == (applyOnNode == 3 ? 2u : 1u)) {
+                ++unbinds;
+                if (applyOnNode == 3) {
+                    UNIT_ASSERT(runtime.WrapInActorContext(keepers[2], [&](IActor* actor) {
+                        auto* keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                        UNIT_ASSERT(keeper->IsDistconfNodeExcluded(2));
+                        UNIT_ASSERT(!keeper->GetBindQueue(2));
+                        UNIT_ASSERT(keeper->GetRootNodeId() != 2);
+                        excludedParentDetached = true;
+                    }));
+                }
+            }
+            if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (record.GetRejected() && sender == applyOnNode && nodeId == (applyOnNode == 1 ? 2u : 3u)) {
+                    ++rejections;
+                }
+                if (applyOnNode == 3 && sender == 2 && nodeId == 3 && record.HasCommittedStorageConfig()
+                    && record.GetCommittedStorageConfig().GetGeneration() == 2) {
+                    record.MutableCacheUpdate()->AddRequestedKeys("binding-exclusion");
+                    cacheRequest = true;
+                }
+            }
+            return true;
+        };
+        if (applyOnNode == 3) {
+            UNIT_ASSERT(runtime.WrapInActorContext(keepers[2], [&](IActor* actor) {
+                NKikimrBlobStorage::TCacheUpdate cache;
+                auto* item = cache.AddKeyValuePairs();
+                item->SetKey("binding-exclusion");
+                item->SetGeneration(1);
+                item->SetValue("value");
+                static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCacheUpdates(&cache, 2);
+            }));
+            UNIT_ASSERT(runtime.WrapInActorContext(keepers[1], [&](IActor* actor) {
+                static_cast<NStorage::TDistributedConfigKeeper*>(actor)->FanOutReversePush(&updated);
+            }));
+        } else {
+            ApplyDistconfConfig(runtime, keepers[applyOnNode - 1], updated);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            bool noParent = false;
+            bool noChildren = false;
+            runtime.WrapInActorContext(keepers[applyOnNode == 3 ? 2 : 1], [&](IActor* actor) {
+                noParent = !static_cast<NStorage::TDistributedConfigKeeper*>(actor)->PartOfNodeQuorum();
+            });
+            runtime.WrapInActorContext(keepers[applyOnNode == 3 ? 1 : applyOnNode - 1], [&](IActor* actor) {
+                noChildren = !static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetSubtreeHeight();
+            });
+            return (applyOnNode == 1 ? rejections : unbinds)
+                && (applyOnNode != 2 || rejections)
+                && (applyOnNode == 3 ? excludedParentDetached : noParent) && noChildren;
+        }));
+        if (applyOnNode == 3) {
+            UNIT_ASSERT(cacheRequest);
+        }
+        state.RequiredParentNodeIds[3] = 1;
+        for (TActorId keeperId : keepers) {
+            ApplyDistconfConfig(runtime, keeperId, updated);
+        }
+        const std::vector active{keepers[0], keepers[2]};
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, active) == 1; }));
+        CheckStaysConverged(runtime, active);
+        UNIT_ASSERT(DistconfDetached(runtime, keepers[1]));
+    }
+
+    Y_UNIT_TEST(ExcludedParentDetachesWhileProcessingConfigAndCacheRequest) {
+        CheckLiveDistconfExclusion(3, false);
+    }
+
+    Y_UNIT_TEST(ExcludedChildDataCenterDetachesBothEndsOfSubtree) {
+        CheckLiveDistconfExclusion(1, true);
+    }
+
+    Y_UNIT_TEST(ExcludedSelfDetachesParentAndChildren) {
+        CheckLiveDistconfExclusion(2, false);
+    }
+
+    Y_UNIT_TEST(ExcludedSubtreeDetachesBeforeCompletingPendingProposal) {
+        auto config = MakeStorageConfig(5, 1);
+        config.MutableSelfManagementConfig()->SetEnabled(true);
+        ExcludeDistconfNode(config, 5);
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            state.Metadata[std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"}]
+                .MutableCommittedStorageConfig()->CopyFrom(config);
+        }
+        TTestActorSystem runtime(5);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        ui64 childBindingCookie = 0;
+        THashSet<ui32> proposalReplies;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 1 && ev->Sender.NodeId() == 2
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType
+                    && ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()) {
+                childBindingCookie = ev->Cookie;
+            }
+            if (nodeId == 1 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasProposeStorageConfig()) {
+                proposalReplies.insert(ev->Sender.NodeId());
+            }
+            return nodeId != 2 || ev->GetTypeRewrite() != NStorage::TEvNodeConfigScatter::EventType
+                || !ev->Get<NStorage::TEvNodeConfigScatter>()->Record.HasProposeStorageConfigWithDistconfStates();
+        };
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* candidate = request->Record.MutableUpdateConfig()->MutableConfig();
+        candidate->CopyFrom(config);
+        ExcludeDistconfNode(*candidate, 2);
+        runtime.Send(new IEventHandle(keepers[0], edge, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return proposalReplies.contains(3) && proposalReplies.contains(4)
+                && state.Metadata.at(std::pair<ui32, TString>{1, "/dev/disk1_1"})
+                    .GetProposedStorageConfig().GetGeneration() == 2;
+        }));
+        SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(1));
+        UNIT_ASSERT(childBindingCookie);
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        auto* node = push->Record.AddBoundNodes();
+        node->MutableNodeId()->CopyFrom(config.GetAllNodes(4));
+        node->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(config));
+        runtime.Send(new IEventHandle(keepers[0], keepers[1], push.release(), 0, childBindingCookie), 2);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response->Get()->Record.DebugString());
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return state.Metadata.at(std::pair<ui32, TString>{1, "/dev/disk1_1"})
+                .GetCommittedStorageConfig().GetGeneration() == 2;
+        }));
+        UNIT_ASSERT(runtime.WrapInActorContext(keepers[0], [&](IActor* actor) {
+            auto* keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+            UNIT_ASSERT(!keeper->GetBindQueue(2));
+            UNIT_ASSERT_VALUES_EQUAL(keeper->GetSubtreeHeight(), 1);
+        }));
     }
 
     Y_UNIT_TEST(InitialConfigBootstrapUsesNodeMajority) {
@@ -3099,10 +3563,27 @@ selector_config: []
             TStringBuilder yaml;
             yaml << "metadata: {kind: MainConfig, version: " << version << ", cluster: ''}\n"
                  << "config:\n"
-                 << "  erasure: " << erasure << '\n'
-                 << "  self_management_config: {enabled: true, erasure_species: " << erasure << "}\n"
-                 << "  default_disk_type: ROT\n"
-                 << "  hosts:\n";
+                 << "  erasure: " << erasure << '\n';
+            const auto& settings = config.GetSelfManagementConfig();
+            if (settings.HasOverrideDistconfState() || settings.DataCenterStatesSize()) {
+                yaml << "  self_management_config:\n    enabled: true\n    erasure_species: " << erasure << '\n';
+                if (settings.HasOverrideDistconfState()) {
+                    yaml << "    override_distconf_state: " << (settings.GetOverrideDistconfState() ? "true" : "false") << '\n';
+                }
+                if (settings.DataCenterStatesSize()) {
+                    yaml << "    data_center_states:\n";
+                    for (const auto& item : settings.GetDataCenterStates()) {
+                        yaml << "    - name: " << item.GetName() << '\n';
+                        if (item.HasState()) {
+                            yaml << "      state: " << (item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED
+                                ? "excluded" : "active") << '\n';
+                        }
+                    }
+                }
+            } else {
+                yaml << "  self_management_config: {enabled: true, erasure_species: " << erasure << "}\n";
+            }
+            yaml << "  default_disk_type: ROT\n  hosts:\n";
             for (const auto& node : config.GetAllNodes()) {
                 const auto& hosts = config.GetBlobStorageConfig().GetDefineBox().GetHost();
                 const auto host = std::ranges::find_if(hosts, [&](const auto& item) {
@@ -3122,6 +3603,9 @@ selector_config: []
                     yaml << ", bridge_pile_name: " << node.GetLocation().GetBridgePileName();
                 }
                 yaml << "}\n"
+                     << (node.HasDistconfState() ? TString(TStringBuilder() << "    distconf_state: "
+                         << (node.GetDistconfState() == NKikimrBlobStorage::TDistconfState::EXCLUDED
+                             ? "excluded" : "active") << '\n') : TString())
                      << "    drive:\n";
                 for (const auto& drive : hostConfig->GetDrive()) {
                     yaml << "    - {path: " << drive.GetPath()
@@ -3365,6 +3849,52 @@ selector_config: []
         UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
         CheckDurableConfigConverges(fixture, fixture.Config);
         UNIT_ASSERT(QueryKeeper(fixture.Runtime, fixture.Root()).HasScepter());
+    }
+
+    Y_UNIT_TEST(OrdinaryDistconfShrinkCannotCertifyItsOwnMinorityProposal) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        auto partial = MakeNextConfig(fixture.Config);
+        for (ui32 index : {1, 2}) {
+            partial.MutableAllNodes(index)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&partial);
+        auto collected = MakeCollectedConfigs(fixture.Config);
+        AddCollectedConfig(collected, fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, partial, {1}, false);
+        const auto result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(result.RecoveredConfig);
+        UNIT_ASSERT_VALUES_EQUAL(result.RecoveredConfig->GetFingerprint(), fixture.Config.GetFingerprint());
+        UNIT_ASSERT(!result.RequiresRecoveryProposition);
+        UNIT_ASSERT(!result.ConfigToPropose);
+    }
+
+    Y_UNIT_TEST(RawStatefulProposalQuorumRequiresFreshCapabilityProof) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        auto proposed = MakeNextConfig(fixture.Config);
+        proposed.MutableAllNodes(2)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&proposed);
+        auto collected = MakeCollectedConfigs(fixture.Config);
+        AddCollectedConfig(collected, fixture.Config, {1, 2, 3});
+        AddCollectedConfig(collected, proposed, {1, 2, 3}, false);
+        for (bool knownApplied : {false, true}) {
+            if (knownApplied) {
+                UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Root(), [&](IActor* actor) {
+                    static_cast<NStorage::TDistributedConfigKeeper*>(actor)->RememberAppliedConfig(proposed);
+                }));
+            }
+            const auto result = ProcessCollectedConfigs(fixture, collected, true);
+            UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+            UNIT_ASSERT(result.RecoveredConfig);
+            UNIT_ASSERT_VALUES_EQUAL(result.RecoveredConfig->GetFingerprint(), fixture.Config.GetFingerprint());
+            UNIT_ASSERT(result.RequiresRecoveryProposition);
+            UNIT_ASSERT(result.ConfigToPropose);
+            UNIT_ASSERT_VALUES_EQUAL(result.ConfigToPropose->GetFingerprint(), proposed.GetFingerprint());
+            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
+                fixture.Config.GetFingerprint());
+        }
     }
 
     Y_UNIT_TEST(RecoveryReproposesPossiblyChosenProposal) {
@@ -4139,6 +4669,677 @@ selector_config: []
         } else if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
             ev.Get<NStorage::TEvNodeWardenReadMetadataResult>()->Guid = nodeId * 1000 + 1;
         }
+    }
+
+    void PrepareDistconfRecovery(TCommitConfirmationFixture& fixture) {
+        fixture.Config = MakeStorageConfig(9, 1, {1, 4, 7}, TBlobStorageGroupType::ErasureMirror3dc);
+        auto* settings = fixture.Config.MutableSelfManagementConfig();
+        settings->SetEnabled(true);
+        settings->SetErasureSpecies("mirror-3-dc");
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-" + std::to_string((node.GetNodeId() - 1) / 3 + 1));
+            if (node.GetNodeId() % 2 == 0) {
+                node.SetDistconfState(NKikimrBlobStorage::TDistconfState::ACTIVE);
+            }
+        }
+        for (const TStringBuf name : {"dc-2", "dc-3"}) {
+            auto* item = settings->AddDataCenterStates();
+            item->SetName(name.data(), name.size());
+            item->SetState(NKikimrBlobStorage::TDistconfState::ACTIVE);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.State.RequiredRootNodeId = 1;
+    }
+
+    NKikimrBlobStorage::TStorageConfig DistconfRecoveryDeclaration(const TCommitConfirmationFixture& fixture,
+                                                                 bool excludeHosts = false) {
+        auto config = fixture.Config;
+        auto* settings = config.MutableSelfManagementConfig();
+        settings->ClearDataCenterStates();
+        settings->SetOverrideDistconfState(true);
+        for (auto& node : *config.MutableAllNodes()) {
+            node.ClearDistconfState();
+            if (excludeHosts && node.GetNodeId() > 3) {
+                node.SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+            }
+        }
+        if (!excludeHosts) {
+            for (const TStringBuf name : {"dc-2", "dc-3"}) {
+                auto* item = settings->AddDataCenterStates();
+                item->SetName(name.data(), name.size());
+                item->SetState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        return config;
+    }
+
+    TActorId RegisterDistconfRecoveryKeeper(TCommitConfirmationFixture& fixture,
+            const NKikimrBlobStorage::TStorageConfig& declaration, ui32 nodeId) {
+        const TString yaml = fixture.MakeReplacementYaml(declaration, 0, "mirror-3-dc");
+        const auto app = NYaml::Parse(yaml);
+        NKikimrBlobStorage::TStorageConfig base;
+        TString error;
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(app, &base, &error), error);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&base);
+        if (fixture.Keepers.empty()) {
+            fixture.Keepers.resize(9);
+        }
+        return fixture.Keepers[nodeId - 1] = RegisterKeeper(fixture.Runtime, base, nodeId, fixture.State, yaml,
+            nullptr, &app.GetSelfManagementConfig());
+    }
+
+    void WaitForDistconfRecoveryCommit(TCommitConfirmationFixture& fixture) {
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return std::ranges::all_of(std::array{1u, 2u, 3u}, [&](ui32 nodeId) {
+                const auto& config = fixture.Metadata(nodeId).GetCommittedStorageConfig();
+                return config.GetGeneration() == 2
+                    && config.GetFingerprint() == fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint();
+            });
+        }));
+        for (ui32 nodeId : {1, 2, 3}) {
+            const auto& config = fixture.Metadata(nodeId).GetCommittedStorageConfig();
+            UNIT_ASSERT(NStorage::TDistributedConfigKeeper::CheckFingerprint(config));
+            UNIT_ASSERT_VALUES_EQUAL(config.GetPrevConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+            UNIT_ASSERT(!config.GetSelfManagementConfig().HasOverrideDistconfState());
+        }
+        for (ui32 nodeId : {4, 5, 6, 7, 8, 9}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 1);
+        }
+    }
+
+    std::vector<NStorage::TSuccessfulDisk> DistconfTestDisks(const NKikimrBlobStorage::TStorageConfig& config,
+                                                           std::initializer_list<ui32> nodeIds) {
+        std::vector<NStorage::TSuccessfulDisk> disks;
+        for (ui32 nodeId : nodeIds) {
+            disks.emplace_back(NStorage::TNodeIdentifier(config.GetAllNodes(nodeId - 1)),
+                "/dev/disk" + std::to_string(nodeId) + "_1", nodeId * 1000 + 1);
+        }
+        return disks;
+    }
+
+    Y_UNIT_TEST(DistconfQuorumRejectsEmptyScopeAndExcludedContributors) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        fixture.Runtime.Start();
+        auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto settings = MakeNodeWardenConfig(declaration);
+        auto excluded = DistconfTestDisks(fixture.Config, {1, 4, 5, 6, 7, 8, 9});
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, excluded, {}, *settings, false));
+        auto active = DistconfTestDisks(fixture.Config, {1, 2});
+        UNIT_ASSERT(NStorage::HasConfigQuorum(fixture.Config, active, {}, *settings, false));
+        auto* dc = declaration.MutableSelfManagementConfig()->AddDataCenterStates();
+        dc->SetName("dc-1");
+        dc->SetState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        settings = MakeNodeWardenConfig(declaration);
+        auto all = DistconfTestDisks(fixture.Config, {1, 2, 3, 4, 5, 6, 7, 8, 9});
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, all, {}, *settings, false));
+        std::vector<NStorage::TNodeIdentifier> nodes;
+        for (const auto& node : fixture.Config.GetAllNodes()) {
+            nodes.emplace_back(node);
+        }
+        UNIT_ASSERT(!NStorage::HasNodeQuorum(fixture.Config, nodes, {}, *settings, nullptr, true));
+    }
+
+    Y_UNIT_TEST(ForcedDistconfShrinkRequiresOverrideAndUnchangedTopology) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        fixture.Runtime.Start();
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto settings = MakeNodeWardenConfig(declaration);
+        auto proposed = NStorage::MakeDistconfQuorumConfig(fixture.Config, *settings);
+        proposed.SetGeneration(2);
+        proposed.MutablePrevConfig()->CopyFrom(fixture.Config);
+        auto available = DistconfTestDisks(proposed, {1, 2});
+        UNIT_ASSERT(NStorage::IsForcedDistconfExclusionTransition(fixture.Config, proposed, *settings));
+        proposed.SetForcedDistconfState(true);
+        UNIT_ASSERT(NStorage::HasConfigQuorum(proposed, available, {}, *settings, true));
+        proposed.ClearForcedDistconfState();
+        settings->SelfManagementConfig->SetOverrideDistconfState(false);
+        UNIT_ASSERT(!NStorage::IsForcedDistconfExclusionTransition(fixture.Config, proposed, *settings));
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(proposed, available, {}, *settings, true));
+        settings->SelfManagementConfig->SetOverrideDistconfState(true);
+        proposed.MutableAllNodes(0)->SetPort(20001);
+        UNIT_ASSERT(!NStorage::IsForcedDistconfExclusionTransition(fixture.Config, proposed, *settings));
+    }
+
+    Y_UNIT_TEST(OrdinaryDistconfScopeChangeRequiresPreviousQuorumAndGuid) {
+        auto previous = MakeStorageConfig(3, 1, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        previous.MutableAllNodes(2)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        auto proposed = previous;
+        proposed.SetGeneration(2);
+        proposed.MutableAllNodes(1)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        proposed.MutablePrevConfig()->CopyFrom(previous);
+        const auto settings = MakeNodeWardenConfig(proposed);
+        auto onlyNew = DistconfTestDisks(proposed, {1, 3});
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(proposed, onlyNew, {}, *settings, true));
+        auto joint = DistconfTestDisks(proposed, {1, 2});
+        UNIT_ASSERT(NStorage::HasConfigQuorum(proposed, joint, {}, *settings, true));
+        std::get<2>(joint[1]) = 42;
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(proposed, joint, {}, *settings, true));
+    }
+
+    Y_UNIT_TEST(ValidateDistconfStatesRejectsMalformedRecordsAndAllowsIndependentGates) {
+        auto config = MakeStorageConfig(3);
+        config.MutableAllNodes(0)->SetDistconfState(NKikimrBlobStorage::TDistconfState::ACTIVE);
+        auto* dc = config.MutableSelfManagementConfig()->AddDataCenterStates();
+        dc->SetName("dc-1");
+        dc->SetState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        UNIT_ASSERT(!NStorage::ValidateDistconfStates(config));
+        auto duplicate = config;
+        duplicate.MutableSelfManagementConfig()->AddDataCenterStates()->CopyFrom(*dc);
+        UNIT_ASSERT(NStorage::ValidateDistconfStates(duplicate));
+        config.MutableAllNodes(1)->SetDistconfState(static_cast<NStorage::EDistconfState>(99));
+        UNIT_ASSERT(NStorage::ValidateDistconfStates(config));
+    }
+
+    Y_UNIT_TEST(DistconfReactivationRequiresJointQuorumAndAuthoritativeMetadata) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto accepted = NStorage::MakeDistconfQuorumConfig(fixture.Config, *MakeNodeWardenConfig(declaration));
+        accepted.SetGeneration(2);
+        accepted.MutablePrevConfig()->CopyFrom(fixture.Config);
+        accepted.SetForcedDistconfState(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&accepted);
+        auto restore = fixture.Config;
+        restore.MutableSelfManagementConfig()->SetOverrideDistconfState(true);
+        auto proposed = NStorage::MakeDistconfQuorumConfig(accepted, *MakeNodeWardenConfig(restore));
+        proposed.SetGeneration(3);
+        proposed.MutablePrevConfig()->CopyFrom(accepted);
+        auto oldOnly = DistconfTestDisks(proposed, {1, 2, 3});
+        const auto settings = MakeNodeWardenConfig(restore);
+        UNIT_ASSERT(!NStorage::IsForcedDistconfExclusionTransition(accepted, proposed, *settings));
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(proposed, oldOnly, {}, *settings, true));
+        auto joint = DistconfTestDisks(proposed, {1, 2, 4, 5});
+        UNIT_ASSERT(NStorage::HasConfigQuorum(proposed, joint, {}, *settings, true));
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(accepted);
+        }
+        fixture.Runtime.Start();
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            RegisterDistconfRecoveryKeeper(fixture, restore, nodeId);
+        }
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return std::ranges::all_of(fixture.Keepers, [&](TActorId id) {
+                return fixture.Metadata(id.NodeId()).GetCommittedStorageConfig().GetGeneration() == 3;
+            });
+        }));
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetPrevConfig().GetFingerprint(),
+                accepted.GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(DistconfRecoversMirror3dcFromOneDataCenterAndRestartsWithoutOverrides) {
+        THashMap<std::pair<ui32, TString>, NKikimrBlobStorage::TPDiskMetadataRecord> metadata;
+        TString acceptedFingerprint;
+        {
+            TCommitConfirmationFixture fixture(false, 9);
+            PrepareDistconfRecovery(fixture);
+            const auto declaration = DistconfRecoveryDeclaration(fixture);
+            fixture.Runtime.Start();
+            fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                SetMetadataDiskGuid(nodeId, *ev);
+                return true;
+            };
+            for (ui32 nodeId : {1, 2, 3}) {
+                RegisterDistconfRecoveryKeeper(fixture, declaration, nodeId);
+            }
+            WaitForDistconfRecoveryCommit(fixture);
+            const auto recovered = fixture.Metadata(1).GetCommittedStorageConfig();
+            UNIT_ASSERT(recovered.GetSelfManagementConfig().GetDataCenterStates(0).GetState()
+                == NKikimrBlobStorage::TDistconfState::EXCLUDED);
+            UNIT_ASSERT(!recovered.GetAllNodes(2).HasDistconfState());
+            acceptedFingerprint = recovered.GetFingerprint();
+            fixture.Runtime.Stop();
+            metadata = fixture.State.Metadata;
+        }
+
+        TCommitConfirmationFixture restarted(false, 9);
+        PrepareDistconfRecovery(restarted);
+        restarted.State.Metadata = std::move(metadata);
+        auto unmarked = restarted.Config;
+        unmarked.MutableSelfManagementConfig()->ClearDataCenterStates();
+        for (auto& node : *unmarked.MutableAllNodes()) {
+            node.ClearDistconfState();
+        }
+        restarted.Runtime.Start();
+        restarted.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        std::vector<TActorId> active;
+        for (ui32 nodeId : {1, 2, 3}) {
+            active.push_back(RegisterDistconfRecoveryKeeper(restarted, unmarked, nodeId));
+        }
+        UNIT_ASSERT(SimUntil(restarted.Runtime, [&] { return FindConvergedRoot(restarted.Runtime, active) == 1; }));
+        CheckStaysConverged(restarted.Runtime, active);
+        for (ui32 nodeId : {1, 2, 3}) {
+            UNIT_ASSERT_VALUES_EQUAL(restarted.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), acceptedFingerprint);
+        }
+    }
+
+    Y_UNIT_TEST(DistconfRecoversMirror3dcWithExplicitHostExclusions) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        const auto declaration = DistconfRecoveryDeclaration(fixture, true);
+        fixture.Runtime.Start();
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        for (ui32 nodeId : {1, 2, 3}) {
+            RegisterDistconfRecoveryKeeper(fixture, declaration, nodeId);
+        }
+        WaitForDistconfRecoveryCommit(fixture);
+        const auto& recovered = fixture.Metadata(1).GetCommittedStorageConfig();
+        UNIT_ASSERT(recovered.GetAllNodes(3).HasDistconfState());
+        UNIT_ASSERT(recovered.GetAllNodes(3).GetDistconfState() == NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        UNIT_ASSERT(recovered.GetSelfManagementConfig().GetDataCenterStates(0).GetState()
+            == NKikimrBlobStorage::TDistconfState::ACTIVE);
+    }
+
+    Y_UNIT_TEST(DistconfRecoveryRequiresDurableMajorityInSurvivingDataCenter) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        fixture.Runtime.Start();
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return !(nodeId != 1 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType);
+        };
+        for (ui32 nodeId : {1, 2, 3}) {
+            RegisterDistconfRecoveryKeeper(fixture, declaration, nodeId);
+        }
+        SimUntil(fixture.Runtime, [] { return false; }, TDuration::Seconds(45));
+        UNIT_ASSERT(fixture.Metadata(1).HasProposedStorageConfig());
+        for (ui32 nodeId : {1, 2, 3}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(DistconfRecoveryResumesAfterProposedOnlyCrash) {
+        THashMap<std::pair<ui32, TString>, NKikimrBlobStorage::TPDiskMetadataRecord> metadata;
+        NKikimrBlobStorage::TStorageConfig declaration;
+        {
+            TCommitConfirmationFixture fixture(false, 9);
+            PrepareDistconfRecovery(fixture);
+            declaration = DistconfRecoveryDeclaration(fixture);
+            fixture.Runtime.Start();
+            fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                SetMetadataDiskGuid(nodeId, *ev);
+                return ev->GetTypeRewrite() != NStorage::TEvNodeWardenWriteMetadata::EventType
+                    || ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetCommittedStorageConfig().GetGeneration() == 1;
+            };
+            for (ui32 nodeId : {1, 2, 3}) {
+                RegisterDistconfRecoveryKeeper(fixture, declaration, nodeId);
+            }
+            UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+                return fixture.Metadata(1).GetProposedStorageConfig().GetGeneration() == 2
+                    && fixture.Metadata(2).GetProposedStorageConfig().GetGeneration() == 2
+                    && fixture.Metadata(3).GetProposedStorageConfig().GetGeneration() == 2;
+            }));
+            for (ui32 nodeId : {1, 2, 3}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 1);
+            }
+            fixture.Runtime.Stop();
+            metadata = fixture.State.Metadata;
+        }
+        TCommitConfirmationFixture restarted(false, 9);
+        PrepareDistconfRecovery(restarted);
+        restarted.State.Metadata = std::move(metadata);
+        restarted.Runtime.Start();
+        restarted.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        for (ui32 nodeId : {1, 2, 3}) {
+            RegisterDistconfRecoveryKeeper(restarted, declaration, nodeId);
+        }
+        WaitForDistconfRecoveryCommit(restarted);
+    }
+
+    Y_UNIT_TEST(DistconfRecoveryRetainsOverwrittenProposalThroughNestedParent) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto parent = MakeNextConfig(fixture.Config);
+        parent.MutableSelfManagementConfig()->SetAutomaticBoxManagement(false);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&parent);
+        auto child = NStorage::MakeDistconfQuorumConfig(parent, *MakeNodeWardenConfig(declaration));
+        child.SetGeneration(3);
+        child.SetForcedDistconfState(true);
+        child.MutablePrevConfig()->CopyFrom(parent);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&child);
+        fixture.Metadata(1).MutableProposedStorageConfig()->CopyFrom(child);
+        fixture.Runtime.Start();
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        for (ui32 nodeId : {1, 2, 3}) {
+            RegisterDistconfRecoveryKeeper(fixture, declaration, nodeId);
+        }
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return std::ranges::all_of(std::array{1u, 2u, 3u}, [&](ui32 nodeId) {
+                const auto& config = fixture.Metadata(nodeId).GetCommittedStorageConfig();
+                return config.GetGeneration() >= 3 && !config.GetSelfManagementConfig().GetAutomaticBoxManagement()
+                    && config.GetFingerprint() == fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint();
+            });
+        }));
+        const auto& recovered = fixture.Metadata(1).GetCommittedStorageConfig();
+        UNIT_ASSERT(NStorage::TDistributedConfigKeeper::CheckFingerprint(recovered));
+        UNIT_ASSERT(recovered.GetSelfManagementConfig().GetDataCenterStates(0).GetState()
+            == NKikimrBlobStorage::TDistconfState::EXCLUDED);
+    }
+
+    Y_UNIT_TEST(DifferingDistconfRecoveryDeclarationsCannotCommit) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto different = declaration;
+        different.MutableSelfManagementConfig()->MutableDataCenterStates(1)->SetState(NKikimrBlobStorage::TDistconfState::ACTIVE);
+        fixture.Runtime.Start();
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        RegisterDistconfRecoveryKeeper(fixture, declaration, 1);
+        RegisterDistconfRecoveryKeeper(fixture, different, 2);
+        SimUntil(fixture.Runtime, [] { return false; }, TDuration::Seconds(45));
+        for (ui32 nodeId : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(StatefulUpdateDoesNotSendProposalBodyToBoundLegacyPeer) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        ui32 legacyBodies = 0;
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->InterconnectSession && ev->Sender.NodeId() == 2) {
+                if (type == NStorage::TEvNodeConfigPush::EventType) {
+                    ev->Get<NStorage::TEvNodeConfigPush>()->Record.SetSupportsDistconfStates(false);
+                } else if (type == NStorage::TEvNodeConfigReversePush::EventType) {
+                    ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.SetSupportsDistconfStates(false);
+                } else if (type == NStorage::TEvNodeConfigGather::EventType) {
+                    auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                    if (record.HasProposeStorageConfig()) {
+                        for (auto& status : *record.MutableProposeStorageConfig()->MutableStatus()) {
+                            status.SetSupportsDistconfStates(false);
+                        }
+                    }
+                }
+            }
+            if (ev->InterconnectSession && nodeId == 2) {
+                if (type == NStorage::TEvNodeConfigScatter::EventType) {
+                    const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                    legacyBodies += record.HasProposeStorageConfigWithDistconfStates()
+                        || (record.HasProposeStorageConfig()
+                            && NStorage::HasDistconfExclusions(record.GetProposeStorageConfig().GetConfig()));
+                } else if (type == NStorage::TEvNodeConfigReversePush::EventType) {
+                    const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                    legacyBodies += record.HasCommittedStorageConfig()
+                        && NStorage::HasDistconfExclusions(record.GetCommittedStorageConfig());
+                }
+            }
+            return !(edge && CaptureInvokeResult(*ev, edge, response));
+        };
+        fixture.Start(true);
+        edge = fixture.Runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* config = request->Record.MutableUpdateConfig()->MutableConfig();
+        config->CopyFrom(fixture.Config);
+        config->MutableAllNodes(2)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        fixture.Runtime.Send(new IEventHandle(fixture.Keepers[0], edge, request.release()), 1);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return response.has_value(); }, TDuration::Seconds(90)));
+        UNIT_ASSERT(response->GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(legacyBodies, 0);
+        for (ui32 nodeId : {1, 2, 3}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        }
+    }
+
+    void CheckRawStatefulProposalRecovery(bool mixedVersions) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto proposed = MakeNextConfig(fixture.Config);
+        proposed.MutableAllNodes(2)->SetDistconfState(NKikimrBlobStorage::TDistconfState::EXCLUDED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&proposed);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableProposedStorageConfig()->CopyFrom(proposed);
+        }
+        THashSet<ui32> legacyNodes;
+        if (mixedVersions) {
+            legacyNodes = {2, 3};
+        }
+        THashSet<ui32> freshWrites;
+        std::vector<std::unique_ptr<IEventHandle>> heldAcks;
+        bool holdAck = true;
+        ui32 legacyBodies = 0;
+        ui32 statefulProposals = 0;
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 sender = ev->Sender.NodeId();
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->InterconnectSession && legacyNodes.contains(sender)) {
+                if (type == NStorage::TEvNodeConfigPush::EventType) {
+                    ev->Get<NStorage::TEvNodeConfigPush>()->Record.SetSupportsDistconfStates(false);
+                } else if (type == NStorage::TEvNodeConfigReversePush::EventType) {
+                    ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.SetSupportsDistconfStates(false);
+                } else if (type == NStorage::TEvNodeConfigGather::EventType) {
+                    auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                    if (record.HasProposeStorageConfig()) {
+                        for (auto& status : *record.MutableProposeStorageConfig()->MutableStatus()) {
+                            status.SetSupportsDistconfStates(false);
+                            status.SetForceDistconfStateValidated(false);
+                        }
+                    }
+                }
+            }
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                if (record.HasProposeStorageConfigWithDistconfStates()) {
+                    ++statefulProposals;
+                    legacyBodies += legacyNodes.contains(nodeId);
+                }
+                if (record.HasProposeStorageConfig()
+                        && NStorage::HasDistconfExclusions(record.GetProposeStorageConfig().GetConfig())) {
+                    ++legacyBodies;
+                }
+            }
+            if (ev->InterconnectSession && legacyNodes.contains(nodeId)
+                    && type == NStorage::TEvNodeConfigReversePush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                legacyBodies += record.HasCommittedStorageConfig()
+                    && NStorage::HasDistconfExclusions(record.GetCommittedStorageConfig());
+            }
+            if (type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record;
+                if (record.GetCommittedStorageConfig().GetGeneration() == 1
+                        && record.GetProposedStorageConfig().GetFingerprint() == proposed.GetFingerprint()) {
+                    freshWrites.insert(nodeId);
+                }
+            }
+            if (holdAck && ev->InterconnectSession && nodeId == 1 && sender == 2
+                    && !legacyNodes.contains(sender) && type == NStorage::TEvNodeConfigGather::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasProposeStorageConfig() && std::ranges::any_of(record.GetProposeStorageConfig().GetStatus(),
+                        [](const auto& status) {
+                            return status.GetStatus() == NKikimrBlobStorage::TEvNodeConfigGather::TProposeStorageConfig::ACCEPTED
+                                && status.GetSupportsDistconfStates() && status.SuccessfulDrivesSize();
+                        })) {
+                    heldAcks.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        fixture.Runtime.Start();
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Keepers.push_back(RegisterKeeper(fixture.Runtime, fixture.Config, nodeId, fixture.State));
+        }
+        if (mixedVersions) {
+            SimUntil(fixture.Runtime, [] { return false; }, TDuration::Seconds(45));
+            for (ui32 nodeId : {1, 2, 3}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig().GetFingerprint(),
+                fixture.Config.GetFingerprint());
+            UNIT_ASSERT_VALUES_EQUAL(legacyBodies, 0);
+            legacyNodes.erase(2);
+        }
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return !heldAcks.empty(); }, TDuration::Seconds(90)));
+        UNIT_ASSERT(freshWrites.contains(1));
+        UNIT_ASSERT(freshWrites.contains(2));
+        for (ui32 nodeId : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig().GetFingerprint(),
+            fixture.Config.GetFingerprint());
+        holdAck = false;
+        ReplayDelayedEvents(fixture.Runtime, heldAcks);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint() == proposed.GetFingerprint()
+                && fixture.Metadata(2).GetCommittedStorageConfig().GetFingerprint() == proposed.GetFingerprint();
+        }));
+        UNIT_ASSERT(statefulProposals);
+        UNIT_ASSERT_VALUES_EQUAL(legacyBodies, 0);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return DistconfDetached(fixture.Runtime, fixture.Keepers[2]); }));
+    }
+
+    Y_UNIT_TEST(MixedVersionRawStatefulProposalWaitsForCapablePeerUpgrade) {
+        CheckRawStatefulProposalRecovery(true);
+    }
+
+    Y_UNIT_TEST(CapablePeersReplayProposedOnlyStatefulSnapshotBeforePublishing) {
+        CheckRawStatefulProposalRecovery(false);
+    }
+
+    Y_UNIT_TEST(StatefulProposalEnvelopeIsUnknownToLegacyRequestSchema) {
+        google::protobuf::FileDescriptorProto schema;
+        schema.set_name("legacy_distconf_request_test.proto");
+        schema.set_syntax("proto3");
+        auto* message = schema.add_message_type();
+        message->set_name("LegacyDistconfScatter");
+        message->add_oneof_decl()->set_name("request");
+        auto* field = message->add_field();
+        field->set_name("propose_storage_config");
+        field->set_number(3);
+        field->set_type(google::protobuf::FieldDescriptorProto::TYPE_BYTES);
+        field->set_label(google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
+        field->set_oneof_index(0);
+        google::protobuf::DescriptorPool pool;
+        const auto* file = pool.BuildFile(schema);
+        UNIT_ASSERT(file);
+        const auto* descriptor = file->message_type(0);
+        google::protobuf::DynamicMessageFactory factory(&pool);
+        auto legacy = std::unique_ptr<google::protobuf::Message>(factory.GetPrototype(descriptor)->New());
+        NKikimrBlobStorage::TEvNodeConfigScatter wire;
+        wire.MutableProposeStorageConfigWithDistconfStates()->MutableConfig()->SetGeneration(2);
+        UNIT_ASSERT(legacy->ParseFromString(wire.SerializeAsString()));
+        UNIT_ASSERT(!legacy->GetReflection()->GetOneofFieldDescriptor(*legacy, descriptor->oneof_decl(0)));
+        wire.MutableProposeStorageConfig()->MutableConfig()->SetGeneration(2);
+        UNIT_ASSERT(legacy->ParseFromString(wire.SerializeAsString()));
+        UNIT_ASSERT(legacy->GetReflection()->GetOneofFieldDescriptor(*legacy, descriptor->oneof_decl(0)));
+    }
+
+    Y_UNIT_TEST(LocalPendingDistconfIntentRejectsLegacyParentPublicationAndCollection) {
+        auto committed = MakeStorageConfig(3);
+        committed.MutableSelfManagementConfig()->SetEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        auto startup = committed;
+        auto proposed = MakeNextConfig(committed);
+        ExcludeDistconfNode(proposed, 3);
+        TNodeWardenTestState state;
+        auto& metadata = state.Metadata[std::pair<ui32, TString>{2, "/dev/disk2_1"}];
+        metadata.MutableCommittedStorageConfig()->CopyFrom(committed);
+        metadata.MutableProposedStorageConfig()->CopyFrom(proposed);
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        const TActorId parent = runtime.Register(new TIgnoreActor, 1);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(1), parent);
+        ui64 bindingCookie = 0;
+        ui32 unbinds = 0;
+        ui32 collectionReads = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 1 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType
+                    && ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()) {
+                bindingCookie = ev->Cookie;
+            }
+            unbinds += nodeId == 1 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigUnbind::EventType;
+            collectionReads += nodeId == 2 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType;
+            return true;
+        };
+        const TActorId keeper = RegisterKeeper(runtime, startup, 2, state);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return bindingCookie && state.NodeWardenConfigs.contains(2); }));
+        collectionReads = 0;
+        const ui64 oldCookie = bindingCookie;
+        auto publication = std::make_unique<NStorage::TEvNodeConfigReversePush>(1);
+        publication->Record.SetSupportsDistconfStates(false);
+        publication->Record.ClearSupportsDirectRootQueries();
+        publication->Record.MutableCommittedStorageConfig()->CopyFrom(proposed);
+        runtime.Send(new IEventHandle(keeper, parent, publication.release(), 0, bindingCookie), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return unbinds && DistconfDetached(runtime, keeper); }));
+        UNIT_ASSERT(SimUntil(runtime, [&] { return bindingCookie != oldCookie; }));
+        auto scatter = std::make_unique<NStorage::TEvNodeConfigScatter>();
+        scatter->Record.MutableCollectConfigs();
+        runtime.Send(new IEventHandle(keeper, parent, scatter.release(), 0, bindingCookie), 1);
+        auto targeted = std::make_unique<NStorage::TEvNodeConfigScatter>();
+        targeted->Record.SetTargeted(true);
+        targeted->Record.MutableCollectConfigs();
+        runtime.Send(new IEventHandle(keeper, parent, targeted.release(), 0, bindingCookie), 1);
+        SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(collectionReads, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetCommittedStorageConfig().GetFingerprint(), committed.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(2)->GetFingerprint(), committed.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(NormalAdvanceSupersedesMinorityStatefulProposalWithOneNodeOffline) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto proposed = MakeNextConfig(fixture.Config);
+        ExcludeDistconfNode(proposed, 3);
+        fixture.Metadata(2).MutableProposedStorageConfig()->CopyFrom(proposed);
+        ui32 ordinaryProposals = 0;
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 2 && ev->InterconnectSession
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                ordinaryProposals += record.HasProposeStorageConfig()
+                    && record.GetProposeStorageConfig().GetConfig().GetGeneration() > 2;
+            }
+            return true;
+        };
+        fixture.Runtime.Start();
+        for (ui32 nodeId : {1, 2}) {
+            fixture.Keepers.push_back(RegisterKeeper(fixture.Runtime, fixture.Config, nodeId, fixture.State));
+        }
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return FindConvergedRoot(fixture.Runtime, fixture.Keepers) == 1; }));
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableAdvanceGeneration();
+        InvokeKeeper(fixture.Runtime, fixture.Keepers[0], std::move(request));
+        const auto advanced = QueryKeeper(fixture.Runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig();
+        UNIT_ASSERT(advanced.GetGeneration() > 2);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint() == advanced.GetFingerprint()
+                && fixture.Metadata(2).GetCommittedStorageConfig().GetFingerprint() == advanced.GetFingerprint();
+        }));
+        UNIT_ASSERT(ordinaryProposals);
+        UNIT_ASSERT(!advanced.GetAllNodes(2).HasDistconfState());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetProposedStorageConfig().GetGeneration(), advanced.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(3).GetCommittedStorageConfig().GetGeneration(), 1);
     }
 
     bool HandleReplaceEvent(TTestActorSystem& runtime, ui32 nodeId, IEventHandle& ev,
@@ -8736,6 +9937,73 @@ selector_config: []
 
     Y_UNIT_TEST(PendingFreshBatchMutationBarrier) {
         CheckFreshQueryBatching(true);
+    }
+
+    Y_UNIT_TEST(FreshStatefulQueryBatchFiltersCapabilitiesPerRecipient) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        ExcludeDistconfNode(fixture.Config, 3);
+        for (ui32 nodeId : {1, 2}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        auto& runtime = fixture.Runtime;
+        runtime.Start();
+        for (ui32 nodeId : {1, 2}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+        QueryKeeper(runtime, fixture.Keepers[0]);
+        TQueryBatch batch(fixture, {2, 2, 2, 1});
+        THashSet<ui64> requests;
+        THashSet<TActorId> readers;
+        std::vector<std::unique_ptr<IEventHandle>> heldReads;
+        bool holdReads = true;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (batch.Capture(*ev)) {
+                return false;
+            }
+            if (ev->GetRecipientRewrite() == fixture.Keepers[0]
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                requests.insert(ev->Cookie);
+            }
+            if (nodeId == 1 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                readers.insert(ev->Sender);
+                if (holdReads) {
+                    heldReads.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        Y_DEFER { runtime.FilterFunction = {}; };
+        const auto send = [&](size_t index) {
+            auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            query->Record.MutableQueryConfig()->SetRequireFresh(true);
+            if (index != 3) {
+                query->Record.MutableQueryConfig()->SetSupportsDistconfStates(index != 1);
+            }
+            runtime.Send(new IEventHandle(fixture.Keepers[0], batch.Requests[index].Edge,
+                query.release(), 0, 100 + index), batch.Requests[index].NodeId);
+        };
+        send(0);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !heldReads.empty(); }));
+        for (size_t index : {1, 2, 3}) {
+            send(index);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests.size() == 4; }));
+        holdReads = false;
+        ReplayDelayedEvents(runtime, heldReads);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return batch.AllReplied(); }));
+        UNIT_ASSERT_VALUES_EQUAL(readers.size(), 2);
+        const auto& legacy = *batch.Requests[1].Result;
+        UNIT_ASSERT(legacy.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        UNIT_ASSERT(!legacy.HasQueryConfig());
+        for (size_t index : {0, 2, 3}) {
+            const auto& result = *batch.Requests[index].Result;
+            UNIT_ASSERT(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            UNIT_ASSERT(result.GetQueryConfig().GetFresh());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetQueryConfig().GetConfig().GetFingerprint(), fixture.Config.GetFingerprint());
+        }
     }
 
     void CheckMinimalConfigQuorum(TCommitConfirmationFixture& fixture, ui32 firstNodeId, ui32 lastNodeId) {

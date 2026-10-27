@@ -5,6 +5,7 @@
 #include "node_warden_events.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/distconf_state.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 
 #include <ydb/core/protos/config.pb.h>
@@ -162,6 +163,7 @@ namespace NKikimr::NStorage {
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
             bool SupportsDirectRootQueries = false; // advertised by the direct parent
+            bool SupportsDistconfStates = false;
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
@@ -174,6 +176,7 @@ namespace NKikimr::NStorage {
                 , Cookie(origin.Cookie)
                 , SessionId(origin.SessionId)
                 , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
+                , SupportsDistconfStates(origin.SupportsDistconfStates)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -205,6 +208,7 @@ namespace NKikimr::NStorage {
             ui32 LastReportedRootNodeId;
             std::optional<ui32> ReportedSubtreeHeight;
             bool SupportsMetadataOnlyCollect = false;
+            bool SupportsDistconfStates = false;
 
             TBoundNode(ui64 cookie, TActorId sessionId, ui32 lastReportedRootNodeId)
                 : Cookie(cookie)
@@ -263,6 +267,7 @@ namespace NKikimr::NStorage {
             TActorId ConfigReaderActor;
             ui64 PersistCookie = 0;
             bool LocalContributionExpired = false;
+            bool UsesDistconfStateProtocol = false;
 
             TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
                 : Origin(std::move(origin))
@@ -309,6 +314,7 @@ namespace NKikimr::NStorage {
 
         // proposed storage configuration of the cluster
         bool PersistProposedStorageConfigInFlight = false;
+        bool HasPendingDistconfStateProposal = false;
 
         // most relevant proposed config
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
@@ -379,6 +385,7 @@ namespace NKikimr::NStorage {
         std::vector<ui32> NodeIdsForIncomingBinding;
         std::vector<ui32> NodeIdsForOtherPilesOutgoingBinding;
         THashMap<ui32, TNodeIdentifier> AllNodeIds;
+        THashSet<ui32> ExcludedNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
         TBridgePileId SelfNodeBridgePileId;
@@ -415,6 +422,9 @@ namespace NKikimr::NStorage {
             ui64 ConfigRecoveryGeneration;
             bool AdvancesConflictingGeneration = false;
             bool RecoveryProposition = false;
+            bool DistconfStateTransition = false;
+            bool ForceDistconfState = false;
+            std::optional<NKikimrBlobStorage::TStorageConfig> DistconfQuorumConfig;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -490,6 +500,15 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden();
+        bool IsDistconfNodeExcluded(ui32 nodeId) const;
+        bool RequiresDistconfStateSupport() const;
+        static bool RequiresDistconfStateSupport(const NKikimrBlobStorage::TStorageConfig& config);
+        void UpdatePendingDistconfStateProposal();
+        static bool SameDistconfStates(const NKikimrBlobStorage::TStorageConfig& lhs,
+            const NKikimrBlobStorage::TStorageConfig& rhs);
+        static bool MergeDistconfStates(const NKikimrBlobStorage::TStorageConfig& configured,
+            const NKikimrBlobStorage::TStorageConfig& persisted,
+            NKikimrBlobStorage::TStorageConfig *target, bool overrideDistconfState);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -592,6 +611,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
             bool RequiresGenerationAdvance = false;
             bool RequiresRecoveryProposition = false;
+            bool RequiresDistconfStateTransition = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
             bool AutomaticBootstrap = false;
@@ -945,6 +965,8 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
+    std::optional<TString> ValidateDistconfStates(const NKikimrBlobStorage::TStorageConfig& config,
+        bool bridgeConfigured = false);
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,

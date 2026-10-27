@@ -15,7 +15,7 @@
 using namespace NKikimr::NYaml;
 
 Y_UNIT_TEST_SUITE(DistconfStateYaml) {
-    using TNode = NKikimrConfig::TStaticNameserviceConfig::TNode;
+    using TState = NKikimrBlobStorage::TDistconfState;
     using NKikimr::NStorage::EDistconfState;
     using NKikimr::NStorage::ResolveDistconfNodeState;
 
@@ -52,7 +52,7 @@ hosts:
         const auto ordinary = Parse(MakeConfig());
         const auto& nodes = config.GetNameserviceConfig().GetNode();
         UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 2);
-        UNIT_ASSERT(nodes[0].GetDistconfState() == NKikimrConfig::TStaticNameserviceConfig::TNode::EXCLUDED);
+        UNIT_ASSERT(nodes[0].GetDistconfState() == TState::EXCLUDED);
         UNIT_ASSERT(!nodes[1].HasDistconfState());
         UNIT_ASSERT_VALUES_EQUAL(config.GetBlobStorageConfig().SerializeAsString(),
             ordinary.GetBlobStorageConfig().SerializeAsString());
@@ -65,7 +65,7 @@ hosts:
         UNIT_ASSERT_VALUES_EQUAL(states.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(states[0].GetName(), "dc-2");
         UNIT_ASSERT(states[0].HasState());
-        UNIT_ASSERT(states[0].GetState() == NKikimrConfig::TStaticNameserviceConfig::TNode::EXCLUDED);
+        UNIT_ASSERT(states[0].GetState() == TState::EXCLUDED);
         UNIT_ASSERT_VALUES_EQUAL(config.GetNameserviceConfig().NodeSize(), 2);
         UNIT_ASSERT(!config.GetNameserviceConfig().GetNode(1).HasDistconfState());
     }
@@ -74,7 +74,7 @@ hosts:
         const auto config = Parse(MakeConfig("  distconf_state: active\n"));
         const auto& node = config.GetNameserviceConfig().GetNode(0);
         UNIT_ASSERT(node.HasDistconfState());
-        UNIT_ASSERT(node.GetDistconfState() == NKikimrConfig::TStaticNameserviceConfig::TNode::ACTIVE);
+        UNIT_ASSERT(node.GetDistconfState() == TState::ACTIVE);
     }
 
     Y_UNIT_TEST(AbsentDataCenterStateIsDistinctFromExplicitActive) {
@@ -92,8 +92,8 @@ self_management_config:
         UNIT_ASSERT_VALUES_EQUAL(states.size(), 2);
         UNIT_ASSERT(states[0].HasState());
         UNIT_ASSERT(!states[1].HasState());
-        UNIT_ASSERT(states[0].GetState() == NKikimrConfig::TStaticNameserviceConfig::TNode::ACTIVE);
-        UNIT_ASSERT(states[1].GetState() == NKikimrConfig::TStaticNameserviceConfig::TNode::ACTIVE);
+        UNIT_ASSERT(states[0].GetState() == TState::ACTIVE);
+        UNIT_ASSERT(states[1].GetState() == TState::ACTIVE);
     }
 
     Y_UNIT_TEST(OverrideFlagPreservesExplicitStates) {
@@ -106,10 +106,10 @@ self_management_config:
             const auto& settings = config.GetSelfManagementConfig();
             UNIT_ASSERT(settings.HasOverrideDistconfState());
             UNIT_ASSERT_VALUES_EQUAL(settings.GetOverrideDistconfState(), overrideState);
-            UNIT_ASSERT(settings.GetDataCenterStates(0).GetState() == NKikimrConfig::TStaticNameserviceConfig::TNode::ACTIVE);
+            UNIT_ASSERT(settings.GetDataCenterStates(0).GetState() == TState::ACTIVE);
             const auto& nodes = config.GetNameserviceConfig().GetNode();
             UNIT_ASSERT(nodes[0].HasDistconfState());
-            UNIT_ASSERT(nodes[0].GetDistconfState() == NKikimrConfig::TStaticNameserviceConfig::TNode::EXCLUDED);
+            UNIT_ASSERT(nodes[0].GetDistconfState() == TState::EXCLUDED);
             UNIT_ASSERT(!nodes[1].HasDistconfState());
         }
     }
@@ -151,7 +151,7 @@ nameservice_config:
 )";
         const auto config = Parse(MakeConfig("  distconf_state: excluded\n", nameservice));
         UNIT_ASSERT(config.GetNameserviceConfig().GetNode(0).GetDistconfState() ==
-            NKikimrConfig::TStaticNameserviceConfig::TNode::EXCLUDED);
+            TState::EXCLUDED);
         UNIT_ASSERT_EXCEPTION_CONTAINS(Parse(MakeConfig("  distconf_state: excluded\n", R"(
 nameservice_config:
   node: [{node_id: 1, host: another-node, port: 19001}]
@@ -161,7 +161,7 @@ nameservice_config:
     Y_UNIT_TEST(EffectiveDefaultStateIsActive) {
         const auto config = Parse(MakeConfig());
         for (const auto& node : config.GetNameserviceConfig().GetNode()) {
-            UNIT_ASSERT(ResolveDistconfNodeState(node, config.GetSelfManagementConfig()) == TNode::ACTIVE);
+            UNIT_ASSERT(ResolveDistconfNodeState(node, config.GetSelfManagementConfig()) == TState::ACTIVE);
         }
     }
 
@@ -169,8 +169,8 @@ nameservice_config:
         const auto config = Parse(MakeConfig({},
             "self_management_config: {enabled: true, data_center_states: [{name: dc-1, state: excluded}]}\n"));
         const auto& nodes = config.GetNameserviceConfig().GetNode();
-        UNIT_ASSERT(ResolveDistconfNodeState(nodes[0], config.GetSelfManagementConfig()) == TNode::EXCLUDED);
-        UNIT_ASSERT(ResolveDistconfNodeState(nodes[1], config.GetSelfManagementConfig()) == TNode::ACTIVE);
+        UNIT_ASSERT(ResolveDistconfNodeState(nodes[0], config.GetSelfManagementConfig()) == TState::EXCLUDED);
+        UNIT_ASSERT(ResolveDistconfNodeState(nodes[1], config.GetSelfManagementConfig()) == TState::ACTIVE);
     }
 
     Y_UNIT_TEST(StateSourcePriorityForHostsAndDataCenters) {
@@ -180,15 +180,15 @@ nameservice_config:
             EDistconfState WithoutOverride;
             EDistconfState WithOverride;
         } cases[] = {
-            {{}, std::nullopt, TNode::ACTIVE, TNode::ACTIVE},
-            {{}, TNode::ACTIVE, TNode::ACTIVE, TNode::ACTIVE},
-            {{}, TNode::EXCLUDED, TNode::EXCLUDED, TNode::EXCLUDED},
-            {"active", std::nullopt, TNode::ACTIVE, TNode::ACTIVE},
-            {"active", TNode::ACTIVE, TNode::ACTIVE, TNode::ACTIVE},
-            {"active", TNode::EXCLUDED, TNode::EXCLUDED, TNode::ACTIVE},
-            {"excluded", std::nullopt, TNode::EXCLUDED, TNode::EXCLUDED},
-            {"excluded", TNode::ACTIVE, TNode::ACTIVE, TNode::EXCLUDED},
-            {"excluded", TNode::EXCLUDED, TNode::EXCLUDED, TNode::EXCLUDED},
+            {{}, std::nullopt, TState::ACTIVE, TState::ACTIVE},
+            {{}, TState::ACTIVE, TState::ACTIVE, TState::ACTIVE},
+            {{}, TState::EXCLUDED, TState::EXCLUDED, TState::EXCLUDED},
+            {"active", std::nullopt, TState::ACTIVE, TState::ACTIVE},
+            {"active", TState::ACTIVE, TState::ACTIVE, TState::ACTIVE},
+            {"active", TState::EXCLUDED, TState::EXCLUDED, TState::ACTIVE},
+            {"excluded", std::nullopt, TState::EXCLUDED, TState::EXCLUDED},
+            {"excluded", TState::ACTIVE, TState::ACTIVE, TState::EXCLUDED},
+            {"excluded", TState::EXCLUDED, TState::EXCLUDED, TState::EXCLUDED},
         };
         for (const auto& item : cases) {
             for (bool overrideState : {false, true}) {
@@ -217,7 +217,7 @@ nameservice_config:
         const auto hostConfig = Parse(MakeConfig("  distconf_state: active\n",
             "self_management_config: {enabled: true, override_distconf_state: true}\n"));
         UNIT_ASSERT(ResolveDistconfNodeState(hostConfig.GetNameserviceConfig().GetNode(0),
-            hostConfig.GetSelfManagementConfig(), TNode::EXCLUDED, TNode::EXCLUDED) == TNode::EXCLUDED);
+            hostConfig.GetSelfManagementConfig(), TState::EXCLUDED, TState::EXCLUDED) == TState::EXCLUDED);
 
         const auto dcConfig = Parse(MakeConfig({}, R"(
 self_management_config:
@@ -226,7 +226,7 @@ self_management_config:
   data_center_states: [{name: dc-1, state: active}]
 )"));
         UNIT_ASSERT(ResolveDistconfNodeState(dcConfig.GetNameserviceConfig().GetNode(0),
-            dcConfig.GetSelfManagementConfig(), TNode::EXCLUDED, TNode::EXCLUDED) == TNode::EXCLUDED);
+            dcConfig.GetSelfManagementConfig(), TState::EXCLUDED, TState::EXCLUDED) == TState::EXCLUDED);
     }
 
     Y_UNIT_TEST(ExplicitActiveCanRestoreBothEntities) {
@@ -237,7 +237,7 @@ self_management_config:
   data_center_states: [{name: dc-1, state: active}]
 )"));
         UNIT_ASSERT(ResolveDistconfNodeState(config.GetNameserviceConfig().GetNode(0),
-            config.GetSelfManagementConfig(), TNode::EXCLUDED, TNode::EXCLUDED) == TNode::ACTIVE);
+            config.GetSelfManagementConfig(), TState::EXCLUDED, TState::EXCLUDED) == TState::ACTIVE);
     }
 
     Y_UNIT_TEST(EffectiveStateSupportsLegacyLocation) {
@@ -246,7 +246,7 @@ self_management_config:
         auto *node = config.MutableNameserviceConfig()->MutableNode(0);
         node->MutableWalleLocation()->CopyFrom(node->GetLocation());
         node->ClearLocation();
-        UNIT_ASSERT(ResolveDistconfNodeState(*node, config.GetSelfManagementConfig()) == TNode::EXCLUDED);
+        UNIT_ASSERT(ResolveDistconfNodeState(*node, config.GetSelfManagementConfig()) == TState::EXCLUDED);
     }
 }
 

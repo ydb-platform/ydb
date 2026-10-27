@@ -6,12 +6,18 @@ namespace NKikimr::NStorage {
 
     namespace {
         bool IsTimedScatterRequest(const NKikimrBlobStorage::TEvNodeConfigScatter& request) {
-            return request.HasCollectConfigs() || request.HasProposeStorageConfig();
+            return request.HasCollectConfigs() || request.HasProposeStorageConfig()
+                || request.HasProposeStorageConfigWithDistconfStates();
         }
     }
 
     void TDistributedConfigKeeper::IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request,
             std::span<const TNodeIdentifier> targetedNodes) {
+        const bool stateProtocol = request.HasProposeStorageConfigWithDistconfStates();
+        if (stateProtocol) {
+            auto proposition = std::move(*request.MutableProposeStorageConfigWithDistconfStates());
+            request.MutableProposeStorageConfig()->Swap(&proposition);
+        }
         ui64 cookie = NextScatterCookie++;
         if (cookie == 0) {
             cookie = NextScatterCookie++;
@@ -35,6 +41,9 @@ namespace NKikimr::NStorage {
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
+        task.UsesDistconfStateProtocol = stateProtocol || (task.Request.HasProposeStorageConfig()
+            && (RequiresDistconfStateSupport()
+                || RequiresDistconfStateSupport(task.Request.GetProposeStorageConfig().GetConfig())));
         if (timed && !task.Request.GetTimeoutUs()) {
             CheckCompleteScatterTask(it);
             return;
@@ -45,12 +54,29 @@ namespace NKikimr::NStorage {
                      new TEvPrivate::TEvScatterTaskTimeout(cookie, true));
             Schedule(TDuration::MicroSeconds(timeoutUs), new TEvPrivate::TEvScatterTaskTimeout(cookie, false));
         }
-        PrepareScatterTask(cookie, task);
-        if (!std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) { // issue scatter task downward unless this one is targeted
+        const bool remote = std::holds_alternative<TBinding>(task.Origin)
+            || std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin);
+        if (remote && task.UsesDistconfStateProtocol && !stateProtocol
+                && (RequiresDistconfStateSupport(task.Request.GetProposeStorageConfig().GetConfig())
+                    || !std::holds_alternative<TBinding>(task.Origin))) {
+            auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
+            SelfNode.Serialize(status->MutableNodeId());
+            status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
+            status->SetReason("Distconf state proposals require protocol support");
+        } else {
+            PrepareScatterTask(cookie, task);
+        }
+        const bool stateProposalRejected = task.UsesDistconfStateProtocol
+            && task.Response.GetProposeStorageConfig().StatusSize()
+            && task.Response.GetProposeStorageConfig().GetStatus(0).GetStatus() == TEvGather::TProposeStorageConfig::ERROR;
+        if (!stateProposalRejected && !std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) {
             for (auto& [nodeId, info] : DirectBoundNodes) {
                 IssueScatterTaskForNode(nodeId, info, cookie, task);
             }
             for (const TNodeIdentifier& node : targetedNodes) {
+                if (IsDistconfNodeExcluded(node.NodeId())) {
+                    continue;
+                }
                 IssueAddedNodeScatterTask(node.NodeId(), cookie, task);
                 const auto [it, inserted] = task.PendingNodes.insert(node.NodeId());
                 Y_ABORT_UNLESS(inserted);
@@ -63,6 +89,10 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PrepareScatterTaskRequest(ui64 cookie, const TScatterTask& task,
             ui32 subtreeHeight, TEvScatter& request) {
         request.CopyFrom(task.Request);
+        if (task.UsesDistconfStateProtocol) {
+            auto proposition = std::move(*request.MutableProposeStorageConfig());
+            request.MutableProposeStorageConfigWithDistconfStates()->Swap(&proposition);
+        }
         request.SetCookie(cookie);
         if (IsTimedScatterRequest(task.Request)) {
             const TMonotonic deadline = task.StartTimestamp + TDuration::MicroSeconds(task.Request.GetTimeoutUs());
@@ -75,6 +105,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task) {
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(nodeId)) {
+            return;
+        }
         auto ev = std::make_unique<TEvNodeConfigScatter>();
         PrepareScatterTaskRequest(cookie, task, 0, ev->Record);
         ev->Record.SetTargeted(true);
@@ -143,6 +176,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
+        if (task.UsesDistconfStateProtocol && !info.SupportsDistconfStates) {
+            return;
+        }
         if (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty()
             && IsTimedScatterRequest(task.Request)) {
             return;
@@ -168,6 +204,25 @@ namespace NKikimr::NStorage {
         }
 
         PerformScatterTask(task); // do the local part
+
+        if (task.Response.HasCollectConfigs()) {
+            const auto& collected = task.Response.GetCollectConfigs();
+            const auto requiresSupport = [](const auto& item) {
+                return RequiresDistconfStateSupport(item.GetConfig());
+            };
+            if (std::ranges::any_of(collected.GetNodes(), [](const auto& item) {
+                    return RequiresDistconfStateSupport(item.GetBaseConfig());
+                }) || std::ranges::any_of(collected.GetCommittedConfigs(), requiresSupport)
+                    || std::ranges::any_of(collected.GetProposedConfigs(), requiresSupport)) {
+                if (const auto *origin = std::get_if<TBinding>(&task.Origin); origin && !origin->SupportsDistconfStates) {
+                    AbortBinding("peer does not support distconf states");
+                    return;
+                }
+                if (std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) {
+                    return;
+                }
+            }
+        }
 
         std::visit(TOverloaded{
             [&](const TBinding& binding) {
@@ -260,6 +315,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(ev->Sender.NodeId())) {
+            return;
+        }
         YDB_LOG_DEBUG("TEvNodeConfigScatter",
             {"marker", "NWDC25"},
             {"binding", Binding},
@@ -269,13 +327,26 @@ namespace NKikimr::NStorage {
             {"record", ev->Get()->Record});
 
         if (auto& record = ev->Get()->Record; Binding && Binding->Expected(*ev)) {
+            if (!Binding->SupportsDistconfStates && (RequiresDistconfStateSupport()
+                    || record.HasProposeStorageConfigWithDistconfStates()
+                    || (record.HasProposeStorageConfig()
+                        && RequiresDistconfStateSupport(record.GetProposeStorageConfig().GetConfig())))) {
+                AbortBinding("peer does not support distconf states");
+                return;
+            }
             IssueScatterTask(*Binding, std::move(record));
         } else if (record.GetTargeted()) {
+            if (record.HasCollectConfigs() && RequiresDistconfStateSupport()) {
+                return;
+            }
             IssueScatterTask(TScatterTaskOriginTargeted{ev->Sender, ev->Cookie, ev->InterconnectSession}, std::move(record));
         }
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigGather::TPtr ev) {
+        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(ev->Sender.NodeId())) {
+            return;
+        }
         YDB_LOG_DEBUG("TEvNodeConfigGather",
             {"marker", "NWDC26"},
             {"sender", ev->Sender},

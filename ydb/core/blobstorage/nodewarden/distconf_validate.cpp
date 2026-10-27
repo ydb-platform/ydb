@@ -502,7 +502,41 @@ namespace NKikimr::NStorage {
         return {};
     }
 
+    std::optional<TString> ValidateDistconfStates(const NKikimrBlobStorage::TStorageConfig& config,
+            bool bridgeConfigured) {
+        using TState = NKikimrBlobStorage::TDistconfState;
+        const auto valid = [](EDistconfState state) { return state == TState::ACTIVE || state == TState::EXCLUDED; };
+        bool excluded = false;
+        for (const auto& node : config.GetAllNodes()) {
+            if (node.HasDistconfState()) {
+                if (!valid(node.GetDistconfState())) {
+                    return "Unknown host distconf state";
+                }
+                excluded |= node.GetDistconfState() == TState::EXCLUDED;
+            }
+        }
+        THashSet<TString> dataCenters;
+        for (const auto& state : config.GetSelfManagementConfig().GetDataCenterStates()) {
+            if (!state.GetName() || !dataCenters.insert(state.GetName()).second) {
+                return "Empty or duplicate data center in distconf states";
+            }
+            if (state.HasState()) {
+                if (!valid(state.GetState())) {
+                    return "Unknown data center distconf state";
+                }
+                excluded |= state.GetState() == TState::EXCLUDED;
+            }
+        }
+        if (excluded && (bridgeConfigured || config.HasClusterState())) {
+            return "Distconf exclusions are not supported for bridged clusters";
+        }
+        return std::nullopt;
+    }
+
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateDistconfStates(config)) {
+            return error;
+        }
         // validate node list
         THashSet<ui32> nodeIds;
         THashSet<std::tuple<TString, ui16>> fqdns;

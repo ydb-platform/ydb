@@ -41,6 +41,7 @@ namespace NKikimr::NStorage {
         bool Detached = false;
         bool AdvancesConflictingGeneration = false;
         bool RecoveryProposition = false;
+        bool DistconfStateTransition = false;
 
     public: // Error handling
         struct TExError : yexception {

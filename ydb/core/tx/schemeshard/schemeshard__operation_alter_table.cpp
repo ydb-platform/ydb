@@ -699,6 +699,29 @@ public:
             return result;
         }
 
+        const auto& replicationConfig = table->ReplicationConfig();
+        const auto owner = replicationConfig.HasOwner()
+            ? TPathId::FromProto(replicationConfig.GetOwner()) : TPathId{};
+        if (alter.HasReplicationConfig()) {
+            const auto& config = alter.GetReplicationConfig();
+            const auto newOwner = config.HasOwner() ? TPathId::FromProto(config.GetOwner()) : TPathId{};
+            if (owner && owner != newOwner && !Transaction.HasExpectedReplicationOwner()) {
+                const auto previous = context.SS->PathsById.find(owner);
+                // A DROP in progress still owns its tables until the controller
+                // has stopped and SchemeShard has committed deletion of its path.
+                if (!newOwner || !context.SS->IsLocalId(owner)
+                    || (previous != context.SS->PathsById.end() && !previous->second->Dropped())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication");
+                    return result;
+                }
+            }
+            if (newOwner && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && !replicationConfig.HasOwner()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot claim a legacy replica without an owner");
+                return result;
+            }
+        }
+
         bool hasLegacyReplicationStream = false;
         bool hasSchemaReplicationStream = false;
         bool hasSchemaCdcStream = false;
@@ -1198,6 +1221,26 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             return {CreateAlterColumnTable(id, tx)};
         }
         return {CreateAlterTable(id, tx)};
+    }
+
+    // Fence cleanup before creating sub-operations for an index table.
+    if (tx.HasExpectedReplicationOwner()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+        const auto table = context.SS->Tables.find(path->PathId);
+        if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
+            const auto& config = table->second->ReplicationConfig();
+            if (config.HasOwner()
+                && TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())) {
+                return {CreateReject(id, NKikimrScheme::StatusSuccess,
+                    "Replication owner has changed; cleanup skipped")};
+            }
+        }
     }
 
     if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {

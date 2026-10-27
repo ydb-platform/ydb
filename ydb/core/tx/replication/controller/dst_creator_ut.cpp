@@ -146,6 +146,60 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated");
     }
 
+    Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {
+        enum class EOwner { Fresh, Writable, Legacy, Current, Collected, Foreign };
+        struct TCase { EOwner Owner; bool InitialScan; bool Pending; };
+        UNIT_ASSERT(!NKikimrConfig::TFeatureFlags().GetEnableAsyncReplicationTableOwnership());
+        const TCase cases[] = {
+            {EOwner::Fresh, true, false}, {EOwner::Writable, false, false}, {EOwner::Current, true, false},
+            {EOwner::Legacy, true, false}, {EOwner::Legacy, false, false}, {EOwner::Legacy, false, true},
+            {EOwner::Current, false, true}, {EOwner::Collected, false, true},
+            {EOwner::Foreign, true, false}, {EOwner::Foreign, false, false},
+        };
+        for (const auto& test : cases) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
+            TEnv env(flags);
+            const auto owner = env.GetPathId("/Root");
+            auto table = MakeTableDescription({.Name = "Source", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing()});
+            env.CreateTable("/Root", *table);
+            table->SetName("Dst");
+            const bool free = test.Owner == EOwner::Fresh || test.Owner == EOwner::Writable;
+            if (!free) {
+                FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+            }
+            if (!free && test.Owner != EOwner::Legacy) {
+                (test.Owner == EOwner::Collected ? TPathId(owner.OwnerId, 1000000) : owner)
+                    .ToProto(table->MutableReplicationConfig()->MutableOwner());
+            }
+            if (test.Owner != EOwner::Fresh) {
+                env.CreateTable("/Root", *table);
+            }
+            const auto path = test.Owner == EOwner::Fresh ? TPathId{} : env.GetPathId("/Root/Dst");
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                "/Root", test.Owner == EOwner::Foreign ? env.GetPathId("/Root/Source") : owner,
+                1, 1, TReplication::ETargetKind::Table, "/Root/Source", "/Root/Dst",
+                EReplicationMode::ReadOnly, EConsistencyLevel::Row, test.InitialScan, test.Pending ? path : TPathId{}));
+            if (!test.InitialScan) {
+                PrepareAttachDst(env);
+            }
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, test.Owner == EOwner::Foreign
+                ? NKikimrScheme::StatusPreconditionFailed : NKikimrScheme::StatusSuccess, result->Get()->Error);
+            if (result->Get()->IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, env.GetPathId("/Root/Dst"));
+            }
+            const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+            const bool owned = free ? TableOwnership : test.Owner != EOwner::Legacy;
+            UNIT_ASSERT_VALUES_EQUAL(config.HasOwner(), owned);
+            if (owned) {
+                UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), owner);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        }
+    }
+
     Y_UNIT_TEST(AttachTable) {
         TEnv env;
         const auto table = TTestTableDescription{
@@ -448,6 +502,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
 
         createDstCreator(pendingDstPathId);
+        if (schemaChange == EAttachmentSchemaChange::None) {
+            PrepareAttachDst(env);
+        }
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         const auto desc = env.GetDescription("/Root/Dst");
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pendingDstPathId);
@@ -503,12 +560,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void CheckAttachmentCompletionBarrier(
             EAttachmentStart start,
             bool cleanup = false,
-            bool acceptedBeforeRetry = false)
+            bool acceptedBeforeRetry = false,
+            bool tableOwnership = true,
+            bool legacyReplica = false)
     {
         const bool recovery = start == EAttachmentStart::RecoveredPublished
             || start == EAttachmentStart::RecoveredBeforeSubmission;
         const bool beforeSubmission = start == EAttachmentStart::RecoveredBeforeSubmission;
-        TEnv env;
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableAsyncReplicationTableOwnership(tableOwnership);
+        TEnv env(flags);
         auto& runtime = env.GetRuntime();
         const auto table = TTestTableDescription{
             .Name = "Source",
@@ -574,8 +635,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 new TEvTxUserProxy::TEvAllocateTxIdResult(txId, services, {}));
         };
         auto expectRequest = [&](ui32 type) {
-            const auto request = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            auto request = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
             UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(), type);
+            return request;
         };
         auto describe = [&](bool published) {
             expectRequest(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
@@ -591,6 +653,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     *result->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
                     EReplicationMode::ReadOnly,
                     EConsistencyLevel::Row);
+                if (tableOwnership && !legacyReplica) {
+                    databasePathId.ToProto(result->Record.MutablePathDescription()->MutableTable()
+                        ->MutableReplicationConfig()->MutableOwner());
+                }
                 result->Record.MutablePathDescription()->MutableSelf()->SetPathState(
                     NKikimrSchemeOp::EPathStateAlter);
             }
@@ -599,7 +665,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             UNIT_ASSERT_VALUES_EQUAL_C(results->load(), 0, "Attachment completed before shards");
         };
         auto proposeResult = [&](ui64 txId, NKikimrScheme::EStatus status) {
-            expectRequest(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+            const auto request = expectRequest(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+            const auto& record = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+                request->Get()->Ev.Get())->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetTransaction(0).GetAlterTable().GetReplicationConfig().HasOwner(),
+                tableOwnership && !legacyReplica);
             runtime.Send(
                 creator,
                 pipeCache,
@@ -608,10 +678,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         allocate(100);
         describe(start == EAttachmentStart::RecoveredPublished || start == EAttachmentStart::FreshPublished);
-        if (!recovery) {
-            runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-            env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-        }
+        PrepareAttachDst(env);
         allocate(101);
         if (!beforeSubmission) {
             if (!recovery) {
@@ -630,6 +697,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             proposeResult(recovery ? 101 : 102, NKikimrScheme::StatusMultipleModifications);
             env.SendAsync(creator, new TEvents::TEvWakeup());
             describe(true);
+            PrepareAttachDst(env);
             allocate(103);
         }
 
@@ -670,6 +738,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             *completed->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
             EReplicationMode::ReadOnly,
             EConsistencyLevel::Row);
+        if (tableOwnership && !legacyReplica) {
+            databasePathId.ToProto(completed->Record.MutablePathDescription()->MutableTable()
+                ->MutableReplicationConfig()->MutableOwner());
+        }
         runtime.Send(creator, pipeCache, completed.Release());
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
@@ -678,22 +750,24 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST_TWIN(RecoveryWaitsForAttachmentShardCompletion, Cleanup) {
         CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredPublished, Cleanup);
+        CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredPublished, Cleanup, false, false);
+        CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredPublished, Cleanup, false, true, true);
     }
 
     Y_UNIT_TEST_TWIN(RecoveryBeforeAttachmentSubmission, Cleanup) {
         CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredBeforeSubmission, Cleanup);
     }
 
-    Y_UNIT_TEST(AttachmentWaitsForCompletionAfterPipeRetry) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable);
+    Y_UNIT_TEST_TWIN(AttachmentWaitsForCompletionAfterPipeRetry, TableOwnership) {
+        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable, false, false, TableOwnership);
     }
 
-    Y_UNIT_TEST(AttachmentIgnoresOldCompletionAfterPipeRetry) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable, false, true);
+    Y_UNIT_TEST_TWIN(AttachmentIgnoresOldCompletionAfterPipeRetry, TableOwnership) {
+        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable, false, true, TableOwnership);
     }
 
-    Y_UNIT_TEST(FreshReadonlyAttachmentWaitsForShardCompletion) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshPublished);
+    Y_UNIT_TEST_TWIN(FreshReadonlyAttachmentWaitsForShardCompletion, TableOwnership) {
+        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshPublished, false, false, TableOwnership);
     }
 
     Y_UNIT_TEST(MissingAttachmentTable) {
@@ -799,10 +873,19 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     false,
                     pathId));
             }
-            for (ui32 i = 0; i < 2; ++i) {
-                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
+            for (ui32 completed = 0; completed < 2;) {
+                TAutoPtr<IEventHandle> event;
+                const auto [prepare, result] = env.GetRuntime().GrabEdgeEvents<
+                    TEvPrivate::TEvPrepareAttachDst, TEvPrivate::TEvCreateDstResult>(event);
+                if (prepare) {
+                    UNIT_ASSERT_VALUES_EQUAL(prepare->DstPathId, pathId);
+                    env.SendAsync(event->Sender, new TEvPrivate::TEvPrepareAttachDstResult());
+                } else {
+                    UNIT_ASSERT(result);
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                    UNIT_ASSERT_VALUES_EQUAL(result->DstPathId, pathId);
+                    ++completed;
+                }
             }
         }
     }
@@ -842,9 +925,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 *tx.MutableAlterTable()->MutableReplicationConfig(),
                 EReplicationMode::ReadOnly,
                 EConsistencyLevel::Row);
-            const auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
-                pathId.OwnerId,
-                std::move(request));
+            // A new generation may still be initializing. The pipe waits for
+            // SchemeShard to become active before delivering the request.
+            runtime.SendToPipe(pathId.OwnerId, env.GetSender(), request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(env.GetSender());
             const auto status = result->Get()->Record.GetStatus();
             // A scavenged path is empty; a retained tombstone is deleted.
             UNIT_ASSERT_C(

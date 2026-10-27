@@ -57,10 +57,19 @@ TConclusionStatus TFastPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TWaitPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+TConclusionStatus TStopPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TOnePortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    AFL_VERIFY(controller);
+    AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Cleanup));
     const i64 erased = controller->GetPortionsErasedCounter().Val();
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
     const TInstant start = TInstant::Now();
     while (TInstant::Now() - start < TDuration::Seconds(60)) {
         if (erased < controller->GetPortionsErasedCounter().Val()) {
@@ -73,6 +82,8 @@ TConclusionStatus TWaitPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr
     }
 
     AFL_VERIFY(erased < controller->GetPortionsErasedCounter().Val());
+
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
     return TConclusionStatus::Success();
 }
 

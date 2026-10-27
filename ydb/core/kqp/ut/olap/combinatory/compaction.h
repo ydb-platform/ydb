@@ -61,12 +61,21 @@ public:
     }
 };
 
-class TWaitPortionsCleanupCommand: public ICommand {
+class TStopPortionsCleanupCommand: public ICommand {
 private:
     virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
 
 public:
-    TWaitPortionsCleanupCommand() {
+    TStopPortionsCleanupCommand() {
+    }
+};
+
+class TOnePortionsCleanupCommand: public ICommand {
+private:
+    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+
+public:
+    TOnePortionsCleanupCommand() {
     }
 };
 

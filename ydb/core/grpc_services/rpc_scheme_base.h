@@ -78,8 +78,9 @@ protected:
     }
 
     virtual void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
+        if (!ev->Get()->Record.GetError().empty())
+            this->Request_->RaiseIssue(NYql::TIssue(ev->Get()->Record.GetError()));
+        return this->Reply(ev->Get()->Record.GetStatus(), ctx);
     }
 
     void PassAway() override {

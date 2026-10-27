@@ -2015,11 +2015,13 @@ public:
 
     class TTxHnswFollowerSync;
     class TTxHnswSnapshot;
+    class TTxHnswReplicaStatus;
     void ScheduleHnswFollowerSync();
     void TryInstallFollowerHnswIndex(ui32 localTid, TPathId indexId);
     bool TrackFollowerHnswCommit(ui32 localTid, TPathId indexId, TRowVersion version);
     void Handle(TEvPrivate::TEvHnswFollowerSync::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvHnswPipeStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvHnswCache::TEvSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvHnswCache::TEvSnapshotResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvHnswCache::TEvAcquired::TPtr& ev, const TActorContext& ctx);
@@ -3894,6 +3896,7 @@ protected:
             HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
             HFunc(TEvPrivate::TEvHnswPipeStatus, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
             HFunc(TEvHnswCache::TEvAcquired, Handle);
@@ -3979,6 +3982,7 @@ protected:
             HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
             HFunc(TEvPrivate::TEvHnswPipeStatus, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
             HFunc(TEvHnswCache::TEvAcquired, Handle);
@@ -4108,6 +4112,7 @@ protected:
             HFunc(TEvHnswCache::TEvRegistered, Handle);
             HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
             HFunc(TEvPrivate::TEvHnswPipeStatus, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
             HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
             HFunc(TEvHnswCache::TEvAcquired, Handle);

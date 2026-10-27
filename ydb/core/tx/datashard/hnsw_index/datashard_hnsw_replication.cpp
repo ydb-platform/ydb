@@ -502,6 +502,102 @@ void TDataShard::TryInstallFollowerHnswIndex(ui32 localTid, TPathId indexId) {
         entry.GraphKey = key;
 }
 
+class TDataShard::TTxHnswReplicaStatus : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHnswReplicaStatus(TDataShard* self, TEvHnswCache::TEvStatusRequest::TPtr request)
+        : TBase(self), Request(std::move(request)) {}
+    TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Result = MakeHolder<TEvHnswCache::TEvStatusResponse>();
+        auto& result = Result->Record;
+        const auto& request = Request->Get()->Record;
+        result.SetTabletId(Self->TabletID());
+        result.SetFollowerId(Self->FollowerId());
+        result.SetLeaderGeneration(Self->Executor()->Generation());
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || Self->IsStopping()
+                || (!Self->IsFollower() && Self->State != TShardState::Ready)) {
+            return true;
+        }
+        if (Self->IsFollower()) {
+            Self->ScheduleHnswFollowerSync();
+            NKikimrTxDataShard::TError::EKind status;
+            TString error;
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, error))
+                return false;
+            if (status != NKikimrTxDataShard::TError::OK)
+                return true;
+        }
+        auto tableIt = Self->TableInfos.find(request.GetTablePathId());
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex() || Self->PathOwnerId != request.GetTableOwnerId()
+                || tableIt == Self->TableInfos.end()
+                || tableIt->second->GetTableSchemaVersion() != request.GetSchemaVersion())
+            return true;
+        const auto& table = *tableIt->second;
+        const auto indexId = Self->ResolveHnswIndexId(table.LocalTid, {});
+        const auto* metadata = Self->FindHnswIndexInfo(table.LocalTid, indexId);
+        if (!metadata || metadata->Settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+            return true;
+        }
+        result.SetSchemaVersion(table.GetTableSchemaVersion());
+        if (!Self->IsFollower()) {
+            const auto* cached = Self->FindHnswIndexEntry(table.LocalTid, indexId);
+            if (cached && cached->Index) {
+                const auto lower = Max(cached->Index->GetBaseVersion(), cached->Changes->LowerReadVersion);
+                if (lower < Self->Pipeline.GetUnreadableEdge()
+                        && !Self->VolatileTxManager.HasVolatileTxsAtSnapshot(lower)) {
+                    Self->PromoteImmediatePostExecuteEdges(lower, EPromotePostExecuteEdges::RepeatableRead, txc);
+                    Self->SnapshotManager.PromoteCompleteEdge(lower, txc);
+                }
+            } else {
+                Self->RequestHnswIndexBuild(table.LocalTid, metadata->VectorColumnTag, metadata->Settings, indexId);
+            }
+            Self->PromoteFollowerReadEdge(txc);
+        }
+        const auto [edge, repeatable] = Self->SnapshotManager.GetFollowerReadEdge();
+        result.SetReadStep(edge.Step);
+        result.SetReadTxId(edge.TxId);
+        result.SetRepeatable(repeatable);
+        if (!repeatable || edge < TRowVersion(request.GetTargetStep(), request.GetTargetTxId()))
+            return true;
+        if (Self->IsFollower())
+            Self->PrepareFollowerHnswIndex(table.LocalTid, txc.DB, edge, indexId);
+        const auto* cached = Self->FindHnswIndexEntry(table.LocalTid, indexId);
+        if (!cached) {
+            return true;
+        }
+        const auto& entry = *cached;
+        const bool notRequired = Self->IsFollower()
+            ? entry.FollowerNotRequired && entry.FollowerJournalTracking && entry.Changes->Valid
+                && entry.FollowerLeaderGeneration == result.GetLeaderGeneration()
+                && entry.FollowerSnapshot.GetLeaderGeneration() == result.GetLeaderGeneration()
+                && Self->Executor()->Step() >= entry.FollowerSnapshot.GetCheckpointStep()
+            : !entry.Index && !entry.Building && entry.NextScanAttemptAt == TInstant::Max();
+        result.SetNotRequired(notRequired);
+        result.SetReady(notRequired);
+        if (!notRequired) {
+            if (auto graph = Self->GetHnswIndex(table.LocalTid, metadata->VectorColumnTag,
+                    metadata->Settings, false, edge, indexId)) {
+                // Loading a graph is insufficient if its first search cannot
+                // obtain workspace under the current node-wide memory grant.
+                const auto workspace = Self->TryReserveHnswCacheMemory(graph->EstimatedSearchMemoryBytes());
+                result.SetReady(bool(workspace));
+            }
+        }
+        result.SetGraphKey(entry.GraphKey);
+        return true;
+    }
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Request->Sender, Result.Release(), 0, Request->Cookie);
+    }
+private:
+    TEvHnswCache::TEvStatusRequest::TPtr Request;
+    THolder<TEvHnswCache::TEvStatusResponse> Result;
+};
+
+void TDataShard::Handle(TEvHnswCache::TEvStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxHnswReplicaStatus(this, ev), ctx);
+}
+
 NTable::IRedoObserver* TDataShard::GetFollowerRedoObserver() {
     // Keep existing journals complete across feature-flag changes, even when
     // no read observes the temporarily disabled feature.

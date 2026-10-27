@@ -77,7 +77,7 @@ namespace NKikimr::NDataShard {
                         if (reduce) { reduce(index->EstimatedMemoryBytes()); }
                         result.MemoryReservation = reservation;
                         if (reservation) {
-                            index->SetGraphReservation(reservation, /*deferDeletion=*/true);
+                            index->SetGraphReservation(reservation, {}, /*deferDeletion=*/true);
                         }
                         result.Index = std::move(index);
                     }

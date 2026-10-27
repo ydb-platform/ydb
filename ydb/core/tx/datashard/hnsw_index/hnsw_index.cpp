@@ -1,4 +1,5 @@
 #include "hnsw_index.h"
+#include "hnsw_memory_tracker.h"
 #include <ydb/core/tx/datashard/hnsw/serialization.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
@@ -432,8 +433,56 @@ namespace NKikimr::NDataShard {
             return true;
         }
 
+        struct TSearchLease {
+            TGraph* Owner = nullptr;
+            std::shared_ptr<void> Scratch;
+            ~TSearchLease() {
+                if (Owner) {
+                    std::lock_guard guard(Owner->SearchMemoryMutex);
+                    --Owner->ActiveSearches;
+                }
+            }
+        };
+
+        size_t EstimatedVisitedMemoryBytes() const {
+            return SaturatingAdd(sizeof(similarity::VisitedList) + 256,
+                SaturatingMultiply(SaturatingAdd(Keys.size(), 1), sizeof(similarity::vl_type)));
+        }
+
+        std::unique_ptr<TSearchLease> AcquireSearchMemory(size_t scratchBytes) {
+            auto lease = std::make_unique<TSearchLease>();
+            if (!MemoryTracker) {
+                return lease;
+            }
+            lease->Scratch = TryReserveHnswMemory(MemoryTracker, scratchBytes, MemoryOwner);
+            if (!lease->Scratch) {
+                return {};
+            }
+            std::lock_guard guard(SearchMemoryMutex);
+            // The graph reservation includes the initial library buffer.
+            // Additional buffers are retained by the library up to peak
+            // concurrency, so keep their charges for the graph's lifetime.
+            if (Index && ActiveSearches >= ExtraVisitedMemory.size() + 1) {
+                auto reservation = TryReserveHnswMemory(MemoryTracker, EstimatedVisitedMemoryBytes(), MemoryOwner);
+                if (!reservation) {
+                    return {};
+                }
+                ExtraVisitedMemory.push_back(std::move(reservation));
+            }
+            ++ActiveSearches;
+            lease->Owner = this;
+            return lease;
+        }
+
+        // Declare reservations before Index: its retained buffers must be
+        // destroyed before their reservations release the node-wide charge.
         std::shared_ptr<void> Reservation;
         bool DeferDeletion = false;
+        std::shared_ptr<THnswCacheMemoryTracker> MemoryTracker;
+        std::vector<std::shared_ptr<void>> ExtraVisitedMemory;
+        std::mutex SearchMemoryMutex;
+        size_t ActiveSearches = 0;
+        ui64 MemoryOwner = 0;
         VectorIndexSettings Settings;
         std::unique_ptr<similarity::Space<float>> Space;
         size_t Dimension = 0;
@@ -475,6 +524,11 @@ namespace NKikimr::NDataShard {
                 return result;
             }
 
+            const auto memory = Graph->AcquireSearchMemory(EstimatedSearchAuxMemoryBytes(k, efSearch));
+            if (!memory) {
+                result.Covered = false;
+                return result;
+            }
             std::unique_ptr<const similarity::Object> queryObj(
                 new similarity::Object(-1, -1, Graph->Dimension * sizeof(float), view.Data));
 
@@ -543,6 +597,21 @@ namespace NKikimr::NDataShard {
             }
             std::reverse(result.Results.begin(), result.Results.end());
             return result;
+        }
+
+        size_t EstimatedSearchMemoryBytes(size_t k, ui32 efSearch) const {
+            return SaturatingAdd(EstimatedSearchAuxMemoryBytes(k, efSearch),
+                Graph->Index ? Graph->EstimatedVisitedMemoryBytes() : 0);
+        }
+
+        size_t EstimatedSearchAuxMemoryBytes(size_t k, ui32 efSearch) const {
+            const auto rows = Graph->Keys.size();
+            const auto changes = ChangeCount();
+            const auto graphK = Min(k, rows) + Min(changes, rows - Min(k, rows));
+            const auto candidates = Min(Max<size_t>(efSearch, graphK), rows);
+            const auto queues = SaturatingMultiply(SaturatingAdd(candidates, changes), 256);
+            const auto query = SaturatingAdd(SaturatingMultiply(Graph->Dimension, 2 * sizeof(float)), 4096);
+            return SaturatingAdd(queues, query);
         }
 
         size_t Size() const {
@@ -640,11 +709,19 @@ namespace NKikimr::NDataShard {
         return Impl->Graph.use_count();
     }
 
-    void THnswIndex::SetGraphReservation(std::shared_ptr<void> reservation, bool deferDeletion) {
+    void THnswIndex::SetGraphReservation(std::shared_ptr<void> reservation,
+            std::shared_ptr<THnswCacheMemoryTracker> tracker, bool deferDeletion) {
         Y_ENSURE(reservation && !Impl->Graph->Reservation && Impl->Graph.use_count() == 1,
             "Install the graph reservation before sharing storage");
         Impl->Graph->DeferDeletion = deferDeletion;
         Impl->Graph->Reservation = std::move(reservation);
+        Impl->Graph->MemoryTracker = std::move(tracker);
+    }
+
+    void THnswIndex::SetGraphMemoryTracker(std::shared_ptr<THnswCacheMemoryTracker> tracker, ui64 owner) {
+        Y_ENSURE(Impl->Graph.use_count() == 1 && !Impl->Graph->MemoryTracker);
+        Impl->Graph->MemoryTracker = std::move(tracker);
+        Impl->Graph->MemoryOwner = owner;
     }
 
     void THnswIndex::SaveGraph(std::ostream& output) const {
@@ -929,6 +1006,10 @@ namespace NKikimr::NDataShard {
 
     size_t THnswIndex::Dimension() const {
         return Impl->Dim();
+    }
+
+    size_t THnswIndex::EstimatedSearchMemoryBytes(size_t k, ui32 efSearch) const {
+        return Impl->EstimatedSearchMemoryBytes(k, efSearch);
     }
 
     size_t THnswIndex::EstimatedMemoryBytes() const {

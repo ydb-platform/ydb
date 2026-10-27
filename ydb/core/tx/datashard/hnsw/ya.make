@@ -6,7 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos/hnsw
     ydb/core/base
     ydb/core/tx/datashard/hnsw_index
     ydb/library/actors/core

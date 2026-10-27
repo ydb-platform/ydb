@@ -702,6 +702,9 @@ namespace NKikimr::NDataShard {
         if (!index->HasGraphReservation()) {
             index->SetGraphReservation(std::move(memoryReservation));
         }
+        if (!IsFollower()) {
+            index->SetGraphMemoryTracker(HnswCacheMemoryTracker, entry.MemoryOwner);
+        }
         entry.Generations.push_back(index);
         if (entry.Index && entry.Index->GetBaseVersion() != baseVersion) {
             entry.Retained.push_back(std::move(entry.Index));
@@ -833,7 +836,12 @@ namespace NKikimr::NDataShard {
             return;
         }
         const auto low = SnapshotManager.GetLowWatermark();
-        const auto floor = GetHnswBuildVersion();
+        const auto followerEdge = SnapshotManager.GetFollowerReadEdge().first;
+        // The follower edge can remain behind the current read version on an
+        // idle table. Keep history for that stale snapshot as it advances.
+        const auto floor = IsFollower() || HasFollowers()
+            ? Min(GetHnswBuildVersion(), followerEdge)
+            : GetHnswBuildVersion();
         THashMap<ui32, std::vector<TRowVersion>> readVersions;
         ForEachHnswIndexEntry([&](ui32 tid, const TPathId&, auto& entry) {
             if (IsFollower() && entry.Building) {
@@ -902,7 +910,10 @@ namespace NKikimr::NDataShard {
             // Readers, stored snapshots and builds pin their versions directly.
             // Advancing the floor is constant time; Set compacts just this key.
             if (!IsFollower()) {
-                entry.Changes->AdvanceRetentionFloor(GetHnswBuildVersion());
+                const auto floor = GetHnswBuildVersion();
+                entry.Changes->AdvanceRetentionFloor(HasFollowers()
+                    ? Min(floor, SnapshotManager.GetFollowerReadEdge().first)
+                    : floor);
             }
             entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector), std::move(change.MemoryReservation));
         }

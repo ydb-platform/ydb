@@ -79,6 +79,45 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
     Execute(CreateTxBilling(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx) {
+    const auto id = TIndexBuildId(ev->Get()->BuildId);
+    const auto it = IndexBuilds.find(id);
+    if (it == IndexBuilds.end()) {
+        return;
+    }
+    auto& buildInfo = *it->second;
+    buildInfo.HnswProgressScheduled = false;
+    if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone) {
+        Execute(CreateTxProgress(id), ctx);
+    }
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvHnswReplicaStatus::TPtr& ev, const TActorContext& ctx) {
+    const auto& result = ev->Get()->Record;
+    if (!ev->Get()->IndexBuild) {
+        const TOperationId id(TTxId(result.GetOperationTxId()), TSubTxId(result.GetOperationPartId()));
+        if (const auto* state = FindTx(id); state && state->State == TTxState::WaitHnswReplicas) {
+            Execute(CreateTxOperationReply(id, ev), ctx);
+        }
+        return;
+    }
+    const auto id = TIndexBuildId(result.GetOperationTxId());
+    const auto it = IndexBuilds.find(id);
+    if (it == IndexBuilds.end()) {
+        return;
+    }
+    auto& build = *it->second;
+    if (build.State != TIndexBuildInfo::EState::Applying || !build.ApplyTxDone
+            || !build.HnswProbeInFlight || ev->Sender != build.HnswProbeActor
+            || result.GetRound() != build.HnswProbeRound) {
+        return;
+    }
+    build.HnswProbeInFlight = false;
+    build.HnswReplicasReady = result.GetReady();
+    build.HnswCheckpoints.assign(result.GetCheckpoints().begin(), result.GetCheckpoints().end());
+    Execute(CreateTxProgress(id), ctx);
+}
+
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ENSURE(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);

@@ -56,17 +56,34 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
-bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
-    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+bool PrepareNextBuildableIndex(TSchemeShard* ss, TItem& item) {
+    if (!item.Table || !item.DstPathId) {
         return false;
     }
 
-    while (item.NextIndexIdx < item.Table->indexes_size() &&
-           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
-        ++item.NextIndexIdx;
+    const TPath tablePath = TPath::Init(item.DstPathId, ss);
+    if (!tablePath.IsResolved()) {
+        return false;
     }
 
-    return item.NextIndexIdx < item.Table->indexes_size();
+    while (item.NextIndexIdx < item.Table->indexes_size()) {
+        const auto& index = item.Table->indexes(item.NextIndexIdx);
+        if (NTableIndex::IsLocalTableIndex(index.type_case())) {
+            ++item.NextIndexIdx;
+            continue;
+        }
+
+        const auto indexPath = tablePath.Child(index.name());
+        if (indexPath.IsResolved() && !indexPath.IsDeleted()) {
+            // Already materialized or built.
+            ++item.NextIndexIdx;
+            continue;
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
@@ -1387,8 +1404,32 @@ private:
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         } else if (item.Table) {
             TString error;
-            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+            TVector<TString> indexesToBuild;
+            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error, indexesToBuild)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
+            }
+
+            if (!indexesToBuild.empty()) {
+                THashSet<TString> warned;
+                THashSet<TString> toBuild(indexesToBuild.begin(), indexesToBuild.end());
+                for (auto it = item.MaterializedIndexes.begin(); it != item.MaterializedIndexes.end(); ) {
+                    const auto& prefix = it->first.ImplTablePrefix;
+                    const auto pos = prefix.find('/');
+                    const TString indexName = pos == TString::npos ? prefix : prefix.substr(0, pos);
+                    if (toBuild.contains(indexName)) {
+                        if (!warned.contains(indexName)) {
+                            if (item.Issue) {
+                                item.Issue += "\n";
+                            }
+                            item.Issue += TStringBuilder() << "index '" << indexName
+                                << "' scheme is incompatible with the backup, so it will be built from the table data";
+                            warned.insert(indexName);
+                        }
+                        it = item.MaterializedIndexes.erase(it);
+                    } else {
+                        it++;
+                    }
+                }
             }
         }
 
@@ -1979,7 +2020,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                if (PrepareNextBuildableIndex(Self, item)) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -2010,7 +2051,7 @@ private:
             if (item.Table) {
                 ++item.NextIndexIdx;
             }
-            if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+            if (PrepareNextBuildableIndex(Self, item)) {
                 AllocateTxId(*importInfo, itemIdx);
             } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                        AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

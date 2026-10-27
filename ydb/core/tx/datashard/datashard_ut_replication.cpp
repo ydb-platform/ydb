@@ -2,7 +2,9 @@
 #include "const.h"
 #include "datashard_active_transaction.h"
 #include "datashard_ut_common_kqp.h"
+#include "datashard_user_table.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
@@ -16,6 +18,93 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardReplication) {
+
+    Y_UNIT_TEST_TWIN(IncrementalRestoreConfigSurvivesSchemaAlter, WeakConsistency) {
+        NKikimrSchemeOp::TTableDescription schema;
+        schema.SetName("table-1");
+        schema.SetPath("/Root/table-1");
+        auto& config = *schema.MutableIncrementalBackupConfig();
+        config.SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+        config.SetConsistency(WeakConsistency
+            ? NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK
+            : NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_STRONG);
+        const TUserTable original(1, schema, 0);
+
+        NKikimrSchemeOp::TTableDescription delta;
+        delta.SetName("table-1");
+        delta.MutableIncrementalBackupConfig()->CopyFrom(config);
+        const TUserTable altered(original, delta);
+        NKikimrSchemeOp::TTableDescription persisted;
+        altered.GetSchema(persisted);
+        UNIT_ASSERT(persisted.HasIncrementalBackupConfig());
+        UNIT_ASSERT(!persisted.HasReplicationConfig());
+
+        const TUserTable restored(1, persisted, 0);
+        UNIT_ASSERT(restored.IsIncrementalRestore());
+        UNIT_ASSERT(!restored.IsReplicated());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(restored.IncrementalBackupConfig.Consistency),
+            static_cast<ui32>(config.GetConsistency()));
+    }
+
+    Y_UNIT_TEST_TWIN(AttachedReplicationSurvivesRestart, GlobalConsistency) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);");
+
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetWorkingDir("/Root");
+        tx.SetInternal(true);
+        auto& desc = *tx.MutableAlterTable();
+        desc.SetName("table-1");
+        auto& config = *desc.MutableReplicationConfig();
+        config.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        config.SetConsistencyLevel(GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        const auto altered = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(altered->Get()->Record.GetStatus(),
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+        WaitTxNotification(server, sender, altered->Get()->Record.GetTxId());
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        UNIT_ASSERT(tableId.SchemaVersion);
+        const auto apply = [&](i64 offset, ui32 value) {
+            const ui64 writeTxId = GlobalConsistency ? 123 + offset : 0;
+            ApplyChanges(server, shards.at(0), tableId, "my-source", {
+                TChange{ .Offset = offset, .WriteTxId = writeTxId,
+                    .Key = 1, .Value = value },
+            });
+            if (GlobalConsistency) {
+                CommitWrites(server, {"/Root/table-1"}, writeTxId);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+                TStringBuilder() << "key = 1, value = " << value << "\n");
+        };
+        apply(0, 11);
+        RebootTablet(runtime, shards.at(0), sender);
+        apply(1, 12);
+
+        WaitTxNotification(server, sender, AsyncAlterDropReplicationConfig(server, "/Root", "table-1"));
+        RebootTablet(runtime, shards.at(0), sender);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 13);");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 13\n");
+        ApplyChanges(server, shards.at(0), ResolveTableId(server, sender, "/Root/table-1"), "my-source", {
+            TChange{ .Offset = 2, .WriteTxId = 0, .Key = 1, .Value = 14 },
+        }, NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST);
+    }
 
     Y_UNIT_TEST(SimpleApplyChanges) {
         TPortManager pm;

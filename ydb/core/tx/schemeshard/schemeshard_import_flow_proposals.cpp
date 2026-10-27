@@ -1,11 +1,13 @@
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_helpers.h"
 
+#include "index/index_utils.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -14,6 +16,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <google/protobuf/util/time_util.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -44,12 +48,72 @@ static bool FillDefaultValues(
     return true;
 }
 
+namespace {
+
+// Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into
+// the index as it would be created in this database. Returns false (and fills `error`) when they
+// cannot - for example when a backup of a compact fulltext index is restored with
+// EnableCompactFulltextIndex off. Such an index must not be materialized.
+bool CheckIndexMaterializationCompatible(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    const TImportInfo::TItem& item,
+    TString& error
+) {
+    THashMap<TString, NKikimrSchemeOp::TTableDescription> expected;
+    for (auto& tbl: NTableIndex::CalcIndexImplTables(baseTable, indexDesc)) {
+        expected[tbl.GetName()] = std::move(tbl);
+    }
+
+    const TString indexPrefix = TStringBuilder() << indexDesc.GetName() << "/";
+    for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
+        if (!metadata.ImplTablePrefix.StartsWith(indexPrefix)) {
+            continue;
+        }
+
+        const TString implTableName = metadata.ImplTablePrefix.substr(indexPrefix.size());
+        auto expectedIt = expected.find(implTableName);
+        if (expectedIt == expected.end()) {
+            error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
+                << "' has an impl table '" << implTableName << "' unexpected in this database";
+            return false;
+        }
+
+        NKikimrSchemeOp::TTableDescription backupDesc;
+        Ydb::StatusIds::StatusCode status;
+        TString parseError;
+        if (!FillColumnDescription(backupDesc, scheme.columns(), status, error)) {
+            error = TStringBuilder() << "cannot parse the materialized scheme of '" << metadata.ImplTablePrefix
+                << "': " << parseError;
+            return false;
+        }
+        backupDesc.MutableKeyColumnNames()->CopyFrom(scheme.primary_key());
+
+        google::protobuf::util::MessageDifferencer diff;
+        // TypeId is redundant with Type, and the backup scheme is parsed without it.
+        diff.IgnoreField(NKikimrSchemeOp::TColumnDescription::descriptor()->FindFieldByName("TypeId"));
+        if (!std::equal(backupDesc.GetColumns().begin(), backupDesc.GetColumns().end(),
+                expectedIt->second.GetColumns().begin(), [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
+            !std::equal(backupDesc.GetKeyColumnNames().begin(), backupDesc.GetKeyColumnNames().end(),
+                expectedIt->second.GetKeyColumnNames().begin())) {
+            error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
+                << "' has a scheme incompatible with this database";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+} // namespace
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
     ui32 itemIdx,
-    TString& error
+    TString& error,
+    TVector<TString>& indexesToBuild
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
@@ -99,6 +163,65 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
+        // Indexes whose materialized data in the backup does not fit the layout created in this
+        // database (e.g. a compact fulltext index restored with EnableCompactFulltextIndex off) are
+        // not created materialized here. Instead they are left out of the create request and built
+        // from the restored table data afterwards (see PrepareNextBuildableIndex).
+        if (indexedTable.IndexDescriptionSize()) {
+            const auto& baseTable = indexedTable.GetTableDescription();
+
+            // An index is materialized if the backup has impl tables for it. Before the impl-table
+            // items are created this is known from the downloaded schemes; afterwards (and after a
+            // restart) - from the already created impl-table child items.
+            THashSet<TString> materializedIndexes;
+            if (item.MaterializedIndexes.empty()) {
+                const TString prefix = TStringBuilder() << item.DstPathName << "/";
+                for (ui32 childIdx : item.ChildItems) {
+                    if (childIdx >= importInfo.Items.size()) {
+                        continue;
+                    }
+                    const TString& childPath = importInfo.Items[childIdx].DstPathName;
+                    if (!childPath.StartsWith(prefix)) {
+                        continue;
+                    }
+                    const auto start = prefix.size();
+                    const auto end = childPath.find('/', start);
+                    materializedIndexes.insert(childPath.substr(start, end == TString::npos ? end : end - start));
+                }
+            } else {
+                for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
+                    auto pos = metadata.ImplTablePrefix.find('/');
+                    materializedIndexes.insert(pos == TStringBuf::npos ? metadata.ImplTablePrefix : metadata.ImplTablePrefix.substr(0, pos));
+                }
+            }
+
+            std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
+            compatible.reserve(indexedTable.IndexDescriptionSize());
+            for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+                TString indexError;
+                bool ok = materializedIndexes.contains(indexDesc.GetName());
+                if (ok && !item.MaterializedIndexes.empty()) {
+                    ok = CheckIndexMaterializationCompatible(baseTable, indexDesc, item, indexError);
+                }
+                if (ok) {
+                    compatible.push_back(indexDesc);
+                } else {
+                    indexesToBuild.push_back(indexDesc.GetName());
+                    YDB_LOG_WARN("TImport: will build an index instead of restoring it",
+                        {"index", indexDesc.GetName()},
+                        {"reason", indexError},
+                    );
+                }
+            }
+            if (compatible.size() != static_cast<size_t>(indexedTable.IndexDescriptionSize())) {
+                auto* descs = indexedTable.MutableIndexDescription();
+                descs->Clear();
+                for (auto& desc : compatible) {
+                    *descs->Add() = desc;
+                }
+            }
+        }
+
         if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }
@@ -125,7 +248,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 ) {
     TString unused;
-    return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
+    TVector<TString> unusedIndexesToBuild;
+    return CreateTablePropose(ss, txId, importInfo, itemIdx, unused, unusedIndexesToBuild);
 }
 
 template <typename TPath>
@@ -175,6 +299,7 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     const Ydb::Table::CreateTableRequest& scheme
 ) {
     NKikimrSchemeOp::TTableDescription tableDesc;
+    tableDesc.Clear();
     tableDesc.MutableKeyColumnNames()->CopyFrom(src.GetKeyColumnNames());
     tableDesc.MutableKeyColumnIds()->CopyFrom(src.GetKeyColumnIds());
 

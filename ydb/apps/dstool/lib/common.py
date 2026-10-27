@@ -1044,7 +1044,7 @@ def deserialize_fail_domain(s):
     return res
 
 
-def pdisk_matches_storage_pool(pdisk, sp):
+def pdisk_matches_storage_pool(pdisk, sp, location=None):
     if pdisk.BoxId != sp.BoxId:
         return False
 
@@ -1061,6 +1061,12 @@ def pdisk_matches_storage_pool(pdisk, sp):
                     break
             elif prop.HasField('Kind'):
                 if prop.Kind != pdisk.Kind:
+                    break
+            elif prop.HasField('Location'):
+                if location is None or not all(
+                    location.HasField(field.name) and getattr(location, field.name) == value
+                    for field, value in prop.Location.ListFields()
+                ):
                     break
             else:
                 print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
@@ -1178,12 +1184,15 @@ def build_pdisk_static_slots_map(base_config):
 
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
+    node_locations = {node.NodeId: node.Location for node in base_config.Node} if storage_pool is not None else {}
 
     group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
 
     pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
-        if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
+        if storage_pool is not None and not pdisk_matches_storage_pool(
+            pdisk, storage_pool, node_locations.get(pdisk.NodeId)
+        ):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots

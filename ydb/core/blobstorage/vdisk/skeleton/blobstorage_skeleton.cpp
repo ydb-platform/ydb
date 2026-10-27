@@ -139,26 +139,6 @@ namespace NKikimr {
         // Some stuff to handle a case when we can't accept TEvVPut requests
         // because of (fresh) compaction overload
         ////////////////////////////////////////////////////////////////////////
-        static bool BlockWrites(NKikimrBlobStorage::TGroupDecommitStatus::E status) {
-            switch (status) {
-                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
-                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
-                    return false;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
-                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
-                    return true;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
-                    return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
-
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_ABORT();
-                    return true;
-            }
-        }
-
         template<typename TEvent>
         bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
             if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
@@ -167,9 +147,10 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
             } else if (Config->BaseInfo.ReadOnly) {
                 ReplyError(NKikimrProto::ERROR, "disk is in readonly mode", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (BlockWrites(GInfo->DecommitStatus)) {
+            } else if (GInfo->DecommitBlocksWrites()) {
                 if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVCollectGarbage>) {
-                    if (const auto& r = ev->Get()->Record; r.GetHard() && r.GetRecordGeneration() == Max<ui32>()) {
+                    if (const auto& r = ev->Get()->Record;
+                            TBlobStorageGroupInfo::IsAssimilationBarrier(r.GetHard(), r.GetRecordGeneration())) {
                         return true; // part of an assimilation process
                     }
                 }
@@ -1914,7 +1895,7 @@ namespace NKikimr {
         void ProcessAssimilation(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx, bool waitForLog) {
             if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (!BlockWrites(GInfo->DecommitStatus) && !ev->Get()->Record.GetIgnoreDecommitState()) {
+            } else if (!GInfo->DecommitBlocksWrites() && !ev->Get()->Record.GetIgnoreDecommitState()) {
                 ReplyError(NKikimrProto::ERROR, "decommission didn't start yet", ev, ctx, TAppData::TimeProvider->Now());
             } else if (const auto lsn = LoggedRecsVault.GetLastLsnInFlight(); waitForLog && lsn) {
                 // Requests admitted before a group generation change may still be logging. Their successful
@@ -2518,7 +2499,7 @@ namespace NKikimr {
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
                                                           MinHugeBlobInBytes,
-                                                          Db->GetVDiskIncarnationGuid());
+                                                          Db->GetVDiskIncarnationGuid(true));
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
             UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
@@ -3247,6 +3228,13 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
+            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                // An excluded realm must answer requests, but must not start recovery or background work.
+                SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
+                    NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                UpdateWhiteboard(ctx);
+                return;
+            }
             // generation independent self VDisk Id
             auto genIndSelfVDiskId = SelfVDiskId;
             genIndSelfVDiskId.GroupGeneration = -1;

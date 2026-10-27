@@ -193,6 +193,14 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
         UNIT_ASSERT(hasUserAttributes);
     }
 
+    Y_UNIT_TEST(GetAllowedYdbSysColumnsReturnsEmptyWhenForbidden) {
+        auto columns = GetAllowedYdbSysColumns(true, /* allowYdbSysColumns */ false);
+        UNIT_ASSERT(columns.empty());
+
+        auto columnsOldPath = GetAllowedYdbSysColumns(false, /* allowYdbSysColumns */ false);
+        UNIT_ASSERT(columnsOldPath.empty());
+    }
+
     Y_UNIT_TEST(YdbSysColumnToOldSysColumn) {
         {
             // Non-transparent field

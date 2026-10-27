@@ -34,7 +34,8 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
             executor->Start();
             executor->Stop();
 
-            executor->ExecuteSimple([alive = std::move(alive), &ran] { ran = true; });
+            executor->ExecuteSimple([alive = std::move(alive), &ran]
+                                    { ran = true; });
         }
         UNIT_ASSERT_C(weak.expired(), "a task enqueued after Stop was leaked");
         UNIT_ASSERT_C(!ran, "a task enqueued after Stop was executed");
@@ -51,10 +52,17 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
             executor->Start();
             executor->Stop();
 
-            future = executor->Execute([alive = std::move(alive), &ran] { ran = true; return 42; });
+            future = executor->Execute(
+                [alive = std::move(alive), &ran]
+                {
+                    ran = true;
+                    return 42;
+                });
         }
         // The captures are released; the future is not completed.
-        UNIT_ASSERT_C(weak.expired(), "a future task enqueued after Stop was leaked");
+        UNIT_ASSERT_C(
+            weak.expired(),
+            "a future task enqueued after Stop was leaked");
         UNIT_ASSERT_C(!ran, "a future task enqueued after Stop was executed");
         UNIT_ASSERT(!future.HasValue() && !future.HasException());
     }

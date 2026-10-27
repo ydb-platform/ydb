@@ -1410,6 +1410,38 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(ClientModificationsSendMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& flags = KikimrServer->GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableSQSMigrationCompatibility(false);
+        flags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto created = CreateQueue({{"QueueName", "ClientModifications"}});
+        auto queueUrl = GetByPath<TString>(created, "QueueUrl");
+        for (bool enableClientModifications : {false, true}) {
+            flags.SetEnableClientModifications(enableClientModifications);
+
+            auto single = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
+            auto batch = SendMessageBatch({
+                {"QueueUrl", queueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "first"}, {"MessageBody", "first"}},
+                    NJson::TJsonMap{{"Id", "second"}, {"MessageBody", "second"}}
+                }}
+            }, enableClientModifications ? 200 : 400);
+
+            if (enableClientModifications) {
+                UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+                UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+            } else {
+                for (const auto* result : {&single, &batch}) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);

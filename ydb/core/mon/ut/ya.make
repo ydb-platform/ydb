@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 PEERDIR(
+    ydb/core/client/server
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default

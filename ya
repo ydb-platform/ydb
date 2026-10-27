@@ -349,7 +349,12 @@ def main():
         """match by max prefix length, prefer shortest"""
 
         def _key_for_platform(platform):
-            return len(os.path.commonprefix([target_platform, platform])), -len(platform)
+            prefix_length = 0
+            for target_char, platform_char in zip(target_platform, platform):
+                if target_char != platform_char:
+                    break
+                prefix_length += 1
+            return prefix_length, -len(platform)
 
         return _key_for_platform
 

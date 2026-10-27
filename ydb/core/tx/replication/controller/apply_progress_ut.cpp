@@ -195,6 +195,89 @@ Y_UNIT_TEST_SUITE(ReplicationApplyProgress) {
         env.GetRuntime().RegisterService(MakeTxProxyID(), proxy);
     }
 
+    void CheckPendingCommitRestart(bool loseDeletion) {
+        TApplyEnv env;
+        env.WaitState(TProgress::WAITING_HEARTBEATS);
+        auto& runtime = env.GetRuntime();
+        const auto pathId = env.GetPathId("/Root/replication");
+        auto ids = env.Send<TEvService::TEvTxIdResult>(env.TabletId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(1, 0)}));
+        const auto writeTxId = ids->Get()->Record.GetVersionTxIds(0).GetTxId();
+        const auto proxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto commitGate = runtime.Register(new TEventGate(proxy, env.GetSender(), [](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType
+                && ev.Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction().HasCommitWrites();
+        }));
+        runtime.RegisterService(MakeTxProxyID(), commitGate);
+        const auto describe = [&] {
+            auto request = new TEvController::TEvDescribeReplication();
+            pathId.ToProto(request->Record.MutablePathId());
+            request->Record.MutableRequestedAppliedVersion()->set_step(10000);
+            return env.Send<TEvController::TEvDescribeReplicationResult>(env.TabletId, request)->Get()->Record.GetApplyProgress();
+        };
+        const auto complete = [&] {
+            auto status = new TEvTxUserProxy::TEvProposeTransactionStatus();
+            status->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+            runtime.Send(new IEventHandle(env.Controller, env.GetSender(), status, 0, writeTxId));
+        };
+        env.Heartbeat(TRowVersion(10000, 0));
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ui32(describe().state()), ui32(TProgress::WAITING_COMMITS));
+        if (loseDeletion) {
+            auto info = env.Send<TEvHive::TEvGetTabletStorageInfoResult>(Tests::Hive,
+                new TEvHive::TEvGetTabletStorageInfo(env.TabletId));
+            UNIT_ASSERT_VALUES_EQUAL(info->Get()->Record.GetStatus(), NKikimrProto::OK);
+            const auto& channel = info->Get()->Record.GetInfo().GetChannels(0);
+            const auto service = MakeBlobStorageProxyID(channel.GetHistory(channel.HistorySize() - 1).GetGroupID());
+            const auto original = runtime.GetLocalServiceId(service);
+            const auto tabletId = env.TabletId;
+            const auto gate = runtime.Register(new TEventGate(original, env.GetSender(), [tabletId](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == TEvBlobStorage::TEvPut::EventType
+                    && ev.Get<TEvBlobStorage::TEvPut>()->Id.TabletID() == tabletId;
+            }));
+            runtime.RegisterService(service, gate);
+            complete();
+            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+            auto request = new TEvController::TEvDescribeReplication();
+            pathId.ToProto(request->Record.MutablePathId());
+            request->Record.MutableRequestedAppliedVersion()->set_step(10000);
+            auto promise = NThreading::NewPromise<NKikimrReplication::TEvDescribeReplicationResult>();
+            auto future = promise.GetFuture();
+            runtime.Send(new IEventHandle(env.Controller, runtime.Register(new TDescribeReplyCatcher(promise)), request));
+            UNIT_ASSERT_C(!future.Wait(TDuration::MilliSeconds(100)), "APPLIED replied before TxIds deletion was durable");
+            // Simulate losing the old generation's unpersisted redo on crash.
+            // Keep its Put held forever; the new generation uses the real proxy.
+            runtime.RegisterService(service, original);
+        }
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        auto handshake = runtime.GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
+        UNIT_ASSERT(handshake->Sender != env.Controller);
+        env.Controller = handshake->Sender;
+        env.SendAsync(env.Controller, new TEvService::TEvStatus());
+        // Fresh enumeration must trigger retry of the persisted assigned TxId,
+        // using the persisted heartbeat and no new writer heartbeat.
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        TProgress progress;
+        do {
+            progress = describe();
+            UNIT_ASSERT_C(progress.state() != TProgress::APPLIED,
+                "APPLIED before persisted assigned transaction was recommitted");
+            if (progress.state() == TProgress::WAITING_COMMITS && progress.commit_in_progress()) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        } while (TInstant::Now() < deadline);
+        UNIT_ASSERT_VALUES_EQUAL_C(ui32(progress.state()), ui32(TProgress::WAITING_COMMITS), progress.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(progress.assigned_transactions(), 1);
+        UNIT_ASSERT(progress.commit_in_progress());
+        complete();
+        env.WaitState(TProgress::APPLIED);
+        runtime.RegisterService(MakeTxProxyID(), proxy);
+    }
+
+    Y_UNIT_TEST(PendingCommitSurvivesRestart) { CheckPendingCommitRestart(false); }
+    Y_UNIT_TEST(UnpersistedCommitDeletionSurvivesRestart) { CheckPendingCommitRestart(true); }
+
     Y_UNIT_TEST(WaitsForAllTables) {
         TApplyEnv env(2);
         env.WaitState(TProgress::WAITING_HEARTBEATS);

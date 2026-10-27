@@ -1,34 +1,37 @@
 #include "schema.h"
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NSchemeShard {
 
-bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
+bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& errors) {
     using TRequestedOptions = TOlapOptionsUpdate::TRequestedOptions;
-    // Resets are applied first: the field is cleared so the columnshard falls back to its defaults
-    for (const auto option : schemaUpdate.GetResetOptions()) {
-        switch (option) {
-            case TRequestedOptions::SCHEME_NEED_ACTUALIZATION:
-                SchemeNeedActualization = false;
-                break;
-            case TRequestedOptions::COMPACTION_PLANNER:
-                CompactionPlannerConstructor = {};
-                break;
-            case TRequestedOptions::METADATA_MEMORY_MANAGER:
-                MetadataManagerConstructor = {};
-                break;
-            case TRequestedOptions::SCAN_READER_POLICY_NAME:
-                ScanReaderPolicyName.reset();
-                break;
-            case TRequestedOptions::DEDUPLICATION_ENABLED:
-                DeduplicationEnabled.reset();
-                break;
-            case TRequestedOptions::INSERT_OPTIONS:
-                InsertOptions = {};
-                break;
-            case TRequestedOptions::CACHE_BLOBS_AFTER_WRITE:
-                CacheBlobsAfterWrite.reset();
-                break;
+    const auto resetOption = [&](const TRequestedOptions::EOption option, const bool isSet, auto& value) {
+        if (!schemaUpdate.GetResetOptions().contains(option)) {
+            return true;
         }
+        if (isSet) {
+            errors.AddError(NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "option " << TRequestedOptions::EOption_Name(option) << " is both set and reset");
+            return false;
+        }
+        // Clear the override so the columnshard falls back to its defaults.
+        value = {};
+        return true;
+    };
+    if (!resetOption(
+            TRequestedOptions::SCHEME_NEED_ACTUALIZATION, schemaUpdate.GetSchemeNeedActualization().has_value(), SchemeNeedActualization) ||
+        !resetOption(
+            TRequestedOptions::COMPACTION_PLANNER, schemaUpdate.GetCompactionPlannerConstructor().HasObject(), CompactionPlannerConstructor) ||
+        !resetOption(
+            TRequestedOptions::METADATA_MEMORY_MANAGER, schemaUpdate.GetMetadataManagerConstructor().HasObject(), MetadataManagerConstructor) ||
+        !resetOption(TRequestedOptions::SCAN_READER_POLICY_NAME, schemaUpdate.GetScanReaderPolicyName().has_value(), ScanReaderPolicyName) ||
+        !resetOption(TRequestedOptions::DEDUPLICATION_ENABLED, schemaUpdate.GetDeduplicationEnabled().has_value(), DeduplicationEnabled) ||
+        !resetOption(TRequestedOptions::INSERT_OPTIONS,
+            schemaUpdate.GetInsertOptionsBuildIndexesEnabled().has_value() ||
+                schemaUpdate.GetInsertOptionsBuildIndexesMinBlobBytes().has_value(), InsertOptions) ||
+        !resetOption(TRequestedOptions::CACHE_BLOBS_AFTER_WRITE, schemaUpdate.GetCacheBlobsAfterWrite().has_value(), CacheBlobsAfterWrite)) {
+        return false;
     }
     if (schemaUpdate.GetSchemeNeedActualization()) {
         SchemeNeedActualization = *schemaUpdate.GetSchemeNeedActualization();
@@ -120,4 +123,4 @@ bool TOlapOptionsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
     return true;
 }
 
-}
+}   // namespace NKikimr::NSchemeShard

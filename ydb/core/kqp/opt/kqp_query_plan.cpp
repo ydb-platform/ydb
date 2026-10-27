@@ -3254,6 +3254,11 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
+        // Unsafe truncate runs in a separate executer and has no DQ execution plan.
+        if (GetTableTruncateSettings(tx)) {
+            return;
+        }
+
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
         TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);

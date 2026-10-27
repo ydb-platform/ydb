@@ -47,6 +47,9 @@ constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
+constexpr TStringBuf KqpTableTruncateSinkName = "KqpTableTruncateSink";
+
+NNodes::TMaybeNode<NNodes::TKqpTableTruncateSettings> GetTableTruncateSettings(const NNodes::TKqpPhysicalTx& tx);
 
 enum class EStreamLookupStrategyType {
     Unspecified,

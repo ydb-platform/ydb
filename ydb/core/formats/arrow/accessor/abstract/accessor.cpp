@@ -160,13 +160,14 @@ TString IChunkedArray::TReader::DebugString(const ui32 position) const {
     return NArrow::DebugString(address.GetArray(), address.GetPosition());
 }
 
-std::partial_ordering IChunkedArray::TReader::CompareColumns(
-    const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition) {
+std::partial_ordering IChunkedArray::TReader::CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r,
+    const ui64 rPosition, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
     AFL_VERIFY(l.size() == r.size());
+    AFL_VERIFY(logicalTypes.size() == l.size());
     for (ui32 i = 0; i < l.size(); ++i) {
         const TAddress lAddress = l[i].GetReadChunk(lPosition);
         const TAddress rAddress = r[i].GetReadChunk(rPosition);
-        auto cmp = lAddress.Compare(rAddress);
+        auto cmp = lAddress.Compare(rAddress, logicalTypes[i]);
         if (std::is_neq(cmp)) {
             return cmp;
         }
@@ -183,17 +184,17 @@ IChunkedArray::TAddress IChunkedArray::TReader::GetReadChunk(const ui64 position
     return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), CurrentChunkAddress->GetAddress().GetLocalIndex(position));
 }
 
-const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& item) const {
-    return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
+const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& item, const NScheme::TTypeInfo& logicalType) const {
+    return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position, logicalType);
 }
 
-
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
-    const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {
+    const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const NScheme::TTypeInfo& logicalType) const {
     AFL_VERIFY(Address.Contains(position))("pos", position)("start", Address.DebugString());
     AFL_VERIFY(item.Address.Contains(itemPosition))("pos", itemPosition)("start", item.Address.DebugString());
     //https://github.com/ydb-platform/ydb/issues/26933
-    return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
+    return TComparator::TypedCompare<false>(
+        *Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition), logicalType);
 }
 
 std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {

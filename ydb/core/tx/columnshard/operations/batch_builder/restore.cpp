@@ -21,7 +21,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
         {"count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0},
         {"taskId", WriteData.GetWriteMeta().GetId()});
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
-    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
+    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes());
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
         request->AddColumn(i);
     }

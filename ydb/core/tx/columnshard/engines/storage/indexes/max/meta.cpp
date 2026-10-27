@@ -12,38 +12,44 @@
 namespace NKikimr::NOlap::NIndexes::NMax {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+    const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
+    const auto& logicalType = column.GetTypeInfo();
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
-            auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar();
+            auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar(logicalType);
             AFL_VERIFY(currentScalar);
-            if (!result || NArrow::ScalarCompare(*result, *currentScalar) == -1) {
+            if (!result || !result->is_valid || (currentScalar->is_valid && NArrow::ScalarCompare(*result, *currentScalar, logicalType) < 0)) {
                 result = currentScalar;
             }
         }
     }
+
     const TString indexData = NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
-    const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& dataType) const {
+std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(const std::vector<TString>& data, const TIndexInfo& indexInfo) const {
+    const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
+    const auto& dataType = column.GetArrowField()->type();
+    const auto& logicalType = column.GetTypeInfo();
     AFL_VERIFY(data.size());
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& d : data) {
         std::shared_ptr<arrow::Scalar> current = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(d, dataType).DetachResult();
-        if (!result || NArrow::ScalarCompare(*result, *current) == -1) {
+        if (!result || !result->is_valid || (current->is_valid && NArrow::ScalarCompare(*result, *current, logicalType) < 0)) {
             result = current;
         }
     }
+
     return result;
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
-    auto scalar = GetMaxScalarVerified({ data }, indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+    auto scalar = GetMaxScalarVerified({ data }, indexInfo);
     return scalar->ToString();
 }
 

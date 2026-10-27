@@ -49,7 +49,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
 
-    virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) override;
+    virtual bool DoDeserializeFromProto(
+        const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes) override;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const override;
     virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const override;
     virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const override;

@@ -12,7 +12,9 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
+    const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
+    AFL_VERIFY(keyColumns.size() == logicalTypes.size());
     std::optional<i64> count;
     for (auto&& i : keyColumns) {
         AFL_VERIFY(i);
@@ -26,7 +28,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
     std::vector<TRawReplaceKey> points;
     points.reserve(*count);
     for (int i = 0; i < *count; ++i) {
-        points.push_back(TRawReplaceKey(&keyColumns, i));
+        points.push_back(TRawReplaceKey(&keyColumns, i, logicalTypes));
     }
 
     bool haveNulls = false;
@@ -84,10 +86,10 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<arrow::Schema>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
     auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
-    return MakeSortPermutation(keyBatch->columns(), andUnique);
+    return MakeSortPermutation(keyBatch->columns(), logicalTypes, andUnique);
 }
 
 }   // namespace NKikimr::NArrow

@@ -51,7 +51,8 @@ protected:
     virtual std::optional<ui64> DoGetRawSize() const override {
         return {};
     }
-    virtual TMinMax DoGetMinMaxScalars() const override {
+
+    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& /*logicalType*/) const override {
         Y_ABORT("Not implemented");
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {

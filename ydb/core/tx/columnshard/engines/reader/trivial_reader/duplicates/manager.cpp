@@ -50,7 +50,7 @@ public:
 NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
     NArrow::TGeneralContainer batch(1);
     IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumns());
 }
 
 std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
@@ -98,15 +98,14 @@ TDuplicateManager::TDuplicateManager(
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
-    , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , BordersFlowController(
           std::make_shared<TMergeContext>(
-              std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
-                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
+              std::make_unique<NArrow::NMerger::TMergePartialStream>(LastSchema->GetIndexInfo().GetPrimaryKeyColumns(), nullptr,
+                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumns(),
                   GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
                   GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
               GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
@@ -236,8 +235,8 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> memoryGuard = ev->Get()->ExtractAllocationGuard();
     auto requestGuard = ev->Get()->ExtractRequestGuard();
     TBuildFilterContext columnFetchingRequest(SelfId(), AbortionFlag, constructor->GetRequest()->Get()->GetMaxVersion(),
-        std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
-        std::move(requestGuard), memoryGuard);
+        std::move(portionsToFetch), GetFetchingColumns(), LastSchema, ColumnDataManager, DataAccessorsManager, Counters, std::move(requestGuard),
+        memoryGuard);
     std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(bordersIterator));
     if (InflightExecutors < MaxInflightExecutors) {
         auto startSchedule = executor->ScheduleNext(std::move(columnFetchingRequest));

@@ -24,7 +24,7 @@ protected:
     }
 
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
+        TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& indexInfo) const = 0;
 
     virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,

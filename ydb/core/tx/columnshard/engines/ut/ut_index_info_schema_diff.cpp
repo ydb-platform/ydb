@@ -42,6 +42,28 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropAndAdd() {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
+    Y_UNIT_TEST(PrimaryKeyTypesComeFromLogicalSchema) {
+        auto storages = TTestStoragesManager::GetInstance();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 9));
+        auto schemaV1 = MakeSchemaV1();
+        auto schemaV2 = MakeSchemaV2AfterDropAndAdd();
+        for (auto* schema : { &schemaV1, &schemaV2 }) {
+            *schema->MutableColumns(0) = NArrow::NTest::TTestColumn("timestamp", decimal).SetNullable(false).CreateColumn(1);
+        }
+
+        auto original = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(original);
+        auto updated = TIndexInfo::BuildFromProto(TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2), *original, storages, cache);
+        UNIT_ASSERT(updated);
+        for (const auto* indexInfo : { &*original, &*updated }) {
+            const auto types = indexInfo->GetPrimaryKeyTypes();
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            UNIT_ASSERT(types.front() == indexInfo->GetPrimaryKeyColumns().front().second);
+            UNIT_ASSERT(types.front() == decimal);
+        }
+    }
+
     Y_UNIT_TEST(GetColumnsConsistentAfterDropAndAddColumns) {
         auto storages = TTestStoragesManager::GetInstance();
         auto cache = std::make_shared<TSchemaObjectsCache>();

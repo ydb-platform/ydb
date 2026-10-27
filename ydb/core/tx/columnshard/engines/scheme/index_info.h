@@ -466,6 +466,10 @@ public:
         return PKColumns;
     }
 
+    std::vector<NScheme::TTypeInfo> GetPrimaryKeyTypes() const {
+        return NArrow::ColumnTypes(PKColumns);
+    }
+
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
     }

@@ -394,14 +394,14 @@ bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x) {
     });
 }
 
-bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
-    return ScalarLess(*x, *y);
+    return ScalarLess(*x, *y, logicalType);
 }
 
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
-    return ScalarCompare(x, y) < 0;
+bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType) {
+    return ScalarCompare(x, y, logicalType) < 0;
 }
 
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
@@ -435,42 +435,70 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
     });
 }
 
-int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
+std::partial_ordering ScalarComparePartial(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
 
-    return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
+    std::partial_ordering cmp = std::partial_ordering::equivalent;
+    AFL_VERIFY(SwitchType(x.type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
 
-        std::partial_ordering cmp = std::partial_ordering::equivalent;
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
-            cmp = TComparator::CompareValueNotNull(
-                arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
-                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()));
+            cmp = TComparator::CompareValueNotNull(arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
+                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()), logicalType);
         } else if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            cmp = TComparator::CompareValueNotNull(xval, yval);
+            cmp = TComparator::CompareValueNotNull(xval, yval, logicalType);
         } else {
             Y_ABORT_UNLESS(false);   // TODO: non primitive types
         }
-        // Preserve the scalar API's treatment of unordered floating-point values as equal.
-        return int(cmp > 0) - int(cmp < 0);
-    });
+
+        return true;
+    }));
+
+    return cmp;
 }
 
-int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+std::partial_ordering ScalarComparePartial(
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
+    if (x->type->Equals(y->type)) {
+        return ScalarComparePartial(*x, *y, logicalType);
+    }
+
+    // Predicates may compare different physical types, for example an Int32 column with an Int64 constant.
+    // Keep Arrow's promotion rules instead of narrowing the constant to the column's type.
+    for (const auto& [name, order] : { std::pair{ "less", std::partial_ordering::less }, std::pair{ "greater", std::partial_ordering::greater },
+             std::pair{ "equal", std::partial_ordering::equivalent } }) {
+        const auto result = TStatusValidator::GetValid(arrow::compute::CallFunction(name, { x, y }));
+        const auto& value = result.scalar_as<arrow::BooleanScalar>();
+        if (value.is_valid && value.value) {
+            return order;
+        }
+    }
+
+    return std::partial_ordering::unordered;
+}
+
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType) {
+    const auto cmp = ScalarComparePartial(x, y, logicalType);
+    // Preserve the scalar API's treatment of unordered floating-point values as equal.
+    return int(cmp > 0) - int(cmp < 0);
+}
+
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
-    return ScalarCompare(*x, *y);
+    return ScalarCompare(*x, *y, logicalType);
 }
 
-int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+int ScalarCompareNullable(
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     if (!x && !!y) {
         return -1;
     }
@@ -480,7 +508,7 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
     if (!x && !y) {
         return 0;
     }
-    return ScalarCompare(*x, *y);
+    return ScalarCompare(*x, *y, logicalType);
 }
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {

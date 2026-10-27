@@ -8,9 +8,15 @@
 
 namespace NKikimr::NArrow {
 
+TSimpleRow::TSimpleRow(const NMerger::TSortableBatchPosition& position)
+    : TSimpleRow(position.MakeRecordBatch(), 0, position.GetSorting()->GetLogicalTypes())
+{
+}
+
 std::partial_ordering TSimpleRow::operator<=>(const TSimpleRow& item) const {
     AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema));
-    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema).GetResult();
+    AFL_VERIFY_DEBUG(LogicalTypes == item.LogicalTypes);
+    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema, LogicalTypes).GetResult();
 }
 
 bool TSimpleRow::operator==(const TSimpleRow& item) const {
@@ -34,21 +40,23 @@ std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, con
                                                  "item", item.Schema->field(i)->ToString());
     }
 #endif
-    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema, columnsCount).GetResult();
+    AFL_VERIFY_DEBUG(std::equal(LogicalTypes.begin(), LogicalTypes.begin() + columnsCount, item.LogicalTypes.begin()));
+    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema, LogicalTypes, columnsCount).GetResult();
 }
 
 std::partial_ordering TSimpleRow::CompareNotNull(const TSimpleRow& item) const {
     AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema))("rowSchema", Schema->ToString(true))("itemSchema", item.Schema->ToString(true));
     AFL_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
-    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema).GetResult();
+    AFL_VERIFY_DEBUG(LogicalTypes == item.LogicalTypes);
+    return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema, LogicalTypes).GetResult();
 }
 
 NMerger::TSortableBatchPosition TSimpleRow::BuildSortablePosition(const bool reverse /*= false*/) const {
-    return NMerger::TSortableBatchPosition(ToBatch(), 0, reverse);
+    return NMerger::TSortableBatchPosition(ToBatch(), 0, reverse, LogicalTypes);
 }
 
-TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema) const {
-    return TSimpleRow(Data, schema);
+TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+    return TSimpleRow(Data, schema, logicalTypes);
 }
 
 }   // namespace NKikimr::NArrow

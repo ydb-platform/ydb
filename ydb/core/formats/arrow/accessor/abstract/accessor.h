@@ -186,7 +186,8 @@ public:
 
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
 
-        std::partial_ordering Compare(const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const;
+        std::partial_ordering Compare(
+            const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const NScheme::TTypeInfo& logicalType) const;
 
         TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
             : Array(arr)
@@ -245,7 +246,7 @@ public:
             AFL_VERIFY(position < (ui32)Array->length());
         }
 
-        const std::partial_ordering Compare(const TAddress& item) const;
+        const std::partial_ordering Compare(const TAddress& item, const NScheme::TTypeInfo& logicalType) const;
     };
 
 private:
@@ -292,7 +293,8 @@ protected:
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    virtual TMinMax DoGetMinMaxScalars() const = 0;
+
+    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -444,8 +446,8 @@ public:
         }
 
         TAddress GetReadChunk(const ui64 position) const;
-        static std::partial_ordering CompareColumns(
-            const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition);
+        static std::partial_ordering CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r,
+            const ui64 rPosition, const std::vector<NScheme::TTypeInfo>& logicalTypes);
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
@@ -456,14 +458,14 @@ public:
         return DoGetScalar(index);
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
+    std::shared_ptr<arrow::Scalar> GetMaxScalar(const NScheme::TTypeInfo& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
-        return GetMinMaxScalars().Max();
+        return GetMinMaxScalars(logicalType).Max();
     }
 
-    TMinMax GetMinMaxScalars() const {
+    TMinMax GetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
-        return DoGetMinMaxScalars();
+        return DoGetMinMaxScalars(logicalType);
     }
 
     std::optional<ui64> GetRawSize() const {

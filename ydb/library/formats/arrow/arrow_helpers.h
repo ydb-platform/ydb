@@ -8,6 +8,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <library/cpp/json/writer/json_value.h>
 
+#include <compare>
 #include <map>
 
 namespace NKikimr::NScheme {
@@ -91,12 +92,16 @@ TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x);
 TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x);
 TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x);
 TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x);
-int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
-int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+std::partial_ordering ScalarComparePartial(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
+std::partial_ordering ScalarComparePartial(
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
+int ScalarCompareNullable(
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
-bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
+bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 

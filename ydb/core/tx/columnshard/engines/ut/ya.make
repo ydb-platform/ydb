@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/predicate
+    ydb/core/tx/columnshard/transactions/locks
     yql/essentials/sql/pg_dummy
     yql/essentials/core/arrow_kernels/request
     ydb/core/testlib/default
@@ -54,6 +55,8 @@ SRCS(
     ut_index_blob_size_limit.cpp
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
+    sys_view_keys_ut.cpp
+    tx_event_logical_types_ut.cpp
     helper.cpp
 )
 

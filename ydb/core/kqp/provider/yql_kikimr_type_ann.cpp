@@ -3083,21 +3083,17 @@ private:
             return TStatus::Error;
         }
 
-        static const THashSet<TString> supportedSettings = {"UNSAFE"};
-
         bool unsafe = false;
         for (const auto& setting : node.Settings()) {
-            const auto name = TString(setting.Name().Value());
-            if (!supportedSettings.contains(name)) {
+            const auto name = setting.Name().Value();
+            if (name != "UNSAFE") {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown TRUNCATE TABLE setting: " << name));
                 return TStatus::Error;
             }
 
-            if (name == "UNSAFE") {
-                // The grammar only admits a bool literal here, so this cannot be anything else.
-                unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
-            }
+            // The grammar only admits a bool literal here, so this cannot be anything else.
+            unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
         }
 
         if (unsafe && !SessionCtx->Config().FeatureFlags.GetEnableUnsafeTruncateTable()) {

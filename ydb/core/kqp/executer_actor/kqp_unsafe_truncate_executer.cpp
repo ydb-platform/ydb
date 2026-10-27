@@ -333,7 +333,6 @@ private:
             return;
         }
 
-        ShardTables.clear();
         for (size_t i = 0; i < request->ResultSet.size(); ++i) {
             const auto& entry = request->ResultSet[i];
             const auto& table = Tables.at(i);
@@ -620,9 +619,6 @@ private:
                 "Unsafe truncate lost contact with a participant after sending a commit request; its outcome is unknown");
             return;
         }
-        if (Restarting) {
-            return;
-        }
         // Stays set until a new TxId is assigned, so that the remaining shards of the abandoned
         // attempt reporting the same failure do not each start a restart of their own.
         Restarting = true;
@@ -676,7 +672,6 @@ private:
         }
         auto issue = NYql::TIssue(message);
         NYql::SetIssueCode(issueCode, issue);
-        ResponseEv->BrokenLockShardId = 0;
         ResponseEv->Record.MutableResponse()->SetStatus(status);
         NYql::IssueToMessage(issue, ResponseEv->Record.MutableResponse()->MutableIssues()->Add());
         Send(Target, ResponseEv.release());

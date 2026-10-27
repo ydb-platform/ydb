@@ -2421,7 +2421,7 @@ public:
 
         // The lock id of the user transaction, so the shards spare its locks while breaking
         // everyone else's. Zero when the truncate is the first statement and no lock exists yet.
-        const ui64 userLockTxId = QueryState->TxCtx ? QueryState->TxCtx->LockHandle.GetLockId() : 0;
+        const ui64 userLockTxId = QueryState->TxCtx->LockHandle.GetLockId();
 
         auto executerActor = CreateKqpUnsafeTruncateExecuter(
             tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,

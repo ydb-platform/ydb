@@ -17,9 +17,12 @@
 
 namespace NYql {
 
-void SanitizeNonAscii(TString& s) {
-    if (!NYql::IsUtf8(s)) {
-        TString escaped;
+namespace {
+
+template <typename T>
+void SanitizeNonAsciiG(T& s) {
+    if (!NYql::IsUtf8(TStringBuf(s))) {
+        T escaped;
         escaped.reserve(s.size());
         const unsigned char* i = reinterpret_cast<const unsigned char*>(s.data());
         const unsigned char* end = i + s.size();
@@ -28,15 +31,25 @@ void SanitizeNonAscii(TString& s) {
             size_t runeLen;
             const RECODE_RESULT result = SafeReadUTF8Char(rune, runeLen, i, end);
             if (result == RECODE_OK) {
-                escaped.insert(escaped.end(), reinterpret_cast<const char*>(i), reinterpret_cast<const char*>(i + runeLen));
+                escaped.append(reinterpret_cast<const char*>(i), runeLen);
                 i += runeLen;
             } else {
                 escaped.push_back('?');
                 ++i;
             }
         }
-        s = escaped;
+        s = std::move(escaped);
     }
+}
+
+} // namespace
+
+void SanitizeNonAscii(TString& s) {
+    SanitizeNonAsciiG(s);
+}
+
+void SanitizeNonAscii(TCowString& s) {
+    SanitizeNonAsciiG(s);
 }
 
 TTextWalker& TTextWalker::Advance(char c) {

@@ -52,6 +52,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIn
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
+ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node

@@ -95,7 +95,7 @@ namespace NKikimr::NStorage {
 
                         case NKikimrBridge::TClusterState::SUSPENDED:
                         case NKikimrBridge::TClusterState::HOT_STANDBY:
-                            // explicit SUSPENDED request is allowed
+                            // explicit request is allowed for a non-primary pile
                             break;
 
                         case NKikimrBridge::TClusterState::INACTIVE:

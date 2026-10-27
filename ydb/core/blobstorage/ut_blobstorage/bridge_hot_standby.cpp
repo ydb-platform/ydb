@@ -84,8 +84,12 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
         std::unique_ptr<IEventHandle> standbyWrite;
+        TMessageRelevanceOwner relevance = std::make_shared<TMessageRelevanceTracker>();
         ui32 standbyReads = 0;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == MakeBlobStorageProxyID(groupId)) {
+                ev->Get<TEvBlobStorage::TEvPut>()->ExternalRelevanceWatcher = relevance;
+            }
             if (ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
                     UNIT_ASSERT(!standbyWrite);
@@ -109,6 +113,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         checker.CheckAll(9); // even a client in the standby reads from the synchronized pile
         UNIT_ASSERT_VALUES_EQUAL(standbyReads, 0);
 
+        relevance.reset(); // the producer finishes while its background copy is still queued
         env.Runtime->FilterFunction = {};
         env.Runtime->Send(standbyWrite.release(), 1);
         const auto& [writtenGroup, id, data] = checker.GetWritten().back();

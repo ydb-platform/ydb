@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_write_table.h"
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
@@ -48,6 +49,12 @@ struct TKqpBufferLockSettings {
     ui64 LockNodeId;
     NKikimrDataEvents::ELockMode LockMode;
     ui64 QuerySpanId = 0;
+
+    // Remember the partitioning metadata (borders/version) of every shard that
+    // received a lock request and register it on the lock echo. The only consumer
+    // of that metadata is the split/merge handling (MoveShardTo), enabled only
+    // under the WriteSeqNum protocol, so it is collected only then.
+    bool CollectShardMetas = false;
 
     IKqpTransactionManagerPtr TxManager;
 

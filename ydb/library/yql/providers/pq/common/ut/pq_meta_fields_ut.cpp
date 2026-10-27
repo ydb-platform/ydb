@@ -166,9 +166,15 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
         bool hasPartitionId = false;
         bool hasOffset = false;
         for (const auto& col : columns) {
-            if (col == "__ydb_write_time") hasWriteTime = true;
-            if (col == "__ydb_partition_id") hasPartitionId = true;
-            if (col == "__ydb_offset") hasOffset = true;
+            if (col == "__ydb_write_time") {
+                hasWriteTime = true;
+            }
+            if (col == "__ydb_partition_id") {
+                hasPartitionId = true;
+            }
+            if (col == "__ydb_offset") {
+                hasOffset = true;
+            }
         }
         UNIT_ASSERT(hasWriteTime);
         UNIT_ASSERT(hasPartitionId);
@@ -180,9 +186,19 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
 
         bool hasUserAttributes = false;
         for (const auto& col : columns) {
-            if (col == "__ydb_user_attributes") hasUserAttributes = true;
+            if (col == "__ydb_user_attributes") {
+                hasUserAttributes = true;
+            }
         }
         UNIT_ASSERT(hasUserAttributes);
+    }
+
+    Y_UNIT_TEST(GetAllowedYdbSysColumnsReturnsEmptyWhenForbidden) {
+        auto columns = GetAllowedYdbSysColumns(true, /* allowYdbSysColumns */ false);
+        UNIT_ASSERT(columns.empty());
+
+        auto columnsOldPath = GetAllowedYdbSysColumns(false, /* allowYdbSysColumns */ false);
+        UNIT_ASSERT(columnsOldPath.empty());
     }
 
     Y_UNIT_TEST(YdbSysColumnToOldSysColumn) {
@@ -263,4 +279,4 @@ Y_UNIT_TEST_SUITE(TPqMetaFieldsTest) {
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

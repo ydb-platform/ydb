@@ -12,6 +12,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/regex/pcre
     util
+    ydb/core/base
     ydb/library/aclib
 )
 

@@ -43,6 +43,27 @@ def datacenter_inject_fanout(
     )
 
 
+def pile_inject_fanout(
+    nemesis_type: str, target: ChaosTarget, inventory
+) -> list[DispatchCommand]:
+    """Inject on every host of ``target``'s pile (one scenario).
+
+    Same contract as :func:`datacenter_inject_fanout`: the boundary scheduler already chose the
+    pile, so ``BridgePileFanoutPlanner.scheduled_tick`` must not ``random.choice`` another one.
+    """
+    pile_id = target.group_id
+    hosts = [
+        t.host for t in inventory.entities(TargetKind.PILE) if t.group_id == pile_id
+    ] or [target.host]
+    payload_id = int(pile_id) if str(pile_id).isdigit() else pile_id
+    return fanout(
+        nemesis_type,
+        [ChaosTarget.for_pile(h, pile_id) for h in hosts],
+        "inject",
+        {"bridge_pile_id": payload_id},
+    )
+
+
 class ChaosOrchestratorStore:
     def __init__(
         self,
@@ -115,11 +136,14 @@ class ChaosOrchestratorStore:
     ) -> list[DispatchCommand]:
         """Inject on one already-reserved ``target`` (boundary scheduler path), so no pre-filter.
 
-        A DATACENTER target is fanned out over its DC; a toggle fault is dispatched directly, so a
-        planner's cross-tick state cannot fight the scheduler; anything else goes to its planner.
+        A DATACENTER or PILE target is fanned out over that group; a toggle fault is dispatched
+        directly, so a planner's cross-tick state cannot fight the scheduler; anything else goes
+        to its planner.
         """
         if target.kind is TargetKind.DATACENTER and self._inventory is not None:
             return datacenter_inject_fanout(nemesis_type, target, self._inventory)
+        if target.kind is TargetKind.PILE and self._inventory is not None:
+            return pile_inject_fanout(nemesis_type, target, self._inventory)
         if recovery_mode_for(nemesis_type) == "extract":
             return self._direct_commands(nemesis_type, target, "inject")
         planner = self._planners.get(nemesis_type)

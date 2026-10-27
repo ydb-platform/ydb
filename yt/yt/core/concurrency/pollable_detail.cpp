@@ -15,6 +15,9 @@ void* TPollableBase::GetCookie() const
     return Cookie_.Get();
 }
 
+void TPollableBase::ResetInvoker()
+{ }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

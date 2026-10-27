@@ -10,17 +10,16 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/util/backoff.h>
 
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/dq/actors/dq.h>
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -29,7 +28,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TStatusTrackerActor : public TBaseComputeActor<TStatusTrackerActor> {
+class TStatusTrackerActor: public TBaseComputeActor<TStatusTrackerActor> {
 public:
     using IRetryPolicy = IRetryPolicy<const TEvYdbCompute::TEvGetOperationResponse::TPtr&>;
 
@@ -42,10 +41,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("GetOperation") },
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>(
+            { { MakeIntrusive<TComputeRequestCounters>("GetOperation") }, { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -53,7 +50,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -63,14 +60,9 @@ public:
         }
     };
 
-    TStatusTrackerActor(const TRunActorParams& params,
-                        const TActorId& parent,
-                        const TActorId& connector,
-                        const TActorId& pinger,
-                        const NYdb::TOperation::TOperationId& operationId,
-                        std::unique_ptr<IPlanStatProcessor>&& processor,
-                        const ::NYql::NCommon::TServiceCounters& queryCounters,
-                        const ::NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters)
+    TStatusTrackerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger,
+        const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor,
+        const ::NYql::NCommon::TServiceCounters& queryCounters, const ::NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters)
         : TBase(queryCounters, "StatusTracker")
         , Params(params)
         , Parent(parent)
@@ -81,7 +73,8 @@ public:
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
         , FailedStatusCodeCounters(failedStatusCodeCounters)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
 
@@ -133,7 +126,10 @@ public:
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId});
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus, ComputeStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(
+                             NYql::TIssues{ NYql::TIssue{
+                                 TStringBuilder{} << "Error saving information about the status of operation: " << OperationId.ToString() } },
+                             NYdb::EStatus::INTERNAL_ERROR, ExecStatus, ComputeStatus));
             FailedAndPassAway();
         }
     }
@@ -141,7 +137,7 @@ public:
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
 
-        if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
+        if (response.Status == NYdb::EStatus::NOT_FOUND) {   // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
             YDB_LOG_INFO("[ydb] [StatusTracker] Operation has been already removed",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
@@ -241,7 +237,8 @@ public:
     }
 
     void SendGetOperation(const TDuration& delay = TDuration::Zero()) {
-        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(
+            Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
     void OnPingRequestStart() {
@@ -271,7 +268,8 @@ public:
     void UpdateCpuQuota(double cpuUsage) {
         TDuration duration = QueryStats.GetTotalDuration();
         if (cpuUsage && duration) {
-            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage));
+            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(),
+                new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage));
         }
     }
 
@@ -368,15 +366,11 @@ private:
     TInstant StartTime;
 };
 
-std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,
-                                                          const TActorId& parent,
-                                                          const TActorId& connector,
-                                                          const TActorId& pinger,
-                                                          const NYdb::TOperation::TOperationId& operationId,
-                                                          std::unique_ptr<IPlanStatProcessor>&& processor,
-                                                          const ::NYql::NCommon::TServiceCounters& queryCounters,
-                                                          const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters) {
-    return std::make_unique<TStatusTrackerActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters, failedStatusCodeCounters);
+std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+    const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor,
+    const ::NYql::NCommon::TServiceCounters& queryCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters) {
+    return std::make_unique<TStatusTrackerActor>(
+        params, parent, connector, pinger, operationId, std::move(processor), queryCounters, failedStatusCodeCounters);
 }
 
-}
+}   // namespace NFq

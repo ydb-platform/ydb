@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
@@ -406,7 +407,6 @@ public:
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
@@ -902,23 +902,12 @@ private:
         }
 
         if (resolveStatus == CONTINUE) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
+            DoExecute();
         }
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev)) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
-        }
-    }
-
-    void HandlePartitionStats(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        TBase::ApplyPartitionStatsResult(ev);
-        if (TBase::PendingPartitionStatsRequests == 0) {
             DoExecute();
         }
     }
@@ -1423,13 +1412,30 @@ private:
                 NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
                     ? info.GetDeferredVictimQuerySpanId() : 0;
+                const auto& task = TasksGraph.GetTask(taskId);
+                const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                THashMap<ui64, TShardMeta> shardMetas;
+                for (const auto& shardInfo : info.GetShardPartitioningInfo()) {
+                    // Each meta carries the id of the table its partitioning was
+                    // resolved against (e.g. the lookup table), which is not
+                    // necessarily the producing stage's table meta: a stage with a
+                    // table sink has the sink table's id in its meta.
+                    shardMetas.emplace(shardInfo.GetShardId(), ToShardMeta(shardInfo));
+                }
                 for (const auto& lock : info.GetLocks()) {
-                    const auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
-                    TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                    TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                    // Partitioning metadata is shipped by the input actor for the
+                    // shards it sent EvLocks to; other shards (e.g. locked by plain
+                    // reads) are registered without it.
+                    if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
+                        AFL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
+                    } else {
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                    }
                     TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);
                 }
 
@@ -1467,6 +1473,7 @@ private:
                         flags |= IKqpTransactionManager::EAction::READ;
                     }
 
+                    // At current time don't add shard partitioning metadata here. (Read Committed doesn't work for OLAP.)
                     TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     TxManager->AddAction(lock.GetDataShard(), flags, Request.QuerySpanId);
                     TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId);

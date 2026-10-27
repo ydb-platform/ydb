@@ -8,6 +8,8 @@ import logging
 import os
 import time as time_module
 from typing import Optional
+
+import yaml
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -20,12 +22,51 @@ from ydb.tests.library.stability.utils.results_models import StressUtilDeployRes
 
 # Default orchestrator port from nemesis Settings.app_port
 _NEMESIS_ORCHESTRATOR_PORT = 31434
+
+# Boundary-scheduler profile for a bridge (2dc) cluster, posted as
+# POST /api/scheduler/start {"enabled": ...}. Pile faults and tablet kills are
+# GuardMode.BYPASS: they do not draw the erasure-domain budget. Node, disk and
+# datacenter faults (and KickTabletsFromNodeNemesis, which is FULL) stay out so
+# a pile outage is not stacked on top of reserved fail domains.
+_BRIDGE_CLUSTER_SCHEDULER_TYPES = (
+    "BridgePileStopNodesNemesis",
+    "BridgePileRouteUnreachableNemesis",
+    "BridgePileIptablesBlockPortsNemesis",
+    "KillCoordinatorNemesis",
+    "KillHiveNemesis",
+    "KillBsControllerNemesis",
+    "KillNodeBrokerNemesis",
+    "KillSchemeShardNemesis",
+    "KillMediatorNemesis",
+    "KillTxAllocatorNemesis",
+    "KillKeyValueNemesis",
+    "KillTenantSlotBrokerNemesis",
+    "KillPersQueueNemesis",
+    "KillDataShardNemesis",
+    "KillBlockstoreVolumeNemesis",
+    "KillBlockstorePartitionNemesis",
+)
 # Health polling parameters
 _HEALTH_POLL_INTERVAL_S = 10
 _HEALTH_POLL_TIMEOUT_S = 300
 
 # Synthetic hosts injected by SystemTabletBackup workload; not real SSH targets.
 _FAKE_HOST_PREFIX = "system.tablet.backup.fake"
+
+
+def _yaml_has_bridge_piles(path: Optional[str]) -> bool:
+    """True when ``path`` is a cluster yaml with at least two bridge piles."""
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return False
+    if not isinstance(doc, dict):
+        return False
+    piles = (doc.get("config") or {}).get("bridge_config", {}).get("piles", [])
+    return isinstance(piles, list) and len(piles) >= 2
 
 
 def _is_ssh_host(host: str) -> bool:
@@ -439,24 +480,36 @@ class StressUtilDeployer:
         )
         return False
 
+    def _scheduler_start_body(self) -> dict:
+        """Profile for ``POST /api/scheduler/start``.
+
+        A bridge cluster gets pile chaos plus tablet kills. Any other cluster
+        sends ``{}``, which leaves the catalog stability profile in place.
+        """
+        paths = (self.cluster_path, self.yaml_config)
+        if any(_yaml_has_bridge_piles(path) for path in paths):
+            return {"enabled": list(_BRIDGE_CLUSTER_SCHEDULER_TYPES)}
+        return {}
+
     def _set_schedules_enabled(
         self, enabled: bool, nemesis_log: list[str]
     ) -> bool:
         """Start or stop the nemesis scheduler via the orchestrator API.
 
-        ``POST /api/scheduler/start`` (empty profile → catalog defaults) or
-        ``POST /api/scheduler/stop``.
+        ``POST /api/scheduler/start`` (empty body keeps the catalog profile;
+        a bridge cluster sends ``enabled``) or ``POST /api/scheduler/stop``.
 
         Returns:
             ``True`` on success, ``False`` on failure.
         """
         endpoint = self._get_orchestrator_endpoint()
         url = f"{endpoint}/api/scheduler/{'start' if enabled else 'stop'}"
-        payload = json.dumps({}).encode()
+        body = self._scheduler_start_body() if enabled else {}
+        payload = json.dumps(body).encode()
 
         action = "Enabling" if enabled else "Disabling"
-        nemesis_log.append(f"{action} nemesis scheduler via {url}")
-        logging.info(f"{action} nemesis scheduler: POST {url}")
+        nemesis_log.append(f"{action} nemesis scheduler via {url} body={body}")
+        logging.info(f"{action} nemesis scheduler: POST {url} body={body}")
 
         try:
             req = urllib.request.Request(

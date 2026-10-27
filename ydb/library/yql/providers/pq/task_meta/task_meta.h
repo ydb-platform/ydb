@@ -1,7 +1,6 @@
 #pragma once
 
 #include <google/protobuf/any.pb.h>
-
 #include <util/generic/maybe.h>
 
 namespace NYql {
@@ -10,7 +9,7 @@ namespace NDqProto {
 
 class TDqTask;
 
-} // namespace NDqProto
+}   // namespace NDqProto
 
 namespace NPq {
 
@@ -29,6 +28,6 @@ TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& d
 
 std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask& dqTask);
 
-} // namespace NPq
+}   // namespace NPq
 
-} // namespace NYql
+}   // namespace NYql

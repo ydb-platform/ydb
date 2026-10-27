@@ -78,19 +78,6 @@ def filter_cmd(cmd):
             skip = False
 
 
-LINKER_FILTER_RE = re.compile(r'(/python(?:3)?$|/clang(?:\+\+)?$|/\.ya/tools/)')
-
-
-def filter_linker_flags(cmd):
-    """Remove runner/tool entries from command line."""
-
-    @lru_cache(maxsize=256)
-    def drop(a: str) -> bool:
-        return bool(LINKER_FILTER_RE.search(a))
-
-    return [a for a in cmd if not drop(a)]
-
-
 def is_generated(testing_src: str, build_root: str) -> bool:
     return testing_src.startswith(build_root)
 
@@ -915,7 +902,8 @@ def main() -> None:
     if is_generated(args.testing_src, args.build_root):
         return
 
-    filtered_clang_cmd = filter_linker_flags(clang_cmd[1:])
+    # Drop the compiler executable and keep all flags, including SDK paths in the tool cache.
+    filtered_clang_cmd = clang_cmd[1:]
     mapping_file = args.mapping_file or args.default_mapping_file
     testing_src = os.path.relpath(args.testing_src, args.source_root)
 

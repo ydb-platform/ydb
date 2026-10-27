@@ -6,14 +6,13 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/fq/scope.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/utility.h>
 
@@ -27,7 +26,7 @@ using namespace NActors;
 using namespace NYql;
 using namespace NFq;
 
-struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
+struct TEvPingResponse: public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
     TPingTaskResult Result;
     FederatedQuery::QueryAction Action = FederatedQuery::QUERY_ACTION_UNSPECIFIED;
 
@@ -50,7 +49,7 @@ private:
     }
 };
 
-class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
+class TPingerActor: public NActors::TActorBootstrapped<TPingerActor> {
     class TRetryState {
     public:
         void Init(TInstant now, TInstant startLeaseTime, TDuration maxRetryTime) {
@@ -70,7 +69,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
                 return Nothing();
             }
 
-            const TDuration nextDelay = Delay; // The first delay is zero
+            const TDuration nextDelay = Delay;   // The first delay is zero
             Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
 
             const TDuration randomizedNextDelay = nextDelay ? RandomizeDelay(nextDelay) : nextDelay;
@@ -90,7 +89,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         }
 
         operator bool() const {
-            return StartRequestTime != TInstant::Zero(); // State has been initialized.
+            return StartRequestTime != TInstant::Zero();   // State has been initialized.
         }
 
     private:
@@ -100,14 +99,14 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         }
 
     private:
-        TDuration Delay; // The first retry will be done instantly.
+        TDuration Delay;   // The first retry will be done instantly.
         TInstant StartLeaseTime;
         TInstant StartRequestTime;
         size_t RetriesCount = 0;
 
         TDuration MaxRetryTime;
         static constexpr TDuration MaxDelay = TDuration::Seconds(5);
-        static constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
+        static constexpr TDuration MinDelay = TDuration::MilliSeconds(100);   // from second retry
     };
 
     struct TForwardPingReqInfo {
@@ -135,18 +134,9 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
     };
 
 public:
-    TPingerActor(
-        const TString& tenantName,
-        const NYdb::NFq::TScope& scope,
-        const TString& userId,
-        const TString& id,
-        const TString& ownerId,
-        const TActorId parent,
-        const NConfig::TPingerConfig& config,
-        TInstant deadline,
-        const ::NYql::NCommon::TServiceCounters& queryCounters,
-        TInstant createdAt,
-        bool replyToSender)
+    TPingerActor(const TString& tenantName, const NYdb::NFq::TScope& scope, const TString& userId, const TString& id, const TString& ownerId,
+        const TActorId parent, const NConfig::TPingerConfig& config, TInstant deadline, const ::NYql::NCommon::TServiceCounters& queryCounters,
+        TInstant createdAt, bool replyToSender)
         : Config(config)
         , TenantName(tenantName)
         , Scope(scope)
@@ -168,7 +158,7 @@ public:
         YDB_LOG_TRACE("Start Pinger",
             {"queryId", Id},
             {"owner", OwnerId});
-        StartLeaseTime = TActivationContext::Now(); // Not accurate value, but it allows us to retry the first unsuccessful ping request.
+        StartLeaseTime = TActivationContext::Now();   // Not accurate value, but it allows us to retry the first unsuccessful ping request.
         ScheduleNextPing();
         Become(&TPingerActor::StateFunc);
     }
@@ -205,17 +195,17 @@ private:
         }
 
         switch (ev->Get()->Tag) {
-        case ContinueLeaseWakeupTag:
-            WakeupContinueLease();
-            break;
-        case RetryContinueLeaseWakeupTag:
-            WakeupRetryContinueLease();
-            break;
-        case RetryForwardPingRequestWakeupTag:
-            WakeupRetryForwardPingRequest();
-            break;
-        default:
-            Y_ABORT("Unknow wakeup tag: %lu", ev->Get()->Tag);
+            case ContinueLeaseWakeupTag:
+                WakeupContinueLease();
+                break;
+            case RetryContinueLeaseWakeupTag:
+                WakeupRetryContinueLease();
+                break;
+            case RetryForwardPingRequestWakeupTag:
+                WakeupRetryForwardPingRequest();
+                break;
+            default:
+                Y_ABORT("Unknow wakeup tag: %lu", ev->Get()->Tag);
         }
     }
 
@@ -244,7 +234,8 @@ private:
                 {"queryId", Id},
                 {"owner", OwnerId},
                 {"request", ev->Get()->Request});
-            Send(ReplyToSender ? ev->Sender : Parent, new TEvents::TEvForwardPingResponse(false, FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED), 0, ev->Cookie);
+            Send(ReplyToSender ? ev->Sender : Parent,
+                new TEvents::TEvForwardPingResponse(false, FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED), 0, ev->Cookie);
             return;
         }
 
@@ -282,13 +273,9 @@ private:
         }
 
         const NYdb::EStatus status = ev->Get()->Status.GetStatus();
-        if (status == NYdb::EStatus::INTERNAL_ERROR
-            || status == NYdb::EStatus::UNAVAILABLE
-            || status == NYdb::EStatus::OVERLOADED
-            || status == NYdb::EStatus::TIMEOUT
-            || status == NYdb::EStatus::BAD_SESSION
-            || status == NYdb::EStatus::SESSION_EXPIRED
-            || status == NYdb::EStatus::SESSION_BUSY) {
+        if (status == NYdb::EStatus::INTERNAL_ERROR || status == NYdb::EStatus::UNAVAILABLE || status == NYdb::EStatus::OVERLOADED ||
+            status == NYdb::EStatus::TIMEOUT || status == NYdb::EStatus::BAD_SESSION || status == NYdb::EStatus::SESSION_EXPIRED ||
+            status == NYdb::EStatus::SESSION_BUSY) {
             return true;
         }
 
@@ -330,7 +317,7 @@ private:
             } else {
                 retryState = &ForwardRequests.front().RetryState;
             }
-            Y_ABORT_UNLESS(*retryState); // Initialized
+            Y_ABORT_UNLESS(*retryState);   // Initialized
         }
 
         if (continueLeaseRequest) {
@@ -365,7 +352,8 @@ private:
             if (continueLeaseRequest) {
                 ScheduleNextPing();
             } else {
-                Send(ReplyToSender ? ForwardRequests.front().Request->Sender : Parent, new TEvents::TEvForwardPingResponse(true, action), 0, ev->Cookie);
+                Send(ReplyToSender ? ForwardRequests.front().Request->Sender : Parent, new TEvents::TEvForwardPingResponse(true, action), 0,
+                    ev->Cookie);
                 ForwardRequests.pop_front();
 
                 // Process next forward ping request.
@@ -379,7 +367,8 @@ private:
                 {"owner", OwnerId},
                 {"error", errorMessage},
                 {"after", *retryAfter});
-            Schedule(*retryAfter, new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
+            Schedule(*retryAfter,
+                new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
         } else {
             TRetryState* retryStateForLogging = retryState;
             if (!retryStateForLogging) {
@@ -393,7 +382,7 @@ private:
                 {"retryTime", retryStateForLogging->GetRetryTime(now)});
             auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED;
             if (ReplyToSender) {
-                for (const auto& forwardRequest: ForwardRequests) {
+                for (const auto& forwardRequest : ForwardRequests) {
                     Send(forwardRequest.Request->Sender, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
                 }
             } else {
@@ -482,38 +471,18 @@ private:
 
     std::deque<TForwardPingReqInfo> ForwardRequests;
     bool Finishing = false;
-    bool FatalError = false; // Nonretryable error from PingTask or all retries finished.
+    bool FatalError = false;   // Nonretryable error from PingTask or all retries finished.
 
     TSchedulerCookieHolder SchedulerCookieHolder;
     TActorId InternalServiceId;
     bool ReplyToSender = false;
 };
 
-IActor* CreatePingerActor(
-    const TString& tenantName,
-    const NYdb::NFq::TScope& scope,
-    const TString& userId,
-    const TString& id,
-    const TString& ownerId,
-    const TActorId parent,
-    const NConfig::TPingerConfig& config,
-    TInstant deadline,
-    const ::NYql::NCommon::TServiceCounters& queryCounters,
-    TInstant createdAt,
-    bool replyToSender)
+IActor* CreatePingerActor(const TString& tenantName, const NYdb::NFq::TScope& scope, const TString& userId, const TString& id,
+    const TString& ownerId, const TActorId parent, const NConfig::TPingerConfig& config, TInstant deadline,
+    const ::NYql::NCommon::TServiceCounters& queryCounters, TInstant createdAt, bool replyToSender)
 {
-    return new TPingerActor(
-        tenantName,
-        scope,
-        userId,
-        id,
-        ownerId,
-        parent,
-        config,
-        deadline,
-        queryCounters,
-        createdAt,
-        replyToSender);
+    return new TPingerActor(tenantName, scope, userId, id, ownerId, parent, config, deadline, queryCounters, createdAt, replyToSender);
 }
 
-} /* NFq */
+}   // namespace NFq

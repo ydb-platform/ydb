@@ -41,7 +41,7 @@ class TExtractJoinExpressionsRule : public IRule {
  */
 class TInlineScalarSubplanRule : public IRule {
   public:
-    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -422,6 +422,17 @@ class TPushOlapFilterRule : public ISimplifiedRule {
 class TPushOlapProjectionRule : public ISimplifiedRule {
   public:
       TPushOlapProjectionRule() : ISimplifiedRule("Push olap projection", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireLiveness) {}
+
+      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Push down an intermediate aggregate to the column table read in its stage.
+ */
+class TPushOlapAggregateRule : public ISimplifiedRule {
+  public:
+      TPushOlapAggregateRule() : ISimplifiedRule("Push olap aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
       virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
       virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;

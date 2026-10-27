@@ -220,6 +220,8 @@ private:
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
+        AsyncSplitResult.Reset();
+        KqpHost.Reset();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);

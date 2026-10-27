@@ -1,4 +1,5 @@
 #include "flat_dbase_apply.h"
+#include "flat_tier_predicate.h"
 #include "util_fmt_abort.h"
 #include "bloom_filter_defaults.h"
 
@@ -26,6 +27,105 @@ namespace {
     private:
         bool Value = false;
     };
+
+    // No default case: the compiler warns (-Wswitch) about a new enum value until it is listed
+
+    bool IsValid(NPage::ECodec codec) {
+        switch (codec) {
+            case NPage::ECodec::Plain:
+            case NPage::ECodec::LZ4:
+                return true;
+        }
+        return false;
+    }
+
+    bool IsValid(NPage::ECache cache) {
+        switch (cache) {
+            case NPage::ECache::None:
+            case NPage::ECache::Once:
+            case NPage::ECache::Ever:
+                return true;
+        }
+        return false;
+    }
+
+    bool IsValid(NPage::ECacheMode cacheMode) {
+        switch (cacheMode) {
+            case NPage::ECacheMode::Regular:
+            case NPage::ECacheMode::TryKeepInMemory:
+                return true;
+        }
+        return false;
+    }
+
+    // Page settings of a family or a tier are checked before narrowing a proto value to the enum,
+    // so that an out of range value is not truncated to a valid one
+    template <typename TEnum>
+    TEnum PageSettingFromProto(ui32 value, TStringBuf error) {
+        const TEnum result = static_cast<TEnum>(value);
+        Y_ENSURE(static_cast<ui32>(result) == value && IsValid(result), error << " " << value);
+        return result;
+    }
+
+    NPage::ECodec CodecFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECodec>(value, "Invalid page encoding code value");
+    }
+
+    NPage::ECache CacheFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECache>(value, "Invalid pages cache policy value");
+    }
+
+    NPage::ECacheMode CacheModeFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECacheMode>(value, "Invalid cache mode value");
+    }
+
+    /**
+     * Checks the dropped families and the tiering policy of a SetTable record
+     * against the families and the policy they produce, so that an invalid record
+     * is rejected before it changes anything. Returns the policy set by the record, if any.
+     */
+    std::optional<TTieringPolicy> ValidateTiering(const TScheme::TTableInfo& tableInfo, const TAlterRecord& delta) {
+        // TAlter writes every change as a separate record, so a record never both sets and resets the policy
+        Y_ENSURE(!delta.HasTieringPolicy() || !delta.GetResetTieringPolicy(),
+            "Tiering policy is both set and reset in one record");
+
+        // Tiers of the policy are families of the table
+        THashSet<ui32> families;
+        for (const auto& it : tableInfo.Families) {
+            families.insert(it.first);
+        }
+
+        for (const ui32 family : delta.GetDropFamilies()) {
+            Y_ENSURE(family != TColumn::LeaderFamily, "Cannot drop the leader family");
+            for (const auto& [id, column] : tableInfo.Columns) {
+                Y_ENSURE(column.Family != family, "Cannot drop family " << family << " of column " << id);
+            }
+            families.erase(family);
+        }
+
+        std::optional<TTieringPolicy> newPolicy;
+        if (delta.HasTieringPolicy()) {
+            newPolicy = TieringPolicyFromProto(delta.GetTieringPolicy());
+            TTierPredicate::Validate(*newPolicy);
+
+            const auto* column = tableInfo.Columns.FindPtr(newPolicy->ColumnTag);
+            Y_ENSURE(column, "Tiering column " << newPolicy->ColumnTag << " does not exist");
+            TTierPredicate::ValidateColumn(*newPolicy, column->PType);
+
+            // Rules never target the default tier (checked by TTierPredicate::Validate)
+            for (const auto& rule : newPolicy->Rules) {
+                Y_ENSURE(families.contains(rule.TierId),
+                    "Tiering policy refers to tier " << rule.TierId << " that is not a family of the table");
+            }
+        } else if (tableInfo.TieringPolicy && !delta.GetResetTieringPolicy()) {
+            for (const auto& rule : tableInfo.TieringPolicy->Rules) {
+                Y_ENSURE(families.contains(rule.TierId),
+                    "Cannot drop family " << rule.TierId << " used by the tiering policy as a tier");
+            }
+        }
+
+        return newPolicy;
+    }
 }
 
 TSchemeModifier::TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState)
@@ -88,25 +188,21 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
-        auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
-
-        Y_ENSURE(ui32(codec) <= 1, "Invalid page encoding code value");
+        auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
         auto cache = ever ? ECache::Ever : family.Cache;
 
-        cache = delta.HasCache() ? ECache(delta.GetCache()) : cache;
+        cache = delta.HasCache() ? CacheFromProto(delta.GetCache()) : cache;
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
-        auto cacheMode = delta.HasCacheMode() ? ECacheMode(delta.GetCacheMode()) : family.CacheMode;
-        Y_ENSURE(ui32(cacheMode) <= 1, "Invalid cache mode value");
+        auto cacheMode = delta.HasCacheMode() ? CacheModeFromProto(delta.GetCacheMode()) : family.CacheMode;
         if (family.CacheMode != cacheMode) {
             ChangeTableSetting(table, tableInfo.PendingCacheModeChange, true);
         }
 
-        Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
             ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
         }
@@ -149,6 +245,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
     } else if (action == TAlterRecord::SetTable) {
         auto &tableInfo = *Table(table);
+
+        // The policy set by the record, if any
+        const std::optional<TTieringPolicy> tieringPolicy = ValidateTiering(tableInfo, delta);
 
         if (delta.HasByKeyFilter()) {
             // Legacy: convert ByKeyFilter bool to a prefix entry for full key
@@ -209,6 +308,19 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         if (delta.HasSpecialTableType()) {
             ui32 type = delta.GetSpecialTableType();
             changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
+        }
+
+        // Tiering changes and dropped families are validated by ValidateTiering above
+        if (tieringPolicy || delta.GetResetTieringPolicy()) {
+            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, tieringPolicy);
+        }
+
+        for (const ui32 family : delta.GetDropFamilies()) {
+            if (tableInfo.Families.contains(family)) {
+                PreserveTable(table);
+                tableInfo.Families.erase(family);
+                changes |= true;
+            }
         }
 
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
@@ -404,6 +516,8 @@ bool TSchemeModifier::DropColumn(ui32 tid, ui32 id)
     auto *table = Table(tid);
     auto it = table->Columns.find(id);
     if (it != table->Columns.end()) {
+        Y_ENSURE(!table->TieringPolicy || table->TieringPolicy->ColumnTag != id,
+            "Cannot drop column " << id << " used by the tiering policy");
         PreserveTable(tid);
         table->ColumnNames.erase(it->second.Name);
         table->Columns.erase(it);

@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
 #include <ydb/library/table_creator/table_creator.h>
 
 #include <queue>
@@ -15,19 +16,20 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
+class TKqpFinalizeScriptService: public TActorBootstrapped<TKqpFinalizeScriptService> {
     using TRetryPolicy = IRetryPolicy<bool>;
 
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
         , FederatedQuerySetup(federatedQuerySetup)
         , EnableBackgroundLeaseChecks(FederatedQuerySetup && FederatedQuerySetup->ScriptExecutionSettings.EnableBackgroundLeaseChecks)
-        , LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
+        ,
+        LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
         , S3ActorsFactory(std::move(s3ActorsFactory))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
@@ -70,7 +72,8 @@ public:
 
 private:
     void TryStartFinalizeRequest() {
-        if (FinalizationRequestsInFlight >= QueryServiceConfig.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions.empty()) {
+        if (FinalizationRequestsInFlight >= QueryServiceConfig.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() ||
+            WaitingFinalizationExecutions.empty()) {
             return;
         }
 
@@ -87,12 +90,7 @@ private:
     void StartFinalizeRequest(TEvScriptFinalizeRequest::TPtr request) {
         ++FinalizationRequestsInFlight;
 
-        Register(CreateScriptFinalizerActor(
-            std::move(request),
-            QueryServiceConfig,
-            FederatedQuerySetup,
-            S3ActorsFactory
-        ));
+        Register(CreateScriptFinalizerActor(std::move(request), QueryServiceConfig, FederatedQuerySetup, S3ActorsFactory));
     }
 
     void Handle(TEvScriptFinalizeResponse::TPtr& ev) {
@@ -109,11 +107,14 @@ private:
 
 private:
     void CheckScriptExecutionTablesExistence() const {
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest({
-            {".metadata", "script_executions"},
-            {".metadata", "script_execution_leases"},
-            {".metadata", "result_sets"},
-        }).Release()), IEventHandle::FlagTrackDelivery);
+        Send(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(
+                NTableCreator::BuildSchemeCacheNavigateRequest({
+                                                                   { ".metadata", "script_executions" },
+                                                                   { ".metadata", "script_execution_leases" },
+                                                                   { ".metadata", "result_sets" },
+                                                               })
+                    .Release()), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -168,13 +169,9 @@ private:
             RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
                 [](bool longDelay) {
                     return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
-                },
-                TDuration::MilliSeconds(100),
-                TDuration::MilliSeconds(300),
-                TDuration::Minutes(1),
-                std::numeric_limits<size_t>::max(),
-                TDuration::Max()
-            )->CreateRetryState();
+                }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(300), TDuration::Minutes(1), std::numeric_limits<size_t>::max(),
+                TDuration::Max())
+                             ->CreateRetryState();
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
@@ -197,7 +194,7 @@ private:
     const TDuration LeaseCheckStartupTimeout;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    TRetryPolicy::IRetryState::TPtr RetryState;  // Used for check script execution tables existence
+    TRetryPolicy::IRetryState::TPtr RetryState;   // Used for check script execution tables existence
     TActorId ScriptExecutionLeaseCheckActor;
 
     ui32 FinalizationRequestsInFlight = 0;
@@ -207,12 +204,11 @@ private:
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
     return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

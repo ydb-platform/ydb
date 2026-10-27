@@ -1,5 +1,7 @@
 #include "yql_yt_message_stream_impl.h"
+
 #include <util/generic/yexception.h>
+
 namespace NYql {
 TYtMessageStreamReadSettings ParseYtMessageStreamReadSettings(const TExprNode& read) {
     Y_ENSURE(read.ChildrenSize() == 5, "Expected five read arguments");
@@ -12,16 +14,15 @@ TYtMessageStreamReadSettings ParseYtMessageStreamReadSettings(const TExprNode& r
     TString path;
     if (key->IsCallable("MrObject")) {
         Y_ENSURE(key->ChildrenSize() >= 3 && key->Head().IsAtom(), "Expected a literal YT queue path");
-        Y_ENSURE(key->Child(1)->IsAtom() && key->Child(2)->Content().empty(),
-            "YT MessageStream supports only uncompressed reads");
+        Y_ENSURE(key->Child(1)->IsAtom() && key->Child(2)->Content().empty(), "YT MessageStream supports only uncompressed reads");
         const auto format = key->Child(1)->Content();
         Y_ENSURE(format.empty(), "FORMAT is not supported for QYT reads");
         path = key->Head().Content();
     } else {
         Y_ENSURE(key->IsCallable("Key") && key->ChildrenSize() == 1, "Expected one YT queue path");
         const auto& entry = key->Head();
-        Y_ENSURE(entry.IsList() && entry.ChildrenSize() == 2 && entry.Head().IsAtom("table")
-            && entry.Child(1)->IsCallable("String") && entry.Child(1)->ChildrenSize() == 1 && entry.Child(1)->Head().IsAtom(), "Expected a literal YT queue path");
+        Y_ENSURE(entry.IsList() && entry.ChildrenSize() == 2 && entry.Head().IsAtom("table") && entry.Child(1)->IsCallable("String") &&
+                     entry.Child(1)->ChildrenSize() == 1 && entry.Child(1)->Head().IsAtom(), "Expected a literal YT queue path");
         path = entry.Child(1)->Head().Content();
     }
     TString consumer;
@@ -38,6 +39,6 @@ TYtMessageStreamReadSettings ParseYtMessageStreamReadSettings(const TExprNode& r
         }
     }
     Y_ENSURE(!consumer.empty(), "YT MessageStream requires CONSUMER");
-    return {path, consumer};
+    return { path, consumer };
 }
-}
+}   // namespace NYql

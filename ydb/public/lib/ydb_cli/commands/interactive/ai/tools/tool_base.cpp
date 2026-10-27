@@ -71,8 +71,8 @@ TString TDatabaseToolBase::CanonizePath(const TString& path) const {
     if (!Database.StartsWith('/')) {
         return result.StartsWith('/') ? CanonizeAbsolutePath(result) : result;
     }
-    auto canonical = CanonizeYdbPath(result);
-    if (!result.StartsWith('/') || !canonical.StartsWith(Database)) {
+    auto canonical = CanonizeAbsolutePath(result);
+    if (!result.StartsWith('/') || (canonical != "/" && !canonical.StartsWith(Database))) {
         canonical = JoinYdbPath({Database, result});
     }
     return canonical;

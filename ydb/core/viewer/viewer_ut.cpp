@@ -20,6 +20,7 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
 #include "viewer_groups.h"
+#include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -372,6 +373,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
         UNIT_ASSERT(handler);
+        ev->Get()->Database = "/Root/resolved_database";
+        auto healthcheck = std::make_unique<TJsonHealthCheck>(nullptr, ev);
+        UNIT_ASSERT_VALUES_EQUAL(healthcheck->MakeSelfCheckRequest()->Database, "/Root/resolved_database");
     }
 
     Y_UNIT_TEST_TWIN(QueryDatabaseResolvedBeforeLookup, enableRelativePaths) {

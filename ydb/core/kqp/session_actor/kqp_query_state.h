@@ -468,8 +468,7 @@ public:
     }
 
     bool NeedSnapshot(const NYql::TKikimrConfiguration& config) const {
-        return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery(),
-            UserRequestContext && UserRequestContext->IsStreamingQuery);
+        return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
     TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {
@@ -524,6 +523,11 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
+        if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: held-open read locks would be
+            // broken by any concurrent write and abort the query.
+            return false;
+        }
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&

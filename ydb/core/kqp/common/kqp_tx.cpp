@@ -76,15 +76,9 @@ bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
 }
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
-    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery, bool isStreamingQuery)
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
 {
     Y_UNUSED(config);
-
-    if (isStreamingQuery) {
-        // Streaming queries are long-running; pinning an MVCC snapshot would freeze
-        // their view and hold history on datashards, so reads must not be snapshot-based.
-        return false;
-    }
 
     if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&

@@ -509,7 +509,7 @@ public:
 };
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
-    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery, bool isStreamingQuery);
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 // Whether the mode promises that all reads of a transaction observe the same state.
 bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);

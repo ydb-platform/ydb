@@ -124,15 +124,12 @@ public:
     }
 
     bool ForceAcquireSnapshot() const {
-        const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
-        const bool isStreamingQuery = userRequestContext && userRequestContext->IsStreamingQuery;
         const bool forceSnapshot = (
             !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
-            !isStreamingQuery &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
         AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
@@ -962,13 +959,14 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
 
-        // This state is only entered when ForceAcquireSnapshot() returned true,
-        // which is guaranteed to be false for streaming queries. The context must
-        // always be propagated with the tasks graph: a missing context would also
-        // silently disable the streaming bypass in ForceAcquireSnapshot().
         const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
-        AFL_ENSURE(userRequestContext);
-        AFL_ENSURE(!userRequestContext->IsStreamingQuery);
+        if (userRequestContext && userRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned
+            // for their whole lifetime. Reads at the acquired step stay valid via
+            // the datashard KeepSnapshotTimeout grace window and are executed
+            // right away.
+            msg->SnapshotHandle = NKqp::TSnapshotHandle();
+        }
 
         YDB_LOG_TRACE("Read snapshot result",
             {"marker", "KQPDATA"},

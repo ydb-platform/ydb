@@ -47,6 +47,10 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
+  prebuild:
+    type: boolean
+    default: false
+    description: "Run ya make --build-only-test-deps before tests to fill the local cache"
   test_retry_count:
     type: string
     default: ""
@@ -448,6 +452,26 @@ runs:
 
         analytics track runner_info --kind info --runner
         analytics flush
+
+        if [ "${{ inputs.prebuild }}" = "true" ]; then
+          echo "Prebuild: ya make -A --build-only-test-deps (no test run), then tests use local cache"
+          analytics start ya_prebuild
+          set +e
+          ./ya make "${params[@]}" --build-only-test-deps \
+            ${GRAPH_PATH:+--build-custom-json=$GRAPH_PATH} \
+            ${CONTEXT_PATH:+--custom-context=$CONTEXT_PATH} \
+            $YA_MAKE_TARGET
+          PREBUILD_RC=$?
+          set -e
+          if [ $PREBUILD_RC -eq 0 ]; then
+            analytics end ya_prebuild
+          else
+            analytics end ya_prebuild --rc "$PREBUILD_RC" --error "ya prebuild rc=${PREBUILD_RC}"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "Prebuild ya make failed with rc=$PREBUILD_RC" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            exit $PREBUILD_RC
+          fi
+        fi
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)

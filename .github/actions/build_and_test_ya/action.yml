@@ -67,6 +67,10 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  prebuild:
+    type: boolean
+    default: false
+    description: "Run ya make --build-only-test-deps before tests (local cache warmup)"
 defaults:
   run:
     shell: bash
@@ -132,6 +136,7 @@ runs:
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
         # Temporary comparison: full small/medium, no remote cache.
+        # Prebuild pair baseline: interleaved ya make -A, prebuild off.
         increment: false
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }} --no-bazel-remote-store
@@ -140,6 +145,7 @@ runs:
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: false
+        prebuild: false
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         add_vcs_info: ${{ inputs.add_vcs_info }}

@@ -1207,6 +1207,28 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "format") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value == "json") {
+                    dstSettings.ChangefeedFormat = TReplicationSettings::EChangefeedFormat::Json;
+                } else if (value == "binary") {
+                    dstSettings.ChangefeedFormat = TReplicationSettings::EChangefeedFormat::Binary;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown changefeed format: " << value));
+                    return false;
+                }
+            } else if (name == "compression") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value == "none") {
+                    dstSettings.ChangefeedCompression = TReplicationSettings::EChangefeedCompression::None;
+                } else if (value == "zstd") {
+                    dstSettings.ChangefeedCompression = TReplicationSettings::EChangefeedCompression::Zstd;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown changefeed compression: " << value));
+                    return false;
+                }
             }
         }
 
@@ -3152,9 +3174,25 @@ public:
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
                                     } else if (to_lower(format) == "debezium_json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+                                    } else if (to_lower(format) == "binary") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));
+                                        return SyncError();
+                                    }
+                                } else if (name == "compression") {
+                                    auto compression = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    if (to_lower(compression) == "none") {
+                                        add_changefeed->set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_NONE);
+                                    } else if (to_lower(compression) == "zstd") {
+                                        add_changefeed->set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << "Unknown changefeed compression: " << compression));
                                         return SyncError();
                                     }
                                 } else if (name == "initial_scan") {

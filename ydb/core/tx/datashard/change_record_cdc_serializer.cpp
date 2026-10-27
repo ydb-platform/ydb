@@ -2,6 +2,7 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/change_exchange/binary_cdc.h>
 #include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -20,6 +22,12 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -32,15 +40,69 @@ class TBaseSerializer: public IChangeRecordSerializer {
         return data;
     }
 
+    // Heartbeats stay raw. A data row below CdcZstdMinPayloadBytes stays raw.
+    // Anything we do compress is written with one ZSTD_compress2 into a context
+    // owned by this serializer. The raw bytes stay in place when zstd does not
+    // make them shorter.
+    //
+    // Negative levels select the fast strategy and use the magnitude as the
+    // search step. ZSTD_minCLevel() is -128 KiB, so a 1 KiB run is stored as
+    // literals and the frame grows. Level -1 still visits every byte and shrinks
+    // that run. Schema snapshots use the library default level.
+    static constexpr int CdcZstdDataLevel = -1;
+    void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
+            return;
+        }
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            return;
+        }
+
+        const auto& payload = data.GetData();
+        const bool schema = record.GetKind() == TChangeRecord::EKind::CdcSchemaChange;
+        if (!schema && payload.size() < CdcZstdMinPayloadBytes) {
+            return;
+        }
+        if (payload.size() > static_cast<size_t>(Max<i32>())) {
+            return;
+        }
+
+        if (!CCtx_) {
+            CCtx_ = ZSTD_createCCtx();
+            Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
+        }
+        const int level = schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel;
+        if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
+            return;
+        }
+        const size_t bound = ZSTD_compressBound(payload.size());
+        if (bound == 0) {
+            return;
+        }
+
+        TString compressed = TString::Uninitialized(bound);
+        const size_t written = ZSTD_compress2(
+            CCtx_, compressed.begin(), compressed.size(), payload.data(), payload.size());
+        if (ZSTD_isError(written) || written >= payload.size()) {
+            return;
+        }
+        compressed.resize(written);
+        data.SetCodec(NPersQueueCommon::ZSTD);
+        UncompressedSize = static_cast<ui32>(payload.size());
+        data.SetData(std::move(compressed));
+    }
+
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
         cmd.SetData(data.SerializeAsString());
     }
 
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& schemaChange = *cmd.MutableSchemaChange();
         schemaChange.SetStep(record.GetStep());
@@ -51,12 +113,15 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& heartbeat = *cmd.MutableHeartbeat();
         heartbeat.SetStep(record.GetStep());
         heartbeat.SetTxId(record.GetTxId());
         heartbeat.SetData(data.SerializeAsString());
     }
+
+    TMaybe<ui32> UncompressedSize;
 
 protected:
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
@@ -66,24 +131,41 @@ public:
         : Opts(opts)
     {}
 
+    ~TBaseSerializer() override {
+        if (CCtx_) {
+            ZSTD_freeCCtx(CCtx_);
+        }
+    }
+
+    TBaseSerializer(const TBaseSerializer&) = delete;
+    TBaseSerializer& operator=(const TBaseSerializer&) = delete;
+
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        UncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
+            SerializeDataChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcSchemaChange:
-            return SerializeSchemaChange(cmd, record);
+            SerializeSchemaChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
+            SerializeHeartbeat(cmd, record);
+            break;
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
+        }
+        if (UncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
         }
     }
 
 protected:
     const TChangeRecordSerializerOpts Opts;
+    ZSTD_CCtx* CCtx_ = nullptr;
 
 }; // TBaseSerializer
 
@@ -451,6 +533,14 @@ protected:
 public:
     using TJsonSerializer::TJsonSerializer;
 
+    static TString RenderSchemaChangeJson(const TChangeRecord& record) {
+        TChangeRecordSerializerOpts opts;
+        TYdbJsonSerializer serializer(opts);
+        NJson::TJsonValue json;
+        serializer.SerializeSchemaChange(json, record);
+        return serializer.JsonToString(json);
+    }
+
 }; // TYdbJsonSerializer
 
 class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
@@ -695,6 +785,303 @@ public:
 
 }; // TDebeziumJsonSerializer
 
+class TBinaryCdcSerializer: public TBaseSerializer {
+    // A view into a TSerializedCellVec that stays alive until the writer finishes.
+    struct TValueRef {
+        ui16 Index = 0;
+        NScheme::TTypeInfo Type;
+        TCell Cell;
+    };
+
+    struct TColumnSlot {
+        ui16 Index = 0;
+        NScheme::TTypeInfo Type;
+    };
+
+    struct TColumnMap {
+        TVector<std::pair<ui32, NScheme::TTypeInfo>> Keys;
+        TVector<TColumnSlot> Values;
+        THashMap<ui32, ui16> TagToIndex;
+        bool Wide = false;
+    };
+
+    static TColumnMap BuildColumnMap(const TUserTable& table) {
+        TColumnMap map;
+        map.Keys.reserve(table.KeyColumnIds.size());
+        for (const auto tag : table.KeyColumnIds) {
+            const auto it = table.Columns.find(tag);
+            Y_ENSURE(it != table.Columns.end());
+            map.Keys.emplace_back(tag, it->second.Type);
+        }
+
+        TVector<std::pair<TString, ui32>> names;
+        names.reserve(table.Columns.size());
+        for (const auto& [tag, column] : table.Columns) {
+            if (!column.IsKey) {
+                names.emplace_back(column.Name, tag);
+            }
+        }
+        Sort(names);
+
+        map.Values.reserve(names.size());
+        for (ui16 index = 0; index < names.size(); ++index) {
+            const auto tag = names[index].second;
+            const auto& column = table.Columns.at(tag);
+            map.Values.push_back(TColumnSlot{index, column.Type});
+            map.TagToIndex.emplace(tag, index);
+        }
+        map.Wide = map.Values.size() > 127;
+        return map;
+    }
+
+    const TColumnMap& ColumnMapFor(const TUserTable::TCPtr& table) {
+        const ui64 version = table->GetTableSchemaVersion();
+        if (CachedMap && CachedTable.Get() == table.Get() && CachedVersion == version) {
+            return *CachedMap;
+        }
+        CachedTable = table;
+        CachedVersion = version;
+        CachedMap = BuildColumnMap(*table);
+        return *CachedMap;
+    }
+
+    // storage outlives every TCell copied into out.
+    static void CollectValues(const NKikimrChangeExchange::TDataChange::TSerializedCells& in,
+            const TColumnMap& map, TSerializedCellVec& storage, TVector<TValueRef>& out)
+    {
+        if (!in.TagsSize()) {
+            return;
+        }
+
+        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), storage));
+        Y_ENSURE(in.TagsSize() == storage.GetCells().size());
+
+        out.reserve(in.TagsSize());
+        const auto cells = storage.GetCells();
+        for (ui32 i = 0; i < in.TagsSize(); ++i) {
+            const auto tag = in.GetTags(i);
+            const auto it = map.TagToIndex.find(tag);
+            Y_ENSURE(it != map.TagToIndex.end(), "binary CDC value tag is not in the schema: " << tag);
+            const auto index = it->second;
+            out.push_back(TValueRef{index, map.Values[index].Type, cells[i]});
+        }
+        Sort(out, [](const TValueRef& left, const TValueRef& right) {
+            return left.Index < right.Index;
+        });
+    }
+
+    static size_t IndexedWireBytes(bool wide, const TValueRef& value) {
+        size_t bytes = wide ? 2 : 1;
+        if (!value.Cell.IsNull()) {
+            bytes += NChangeExchange::BinaryCdcCellSize(value.Cell, value.Type);
+        }
+        return bytes;
+    }
+
+    void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
+        using NChangeExchange::EBinaryCdcFlag;
+        using NChangeExchange::EBinaryCdcKind;
+        using NChangeExchange::EBinaryCdcOp;
+        using NChangeExchange::TBinaryCdcHeader;
+        using NChangeExchange::TBinaryCdcWriter;
+
+        switch (record.GetKind()) {
+        case TChangeRecord::EKind::CdcSchemaChange: {
+            const TString json = TYdbJsonSerializer::RenderSchemaChangeJson(record);
+            TBinaryCdcHeader header;
+            header.Version = NChangeExchange::BinaryCdcVersion;
+            header.Kind = EBinaryCdcKind::Schema;
+            TBinaryCdcWriter writer;
+            writer.Start(header, 8 + sizeof(ui32) + json.size());
+            writer.SetSchemaJson(json);
+            data.SetData(writer.Finish());
+            return;
+        }
+        case TChangeRecord::EKind::CdcHeartbeat: {
+            TBinaryCdcHeader header;
+            header.Version = NChangeExchange::BinaryCdcVersion;
+            header.Kind = EBinaryCdcKind::Heartbeat;
+            header.Flags = static_cast<ui8>(EBinaryCdcFlag::HasTs);
+            header.Step = record.GetStep();
+            header.TxId = record.GetTxId();
+            TBinaryCdcWriter writer;
+            writer.Start(header, 8 + sizeof(ui64) * 2);
+            data.SetData(writer.Finish());
+            return;
+        }
+        case TChangeRecord::EKind::CdcDataChange:
+            break;
+        case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
+            Y_ENSURE(false, "Unexpected");
+        }
+
+        Y_ENSURE(record.GetSchema());
+        const auto& map = ColumnMapFor(record.GetSchema());
+        const auto& body = record.GetDataChange();
+
+        TSerializedCellVec keyCells;
+        Y_ENSURE(TSerializedCellVec::TryParse(body.GetKey().GetData(), keyCells));
+        Y_ENSURE(body.GetKey().TagsSize() == map.Keys.size());
+        Y_ENSURE(keyCells.GetCells().size() == map.Keys.size());
+        for (size_t i = 0; i < map.Keys.size(); ++i) {
+            Y_ENSURE(body.GetKey().GetTags(i) == map.Keys[i].first);
+        }
+
+        const bool hasOld = body.HasOldImage();
+        const bool hasNew = body.HasNewImage();
+        const bool hasImage = hasOld || hasNew;
+        TSerializedCellVec valueStorage;
+        TSerializedCellVec oldStorage;
+        TSerializedCellVec newStorage;
+        TVector<TValueRef> values;
+        TVector<TValueRef> oldImage;
+        TVector<TValueRef> newImage;
+        EBinaryCdcOp op = EBinaryCdcOp::None;
+        switch (body.GetRowOperationCase()) {
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+            op = EBinaryCdcOp::Upsert;
+            if (!hasImage) {
+                CollectValues(body.GetUpsert(), map, valueStorage, values);
+            }
+            break;
+        case NKikimrChangeExchange::TDataChange::kReset:
+            op = EBinaryCdcOp::Reset;
+            if (!hasImage) {
+                CollectValues(body.GetReset(), map, valueStorage, values);
+            }
+            break;
+        case NKikimrChangeExchange::TDataChange::kErase:
+            op = EBinaryCdcOp::Erase;
+            break;
+        default:
+            Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+        }
+        if (hasOld) {
+            CollectValues(body.GetOldImage(), map, oldStorage, oldImage);
+        }
+        if (hasNew) {
+            CollectValues(body.GetNewImage(), map, newStorage, newImage);
+        }
+
+        TString user;
+        TString trace;
+        if (const auto userCtx = record.GetUserCtx()) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                user = userCtx->GetUserSID();
+            }
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                trace = userCtx->GetUserTraceId().GetHexTraceId();
+            }
+        }
+
+        TBinaryCdcHeader header;
+        header.Version = NChangeExchange::BinaryCdcVersion;
+        header.Kind = EBinaryCdcKind::Data;
+        header.Op = op;
+        header.KeyCount = map.Keys.size();
+        header.ValueCount = values.size();
+        header.OldImageCount = oldImage.size();
+        header.NewImageCount = newImage.size();
+        if (map.Wide) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::WideIndex);
+        }
+        if (hasOld) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasOldImage);
+        }
+        if (hasNew) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasNewImage);
+        }
+        if (Opts.VirtualTimestamps) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasTs);
+            header.Step = record.GetStep();
+            header.TxId = record.GetTxId();
+        }
+        if (!user.empty()) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasUser);
+        }
+        if (!trace.empty()) {
+            header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasTrace);
+        }
+        for (const auto& cell : keyCells.GetCells()) {
+            if (cell.IsNull()) {
+                header.Flags |= static_cast<ui8>(EBinaryCdcFlag::NullKeys);
+                break;
+            }
+        }
+
+        size_t bytes = 8;
+        if (hasOld) {
+            bytes += sizeof(ui16);
+        }
+        if (hasNew) {
+            bytes += sizeof(ui16);
+        }
+        if (Opts.VirtualTimestamps) {
+            bytes += sizeof(ui64) * 2;
+        }
+        const bool nullKeys = (header.Flags & static_cast<ui8>(EBinaryCdcFlag::NullKeys)) != 0;
+        for (size_t i = 0; i < map.Keys.size(); ++i) {
+            const auto& cell = keyCells.GetCells()[i];
+            if (nullKeys) {
+                bytes += 1;
+            }
+            if (!cell.IsNull()) {
+                bytes += NChangeExchange::BinaryCdcCellSize(cell, map.Keys[i].second);
+            }
+        }
+        for (const auto& value : values) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        for (const auto& value : oldImage) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        for (const auto& value : newImage) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        if (!user.empty()) {
+            bytes += sizeof(ui16) + user.size();
+        }
+        if (!trace.empty()) {
+            bytes += sizeof(ui16) + trace.size();
+        }
+
+        TBinaryCdcWriter writer;
+        writer.Start(header, bytes);
+        for (size_t i = 0; i < map.Keys.size(); ++i) {
+            writer.AddKey(keyCells.GetCells()[i], map.Keys[i].second);
+        }
+        for (const auto& value : values) {
+            writer.AddValue(value.Index, value.Cell, value.Type);
+        }
+        for (const auto& value : oldImage) {
+            writer.AddOldImage(value.Index, value.Cell, value.Type);
+        }
+        for (const auto& value : newImage) {
+            writer.AddNewImage(value.Index, value.Cell, value.Type);
+        }
+        if (!user.empty()) {
+            writer.SetUser(user);
+        }
+        if (!trace.empty()) {
+            writer.SetTrace(trace);
+        }
+        data.SetData(writer.Finish());
+    }
+
+    TUserTable::TCPtr CachedTable;
+    TMaybe<TColumnMap> CachedMap;
+    ui64 CachedVersion = 0;
+
+public:
+    using TBaseSerializer::TBaseSerializer;
+
+    TString DebugString(const TChangeRecord& record) override {
+        return TStringBuilder() << "binary CDC kind " << static_cast<int>(record.GetKind());
+    }
+
+}; // TBinaryCdcSerializer
+
 TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
     TChangeRecordSerializerOpts opts;
     opts.Debug = true;
@@ -711,6 +1098,8 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
         return new TDynamoDBStreamsJsonSerializer(opts);
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return new TDebeziumJsonSerializer(opts);
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatBinary:
+        return new TBinaryCdcSerializer(opts);
     default:
         Y_ENSURE(false, "Unsupported format");
     }
@@ -735,6 +1124,17 @@ TString TChangeRecord::GetPartitionKey() const {
 
     PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
     return *PartitionKey;
+}
+
+TString TChangeRecord::GetRawKeyPartitionKey() const {
+    if (RawKeyPartitionKey) {
+        return *RawKeyPartitionKey;
+    }
+
+    Y_ENSURE(Kind == EKind::CdcDataChange);
+    const auto& key = GetDataChange().GetKey().GetData();
+    RawKeyPartitionKey.ConstructInPlace(MD5::Calc(TStringBuf(key.data(), key.size())));
+    return *RawKeyPartitionKey;
 }
 
 }

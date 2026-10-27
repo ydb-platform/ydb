@@ -704,10 +704,13 @@ public:
     TChangefeedDescription& SetAttributes(std::unordered_map<std::string, std::string>&& attrs);
     // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const std::string& value);
+    // Codec of the stored change record. NONE keeps the record as-is.
+    TChangefeedDescription& WithCompression(EChangefeedCompression compression);
 
     const std::string& GetName() const;
     EChangefeedMode GetMode() const;
     EChangefeedFormat GetFormat() const;
+    EChangefeedCompression GetCompression() const;
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
     bool GetSchemaChanges() const;
@@ -738,6 +741,7 @@ private:
     std::string Name_;
     EChangefeedMode Mode_;
     EChangefeedFormat Format_;
+    EChangefeedCompression Compression_ = EChangefeedCompression::None;
     EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
     bool SchemaChanges_ = false;

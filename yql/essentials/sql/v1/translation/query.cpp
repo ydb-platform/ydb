@@ -400,6 +400,9 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
     if (desc.Settings.Format) {
         settings = node.L(settings, node.Q(node.Y(node.Q("format"), desc.Settings.Format)));
     }
+    if (desc.Settings.Compression) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("compression"), desc.Settings.Compression)));
+    }
     if (desc.Settings.InitialScan) {
         settings = node.L(settings, node.Q(node.Y(node.Q("initial_scan"), desc.Settings.InitialScan)));
     }

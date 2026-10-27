@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    binary_cdc.cpp
     change_exchange.cpp
     change_record.cpp
     change_sender.cpp

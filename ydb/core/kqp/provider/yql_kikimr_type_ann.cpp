@@ -2935,6 +2935,8 @@ private:
                 "consistency_level",
                 "commit_interval",
                 "initial_scan",
+                "format",
+                "compression",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

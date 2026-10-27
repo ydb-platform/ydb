@@ -460,4 +460,6 @@ message TFeatureFlags {
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
     optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
+    // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
+    optional bool EnableBinaryChangefeedForAsyncReplication = 373 [default = false];
 }

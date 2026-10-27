@@ -451,6 +451,31 @@ public:
             return result;
         }
 
+        switch (desc.GetConfig().GetChangefeedFormat()) {
+        case NKikimrReplication::CHANGEFEED_FORMAT_UNSPECIFIED:
+        case NKikimrReplication::CHANGEFEED_FORMAT_JSON:
+            break;
+        case NKikimrReplication::CHANGEFEED_FORMAT_BINARY:
+            if (!AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "BINARY format is not supported yet");
+                return result;
+            }
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid changefeed format");
+            return result;
+        }
+
+        switch (desc.GetConfig().GetChangefeedCompression()) {
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_UNSPECIFIED:
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_NONE:
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD:
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid changefeed compression");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();

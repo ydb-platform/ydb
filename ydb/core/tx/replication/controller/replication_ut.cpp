@@ -64,6 +64,42 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT_VALUES_EQUAL(replication->GetConfig().GetSrcConnectionParams().GetIamCredentials().GetResourceId(), "");
     }
 
+    Y_UNIT_TEST(ChangefeedFormatIsKeptWhenOmitted) {
+        NKikimrReplication::TReplicationConfig config;
+        config.SetChangefeedFormat(NKikimrReplication::CHANGEFEED_FORMAT_BINARY);
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
+
+        NKikimrReplication::TReplicationConfig updated;
+        updated.MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("token");
+        replication->SetConfig(std::move(updated));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replication->GetConfig().GetChangefeedFormat()),
+            static_cast<int>(NKikimrReplication::CHANGEFEED_FORMAT_BINARY));
+
+        NKikimrReplication::TReplicationConfig jsonConfig;
+        jsonConfig.SetChangefeedFormat(NKikimrReplication::CHANGEFEED_FORMAT_JSON);
+        replication->SetConfig(std::move(jsonConfig));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replication->GetConfig().GetChangefeedFormat()),
+            static_cast<int>(NKikimrReplication::CHANGEFEED_FORMAT_JSON));
+    }
+
+    Y_UNIT_TEST(ChangefeedCompressionIsKeptWhenOmitted) {
+        NKikimrReplication::TReplicationConfig config;
+        config.SetChangefeedCompression(NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD);
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
+
+        NKikimrReplication::TReplicationConfig updated;
+        updated.MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("token");
+        replication->SetConfig(std::move(updated));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replication->GetConfig().GetChangefeedCompression()),
+            static_cast<int>(NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD));
+
+        NKikimrReplication::TReplicationConfig noneConfig;
+        noneConfig.SetChangefeedCompression(NKikimrReplication::CHANGEFEED_COMPRESSION_NONE);
+        replication->SetConfig(std::move(noneConfig));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(replication->GetConfig().GetChangefeedCompression()),
+            static_cast<int>(NKikimrReplication::CHANGEFEED_COMPRESSION_NONE));
+    }
+
     Y_UNIT_TEST(InitialScanIsImmutable) {
         NKikimrReplication::TReplicationConfig config;
         config.SetInitialScan(false);

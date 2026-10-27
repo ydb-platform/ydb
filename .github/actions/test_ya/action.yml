@@ -272,6 +272,7 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          -DTEST_EXPORTS_FILE=ydb/apps/ydbd/exports.symlist
           --add-peerdirs-tests all
           --cleanup-child-processes
         )

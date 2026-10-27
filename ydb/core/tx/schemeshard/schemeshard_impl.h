@@ -436,6 +436,7 @@ public:
     bool EnableWasmCompileController = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
+    bool EnableIndexStreamWrite = true;
     bool EnableReplaceIfExistsForExternalEntities = false;
     bool EnableTempTables = false;
     bool EnableResourcePoolsOnServerless = false;

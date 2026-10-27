@@ -25,6 +25,7 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
@@ -8896,6 +8897,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
             (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
             (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
             (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
+            (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem,
         }),
         IEventHandle::FlagTrackDelivery
     );
@@ -8923,6 +8925,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     if (appConfig.HasFeatureFlags()) {
         ApplyConsoleConfigs(appConfig.GetFeatureFlags(), ctx);
     }
+
+    // Subscribed configuration is a full snapshot; an absent section restores defaults.
+    EnableIndexStreamWrite = appConfig.GetTableServiceConfig().GetEnableIndexStreamWrite();
 
     if (appConfig.HasCompactionConfig()) {
         const auto& compactionConfig = appConfig.GetCompactionConfig();

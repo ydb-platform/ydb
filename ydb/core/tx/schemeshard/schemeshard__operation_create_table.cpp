@@ -615,6 +615,7 @@ public:
             .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
             .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
             .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+            .EnableIndexStreamWrite = context.SS->EnableIndexStreamWrite,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

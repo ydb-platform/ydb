@@ -8,6 +8,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
@@ -228,11 +230,13 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         auto colId = table->GetColumnIdByNameSlow(col.GetName());
         bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);
 
-        // Adding a new NOT NULL column to an existing table requires a default,
+        const bool isVirtualGenerated = col.HasDefaultFromExpression() && !col.GetDefaultFromExpression().GetStored();
+
+        // Adding a new physical NOT NULL column to an existing table requires a default,
         // otherwise pre-existing rows would have no value for that column and
         // would violate the constraint immediately. Altering an existing column (SET NOT NULL way)
         // is handled separately and may validate existing data instead.
-        if (col.GetNotNull() && !hasDefault && !altersExistingColumn) {
+        if (col.GetNotNull() && !hasDefault && !altersExistingColumn && !isVirtualGenerated) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -303,7 +307,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     // In addition, such verification protects against a potential bug on the client side.
     if (!isInternal) {
         for (auto& col : *copyAlter.MutableColumns()) {
-            if (col.HasNotNull() && col.GetNotNull()) {
+            const bool addsVirtualGenerated = col.HasDefaultFromExpression()
+                && !col.GetDefaultFromExpression().GetStored()
+                && table->GetColumnIdByNameSlow(col.GetName()) == TTableInfo::InvalidColumnId;
+            if (col.HasNotNull() && col.GetNotNull() && !addsVirtualGenerated) {
                 status = NKikimrScheme::StatusInvalidParameter;
                 errStr = Sprintf("Cannot set NotNull to true on column '%s' in a ModifyScheme request — Internal flag is not set. "
                                     "To override, set Internal = true. This is dangerous: only do this if you know what you are doing", col.GetName().c_str());
@@ -331,6 +338,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
         .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+        .EnableAddColumnGeneratedVirtual = AppData()->FeatureFlags.GetEnableAddColumnGeneratedVirtual(),
+        .EnableIndexStreamWrite = context.SS->EnableIndexStreamWrite,
     };
 
 
@@ -1336,6 +1345,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     if (!path->IsTable()) {
         if (path->IsColumnTable()) {
+            if (AnyOf(alter.GetColumns(), [](const auto& column) { return column.HasDefaultFromExpression(); })) {
+                return {CreateReject(id, NKikimrScheme::StatusInvalidParameter,
+                    "Generated columns are not supported in column tables")};
+            }
             return {CreateAlterColumnTable(id, tx)};
         }
         return {CreateAlterTable(id, tx)};

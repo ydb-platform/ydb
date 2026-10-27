@@ -8,6 +8,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr::NSchemeShard {
@@ -276,6 +278,17 @@ public:
                 }
             }
         } else if (settings.has_column_build_operation()) {
+            if (settings.HasAlterMainTablePayload()) {
+                NKikimrSchemeOp::TModifyScheme alter;
+                if (!settings.GetAlterMainTablePayload().UnpackTo(&alter)) {
+                    return makeReply("invalid ALTER TABLE payload");
+                }
+                if (AnyOf(alter.GetAlterTable().GetColumns(), [](const auto& column) {
+                    return column.HasDefaultFromExpression() && !column.GetDefaultFromExpression().GetStored();
+                })) {
+                    return makeReply("Adding VIRTUAL GENERATED columns together with columns requiring a build is not supported");
+                }
+            }
             bool allFromSequence = settings.column_build_operation().column_size() > 0;
             for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
                 if (settings.column_build_operation().column(i).default_from_sequence().empty()) {

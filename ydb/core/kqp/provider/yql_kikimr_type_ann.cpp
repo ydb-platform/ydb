@@ -691,49 +691,41 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ValidateGeneratedColumns(const TKiCreateTable& create, TKikimrTableMetadata& meta, TExprContext& ctx,
-        TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
+    IGraphTransformer::TStatus CompileGeneratedColumns(TPositionHandle pos, const TExprList& columns,
+        TKikimrTableMetadata& meta, TExprContext& ctx,
+        TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx, bool isAlter = false)
     {
         THashSet<TString> generatedColumns;
-        THashSet<TString> allColumns;
 
         for (const auto& [name, col] : meta.Columns) {
-            allColumns.insert(name);
             if (col.IsDefaultFromExpression()) {
                 generatedColumns.insert(name);
             }
         }
 
-        if (generatedColumns.empty()) {
+        const bool hasGeneratedColumns = AnyOf(columns, [&](const TExprBase& item) {
+            return generatedColumns.contains(TString(item.Cast<TExprList>().Item(0).Cast<TCoAtom>().Value()));
+        });
+        if (!hasGeneratedColumns) {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        // Reject disabled features before compiling SQL; SchemeShard also enforces these gates.
         if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
-            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Generated columns require EnableIndexStreamWrite"));
             return IGraphTransformer::TStatus::Error;
         }
-
-        THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
         TVector<const TItemExprType*> rowTypeItems;
         rowTypeItems.reserve(meta.Columns.size());
-        for (auto item : create.Columns()) {
-            auto columnTuple = item.Cast<TExprList>();
-            auto name = columnTuple.Item(0).Cast<TCoAtom>().Value();
-
-            const auto* columnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            const auto* columnMeta = meta.Columns.FindPtr(name);
-            if (columnMeta && columnMeta->NotNull && columnType->GetKind() != ETypeAnnotationKind::Pg) {
-                columnType = &RemoveOptionality(*columnType);
-            }
-
-            rowTypeItems.push_back(ctx.MakeType<TItemExprType>(name, columnType));
+        for (const auto& [name, column] : meta.Columns) {
+            rowTypeItems.push_back(ctx.MakeType<TItemExprType>(name, GetColumnTypeFromMetadata(column, ctx)));
         }
 
         const TTypeAnnotationNode* rowType = ctx.MakeType<TStructExprType>(rowTypeItems);
 
-        for (auto item : create.Columns()) {
+        for (auto item : columns) {
             auto columnTuple = item.Cast<TExprList>();
             auto columnName = TString(columnTuple.Item(0).Cast<TCoAtom>().Value());
             if (!generatedColumns.contains(columnName)) {
@@ -744,20 +736,20 @@ namespace {
             const bool stored = columnMeta.DefaultExpression->Stored;
 
             if (stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedStored()) {
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                     << "STORED GENERATED columns are disabled. Column: " << columnName));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (!stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedVirtual()) {
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                     << "VIRTUAL GENERATED columns are disabled. Column: " << columnName));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (keyColumns.contains(columnName)) {
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                    << "Generated columns cannot be part of the primary key"));
+            if (isAlter && !stored && !sessionCtx.Config().FeatureFlags.GetEnableAddColumnGeneratedVirtual()) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                    << "Adding VIRTUAL GENERATED columns is disabled (EnableAddColumnGeneratedVirtual)"));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -775,26 +767,6 @@ namespace {
             THashSet<TString> refs;
             CollectGeneratedColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
 
-            for (const auto& ref : refs) {
-                if (ref == columnName) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " can not reference itself"));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (!allColumns.contains(ref)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " references an unknown column: " << ref));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (generatedColumns.contains(ref)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " references another generated column: " << ref));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            }
-
             // Persist the dependency columns
             columnMeta.DefaultExpression->Dependencies.assign(refs.begin(), refs.end());
             Sort(columnMeta.DefaultExpression->Dependencies);
@@ -810,7 +782,7 @@ namespace {
             }
 
             if (!lambda->GetTypeAnn()) {
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                     << "Failed to infer the type of generated column " << columnName));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -901,12 +873,6 @@ namespace {
         } else if (constraint.Name().Value() == "not_null") {
             columnMeta.NotNull = true;
         } else if (constraint.Name().Value() == "generated") {
-            if (isAlter) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                    "Column addition with a GENERATED ALWAYS AS expression is not supported"));
-                return false;
-            }
-
             if (columnMeta.IsDefaultKindDefined()) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder()
                     << "Column " << columnName << " is GENERATED and can not have a Serial/DEFAULT value at the same time"));
@@ -917,6 +883,12 @@ namespace {
 
             const auto& generatedValue = constraint.Value().Cast().Ref();
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
+
+            if (isAlter && generatedValue.Child(2)->Content() == "stored") {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                    "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                return false;
+            }
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
@@ -1614,7 +1586,9 @@ private:
 
         MaybeAutoBindRowIdSequence(*meta);
 
-        if (auto status = ValidateGeneratedColumns(create, *meta, ctx, Types, cluster, *SessionCtx); status != TStatus::Ok) {
+        if (auto status = CompileGeneratedColumns(create.Pos(), create.Columns(), *meta, ctx, Types, cluster, *SessionCtx);
+            status != TStatus::Ok)
+        {
             return status;
         }
 
@@ -2277,6 +2251,9 @@ private:
 
         YQL_ENSURE(!node.Actions().Empty());
 
+        TMap<TString, TKikimrColumnMetadata> addedColumnMetadata;
+        TExprNode::TListType addedColumns;
+
         for (const auto& action : node.Actions()) {
             auto name = action.Name().Value();
             if (name == "renameTo") {
@@ -2352,6 +2329,12 @@ private:
                             "Column FAMILY is not supported for column tables"));
                         return TStatus::Error;
                     }
+
+                    if (!addedColumnMetadata.emplace(name, std::move(columnMeta)).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Duplicate column: " << name));
+                        return TStatus::Error;
+                    }
+                    addedColumns.push_back(columnTuple.Ptr());
                 }
             } else if (name == "dropColumns") {
                 auto listNode = action.Value().Cast<TCoAtomList>();
@@ -2685,6 +2668,72 @@ private:
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));
                 return TStatus::Error;
+            }
+        }
+
+        if (!addedColumns.empty()) {
+            TKikimrTableMetadata metadata(table->Metadata->Cluster, table->Metadata->Name);
+            metadata.Columns = table->Metadata->Columns;
+            metadata.KeyColumnNames = table->Metadata->KeyColumnNames;
+            for (auto& [name, column] : addedColumnMetadata) {
+                metadata.Columns.emplace(name, std::move(column));
+            }
+            for (const auto& action : node.Actions()) {
+                if (action.Name().Value() == "dropColumns") {
+                    for (const auto& column : action.Value().Cast<TCoAtomList>()) {
+                        metadata.Columns.erase(TString(column.Value()));
+                    }
+                }
+            }
+
+            if (auto status = CompileGeneratedColumns(node.Pos(), TExprList(ctx.NewList(node.Pos(), TExprNode::TListType(addedColumns))),
+                metadata, ctx, Types, metadata.Cluster, *SessionCtx, /* isAlter */ true); status != TStatus::Ok)
+            {
+                return status;
+            }
+
+            // Carry the expression dependencies with the constraint into execution.
+            TNodeOnNodeOwnedMap replacements;
+            for (const auto& column : addedColumns) {
+                auto tuple = TExprList(column);
+                const auto& columnMeta = metadata.Columns.at(TString(tuple.Item(0).Cast<TCoAtom>().Value()));
+                if (!columnMeta.IsDefaultFromExpression()) {
+                    continue;
+                }
+                for (const auto& constraint : tuple.Item(2).Cast<TCoNameValueTuple>().Value().Cast<TCoNameValueTupleList>()) {
+                    if (constraint.Name().Value() != "generated") {
+                        continue;
+                    }
+                    const auto& dependencyNames = columnMeta.DefaultExpression->Dependencies;
+                    const auto& generatedValue = constraint.Value().Cast().Ref();
+                    bool sameDependencies = generatedValue.ChildrenSize() == 4
+                        && generatedValue.Child(3)->ChildrenSize() == dependencyNames.size();
+                    if (sameDependencies) {
+                        for (size_t i = 0; i < dependencyNames.size(); ++i) {
+                            if (generatedValue.Child(3)->Child(i)->Content() != dependencyNames[i]) {
+                                sameDependencies = false;
+                                break;
+                            }
+                        }
+                    }
+                    // Repeated annotation must preserve the graph once dependencies are known.
+                    if (sameDependencies) {
+                        continue;
+                    }
+                    TExprNode::TListType dependencies;
+                    for (const auto& dependency : dependencyNames) {
+                        dependencies.push_back(ctx.NewAtom(constraint.Pos(), dependency));
+                    }
+                    auto value = constraint.Value().Cast().Ref().ChildrenList();
+                    value.resize(3);
+                    value.push_back(ctx.NewList(constraint.Pos(), std::move(dependencies)));
+                    replacements.emplace(&generatedValue, ctx.NewList(constraint.Pos(), std::move(value)));
+                }
+            }
+            if (!replacements.empty()) {
+                // Rebuild the parent lists so the new constraint nodes receive type annotations.
+                node.Ptr()->ChildRef(TKiAlterTable::idx_Actions) = ctx.ReplaceNodes(node.Actions().Ptr(), replacements);
+                return TStatus::Repeat;
             }
         }
 

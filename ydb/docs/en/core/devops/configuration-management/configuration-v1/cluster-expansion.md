@@ -58,7 +58,45 @@ To add static nodes to the cluster, perform the following steps:
 
     When you run the above command, {{ ydb-short-name }} CLI will request the password to authenticate the given user.
 
-1. Update `NameserviceConfig` through CMS. [Load the current configuration](cms.md), add the new static nodes with their IDs, addresses, ports, and locations to the complete `Node` list, then prepare a protobuf request file named `nameservice.txt` using the CMS instructions. Submit the request:
+1. Prepare a request to update `NameserviceConfig` through CMS. [Load the current configuration](cms.md) and add the new static nodes with their IDs, addresses, ports, and locations to the complete `Node` list. Preserve all existing nodes and the other `NameserviceConfig` settings, including `ClusterUUID` if it is set.
+
+    The `admin console configs load` command saves the `NameserviceConfig` retrieved from CMS to `names.txt` in the output directory. This file contains the configuration itself. The `update` command requires a configuration change request with the `Actions` wrapper shown below.
+
+    Create a file named `nameservice.txt` containing a request in Protocol Buffers text format using the following template. You can choose a different file name:
+
+    ```proto
+    Actions {
+      AddConfigItem {
+        ConfigItem {
+          Cookie: "<config-cookie>"
+          MergeStrategy: 1
+          Config {
+            NameserviceConfig {
+              <full-nameservice-config>
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    Where:
+
+    - `<config-cookie>`: A label for the CMS configuration item being added, for example `static-nodes-expansion`. It helps find the item but does not replace its ID. Sending `AddConfigItem` again with the same label adds another item instead of modifying the existing one.
+    - `<full-nameservice-config>`: The complete updated `NameserviceConfig` contents without the outer `NameserviceConfig { ... }` wrapper. Replace this placeholder with the configuration settings and all `Node` blocks, including both existing and new nodes. The placeholder line is not valid protobuf file content.
+
+    `Actions` contains the request actions, and `AddConfigItem` adds a configuration item. `MergeStrategy: 1` selects `OVERWRITE`: this item replaces lower-priority `NameserviceConfig` values. The request must therefore contain the complete configuration. The default `MERGE` strategy concatenates `Node` lists, which can duplicate existing nodes when you supply a complete list.
+
+    The template omits `UsageScope`, so the item is not restricted to particular nodes, hosts, or tenants. If CMS contains more specific `NameserviceConfig` items, they have higher priority: reconcile them with the updated node list before applying the request.
+
+1. Validate the prepared request without applying changes by using `--dry-run`:
+
+    ```bash
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://<node1.ydb.tech>:2135 \
+        admin console configs update --dry-run nameservice.txt
+    ```
+
+    Use the node address, certificate, and token file from the preceding steps. If validation reports an error, correct the request and validate it again. After successful validation, submit the request without `--dry-run`:
 
     ```bash
     /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://<node1.ydb.tech>:2135 \

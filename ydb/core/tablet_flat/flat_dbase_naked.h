@@ -744,8 +744,9 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->Update(rop, key, ops, Annex, rowVersion);
-            if (RedoObserver)
+            if (RedoObserver) {
                 RedoObserver->OnRedoUpdate(tid, rop, key, ops, Annex, rowVersion, 0, 0);
+            }
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
@@ -758,8 +759,9 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->UpdateTx(rop, key, ops, Annex, txId, savepointSeqNum);
-            if (RedoObserver)
+            if (RedoObserver) {
                 RedoObserver->OnRedoUpdate(tid, rop, key, ops, Annex, TRowVersion::Min(), txId, savepointSeqNum);
+            }
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
@@ -772,8 +774,9 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->CommitTx(txId, rowVersion);
-            if (RedoObserver)
+            if (RedoObserver) {
                 RedoObserver->OnRedoCommit(tid, txId, rowVersion);
+            }
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
         }
@@ -785,8 +788,9 @@ namespace NTable {
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
             wrap->RemoveTx(txId);
-            if (RedoObserver)
+            if (RedoObserver) {
                 RedoObserver->OnRedoRemove(tid, txId);
+            }
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
         }

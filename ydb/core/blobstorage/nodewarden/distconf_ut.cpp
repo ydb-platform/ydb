@@ -3681,6 +3681,56 @@ selector_config: []
         return false;
     }
 
+    Y_UNIT_TEST(ReassignStateStorageNodePreservesRingQuorum) {
+        TCommitConfirmationFixture fixture;
+        auto *config = fixture.Config.MutableStateStorageConfig();
+        config->SetSSId(1);
+        auto *group = config->MutableRing();
+        group->SetNToSelect(3);
+        for (ui32 nodeId : {1, 2, 3}) {
+            auto *ring = group->AddRing();
+            ring->AddNode(nodeId);
+            ring->SetIsDisabled(nodeId == 1);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            return true;
+        };
+        const auto disable = [&](ui32 nodeId) {
+            response.reset();
+            edge = fixture.Runtime.AllocateEdgeActor(1);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableReassignStateStorageNode();
+            command->SetFrom(nodeId);
+            command->SetStateStorage(true);
+            command->SetDisableRing(true);
+            fixture.Runtime.Send(new IEventHandle(fixture.Root(), edge, request.release()), 1);
+            UNIT_ASSERT_C(SimUntil(fixture.Runtime, [&] { return response.has_value(); }),
+                "ReassignStateStorageNode did not finish");
+        };
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto accepted = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT(accepted.GetStateStorageConfig().GetRing().GetRing(0).GetIsDisabled());
+
+        disable(2);
+        UNIT_ASSERT_C(response->GetStatus() != TResult::OK, response->DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "configuration disabled too many rings");
+        const auto rejected = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetFingerprint(), accepted.GetFingerprint());
+        UNIT_ASSERT(!rejected.GetStateStorageConfig().GetRing().GetRing(1).GetIsDisabled());
+    }
+
     void StartZeroGenerationRoot(TCommitConfirmationFixture& fixture) {
         fixture.Config.SetGeneration(0);
         auto *selfManagement = fixture.Config.MutableSelfManagementConfig();

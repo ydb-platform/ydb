@@ -1,0 +1,164 @@
+{
+    "toolchains": {
+        "gdb": {
+            "tools": {
+                "gdb": {
+                    "bottle": "gdb",
+                    "executable": "gdb"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "ppc64le"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ],
+            "env": {
+                "TERMINFO": [
+                    "$(ROOT)/gdb/lib/terminfo"
+                ]
+            }
+        },
+        "gcore": {
+            "tools": {
+                "gcore": {
+                    "bottle": "gdb",
+                    "executable": "gcore"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "ppc64le"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "gdbserver": {
+            "tools": {
+                "gdbserver": {
+                    "bottle": "gdb",
+                    "executable": "gdbserver"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "ppc64le"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ]
+        }
+    },
+    "bottles": {
+        "gdb": {
+            "formula": "build/external_resources/gdb/resources.json",
+            "executable": {
+                "gdb": [
+                    "gdb",
+                    "bin",
+                    "gdb"
+                ],
+                "gdbserver": [
+                    "gdb",
+                    "bin",
+                    "gdbserver"
+                ],
+                "gcore": [
+                    "gdb",
+                    "bin",
+                    "gcore"
+                ]
+            }
+        }
+    }
+}

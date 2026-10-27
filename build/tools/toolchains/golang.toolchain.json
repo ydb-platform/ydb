@@ -1,0 +1,62 @@
+{
+    "toolchains": {
+        "golang": {
+            "tools": {
+                "go": {
+                    "bottle": "golang",
+                    "executable": "go"
+                },
+                "gofmt": {
+                    "bottle": "golang",
+                    "executable": "gofmt"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                }
+            ],
+            "params": {
+                "type": "golang",
+                "version": "1.27.1"
+            }
+        }
+    },
+    "bottles": {
+        "golang": {
+            "formula": "build/external_resources/go_tools/go1.27.json",
+            "executable": {
+                "go": [
+                    "bin",
+                    "go"
+                ],
+                "gofmt": [
+                    "bin",
+                    "gofmt"
+                ]
+            }
+        }
+    }
+}

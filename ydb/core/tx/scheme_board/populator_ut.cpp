@@ -451,6 +451,99 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             "replay of the latest description must use that description's current path for routing");
     }
 
+    void TestColdDeletionWithPathWaitsForReplicaQuorum(bool subscribeBeforeDeletion) {
+        TTestBasicRuntime runtime;
+        TStateStorageInfo::TRingGroup group{};
+        group.NToSelect = ReplicasInRingGroup;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, ReplicasInRingGroup));
+        const auto edge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        const auto info = GetStateStorageInfo(runtime);
+        THashSet<TActorId> replicaActors;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                replicaActors.insert(runtime.GetLocalServiceId(replica));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicaActors.size(), ReplicasInRingGroup);
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto& ev) {
+            if (replicaActors.contains(ev->Sender)) {
+                ++committed;
+            }
+        });
+        const TActorId populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all replicas initialized", [&] {
+            return committed == ReplicasInRingGroup;
+        }, TDuration::Seconds(10));
+        commits.Remove();
+
+        if (subscribeBeforeDeletion) {
+            const auto subscriber = runtime.AllocateEdgeActor();
+            for (const auto& replica : replicaActors) {
+                runtime.Send(new IEventHandle(replica, subscriber, new NInternalEvents::TEvSubscribe(pathId, owner)));
+                auto notify = runtime.GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber, TDuration::Seconds(10));
+                UNIT_ASSERT_VALUES_EQUAL(notify->Sender, replica);
+                const auto& record = notify->Get()->GetRecord();
+                UNIT_ASSERT_VALUES_EQUAL(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()), pathId);
+                UNIT_ASSERT(record.GetIsDeletion());
+                UNIT_ASSERT_VALUES_EQUAL(record.GetVersion(), 0);
+            }
+        }
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
+            return ev->Sender == populator && ev->Cookie == cookie;
+        });
+        TBlockEvents<TUpdateAck> replicaAcks(runtime, [&](const auto& ev) {
+            return replicaActors.contains(ev->Sender) && ev->Cookie == cookie;
+        });
+        TBlockEvents<TUpdateAck> mainAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == edge && ev->Cookie == cookie;
+        });
+
+        auto deletion = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        deletion->Record = GenerateDescribe("/Root/TestPath", pathId, 2);
+        deletion->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+        runtime.Send(new IEventHandle(populator, edge, deletion.Release(), 0, cookie));
+        runtime.WaitFor("cold deletion routed to replicas", [&] {
+            return updates.size() == ReplicasInRingGroup || !mainAcks.empty();
+        }, TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(mainAcks.empty(),
+            "a deletion replay with a routing path must not be acknowledged before replica quorum");
+        UNIT_ASSERT_VALUES_EQUAL(updates.size(), ReplicasInRingGroup);
+        mainAcks.Stop();
+        updates.Stop().Unblock();
+        runtime.WaitFor("cold deletion replica ACKs", [&] {
+            return replicaAcks.size() == ReplicasInRingGroup;
+        }, TDuration::Seconds(10));
+        for (const auto& ack : replicaAcks) {
+            UNIT_ASSERT_VALUES_EQUAL(ack->Get()->GetPathId(), pathId);
+            UNIT_ASSERT_VALUES_EQUAL_C(ack->Get()->Record.GetVersion(), Max<ui64>(), ack->ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+
+        replicaAcks.Unblock(1);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 0,
+            "one replica ACK must not complete a deletion requiring two of three replicas");
+        replicaAcks.Unblock(1);
+        auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Sender, populator);
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Get()->GetPathId(), pathId);
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Get()->Record.GetVersion(), Max<ui64>());
+    }
+
+    Y_UNIT_TEST(ColdDeletionWithPathWaitsForReplicaQuorum) {
+        TestColdDeletionWithPathWaitsForReplicaQuorum(false);
+    }
+
+    Y_UNIT_TEST(ColdDeletionWithPathAfterSubscriptionWaitsForReplicaQuorum) {
+        TestColdDeletionWithPathWaitsForReplicaQuorum(true);
+    }
+
     Y_UNIT_TEST(OneRingGroup) {
         TestPopulatorQuorum({ {} });
     }

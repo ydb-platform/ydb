@@ -573,6 +573,9 @@ private:
         }
 
         if (desc->IsEmpty()) {
+            if (createIfNotExists && !desc->IsExplicitlyDeleted()) {
+                desc->Clear();
+            }
             return;
         }
 

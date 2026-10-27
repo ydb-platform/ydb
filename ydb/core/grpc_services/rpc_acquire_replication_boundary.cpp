@@ -99,7 +99,7 @@ private:
             }
         }
         if (NextPath < GetProtoRequest()->source_paths_size()) {
-            return DescribePath(GetProtoRequest()->source_paths(NextPath++));
+            return DescribePath(Request_->NormalizePath(GetProtoRequest()->source_paths(NextPath++)));
         }
         // A fresh request is issued only after all completed Freezes were observed.
         Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), new TLongTxEvents::TEvAcquireReadSnapshot(Database));

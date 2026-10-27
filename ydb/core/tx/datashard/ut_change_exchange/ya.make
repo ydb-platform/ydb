@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
+    ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/persqueue_public

@@ -5159,6 +5159,313 @@ Y_UNIT_TEST_SUITE(Cdc) {
         checkAwsRegion("/Root/Table/Stream2", "customRegion");
     }
 
+    Y_UNIT_TEST(FreezeAuditSnapshotCoversDelayedReply) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134))
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        const auto tablet = GetTableShards(server, sender, "/Root/Table").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        std::unique_ptr<IEventHandle> reply;
+        TRowVersion version(0, 0);
+        auto blocker = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                UNIT_ASSERT(ev->Get()->Record.HasCommitVersion());
+                version = TRowVersion::FromProto(ev->Get()->Record.GetCommitVersion());
+                reply.reset(ev.Release());
+            }
+        });
+        auto request = MakeWriteRequest(124, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId,
+            std::vector<ui32>{1, 2}, std::vector<TCell>{TCell::Make(ui32(1)), TCell::Make(ui32(10))});
+        runtime.SendToPipe(tablet, sender, request.release());
+        runtime.WaitFor("completed write with delayed reply", [&]{ return bool(reply); });
+        blocker.Remove();
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        const auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+        UNIT_ASSERT_C(version <= snapshot, "write=" << version << " snapshot=" << snapshot);
+        runtime.Send(reply.release(), 0, true);
+        runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+    }
+
+    auto WaitForFrozenCdc(TTestActorRuntime& runtime, const TActorId& sender,
+            const TString& path, const TRowVersion& boundary, size_t expectedChanges) {
+        // Check the persisted topic, including ordering across restarts, rather
+        // than only observing records generated inside DataShard.
+        for (size_t attempt = 0; attempt < 30; ++attempt) {
+            auto records = GetRecords(runtime, sender, path, 0);
+            TRowVersion resolved(0, 0);
+            size_t changes = 0;
+            for (const auto& [key, data] : records) {
+                Y_UNUSED(key);
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
+                if (json.Has("resolved")) {
+                    const TRowVersion next(json["resolved"][0].GetUInteger(), json["resolved"][1].GetUInteger());
+                    UNIT_ASSERT_C(resolved <= next, "Resolved timestamp regressed: " << resolved << " -> " << next);
+                    resolved = next;
+                } else {
+                    UNIT_ASSERT(json.Has("ts"));
+                    const TRowVersion version(json["ts"][0].GetUInteger(), json["ts"][1].GetUInteger());
+                    UNIT_ASSERT_C(resolved < version, "CDC=" << version << " follows heartbeat=" << resolved);
+                    ++changes;
+                }
+            }
+            if (resolved >= boundary) {
+                UNIT_ASSERT_VALUES_EQUAL(changes, expectedChanges);
+                return records;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_FAIL("Frozen CDC did not reach " << boundary);
+        return GetRecords(runtime, sender, path, 0);
+    }
+
+    void FreezeAuditWaitsVolatileAndDependentImmediate(bool reboot, bool abort) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root").SetEnableDataShardVolatileTransactions(true));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table1", SimpleTable());
+        CreateShardedTable(server, sender, "/Root", "Table2", SimpleTable());
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table1",
+            WithVirtualTimestamps(WithResolvedTimestamps(TDuration::Seconds(1),
+                Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        const auto tablet1 = GetTableShards(server, sender, "/Root/Table1").at(0);
+        const auto tablet2 = GetTableShards(server, sender, "/Root/Table2").at(0);
+        const auto tableId2 = ResolveTableId(server, sender, "/Root/Table2");
+        const auto actor2 = ResolveTablet(runtime, tablet2);
+        size_t brokenLocks = 0;
+        auto breakLock = [&](auto* locks, ui64 txId) {
+            auto* lock = locks->AddLocks();
+            lock->SetLockId(txId);
+            lock->SetDataShard(tablet2);
+            lock->SetGeneration(1);
+            lock->SetCounter(1);
+            lock->SetSchemeShard(tableId2.PathId.OwnerId);
+            lock->SetPathId(tableId2.PathId.LocalPathId);
+            ++brokenLocks;
+        };
+        auto brokenWrite = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (abort && ev->GetRecipientRewrite() == actor2
+                && record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+                && record.HasLocks()) {
+                breakLock(record.MutableLocks(), record.GetTxId());
+            }
+        });
+        auto brokenPropose = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (abort && ev->GetRecipientRewrite() == actor2
+                && record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
+                NKikimrTxDataShard::TDataTransaction tx;
+                UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                if (tx.HasKqpTransaction() && tx.GetKqpTransaction().HasLocks()) {
+                    breakLock(tx.MutableKqpTransaction()->MutableLocks(), record.GetTxId());
+                    UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                }
+            }
+        });
+        TMap<ui64, TRowVersion> versions;
+        auto records = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    versions.emplace(record->GetOrder(), TRowVersion(record->GetStep(), record->GetTxId()));
+                }
+            }
+        });
+        std::vector<std::unique_ptr<IEventHandle>> readSets;
+        auto blocker = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](auto& ev) {
+            readSets.emplace_back(ev.Release());
+        });
+        const auto session = CreateSessionRPC(runtime, "/Root");
+        auto result = SendRequest(runtime, MakeSimpleRequestRPC(
+            "UPSERT INTO `/Root/Table1` (key, value) VALUES (1, 10);"
+            "UPSERT INTO `/Root/Table2` (key, value) VALUES (2, 20);", session, "", true), "/Root");
+        runtime.WaitFor("blocked volatile decisions", [&]{ return readSets.size() >= (abort ? 3u : 4u); });
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table1` (key, value) VALUES (1, 11);");
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, tablet1, "DataShard/VolatileTxWaitingCount"), 0);
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, tablet1, "DataShard/VolatileTxCommittedCount"), 0);
+        if (abort) {
+            UNIT_ASSERT_VALUES_EQUAL(brokenLocks, 1u);
+        }
+        ui64 freezeTx = 0;
+        bool schemaChanged = false;
+        auto completion = runtime.AddObserver<TEvDataShard::TEvSchemaChanged>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == freezeTx) {
+                schemaChanged = true;
+            }
+        });
+        freezeTx = AsyncAlterFreezeState(server, "/Root", "Table1", NKikimrSchemeOp::EFreezeState::Freeze);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!schemaChanged, "Freeze completed with unresolved volatile decisions");
+        if (reboot) {
+            readSets.clear();
+            RebootTablet(runtime, tablet1, sender);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(!schemaChanged, "Freeze completed after reboot with unresolved volatile decisions");
+        }
+        blocker.Remove();
+        for (auto& ev : readSets) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        const auto resultText = FormatResult(AwaitResponse(runtime, std::move(result)));
+        if (reboot) {
+            UNIT_ASSERT_C(resultText == "<empty>" || resultText == "ERROR: UNDETERMINED", resultText);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(resultText, abort ? "ERROR: ABORTED" : "<empty>");
+        }
+        WaitTxNotification(server, sender, freezeTx);
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table2",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        const auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+        runtime.WaitFor("both CDC changes", [&]{ return versions.size() >= (abort ? 1u : 2u); });
+        for (const auto& [order, version] : versions) {
+            Y_UNUSED(order);
+            UNIT_ASSERT_C(version <= snapshot, "CDC=" << version << " snapshot=" << snapshot);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT value FROM `/Root/Table1`;"),
+            "{ items { uint32_value: 11 } }");
+        if (abort) {
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT key FROM `/Root/Table2`;"), "");
+            UNIT_ASSERT_VALUES_EQUAL(versions.size(), 1u);
+        }
+        WaitForFrozenCdc(runtime, sender, "/Root/Table1/Stream",
+            TRowVersion((snapshot.Step / 1000 + 1) * 1000, 0), abort ? 1 : 2);
+    }
+
+    Y_UNIT_TEST(FreezeAuditWaitsVolatileAndDependentImmediate) {
+        FreezeAuditWaitsVolatileAndDependentImmediate(false, false);
+    }
+
+    Y_UNIT_TEST(FreezeAuditWaitsVolatileAfterReboot) {
+        FreezeAuditWaitsVolatileAndDependentImmediate(true, false);
+    }
+
+    Y_UNIT_TEST(FreezeAuditWaitsVolatileAbort) {
+        FreezeAuditWaitsVolatileAndDependentImmediate(false, true);
+    }
+
+    void FreezeAuditHeartbeatReachesBoundary(bool empty, bool reboot) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        TRowVersion lastHeartbeat(0, 0);
+        auto observer = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                    lastHeartbeat = Max(lastHeartbeat, TRowVersion(record->GetStep(), record->GetTxId()));
+                }
+            }
+        });
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(1), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        runtime.WaitFor("initial heartbeat", [&]{ return lastHeartbeat != TRowVersion(0, 0); });
+        if (!empty) {
+            ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        }
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        if (reboot) {
+            RebootTablet(runtime, GetTableShards(server, sender, "/Root/Table").at(0), sender);
+        }
+        const auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+        const TRowVersion boundary((snapshot.Step / 1000 + 1) * 1000, 0);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+        UNIT_ASSERT_C(lastHeartbeat >= boundary,
+            "Frozen CDC stalled: heartbeat=" << lastHeartbeat << " boundary=" << boundary);
+    }
+
+    Y_UNIT_TEST(FreezeAuditHeartbeatReachesBoundary) { FreezeAuditHeartbeatReachesBoundary(false, false); }
+    Y_UNIT_TEST(FreezeAuditHeartbeatEmptyTable) { FreezeAuditHeartbeatReachesBoundary(true, false); }
+    Y_UNIT_TEST(FreezeAuditHeartbeatAfterReboot) { FreezeAuditHeartbeatReachesBoundary(false, true); }
+
+    void FreezeAuditDelayedCdc(bool rebootBeforeDelivery) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        const auto tablet = GetTableShards(server, sender, "/Root/Table").at(0);
+        TRowVersion generatedHeartbeat(0, 0);
+        std::vector<std::unique_ptr<IEventHandle>> delayed;
+        auto observer = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            bool hasData = false;
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                    generatedHeartbeat = Max(generatedHeartbeat, TRowVersion(record->GetStep(), record->GetTxId()));
+                } else if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    hasData = true;
+                }
+            }
+            if (hasData) {
+                delayed.emplace_back(ev.Release());
+            }
+        });
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            WithVirtualTimestamps(WithResolvedTimestamps(TDuration::Seconds(1),
+                Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        runtime.WaitFor("initial heartbeat", [&]{ return generatedHeartbeat != TRowVersion(); });
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        runtime.WaitFor("delayed CDC data", [&]{ return !delayed.empty(); });
+        WaitTxNotification(server, sender, AsyncAlterFreezeState(server, "/Root", "Table",
+            NKikimrSchemeOp::EFreezeState::Freeze));
+        const auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+        const TRowVersion boundary((snapshot.Step / 1000 + 1) * 1000, 0);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        UNIT_ASSERT_C(generatedHeartbeat >= boundary, "Heartbeat was not generated on Frozen");
+        auto checkBlocked = [&] {
+            for (const auto& [key, data] : GetRecords(runtime, sender, "/Root/Table/Stream", 0)) {
+                Y_UNUSED(key);
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
+                UNIT_ASSERT(json.Has("resolved"));
+                const TRowVersion version(json["resolved"][0].GetUInteger(), json["resolved"][1].GetUInteger());
+                UNIT_ASSERT_C(version < boundary, "Heartbeat overtook delayed CDC data");
+            }
+        };
+        checkBlocked();
+        if (rebootBeforeDelivery) {
+            delayed.clear();
+            RebootTablet(runtime, tablet, sender);
+            runtime.WaitFor("CDC replay on Frozen", [&]{ return !delayed.empty(); });
+            runtime.SimulateSleep(TDuration::Seconds(5));
+            checkBlocked();
+        }
+        observer.Remove();
+        for (auto& ev : delayed) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        const auto before = WaitForFrozenCdc(runtime, sender, "/Root/Table/Stream", boundary, 1);
+        // Once the boundary is visible, both CDC data and heartbeats must survive
+        // source and topic tablet restarts, with no duplicate data records.
+        const auto pqTablet = ResolvePqTablet(runtime, sender, "/Root/Table/Stream", 0);
+        RebootTablet(runtime, tablet, sender);
+        RebootTablet(runtime, pqTablet, sender);
+        const auto laterSnapshot = AcquireReadSnapshot(runtime, "/Root");
+        const auto after = WaitForFrozenCdc(runtime, sender, "/Root/Table/Stream",
+            TRowVersion((laterSnapshot.Step / 1000 + 2) * 1000, 0), 1);
+        UNIT_ASSERT_GE(after.size(), before.size());
+        for (size_t i = 0; i < before.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(after[i].second, before[i].second);
+        }
+    }
+
+    Y_UNIT_TEST(FreezeAuditHeartbeatCannotOvertakeCdc) { FreezeAuditDelayedCdc(false); }
+    Y_UNIT_TEST(FreezeAuditHeartbeatCannotOvertakeCdcAfterReboot) { FreezeAuditDelayedCdc(true); }
+
     Y_UNIT_TEST(ResolvedTimestamps) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

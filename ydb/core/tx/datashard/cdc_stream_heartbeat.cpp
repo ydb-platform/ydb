@@ -31,7 +31,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready && Self->State != TShardState::Frozen) {
             return true;
         }
 
@@ -85,7 +85,8 @@ void TDataShard::EmitHeartbeats() {
     YDB_LOG_DEBUG("[CdcStreamHeartbeat] Scheduling CDC stream heartbeat emission",
         {"tabletId", TabletID()});
 
-    if (State != TShardState::Ready) {
+    // Frozen tables still need resolved timestamps to drain their CDC streams.
+    if (State != TShardState::Ready && State != TShardState::Frozen) {
         return;
     }
 

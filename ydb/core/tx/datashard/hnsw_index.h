@@ -16,6 +16,11 @@ namespace NKikimr::NDataShard {
     // Omitted proto3 parameters use the documented server-side default.
     ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
 
+    ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
+    bool AreHnswIndexSettingsCompatible(
+        const Ydb::Table::VectorIndexSettings& cached,
+        const Ydb::Table::VectorIndexSettings& requested);
+
     // Result of an HNSW search: pairs of (serialized primary key, distance).
     struct THnswSearchResult {
         std::vector<std::pair<TString, float>> Results;

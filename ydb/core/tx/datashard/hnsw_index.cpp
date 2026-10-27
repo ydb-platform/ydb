@@ -35,6 +35,7 @@ namespace NKikimr::NDataShard {
         constexpr ui32 DefaultHnswM = 16;
         constexpr ui32 DefaultHnswEfConstruction = 200;
         constexpr ui64 DefaultHnswDeltaRows = 10000;
+        constexpr ui64 DefaultHnswMinRows = 10000;
 
         size_t SaturatingAdd(size_t lhs, size_t rhs) {
             return rhs > Max<size_t>() - lhs ? Max<size_t>() : lhs + rhs;
@@ -103,6 +104,26 @@ namespace NKikimr::NDataShard {
         return settings.has_delta_rows()
                    ? settings.delta_rows()
                    : DefaultHnswDeltaRows;
+    }
+
+    ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
+        return settings.has_min_rows() ? settings.min_rows() : DefaultHnswMinRows;
+    }
+
+    bool AreHnswIndexSettingsCompatible(
+        const VectorIndexSettings& cached,
+        const VectorIndexSettings& requested) {
+        const auto connectivity = [](const auto& settings) {
+            return settings.has_m()
+                       ? settings.m()
+                       : DefaultHnswM;
+        };
+        const auto constructionCandidates = [](const auto& settings) {
+            return settings.has_ef_construction()
+                       ? settings.ef_construction()
+                       : DefaultHnswEfConstruction;
+        };
+        return cached.metric() == requested.metric() && cached.vector_type() == requested.vector_type() && cached.vector_dimension() == requested.vector_dimension() && connectivity(cached) == connectivity(requested) && constructionCandidates(cached) == constructionCandidates(requested);
     }
 
     void THnswIndexChanges::Set(TString key, TRowVersion version,

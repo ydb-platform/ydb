@@ -65,6 +65,7 @@ namespace NKikimr::NDataShard {
                 for (ui64 commitTxId : info->CommitTxIds) {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.CommitTx(tid, commitTxId, info->Version);
+                        Self->CommitHnswIndexChanges(tid, commitTxId, info->Version, txc.DB);
                         Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
                     } else if (txc.DB.HasRemovedTx(tid, commitTxId)) {
                         YDB_LOG_CRIT("Committing removed changes",
@@ -168,6 +169,7 @@ namespace NKikimr::NDataShard {
                 for (ui64 commitTxId : info->CommitTxIds) {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.RemoveTx(tid, commitTxId);
+                        Self->AbortHnswIndexChanges(tid, commitTxId, txc.DB);
                         Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
                     }
                 }

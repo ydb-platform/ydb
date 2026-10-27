@@ -79,3 +79,6 @@ D1 does not implement continuation frames, compiler effects, CPU quanta, batchin
 checkpoint replay, or FQ/KQP bridges. In D2/D3, a continuation that exhausts its CPU
 budget with runnable work must explicitly arm a coalesced rerun: completion
 readiness alone is not a substitute. A truly waiting task must not self-poll.
+
+The D2 compiler/runtime is in [compute](compute/README.md), a separate target
+above this standalone lifecycle library. Engine bridges are still pending D6.

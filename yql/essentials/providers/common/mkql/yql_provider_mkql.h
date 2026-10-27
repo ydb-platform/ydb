@@ -6,6 +6,9 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
+namespace NKikimr::NMiniKQL::NAsync { class TCallableRegistry; }
+namespace NYql { struct TTypeAnnotationContext; }
+
 namespace NYql::NCommon {
 
 class IMkqlCallableCompiler;
@@ -24,6 +27,8 @@ struct TMkqlBuildContext {
     const size_t Level = 0ULL;
     const ui64 LambdaId = 0ULL;
     NKikimr::NMiniKQL::TRuntimeNode Parameters;
+    const TTypeAnnotationContext* AsyncTypes = nullptr;
+    const NKikimr::NMiniKQL::NAsync::TCallableRegistry* AsyncRegistry = nullptr;
 
     TMkqlBuildContext(const IMkqlCallableCompiler& mkqlCompiler, NKikimr::NMiniKQL::TProgramBuilder& builder, TExprContext& exprCtx, ui64 lambdaId = 0ULL, TArgumentsMap&& args = {}, TMemoizedTypesMap* typeMemoization = nullptr)
         : MkqlCompiler(mkqlCompiler)
@@ -45,6 +50,8 @@ struct TMkqlBuildContext {
         , Level(parent.Level + 1U)
         , LambdaId(lambdaId)
         , Parameters(parent.Parameters)
+        , AsyncTypes(parent.AsyncTypes)
+        , AsyncRegistry(parent.AsyncRegistry)
     {
     }
 

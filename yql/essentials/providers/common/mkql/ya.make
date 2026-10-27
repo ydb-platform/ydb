@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/json
     yql/essentials/ast
     yql/essentials/minikql
+    yql/essentials/minikql/async/compute
     yql/essentials/public/decimal
     yql/essentials/public/udf
     yql/essentials/utils

@@ -286,6 +286,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , BridgeBinaryPath(opts.BridgeBinaryPath)
     , NotConsumedLinear(notConsumedLinear)
     , RuntimeSettings(*runtimeSettings)
+    , AsyncServices(opts.AsyncServices)
     , RuntimeSettingsPtr_(std::move(runtimeSettings))
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));

@@ -32,6 +32,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_change_exchange.cpp
+    datashard_ut_replication_boundary.cpp
 )
 
 END()

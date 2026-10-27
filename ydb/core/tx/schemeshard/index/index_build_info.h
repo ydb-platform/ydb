@@ -240,6 +240,32 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
+    const Ydb::Table::KMeansTreeSettings& GetVectorSettings() const {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription).GetSettings();
+        }
+        return std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();
+    }
+
+    Ydb::Table::KMeansTreeSettings& MutableVectorSettings() {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return *std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription).MutableSettings();
+        }
+        return *std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).MutableSettings();
+    }
+
+    Ydb::Table::VectorIndexSettings GetKMeansVectorSettings() const {
+        auto settings = GetVectorSettings().settings();
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            // Routing uses KMeans without changing the persisted HNSW settings.
+            settings.clear_m();
+            settings.clear_ef_construction();
+            settings.clear_min_rows();
+            settings.clear_delta_rows();
+        }
+        return settings;
+    }
+
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 0;
@@ -735,30 +761,29 @@ public:
             }
 
             switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
-                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
-                    auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
-                    indexInfo->KMeans.K = desc.settings().clusters();
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
-                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-                    indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
-                        ? desc.settings().overlap_clusters()
-                        : NTableIndex::NKMeans::DefaultOverlapClusters;
-                    indexInfo->KMeans.OverlapRatio = desc.settings().has_overlap_ratio()
-                        ? desc.settings().overlap_ratio()
-                        : NTableIndex::NKMeans::DefaultOverlapRatio;
-                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    indexInfo->SpecializedIndexDescription = std::move(desc);
-                    break;
-                }
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
                 case NKikimrSchemeOp::TIndexCreationConfig::kHnswIndexDescription: {
-                    auto& desc = *creationConfig.MutableHnswIndexDescription();
+                    if (creationConfig.HasHnswIndexDescription()) {
+                        indexInfo->SpecializedIndexDescription = creationConfig.GetHnswIndexDescription();
+                    } else {
+                        indexInfo->SpecializedIndexDescription = creationConfig.GetVectorIndexKmeansTreeDescription();
+                    }
+                    const auto& settings = indexInfo->GetVectorSettings();
                     TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateHnswSettingsPartial(desc.GetSettings(), createError), createError);
-                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    const bool valid = indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(settings, createError)
+                        : NKikimr::NKMeans::ValidateSettingsPartial(settings, createError);
+                    Y_ENSURE(valid, createError);
+                    indexInfo->KMeans.K = settings.clusters();
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + settings.levels();
+                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Adaptive = settings.adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+                    indexInfo->KMeans.OverlapClusters = settings.overlap_clusters()
+                        ? settings.overlap_clusters() : NTableIndex::NKMeans::DefaultOverlapClusters;
+                    indexInfo->KMeans.OverlapRatio = settings.has_overlap_ratio()
+                        ? settings.overlap_ratio() : NTableIndex::NKMeans::DefaultOverlapRatio;
+                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(indexInfo->GetKMeansVectorSettings(), indexInfo->KMeans.Rounds, createError);
                     break;
                 }
                 case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {

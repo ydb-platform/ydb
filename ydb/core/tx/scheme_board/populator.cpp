@@ -718,7 +718,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             {"version", (isDeletion ? 0 : version)});
 
         if (isDeletion) {
-            if (!Descriptions.contains(pathId)) {
+            if (!Descriptions.contains(pathId) && record.GetPath().empty()) {
                 YDB_LOG_NOTICE("Immediate ack for deleted path",
                     {"selfId", SelfId()},
                     {"sender", ev->Sender},
@@ -743,7 +743,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
         auto& path = it->second.Paths[pathId];
-        path = Descriptions.at(pathId).Path;
+        path = isDeletion && !Descriptions.contains(pathId)
+            ? record.GetPath()
+            : Descriptions.at(pathId).Path;
         Update(pathId, isDeletion, ev->Cookie, path);
 
         if (isDeletion) {

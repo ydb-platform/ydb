@@ -29,6 +29,7 @@ SRCS(
     hullds_sst.cpp
     hullds_sst.h
     hullds_sst_it.h
+    hullds_sst_twolevel.h
     hullds_sstslice.cpp
     hullds_sstslice.h
     hullds_sstslice_it.h

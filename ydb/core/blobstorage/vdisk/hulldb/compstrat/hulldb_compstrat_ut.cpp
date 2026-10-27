@@ -88,7 +88,7 @@ namespace NKikimr {
                 memRec.SetNoBlob();
                 TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Contexts.GetVCtx()->SstIndex));
                 index.emplace_back(TKeyLogoBlob(TLogoBlobID(sst->AssignedSstId, 1, 1, 0, 1, 0)), memRec);
-                sst->LoadLinearIndex(index);
+                sst->LoadLinearIndex(std::move(index));
                 auto &slice = *Ds->LogoBlobs->CurSlice;
                 if (level == 0) {
                     slice.Level0.Put(sst);
@@ -380,7 +380,7 @@ namespace NKikimr {
                     memRec.SetDiskBlob(TDiskPart(chunkIdx, 0, inplacedSize));
                     index.emplace_back(TKeyLogoBlob(id), memRec);
                 }
-                sst->LoadLinearIndex(index);
+                sst->LoadLinearIndex(std::move(index));
                 sst->AllChunks.push_back(chunkIdx);
                 sst->Info.Chunks = 1;
                 sst->Info.Items = lastStep - firstStep + 1;
@@ -945,7 +945,7 @@ namespace NKikimr {
             auto sst = MakeBareSst(hull, 100);
             TTrackableVector<TBlocksSst::TRec> index(TMemoryConsumer(hull.Ctx.GetVCtx()->SstIndex));
             index.emplace_back(TKeyBlock(1), TMemRecBlock(1));
-            sst->LoadedIndex = std::move(index);
+            sst->LoadLinearIndex(std::move(index));
             sst->AssignedSstId = 42;
             sst->AllChunks.push_back(7);
             sst->HeapStripe = TDiskPart(7, 0, append * 2);

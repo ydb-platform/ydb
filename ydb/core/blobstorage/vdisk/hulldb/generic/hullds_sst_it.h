@@ -5,61 +5,34 @@
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
-    // TLevelSegment::TMemIterator
+    // TFlatSstIndex::TIterator
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    class TLevelSegment<TKey, TMemRec>::TMemIterator {
-    protected:
-        typedef ::NKikimr::TLevelSegment<TKey, TMemRec> TLevelSegment;
-        typedef typename TLevelSegment::TRec TRec;
-
-        const TLevelSegment *Segment;
-        const TRec *Ptr;
+    class TFlatSstIndex<TKey, TMemRec>::TIterator {
+        const TFlatSstIndex *Index = nullptr;
+        const TRec *Ptr = nullptr;
 
         const TRec *Begin() const {
-            return Segment->LoadedIndex.data();
+            return Index->Recs.data();
         }
 
         const TRec *End() const {
-            return Segment->LoadedIndex.data() + Segment->LoadedIndex.size();
-        }
-
-        TRec *Begin() {
-            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data();
-        }
-
-        TRec *End() {
-            return const_cast<TLevelSegment *>(Segment)->LoadedIndex.data() + Segment->LoadedIndex.size();
+            return Index->Recs.data() + Index->Recs.size();
         }
 
     public:
-        TMemIterator(const TLevelSegment *segment)
-            : Segment(segment)
-            , Ptr(nullptr)
+        TIterator() = default;
+
+        TIterator(const TFlatSstIndex *index)
+            : Index(index)
         {}
-
-        TMemIterator()
-            : Segment(nullptr)
-            , Ptr(nullptr)
-        {}
-
-        TMemIterator(const TMemIterator &i) {
-            Segment = i.Segment;
-            Ptr = i.Ptr;
-        }
-
-        TMemIterator &operator=(const TMemIterator &i) {
-            Segment = i.Segment;
-            Ptr = i.Ptr;
-            return *this;
-        }
 
         bool Valid() const {
             return Ptr && Ptr >= Begin() && Ptr < End();
         }
 
         void Next() {
-            Y_DEBUG_ABORT_UNLESS(Ptr && Ptr < End() && Ptr >= Begin());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++Ptr;
         }
 
@@ -73,7 +46,7 @@ namespace NKikimr {
             return Ptr->GetKey();
         }
 
-        const TMemRec GetMemRec() const {
+        TMemRec GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
             return Ptr->GetMemRec();
         }
@@ -92,148 +65,110 @@ namespace NKikimr {
             Ptr = ::LowerBound(Begin(), End(), key);
         }
 
-        template <class TRecordMerger>
-        void PutToMerger(TRecordMerger *merger) {
-            merger->AddFromSegment(Ptr->GetMemRec(), Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn, Segment);
-        }
-
-        template <class Heap>
-        void PutToHeap(Heap& heap) {
-            heap.Add(this);
-        }
-
-        bool operator == (const TMemIterator &it) const {
-            Y_ABORT_UNLESS(Segment == it.Segment);
+        bool operator == (const TIterator &it) const {
             return Ptr == it.Ptr;
-        }
-
-        bool operator != (const TMemIterator &it) const {
-            return !operator == (it);
-        }
-
-        TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const {
-            return Ptr->GetMemRec().GetDiskData(extr, Segment->GetOutbound());
-        }
-
-        const TLevelSegment *GetSstPtr() const {
-            return Segment;
-        }
-
-        const TDiskPart *GetOutbound() const {
-            return Segment->GetOutbound();
         }
     };
 
-    template <>
-    class TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator {
-    protected:
-        typedef ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TLevelSegment;
-
-        const TLevelSegment* Segment = nullptr;
-
-        const TLevelSegment::TRecHigh* High = nullptr;
-        const TLevelSegment::TRecLow* Low = nullptr;
-        const TLevelSegment::TRecLow* LowRangeBegin = nullptr;
+    ////////////////////////////////////////////////////////////////////////////
+    // TLogoBlobSstIndex::TIterator
+    ////////////////////////////////////////////////////////////////////////////
+    class TLogoBlobSstIndex::TIterator {
+        TTwoLevelLogoBlobSstIndex::TIterator It; // default: an iterator over no index, i.e. invalid
 
     public:
-        TMemIterator(const TLevelSegment* segment)
-            : Segment(segment)
+        TIterator() = default;
+
+        TIterator(const TLogoBlobSstIndex* index)
+            : It(&index->Form)
         {}
 
-        TMemIterator() = default;
-
-        TMemIterator(const TMemIterator& i) {
-            Segment = i.Segment;
-            High = i.High;
-            Low = i.Low;
-            LowRangeBegin = i.LowRangeBegin;
-        }
-
-        TMemIterator& operator=(const TMemIterator& i) {
-            Segment = i.Segment;
-            High = i.High;
-            Low = i.Low;
-            LowRangeBegin = i.LowRangeBegin;
-            return *this;
-        }
-
         bool Valid() const {
-            return Segment && Low && Low >= Segment->IndexLow.begin() && Low < Segment->IndexLow.end();
+            return It.Valid();
         }
 
         void Next() {
-            Y_DEBUG_ABORT_UNLESS(Valid());
-            ++Low;
-            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->GetLowRangeEndIndex())) {
-                ++High;
-                LowRangeBegin = Low;
-            }
+            It.Next();
         }
 
         void Prev() {
-            Y_DEBUG_ABORT_UNLESS(Segment && Low
-                    && Low >= Segment->IndexLow.begin() && Low <= Segment->IndexLow.end());
-
-            if (Y_UNLIKELY(Low == LowRangeBegin)) {
-                --High;
-                LowRangeBegin = Segment->IndexLow.begin() +
-                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
-            }
-            --Low;
+            It.Prev();
         }
 
         TKeyLogoBlob GetCurKey() const {
-            Y_DEBUG_ABORT_UNLESS(Valid());
-            const auto high = High->GetKey();
-            const auto low = Low->GetKey();
-            return TKeyLogoBlob(TLogoBlobID(high.Raw.X[0], high.Raw.X[1], low.Raw.X));
+            return It.GetCurKey();
         }
 
         TMemRecLogoBlob GetMemRec() const {
-            Y_DEBUG_ABORT_UNLESS(Valid());
-            return Low->GetMemRec();
+            return It.GetMemRec();
         }
 
         void SeekToFirst() {
-            High = Segment->IndexHigh.begin();
-            Low = LowRangeBegin = Segment->IndexLow.begin();
+            It.SeekToFirst();
         }
 
         void SeekToLast() {
-            High = Segment->IndexHigh.end();
-            Low = LowRangeBegin = Segment->IndexLow.end();
-            Prev();
+            It.SeekToLast();
         }
 
         void Seek(const TKeyLogoBlob& key) {
-            TLevelSegment::TLogoBlobIdHigh keyHigh(key.LogoBlobID());
-            TLevelSegment::TLogoBlobIdLow keyLow(key.LogoBlobID());
+            It.Seek(key);
+        }
 
-            High = std::lower_bound(Segment->IndexHigh.begin(), Segment->IndexHigh.end(), keyHigh);
+        bool operator == (const TIterator& it) const {
+            return It == it.It;
+        }
+    };
 
-            if (High == Segment->IndexHigh.end()) {
-                Low = LowRangeBegin = Segment->IndexLow.end();
-                return;
-            }
+    ////////////////////////////////////////////////////////////////////////////
+    // TLevelSegment::TMemIterator
+    //
+    // Value-type iterator over one SST: the index iterator plus what needs the segment (outbound, lsn)
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec>
+    class TLevelSegment<TKey, TMemRec>::TMemIterator {
+    protected:
+        const TLevelSegment *Segment = nullptr;
+        typename TIndex::TIterator It; // default: invalid
 
-            auto rangeBegin = Segment->IndexLow.begin() +
-                    (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+    public:
+        TMemIterator() = default;
 
-            if (High->GetKey() != keyHigh) {
-                Low = LowRangeBegin = rangeBegin;
-                return;
-            }
+        explicit TMemIterator(const TLevelSegment *segment)
+            : Segment(segment)
+            , It(&segment->Index)
+        {}
 
-            auto rangeEnd = Segment->IndexLow.begin() + High->GetLowRangeEndIndex();
+        bool Valid() const {
+            return It.Valid();
+        }
 
-            Low = std::lower_bound(rangeBegin, rangeEnd, keyLow);
+        void Next() {
+            It.Next();
+        }
 
-            if (Low == rangeEnd) {
-                LowRangeBegin = rangeEnd;
-                ++High;
-            } else {
-                LowRangeBegin = rangeBegin;
-            }
+        void Prev() {
+            It.Prev();
+        }
+
+        TKey GetCurKey() const {
+            return It.GetCurKey();
+        }
+
+        TMemRec GetMemRec() const {
+            return It.GetMemRec();
+        }
+
+        void SeekToFirst() {
+            It.SeekToFirst();
+        }
+
+        void SeekToLast() {
+            It.SeekToLast();
+        }
+
+        void Seek(const TKey& key) {
+            It.Seek(key);
         }
 
         template <class TRecordMerger>
@@ -248,11 +183,7 @@ namespace NKikimr {
 
         bool operator == (const TMemIterator& it) const {
             Y_ABORT_UNLESS(Segment == it.Segment);
-            return High == it.High && Low == it.Low;
-        }
-
-        bool operator != (const TMemIterator& it) const {
-            return !(operator == (it));
+            return It == it.It;
         }
 
         TDiskDataExtractor* GetDiskData(TDiskDataExtractor* extr) const {
@@ -262,27 +193,6 @@ namespace NKikimr {
         const TLevelSegment* GetSstPtr() const {
             return Segment;
         }
-
-        const TDiskPart* GetOutbound() const {
-            return Segment->GetOutbound();
-        }
     };
-
-    ////////////////////////////////////////////////////////////////////////////
-    // TLevelSegment methods
-    ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec>
-    TKey TLevelSegment<TKey, TMemRec>::FirstKey() const {
-        TMemIterator it(this);
-        it.SeekToFirst();
-        return it.GetCurKey();
-    }
-
-    template <class TKey, class TMemRec>
-    TKey TLevelSegment<TKey, TMemRec>::LastKey() const {
-        TMemIterator it(this);
-        it.SeekToLast();
-        return it.GetCurKey();
-    }
 
 } // NKikimr

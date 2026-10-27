@@ -133,7 +133,7 @@ namespace NKikimr {
             addRecord(20, 300);
 
             TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
-            ptr->LoadLinearIndex(index);
+            ptr->LoadLinearIndex(std::move(index));
 
             TMemIterator it(ptr.Get());
 
@@ -218,13 +218,12 @@ namespace NKikimr {
             addRecord(20, 10, 4);
             addRecord(20, 300, 5);
 
-            TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
-            ptr->LoadLinearIndex(index);
+            TTwoLevelLogoBlobSstIndex twoLevel(ctxs.GetVCtx()->SstIndex, index);
 
-            const auto& indexHigh = ptr->IndexHigh;
+            const auto& indexHigh = twoLevel.IndexHigh;
             auto high = indexHigh.begin();
 
-            using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
+            using TLogoBlobIdHigh = TTwoLevelLogoBlobSstIndex::TLogoBlobIdHigh;
 
             UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(10, 0, 0, 0));
             UNIT_ASSERT(high->GetLowRangeEndIndex() == 2);
@@ -237,10 +236,10 @@ namespace NKikimr {
             ++high;
             UNIT_ASSERT(high == indexHigh.end());
 
-            const auto& indexLow = ptr->IndexLow;
+            const auto& indexLow = twoLevel.IndexLow;
             auto low = indexLow.begin();
 
-            using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
+            using TLogoBlobIdLow = TTwoLevelLogoBlobSstIndex::TLogoBlobIdLow;
 
             UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 1, 0));
             ++low;
@@ -255,7 +254,7 @@ namespace NKikimr {
             UNIT_ASSERT(low == indexLow.end());
 
             TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
-            ptr->SaveLinearIndex(&checkIndex);
+            twoLevel.Save(&checkIndex);
 
             for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
                 UNIT_ASSERT(i->GetKey() == c->GetKey());

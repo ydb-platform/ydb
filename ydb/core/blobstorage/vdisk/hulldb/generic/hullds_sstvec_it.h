@@ -138,10 +138,6 @@ namespace NKikimr {
         TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const {
             return CurSegIt.GetDiskData(extr);
         }
-
-        const TDiskPart *GetOutbound() const {
-            return CurSegIt.GetOutbound();
-        }
     };
 
     ////////////////////////////////////////////////////////////////////////////

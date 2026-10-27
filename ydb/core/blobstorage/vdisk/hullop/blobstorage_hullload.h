@@ -158,11 +158,7 @@ namespace NKikimr {
         void Finish(const TActorContext &ctx) {
             Y_VERIFY_S(RestToReadIndex == 0 && RestToReadOutbound == 0, VCtx->VDiskLogPrefix);
 
-            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                LevelSegment->LoadLinearIndex(LinearIndex);
-            } else {
-                LevelSegment->LoadedIndex.swap(LinearIndex);
-            }
+            LevelSegment->LoadLinearIndex(std::move(LinearIndex));
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;

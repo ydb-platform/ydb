@@ -23,6 +23,7 @@
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
@@ -3390,6 +3391,16 @@ value {
         TPortManager portManager;
         const ui16 s3Port = portManager.GetPort();
         TS3Mock::TSettings s3Settings(s3Port);
+        // Reproducer for #56776: delay real HTTP without blocking the actor runtime.
+        if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+            s3Settings.ErrorResponse = [](TStringBuf method, TStringBuf path) -> TString {
+                if (method == "HEAD" && path == "/test_bucket/Export123/001/data_00.csv.zst.enc") {
+                    Cerr << "Reproducer: delaying S3 HEAD response by 500 ms" << Endl;
+                    Sleep(TDuration::MilliSeconds(500));
+                }
+                return {}; // Continue with the normal successful response.
+            };
+        }
         TS3Mock s3Mock(s3Settings);
         s3Mock.Start();
 
@@ -3483,6 +3494,8 @@ value {
             });
 
         auto waitReadyToReboot = [&]() {
+            const auto realStart = NActors::TMonotonic::Now();
+            const auto simulatedStart = runtime.GetCurrentTime();
             if (!readyToReboot) {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
@@ -3490,6 +3503,9 @@ value {
                 });
                 runtime.DispatchEvents(opts, TDuration::Seconds(10));
             }
+            Cerr << "Reboot wait: ready=" << readyToReboot
+                 << ", real=" << (NActors::TMonotonic::Now() - realStart)
+                 << ", simulated=" << (runtime.GetCurrentTime() - simulatedStart) << Endl;
             return readyToReboot;
         };
 

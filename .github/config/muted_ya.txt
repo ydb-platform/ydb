@@ -65,7 +65,6 @@ ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_restore TRestoreTests.ImportBigEncryptedFileWithRebootAfterLastPortion
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk

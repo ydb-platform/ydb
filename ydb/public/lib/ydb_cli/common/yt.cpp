@@ -16,10 +16,24 @@ void TCommandWithYtProxy::ParseYtProxy(const TString& proxy) {
     }
 
     TMaybe<ui16> port;
+    TStringBuf address = proxy;
+    TStringBuf scheme;
+    ui16 defaultPort = DefaultYtPort;
+
+    if (address.SkipPrefix("https://")) {
+        scheme = "https://";
+        defaultPort = 443;
+    } else if (address.SkipPrefix("http://")) {
+        scheme = "http://";
+    }
 
     try {
-        Split(proxy, ':', YtHost, port);
+        Split(address, ':', YtHost, port);
     } catch (const yexception& ex) {
+        throw TMisuseException() << "Bad YT proxy format: \"" << proxy << "\".";
+    }
+
+    if (YtHost.empty() || YtHost.find_first_of("/?#@") != TString::npos) {
         throw TMisuseException() << "Bad YT proxy format: \"" << proxy << "\".";
     }
 
@@ -27,7 +41,8 @@ void TCommandWithYtProxy::ParseYtProxy(const TString& proxy) {
         YtHost.append(".yt.yandex.net");
     }
 
-    YtPort = port.GetOrElse(DefaultYtPort);
+    YtHost.prepend(scheme);
+    YtPort = port.GetOrElse(defaultPort);
 }
 
 const TString TCommandWithYtToken::YtTokenFile = "~/.yt/token";

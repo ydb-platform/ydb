@@ -43,9 +43,8 @@ class TKqpUnsafeTruncateExecuter: public TActorBootstrapped<TKqpUnsafeTruncateEx
         TTableId TableId;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         bool Navigated = false;
-        // Impl tables are only ever reached through the index of the table the statement names,
-        // never named by the statement itself.
-        bool IsIndexImplTable = false;
+        // Set only for the path named in the TRUNCATE statement.
+        bool IsExplicitTarget = false;
     };
 
     struct TEvReattach : TEventLocal<TEvReattach, EventSpaceBegin(TEvents::ES_PRIVATE)> {
@@ -135,7 +134,7 @@ private:
 
         // Start over from the main table so that a repartitioning or re-indexing between attempts
         // is picked up rather than carried over.
-        Tables.assign(1, TTableToTruncate{.Path = MainTablePath});
+        Tables.assign(1, TTableToTruncate{.Path = MainTablePath, .IsExplicitTarget = true});
 
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
@@ -214,14 +213,9 @@ private:
                 return;
             }
 
-            // An impl table is an ordinary KindTable, so the check above lets it through, and
-            // ShowPrivatePath above disables the scheme cache's own guard. Wiping one directly would
-            // empty the index while the table it belongs to keeps every row - exactly the
-            // disagreement this operation truncates the impl tables together with the table to
-            // avoid. Both other ways to reach the same data refuse it too: the plain TRUNCATE with
-            // "Cannot truncate index", and any write with "Writing to index implementation tables
-            // is not allowed".
-            if (!table.IsIndexImplTable
+            // Index implementation tables may only be truncated together with their owner,
+            // never as the explicit target of the statement.
+            if (table.IsExplicitTarget
                 && entry.TableKind != NSchemeCache::ETableKind::KindRegularTable)
             {
                 ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
@@ -277,7 +271,7 @@ private:
         }
 
         for (auto& path : discovered) {
-            Tables.push_back(TTableToTruncate{.Path = std::move(path), .IsIndexImplTable = true});
+            Tables.push_back(TTableToTruncate{.Path = std::move(path)});
         }
 
         // Another round if the tables just navigated brought in impl tables of their own.

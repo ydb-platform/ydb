@@ -1480,7 +1480,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     }
 
-    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false) {
+    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false,
+            bool manageStateStorage = false) {
         // Setup logging
         SetupLogging(runtime);
         runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
@@ -1498,6 +1499,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         // Setup BSNodeWarden
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+        if (manageStateStorage) {
+            nodeWardenConfig->DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>();
+        }
         IActor* nodeWardenActor = CreateBSNodeWarden(nodeWardenConfig.Release());
         TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
         runtime.EnableScheduleForActor(realNodeWarden, true);
@@ -1515,6 +1519,68 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         // test -> realNodeWarden -> realPDsik -                     -> test
         //                                      `-> fakeWhiteboard -`
         return realNodeWarden;
+    }
+
+    Y_UNIT_TEST(TestDisabledStateStorageReplicaRestartsWhenReenabled) {
+        TTestBasicRuntime runtime(1, false);
+        const TActorId nodeWarden = SetupNodeWardenOnly(runtime, false, true);
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return true;
+        });
+        const ui32 nodeId = runtime.GetNodeId(0);
+
+        auto makeConfig = [&](ui32 version, ui32 disabledRings) {
+            auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+            auto fill = [&](NKikimrConfig::TStateStorageConfig* stateStorage) {
+                stateStorage->SetStateStorageVersion(version);
+                auto* group = stateStorage->AddRingGroups();
+                group->SetNToSelect(3);
+                group->SetPileState(NKikimrConfig::TStateStorageConfig::PRIMARY);
+                for (ui32 index = 0; index < 3; ++index) {
+                    auto* ring = group->AddRing();
+                    ring->AddNode(nodeId);
+                    ring->SetIsDisabled(disabledRings & 1 << index);
+                }
+            };
+            fill(config->MutableStateStorageConfig());
+            fill(config->MutableStateStorageBoardConfig());
+            fill(config->MutableSchemeBoardConfig());
+            return config;
+        };
+
+        auto applyConfig = [&](std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(nodeWarden, sender,
+                new TEvNodeWardenStorageConfig(std::move(config), true, nullptr)));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {sender});
+        };
+
+        auto config = makeConfig(1, 0);
+        const auto info = BuildStateStorageInfo(config->GetStateStorageConfig());
+        const TActorId replicaA = info->RingGroups[0].Rings[0].Replicas[0];
+        const TActorId replicaB = info->RingGroups[0].Rings[1].Replicas[0];
+        const TActorId replicaC = info->RingGroups[0].Rings[2].Replicas[0];
+
+        applyConfig(std::move(config));
+        const TActorId firstActorA = runtime.GetLocalServiceId(replicaA, 0);
+        UNIT_ASSERT(firstActorA);
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaB, 0));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
+
+        applyConfig(makeConfig(2, 1 << 0));
+        UNIT_ASSERT(!runtime.GetLocalServiceId(replicaA, 0));
+
+        applyConfig(makeConfig(3, 0));
+        const TActorId restartedActorA = runtime.GetLocalServiceId(replicaA, 0);
+        UNIT_ASSERT(restartedActorA);
+        UNIT_ASSERT_UNEQUAL(restartedActorA, firstActorA);
+
+        applyConfig(makeConfig(4, 1 << 1));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaA, 0));
+        UNIT_ASSERT(!runtime.GetLocalServiceId(replicaB, 0));
+        UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
     }
 
     class TNoReplyPDiskActor : public TActorBootstrapped<TNoReplyPDiskActor> {

@@ -472,6 +472,39 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(res, "New StateStorage configuration NToSelect has invalid value");
     }
 
+    Y_UNIT_TEST(RejectsInvalidStructureBeforeBuildingStateStorageInfo) {
+        NKikimrConfig::TStateStorageConfig proposed;
+        proposed.AddRingGroups()->SetNToSelect(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ValidateStateStorageConfig("StateStorage", {}, proposed),
+            "New StateStorage has empty ring group");
+
+        proposed.Clear();
+        auto* ringGroup = proposed.AddRingGroups();
+        ringGroup->SetNToSelect(1);
+        auto* ring = ringGroup->AddRing();
+        ring->SetUseSingleNodeActorId(true);
+        ring->AddNode(1);
+        ring->AddNode(2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ValidateStateStorageConfig("StateStorage", {}, proposed),
+            "New StateStorage ring with UseSingleNodeActorId must contain exactly one node");
+
+        proposed.Clear();
+        FillRing(proposed.MutableRing());
+        FillRing(proposed.AddRingGroups());
+        UNIT_ASSERT_VALUES_EQUAL(
+            ValidateStateStorageConfig("StateStorage", {}, proposed),
+            "New StateStorage configuration must contain either Ring or RingGroups");
+
+        proposed.Clear();
+        proposed.SetSSId(2);
+        FillRing(proposed.MutableRing());
+        UNIT_ASSERT_VALUES_EQUAL(
+            ValidateStateStorageConfig("StateStorage", {}, proposed),
+            "New StateStorage configuration has invalid SSId");
+    }
+
     Y_UNIT_TEST(WriteOnly) {
         NKikimrConfig::TStateStorageConfig proposed;
         FillRing(proposed.AddRingGroups());

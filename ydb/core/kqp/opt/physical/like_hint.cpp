@@ -275,7 +275,9 @@ std::optional<TLocatedMatch> LocateMatch(const NYql::TExprNode* node, const NYql
     if (!node) {
         return std::nullopt;
     }
-    if (node->IsCallable("Coalesce") && node->ChildrenSize() >= 2 && IsFalseBool(node->Tail())) {
+    // Only the two-argument form: Coalesce(x, false) is true exactly when x is true. With more
+    // arguments a true result may come from a later child while x is NULL.
+    if (node->IsCallable("Coalesce") && node->ChildrenSize() == 2 && IsFalseBool(node->Tail())) {
         return LocateMatch(node->Child(0), boundArg, boundColumn);
     }
     if (node->IsCallable("Just")) {

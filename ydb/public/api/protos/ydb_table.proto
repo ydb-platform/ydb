@@ -427,6 +427,8 @@ message TableIndex {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
        LocalMinMaxIndex local_min_max_index = 14;
+       // Intentionally reuses the k-means message for the preparatory HNSW API.
+       // Its level/posting/prefix table settings are placeholders for HNSW impl tables.
        GlobalVectorKMeansTreeIndex global_hnsw_index = 15;
     }
     // list of columns content to be copied in to index table
@@ -460,6 +462,8 @@ message TableIndexDescription {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
        LocalMinMaxIndex local_min_max_index = 15;
+       // Intentionally mirrors TableIndex.global_hnsw_index, including its
+       // placeholder level/posting/prefix table settings for HNSW impl tables.
        GlobalVectorKMeansTreeIndex global_hnsw_index = 16;
     }
     Status status = 4;

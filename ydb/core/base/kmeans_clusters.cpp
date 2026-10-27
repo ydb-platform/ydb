@@ -722,8 +722,13 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 }
 
 namespace {
-    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error) {
-        if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error, bool hnsw = false) {
+        auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count();
+        if (!hnsw) {
+            unknownCount += settings.has_m() + settings.has_ef_construction()
+                + settings.has_min_rows() + settings.has_delta_rows();
+        }
+        if (unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
             return false;
         }
@@ -805,7 +810,7 @@ namespace {
             return false;
         }
 
-        if (!ValidateSettingsImpl(settings.settings(), partial, error)) {
+        if (!ValidateSettingsImpl(settings.settings(), partial, error, hnsw)) {
             return false;
         }
 

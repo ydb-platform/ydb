@@ -6,6 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ylimits.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NKMeans {
     namespace {
@@ -70,6 +71,60 @@ namespace NKikimr::NKMeans {
             vector->set_min_rows(0);
             vector->set_delta_rows(Max<ui64>());
             UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+        }
+
+        Y_UNIT_TEST(KMeansRejectsHnswOnlySettings) {
+            auto settings = MakeSettings();
+            settings.set_clusters(2);
+            TString error;
+            UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+            UNIT_ASSERT_C(ValidateSettingsPartial(settings, error), error);
+
+            const auto check = [&](int unsupportedCount) {
+                const auto expectedError = TStringBuilder()
+                    << "vector index settings contain " << unsupportedCount << " unsupported parameter(s)";
+                UNIT_ASSERT(!ValidateSettings(settings, error));
+                UNIT_ASSERT_VALUES_EQUAL(error, expectedError);
+                UNIT_ASSERT(!ValidateSettingsPartial(settings, error));
+                UNIT_ASSERT_VALUES_EQUAL(error, expectedError);
+                UNIT_ASSERT(!ValidateSettings(settings.settings(), error));
+                UNIT_ASSERT_VALUES_EQUAL(error, expectedError);
+                UNIT_ASSERT(!ValidateSettingsPartial(settings.settings(), error));
+                UNIT_ASSERT_VALUES_EQUAL(error, expectedError);
+                UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+                UNIT_ASSERT_C(ValidateHnswSettingsPartial(settings, error), error);
+            };
+
+            for (const auto setField : {
+                &Ydb::Table::VectorIndexSettings::set_m,
+                &Ydb::Table::VectorIndexSettings::set_ef_construction,
+            }) {
+                (settings.mutable_settings()->*setField)(50);
+                check(1);
+                settings.mutable_settings()->clear_m();
+                settings.mutable_settings()->clear_ef_construction();
+            }
+            for (const auto setField : {
+                &Ydb::Table::VectorIndexSettings::set_min_rows,
+                &Ydb::Table::VectorIndexSettings::set_delta_rows,
+            }) {
+                (settings.mutable_settings()->*setField)(0);
+                check(1);
+                settings.mutable_settings()->clear_min_rows();
+                settings.mutable_settings()->clear_delta_rows();
+            }
+
+            settings.mutable_settings()->set_m(50);
+            settings.mutable_settings()->set_ef_construction(200);
+            settings.mutable_settings()->set_min_rows(0);
+            settings.mutable_settings()->set_delta_rows(0);
+            check(4);
+
+            settings.mutable_settings()->GetReflection()->MutableUnknownFields(settings.mutable_settings())->AddVarint(10000, 1);
+            UNIT_ASSERT(!ValidateSettings(settings, error));
+            UNIT_ASSERT_VALUES_EQUAL(error, "vector index settings contain 5 unsupported parameter(s)");
+            UNIT_ASSERT(!ValidateHnswSettings(settings, error));
+            UNIT_ASSERT_VALUES_EQUAL(error, "vector index settings contain 1 unsupported parameter(s)");
         }
 
         Y_UNIT_TEST(PartialSettingsStillValidateConstructionLimits) {

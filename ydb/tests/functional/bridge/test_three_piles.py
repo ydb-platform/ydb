@@ -33,7 +33,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.epoch = 0
         super().setup_method()
         try:
-            assert all(len(nodes) == 8 for nodes in self.pile_nodes.values())
+            assert self.nodes_count % len(self.pile_names) == 0
+            assert all(len(nodes) == self.nodes_count // len(self.pile_names) for nodes in self.pile_nodes.values())
             assert self.configurator.yaml_config["erasure"] == "block-4-2"
             self.wait_states()
         except Exception:

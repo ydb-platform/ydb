@@ -161,6 +161,7 @@ namespace NKikimr::NStorage {
             ui32 RootNodeId = 0; // this is the terminal node id for the whole binding chain
             ui64 Cookie; // binding cookie within the session
             TActorId SessionId; // interconnect session actor
+            bool SupportsDirectRootQueries = false; // advertised by the direct parent
 
             TBinding(ui32 nodeId, ui64 cookie)
                 : NodeId(nodeId)
@@ -172,6 +173,7 @@ namespace NKikimr::NStorage {
                 , RootNodeId(origin.RootNodeId)
                 , Cookie(origin.Cookie)
                 , SessionId(origin.SessionId)
+                , SupportsDirectRootQueries(origin.SupportsDirectRootQueries)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -389,6 +391,11 @@ namespace NKikimr::NStorage {
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
+        class TStateStorageSelfHealRefreshActor;
+        std::optional<TActorId> StateStorageSelfHealRefreshActor;
+        bool StateStorageSelfHealRefreshStarted = false;
+        void StartStateStorageSelfHealRefresh();
+        void CancelStateStorageSelfHealRefresh();
 
         // root node operation
         enum class ERootState {
@@ -964,10 +971,12 @@ namespace NKikimr::NStorage {
         // piles are added and removed with pending operations, static group ids are never reused, static groups going
         // away are ejected, inline pile may be removed
         BridgeFeatureLevelPileOps = 2,
+        BridgeFeatureLevelNonUniformStorage = 3,
+        BridgeFeatureLevelPileOverrides = 4,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOps;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOverrides;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1001,9 +1010,10 @@ namespace NKikimr::NStorage {
         const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
-    // and make every static group an inline pile of itself.
+    // and make every static group an inline pile of itself. BSC converts existing pools and their groups afterwards
+    // unless their conversion is skipped, which activates non-uniform storage.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-        const NKikimrConfig::TBridgeConfig& bridgeConfig);
+        const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion = false);
 
     // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
     // destroyed have older generations and keep them.

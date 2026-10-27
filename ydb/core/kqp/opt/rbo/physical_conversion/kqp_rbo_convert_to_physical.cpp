@@ -73,6 +73,16 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
     TVector<THashMap<ui32, TVector<TExprNode::TPtr>>> allStageArgs;
     TVector<THashMap<ui32, TPositionHandle>> allStagePos; 
 
+    // As in the old optimizer, PRAGMA OptForceOlapPushdownDistinct marks a
+    // DISTINCT key in the read program unless aggregates are pushed down.
+    const auto& config = *rboCtx.KqpCtx.Config;
+    std::optional<TString> forcedDistinctKey;
+    if (const auto key = config.OptForceOlapPushdownDistinct.Get();
+        key && !key->empty() && config.HasOptEnableOlapPushdown() && !config.GetEnableOlapPushdownAggregate()) {
+        forcedDistinctKey = *key;
+    }
+    const ui64 forcedDistinctLimit = config.OptForceOlapPushdownDistinctLimit.Get().GetOrElse(0);
+
     TVector<TPhysicalNames> allNames;
     allNames.reserve(roots.size());
     for (auto & root: roots) {
@@ -92,12 +102,23 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         // aggregate builds that read, its read and map have no lowering of their own.
         THashMap<const IOperator*, TOlapAggregate> olapAggregates;
         THashSet<const IOperator*> olapAggregateInputs;
+        // By read, the trivial DISTINCT whose key the read program marks.
+        THashMap<const IOperator*, TOlapDistinct> olapDistincts;
         for (const auto& iter : *root) {
             const auto* op = iter.Current;
-            if (op->Kind != EOperator::Aggregate || !CastOperator<TOpAggregate>(*op).IsPushedToOlap()) {
+            if (op->Kind != EOperator::Aggregate) {
                 continue;
             }
-            auto olapAggregate = MatchOlapAggregate(CastOperator<TOpAggregate>(*op), ctx);
+            const auto& aggregate = CastOperator<TOpAggregate>(*op);
+            if (!aggregate.IsPushedToOlap()) {
+                if (forcedDistinctKey) {
+                    if (auto olapDistinct = MatchOlapDistinct(aggregate, *forcedDistinctKey, root->PlanProps.InfoUnitRegistry)) {
+                        olapDistincts.emplace(olapDistinct->Read, *olapDistinct);
+                    }
+                }
+                continue;
+            }
+            auto olapAggregate = MatchOlapAggregate(aggregate, ctx);
             Y_ENSURE(olapAggregate, "An aggregate pushed to column shards no longer matches its read");
             olapAggregateInputs.insert(olapAggregate->Read);
             if (olapAggregate->Map) {
@@ -120,6 +141,8 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 std::move(carrierColumn));
             if (olapAggregate) {
                 builder.WithOlapAggregate(*olapAggregate);
+            } else if (const auto* olapDistinct = olapDistincts.FindPtr(&opRead)) {
+                builder.WithOlapDistinct(*olapDistinct, forcedDistinctLimit);
             }
             return builder.BuildPhysicalOp();
         };

@@ -325,6 +325,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetUseBatchPool(UserRequestContext->UseBatchPool);
 
     if (UserRequestContext->PoolConfig.has_value()) {
+        // Only for the nodes without FeatureFlags.EnableComputeSchedulerMemory (or of the older versions) - otherwise the
+        // memory limit of the pool is taken by the compute scheduler from the pool config
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
@@ -570,6 +572,19 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = SerializeTaskForExecution(task);
 
+    if (!QueryQuotaManager && NScheduler::IsMemoryScheduled()) {
+        // the pool limits the memory in the scheduler, not in the resource manager
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
+            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, /* memoryPoolPercent */ 100.0, Database,
+            CaFactory_->GetVerboseMemoryLimitException()),
+            NScheduler::CreateSchedulableMemory(
+                Query,
+                UserRequestContext->DatabaseId,
+                UserRequestContext->PoolId,
+                CaFactory_->ElasticMemoryPercent),
+            CaFactory_->TaskMemory.load());
+    }
+
     if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
@@ -592,9 +607,11 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+    const auto elasticMemory = EstimateTaskElasticMemory(*taskDesc, initialMemoryLimit,
+        CaFactory_->MkqlLightProgramMemoryLimit.load(), CaFactory_->MkqlHeavyProgramMemoryLimit.load());
 
     // the task starts with it and returns it when its compute actor terminates
-    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit, elasticMemory);
 
     if (!rmResult) {
         return MakeActorStartFailureError(ExecuterId, rmResult.GetFailReason(), NYql::NDqProto::StatusIds::OVERLOADED);
@@ -630,6 +647,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             .BlockTrackingMode = BlockTrackingMode,
             .QueryQuotaManager = QueryQuotaManager,
             .InitialMemoryLimit = initialMemoryLimit,
+            .ElasticMemory = elasticMemory,
             .UserToken = UserToken,
             .Database = Database,
             .Query = Query,
@@ -643,7 +661,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             {"ctx", *UserRequestContext},
             {"taskId", taskId},
             {"message", message});
-        QueryQuotaManager->FreeTasks(1, initialMemoryLimit);
+        QueryQuotaManager->FreeTasks(1, initialMemoryLimit, elasticMemory);
         return MakeActorStartFailureError(ExecuterId, message, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
     }
 

@@ -125,7 +125,7 @@ public:
         }
 
         // Also register __ydb_-prefixed system columns
-        for (auto ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+        for (auto ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery, State_->AllowYdbSysColumns())) {
             sourceMetadata.push_back(
                 Build<TCoNameValueTuple>(ctx, read.Pos()).Name().Build("system") .Value<TCoAtom>().Build(ydbColumn) .Done());
         }

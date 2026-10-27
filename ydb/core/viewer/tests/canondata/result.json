@@ -837,6 +837,9 @@
                 "Overall": "Green",
                 "PoolName": "static",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -951,6 +954,9 @@
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1065,6 +1071,9 @@
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1180,6 +1189,9 @@
                 "Overall": "Green",
                 "PoolName": "/Root/dedicated_db:hdd",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1295,6 +1307,9 @@
                 "Overall": "Green",
                 "PoolName": "/Root/shared_db:hdd",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [

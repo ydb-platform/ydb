@@ -114,7 +114,19 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         checker.Write(groupId);
         checker.CheckAll();
 
+        // the group relies on its original part until the part in the new pile is synced, and the original pile can't
+        // go out meanwhile
+        auto getAuthorityPileId = [&] {
+            const auto info = GetGroupInfo(env, groupId);
+            return TBridgePileId::FromProto(&info.GetBridgeGroupState(),
+                &NKikimrBridge::TGroupState::GetAuthorityPileId);
+        };
+        UNIT_ASSERT(getAuthorityPileId() == TBridgePileId::FromPileIndex(0));
+        ExpectError(TrySwitchPileState(env, 0, NKikimrBridge::TClusterState::DISCONNECTED),
+            "Incorrect primary pile state");
+
         RejoinPile(env, 1);
+        WaitUntil(env, [&] { return !getAuthorityPileId(); }, "group not relying on its original part");
         checker.Write(groupId);
         checker.CheckAll();
         CheckPileData(env, checker, 1, 10);
@@ -126,6 +138,36 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
             env.Sim(TDuration::Seconds(30));
             checker.Write(groupId);
             checker.CheckAll();
+        }
+    }
+
+    // groups of the pools not converted along with the cluster get no parts in the added pile, while static groups do
+    Y_UNIT_TEST(ConvertedOneToTwoSkippingStoragePools) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 1, true);
+        const ui32 staticGroupId = 0;
+        checker.Write(staticGroupId);
+
+        NameConvertedClusterNodes(env, *named, [&] {
+            checker.Write(groupId);
+            checker.CheckAll();
+        });
+        auto res = AddPileToConfig(env, "pile_2", 10, 17);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_2", 10, 17);
+        AddPileAndWait(env, "pile_2");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 1, 10, 17), 0); // no dynamic bridged groups
+        RejoinPile(env, 1);
+
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_C(!info.HasBridgeGroupState(), info.ShortDebugString());
+        for (ui32 nodeId : {1u, 10u}) {
+            checker.Write(groupId, nodeId);
+            checker.Write(staticGroupId, nodeId);
+            checker.CheckAll(nodeId);
         }
     }
 
@@ -313,6 +355,78 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         UNIT_ASSERT_VALUES_EQUAL(GetPileStates(config), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED pile_3:DISCONNECTED");
         UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 1);
 
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        RejoinPile(env, 2);
+        checker.Write(groupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, FirstThirdPileNodeId);
+    }
+
+    // groups created while the addition of the pile is stuck get no part in the pile (the addition gives it to them), so
+    // they neither fail for lack of resources there nor take the ones the addition counts on; the stuck addition is
+    // cancelled by removing the pile, which can be added again then
+    Y_UNIT_TEST(StuckAdditionCancelled) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        auto res = AddSingleSlotHostConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        res = AddPileToConfig(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId, 2);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        // validation by BSC fails, but distconf is told it succeeded, so BSC can't place the parts afterwards
+        bool spoofValidation = true;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDistconfResponse && spoofValidation) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfResponse>()->Record;
+                if (record.GetStatus() == NKikimrBlobStorage::TEvControllerDistconfResponse::Error) {
+                    record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                    record.ClearErrorReason();
+                }
+            }
+            return true;
+        };
+        res = AddPile(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        spoofValidation = false;
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env).GetClusterStateDetails().GetPendingPileOperation().HasErrorReason();
+        }, "error of BSC recorded");
+
+        // the new pool gets its group with no part in the pile
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        std::optional<ui32> newGroupId;
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+                if (group->GetIsProxyGroup()) {
+                    newGroupId = group->GetGroupId();
+                }
+            }
+        }
+        UNIT_ASSERT(newGroupId);
+        const auto info = GetGroupInfo(env, *newGroupId);
+        UNIT_ASSERT_C(!NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2)),
+            info.DebugString());
+        checker.Write(*newGroupId);
+
+        // the stuck addition is cancelled by the removal
+        RemovePileAndWait(env, "pile_3");
+        CheckPileGone(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId);
+        checker.CheckAll();
+
+        // resources appear, the pile is added with parts of both groups
+        res = ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["host_configs"][1]["drive"][0]["expected_slot_count"] = 4;
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        AddPileAndWait(env, "pile_3");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 2);
         StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
         RejoinPile(env, 2);
         checker.Write(groupId);

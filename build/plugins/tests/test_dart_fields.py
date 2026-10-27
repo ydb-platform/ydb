@@ -21,8 +21,8 @@ def test_ts_check_sources_include_tests_and_spaces():
 
 def test_ts_check_for_sources_are_relative_to_tested_module():
     unit = Unit(
-        TS_TEST_FOR="yes",
-        TS_TEST_FOR_PATH="project",
+        TS_FOR="yes",
+        TS_FOR_PATH="project",
         MODDIR="project/tests",
         _TS_GLOB_FILES="${ARCADIA_ROOT}/project/src/index.ts",
     )

@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/services/workload_manager/common)
 
 SRCS(
     cpu_quota_manager_ut.cpp
+    helpers_ut.cpp
 )
 
 PEERDIR(

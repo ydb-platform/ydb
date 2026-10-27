@@ -367,6 +367,16 @@ WHERE ApplicationName = 'my_analytics_app'
 ```
 
 
+### Terminating a session {#terminate-session}
+
+To terminate a selected session and its running query, copy its `SessionId` and submit a separate [`KILL SESSION`](../yql/reference/syntax/kill-session.md) query:
+
+```yql
+KILL SESSION `ydb://session/3?node_id=52910&id=MWFmNGYwYTAtYzJkN2RhOWEtZmFkMDhlMTUtZjU0ZDE0OTA%3D`;
+```
+
+Replace the example ID with a value from the query results. See the [statement reference](../yql/reference/syntax/kill-session.md#permissions) for the required permissions and operation result.
+
 ## Query compilation cache {#compile-cache-queries}
 
 The following system view contains information about queries stored in the compilation cache on all cluster nodes:

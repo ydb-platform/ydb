@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(Discovery) {
                 const auto result = UnpackDiscoveryData(cache.CachedMessage);
                 UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(result.pile_states(1).pile_name(), "secondary");
-                UNIT_ASSERT_VALUES_EQUAL(result.pile_states(1).state(), Ydb::Bridge::PileState::HOT_STANDBY);
+                UNIT_ASSERT_EQUAL(result.pile_states(1).state(), Ydb::Bridge::PileState::HOT_STANDBY);
             }
         }
         TCachedMessageData nonBridged(MakeBoardEntries(), nodeInfo, nullptr);
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(Discovery) {
         auto check = [&](bool secondaryVisible, bool serialized) {
             runtime.Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", serialized, edge, cache));
             const auto response = runtime.GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(edge);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+            UNIT_ASSERT_EQUAL(response->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
             if (serialized) {
                 CheckEndpoints(response->Get()->CachedMessage, secondaryVisible, false);
                 CheckEndpoints(response->Get()->CachedMessageSsl, secondaryVisible, true);

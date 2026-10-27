@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
@@ -22,7 +23,17 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) override {
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
-                const TAddress address(OwnerActorId, TabletId, i->GetPortionInfo().GetAddress());
+                const auto& portion = i->GetPortionInfo();
+                const TAddress* matched = nullptr;
+                for (const auto& address : RequestedAddresses) {
+                    if (address.GetTabletId() == TabletId && address.GetPortionId() == portion.GetPortionId() &&
+                        address.GetPathId() == portion.GetPathId()) {
+                        matched = &address;
+                        break;
+                    }
+                }
+                AFL_VERIFY(matched);
+                const TAddress address = *matched;
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
@@ -136,25 +147,70 @@ TInternalPathId TGlobalPortionAddress::GetPathId() const {
     return InternalPortionAddress.GetPathId();
 }
 
-TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress)
+namespace {
+
+ui64 HashSnapshot(const TSnapshot& snapshot) {
+    return CombineHashes(snapshot.GetPlanStep(), snapshot.GetTxId());
+}
+
+ui64 Mix(const ui64 hash, const ui64 value) {
+    return CombineHashes(hash, value);
+}
+
+ui64 PortionContentStamp(const TPortionInfo& portion) {
+    ui64 hash = portion.GetRecordsCount();
+    hash = Mix(hash, portion.GetCompactionLevel());
+    hash = Mix(hash, portion.GetMeta().GetColumnRawBytes());
+    hash = Mix(hash, portion.GetMeta().GetColumnBlobBytes());
+    hash = Mix(hash, portion.GetMeta().GetIndexRawBytes());
+    hash = Mix(hash, portion.GetMeta().GetIndexBlobBytes());
+    hash = Mix(hash, portion.GetSchemaVersion());
+    hash = Mix(hash, portion.GetShardingVersionDef(0));
+    hash = Mix(hash, THash<TString>()(portion.GetMeta().GetTierName()));
+    hash = Mix(hash, portion.GetMeta().GetNumSlices());
+    if (const auto removed = portion.GetRemoveSnapshotOptional()) {
+        hash = CombineHashes(hash, HashSnapshot(*removed));
+    }
+    if (portion.GetPortionType() == EPortionType::Written) {
+        const auto& written = static_cast<const TWrittenPortionInfo&>(portion);
+        if (const auto commit = written.GetCommitSnapshotOptional()) {
+            hash = CombineHashes(hash, HashSnapshot(*commit));
+        }
+    } else {
+        hash = CombineHashes(hash, HashSnapshot(portion.RecordSnapshotMin()));
+        hash = CombineHashes(hash, HashSnapshot(portion.RecordSnapshotMax()));
+    }
+    return hash;
+}
+
+}   // namespace
+
+TGlobalPortionAddress::TGlobalPortionAddress(
+    const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp)
     : TabletActorId(actorId)
     , TabletId(tabletId)
     , InternalPortionAddress(internalAddress)
+    , ContentStamp(contentStamp)
 {
     AFL_VERIFY(TabletId);
 }
 
+TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion)
+    : TGlobalPortionAddress(actorId, tabletId, portion.GetAddress(), PortionContentStamp(portion))
+{
+}
+
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
-    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress;
+    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && ContentStamp == item.ContentStamp;
 }
 
 TGlobalPortionAddress::operator size_t() const {
-    return CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress));
+    return CombineHashes(CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress)), ContentStamp);
 }
 
 const TString TGlobalPortionAddress::Debug() const {
-    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", InternalPortionAddress: {"
-                            << InternalPortionAddress.Debug() << "}";
+    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", ContentStamp: " << ContentStamp
+                            << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
 }
 
 TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress& address) {

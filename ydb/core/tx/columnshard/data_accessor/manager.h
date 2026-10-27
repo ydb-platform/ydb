@@ -99,7 +99,7 @@ private:
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), TabletId, accessor->GetPortionInfo().GetAddress());
+        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), TabletId, accessor->GetPortionInfo());
         add.emplace(address, std::move(accessor));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
             TabletId, std::move(add), std::move(remove));
@@ -108,7 +108,7 @@ private:
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), TabletId, portion->GetAddress()));
+        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), TabletId, *portion));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
             TabletId, std::move(add), std::move(remove));
     }

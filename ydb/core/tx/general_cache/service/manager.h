@@ -592,6 +592,8 @@ public:
 
         auto* sourceInfo = MutableSourceInfoOptional(sourceId);
         if (sourceInfo && hasOwner && sourceInfo->GetOwner() != owner) {
+            AddObjectsToCache(add);
+            RemoveObjectsFromCache(remove);
             return;
         }
         CleanUseless(add.size());

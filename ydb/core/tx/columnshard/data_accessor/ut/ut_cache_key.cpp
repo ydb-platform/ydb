@@ -32,8 +32,10 @@ Y_UNIT_TEST_SUITE(TPortionMetadataCacheKey) {
 
         UNIT_ASSERT(sameTablet == restarted);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(sameTablet), static_cast<size_t>(restarted));
+        const NGeneralCache::TGlobalPortionAddress changed(first, 100, portion, 5);
         UNIT_ASSERT(!(sameTablet == otherTablet));
         UNIT_ASSERT(!(sameTablet == otherPortion));
+        UNIT_ASSERT(!(sameTablet == changed));
     }
 
     Y_UNIT_TEST(ColumnAddressKeepsActorId) {

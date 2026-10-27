@@ -16,6 +16,7 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY(ui64, TabletId, 0);
     TPortionAddress InternalPortionAddress;
+    YDB_READONLY(ui64, ContentStamp, 0);
 
 public:
     const TPortionAddress& GetInternalPortionAddress() const;
@@ -24,7 +25,10 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress);
+    TGlobalPortionAddress(
+        const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp = 0);
+
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion);
 
     bool operator==(const TGlobalPortionAddress& item) const;
 

@@ -206,7 +206,9 @@ namespace NKikimr::NStorage {
                 GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelHotStandby) {
             // Older nodes don't understand the new state. Check connected participants before enabling it, and retain
             // the requirement afterwards so that nodes returning later can't serve this cluster with old semantics.
-            *details->MutablePileRegistry() = Self->GetConfigPileRegistry(config);
+            auto registry = Self->GetConfigPileRegistry(config);
+            Y_ABORT_UNLESS(registry);
+            *details->MutablePileRegistry() = std::move(*registry);
             details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelHotStandby);
             THashSet<ui32> requiredNodeIds;
             THashSet<ui32> ignoredNodeIds;

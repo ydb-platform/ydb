@@ -70,6 +70,8 @@ The user account that is used to connect to the source database must have the fo
 
 Replica objects are created or attached using the account that created the asynchronous replication instance.
 
+When replica tables are created automatically (`INITIAL_SCAN = TRUE`), permissions on the source data are not copied to the target. When initial synchronization uses backup and restore, table permissions and ownership may be restored from the backup, depending on its contents and the import settings. For more information about permissions, see the [reference](../security/short-access-control-notation.md#access-rights).
+
 {% endnote %}
 
 ### Initial Synchronization {#initial-sync}
@@ -200,7 +202,7 @@ When you drop an asynchronous replication instance:
 
 {% note warning %}
 
-If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading.
+If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading. Do not use dropping as a substitute for completing replication. `DROP ASYNC REPLICATION ... CASCADE` also deletes the replica tables.
 
 {% endnote %}
 

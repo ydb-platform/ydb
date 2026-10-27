@@ -4,6 +4,6 @@ This guide describes the process of deploying a {{ ydb-short-name }} cluster on 
 
 Key materials:
 
-- [{#T}](deployment-preparation.md)
-- [{#T}](deployment-configuration-v1.md)
+- <a id="ansible-project-setup"></a>[{#T}](deployment-preparation.md)
+- <a id="inventory-create"></a><a id="change-password"></a><a id="ydb-config-prepare"></a><a id="cluster-state"></a><a id="testing"></a>[{#T}](deployment-configuration-v1.md)
 - [{#T}](deployment-configuration-v2.md)

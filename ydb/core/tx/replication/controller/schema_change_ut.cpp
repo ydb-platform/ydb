@@ -2251,6 +2251,447 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
     }
 }
 
+// These tests use only existing SQL/client interfaces, so the absent FORCE
+// feature is a behavioral SQL failure rather than a C++ compilation failure.
+Y_UNIT_TEST_SUITE(ForceDropAfterDone) {
+    class TSourceAccessBlocker {
+        TTestActorRuntime::TEventObserverHolder Observer;
+
+    public:
+        ui32 Requests = 0;
+        ui32 SecretLookups = 0;
+
+        explicit TSourceAccessBlocker(TTestEnv& env)
+            : Observer(env.GetRuntime().AddObserver([this, &env](IEventHandle::TPtr& ev) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvYdbProxy::EvMakeDirectoryRequest:
+                case TEvYdbProxy::EvRemoveDirectoryRequest:
+                case TEvYdbProxy::EvModifyPermissionsRequest:
+                case TEvYdbProxy::EvCreateTableRequest:
+                case TEvYdbProxy::EvDropTableRequest:
+                case TEvYdbProxy::EvCopyTableRequest:
+                case TEvYdbProxy::EvCopyTablesRequest:
+                case TEvYdbProxy::EvRenameTablesRequest:
+                case TEvYdbProxy::EvCreateTopicRequest:
+                case TEvYdbProxy::EvDescribeConsumerRequest:
+                case TEvYdbProxy::EvReadTopicRequest:
+                case TEvYdbProxy::EvCommitOffsetRequest:
+                case TEvYdbProxy::EvDescribePathRequest:
+                case TEvYdbProxy::EvListDirectoryRequest:
+                case TEvYdbProxy::EvDescribeTableRequest:
+                case TEvYdbProxy::EvAlterTableRequest:
+                case TEvYdbProxy::EvDescribeTopicRequest:
+                case TEvYdbProxy::EvAlterTopicRequest:
+                case TEvYdbProxy::EvDropTopicRequest:
+                case TEvYdbProxy::EvCreateTopicReaderRequest:
+                    ++Requests;
+                    // A source operation cannot complete in this outage.
+                    ev.Reset();
+                    return;
+                case TEvTxProxySchemeCache::EvNavigateKeySet:
+                    if (env.GetRuntime().FindActor(ev->Sender)->GetActivityType()
+                        == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
+                    {
+                        ++SecretLookups;
+                        ev.Reset();
+                    }
+                    return;
+                }
+            }))
+        {}
+
+        void AssertUnused() const {
+            UNIT_ASSERT_VALUES_EQUAL_C(Requests, 0, "Source API used during source-independent lifecycle");
+            UNIT_ASSERT_VALUES_EQUAL_C(SecretLookups, 0, "Source secret resolved during source-independent lifecycle");
+        }
+    };
+
+    struct TSqlEnv: public TTestEnv {
+        enum class EWorkerState { Attached, Stopped };
+
+        TReplicationTestInfo Info;
+        TWorkerId Worker;
+        NYdb::NTable::TTableClient TableClient;
+        NYdb::NTable::TSession Session;
+        TPathId Destination;
+        TPathId SourceStream;
+        TString SourceStreamPath;
+        std::unique_ptr<TSourceAccessBlocker> Source;
+        EWorkerState WorkerState = EWorkerState::Attached;
+
+        TSqlEnv()
+            : TTestEnv(true, NTestHelpers::ERuntimeMode::Simulated)
+            , Info(StartReplication(*this))
+            , Worker(TWorkerId::Parse(GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(GetSender())
+                ->Get()->Record.GetWorker()))
+            , TableClient(CreateTableClient(*this))
+            , Session(CreateTableSession(*this, TableClient))
+            , Destination(GetPathId("/Root/replica1"))
+        {
+            AttachWorkers(*this, Info.ControllerId, {Worker});
+            GetRuntime().WaitFor("source setup", [&] { return SourceStreamsReady(*this, Info, 1); },
+                TDuration::Seconds(30));
+            const auto desc = DescribeReplication(*this, Info);
+            SourceStreamPath = TStringBuilder() << "/Root/table1/"
+                << desc->Get()->Record.GetTargets(0).GetSrcStreamName();
+            SourceStream = GetPathId(SourceStreamPath);
+            AssertDestinationMode(*this, "/Root/replica1",
+                NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        }
+
+        auto Scheme(const TString& query) {
+            return RunCall([&] { return Session.ExecuteSchemeQuery(query).GetValueSync(); });
+        }
+
+        void SchemeOk(const TString& query) {
+            const auto result = Scheme(query);
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+        }
+
+        auto Data(const TString& query) {
+            auto result = RunCall([&] {
+                return Session.ExecuteDataQuery(query,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        }
+
+        void StopWorkerIfAttached() {
+            if (WorkerState == EWorkerState::Stopped) {
+                return;
+            }
+            const auto stop = GetRuntime().GrabEdgeEvent<TEvService::TEvStopWorker>(GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), Worker);
+            SendWorkerStopped(*this, Info.ControllerId, Worker);
+            WorkerState = EWorkerState::Stopped;
+        }
+
+        void Pause() {
+            SchemeOk("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
+            StopWorkerIfAttached();
+            GetRuntime().WaitFor("actual PAUSED", [&] {
+                return DescribeReplication(*this, Info)->Get()->Record.GetState().HasPaused();
+            }, TDuration::Seconds(30));
+        }
+
+        void MakeSourceUnavailable() {
+            // Public config changes require PAUSED or DONE. Pause only to
+            // prepare the unavailable credential before the DONE workflow.
+            Pause();
+            Source = std::make_unique<TSourceAccessBlocker>(*this);
+            SchemeOk(R"(
+                ALTER ASYNC REPLICATION `/Root/replication` SET (
+                    CONNECTION_STRING = "grpc://localhost:1/?database=/Root",
+                    TOKEN_SECRET_PATH = "/Root/unavailable-source-secret"
+                );
+            )");
+            // Prove that the missing credential is actually being resolved,
+            // then leave that real resolver blocked before requesting DONE.
+            GetRuntime().WaitFor("blocked source credential", [&] { return Source->SecretLookups != 0; },
+                TDuration::Seconds(30));
+            Source->Requests = 0;
+            Source->SecretLookups = 0;
+        }
+
+        void Done() {
+            SchemeOk(R"(
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
+            )");
+            StopWorkerIfAttached();
+            GetRuntime().WaitFor("actual controller DONE", [&] {
+                return DescribeReplication(*this, Info)->Get()->Record.GetState().HasDone();
+            }, TDuration::Seconds(30));
+            AssertDestinationWritable(*this);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathId("/Root/replica1"), Destination);
+        }
+
+        void AssertSourceRetained() {
+            UNIT_ASSERT_VALUES_EQUAL(GetPathId(SourceStreamPath), SourceStream);
+            UNIT_ASSERT_VALUES_EQUAL(GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 1);
+            Source->AssertUnused();
+        }
+
+        void AssertRows(const TString& first, const TString& second) {
+            const auto result = Data("SELECT key, value FROM `/Root/replica1` ORDER BY key;");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2);
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), first);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 9);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), second);
+        }
+    };
+
+    // Catches a source lookup added to public forced DONE or its recovery path.
+    Y_UNIT_TEST(PublicDoneWithoutSourceAndAfterControllerRestart) {
+        TSqlEnv env;
+        env.MakeSourceUnavailable();
+        env.Done();
+        env.Source->AssertUnused();
+        RestartController(env, env.Info.ControllerId);
+        UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+        env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'retained'), (9, 'after-restart');");
+        env.AssertRows("retained", "after-restart");
+        env.AssertSourceRetained();
+    }
+
+    // Catches FORCE falling back to remote cleanup, dropping a retained table,
+    // replacing its identity, losing its rows, or leaving it read-only.
+    Y_UNIT_TEST_TWIN(ForceRetainsWritableRowsWithoutSource, Restart) {
+        TSqlEnv env;
+        env.MakeSourceUnavailable();
+        env.Done();
+        env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'retained'), (9, 'before-drop');");
+        if constexpr (Restart) {
+            RestartController(env, env.Info.ControllerId);
+            UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+        }
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        AssertDestinationWritable(env);
+        env.AssertRows("retained", "before-drop");
+        env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (9, 'after-drop');");
+        env.AssertRows("retained", "after-drop");
+        env.AssertSourceRetained();
+    }
+
+    // Catches CASCADE accidentally retaining an owned destination or touching
+    // the abandoned source while deleting only local objects.
+    Y_UNIT_TEST_TWIN(ForceCascadeDeletesOwnedDestinationWithoutSource, Restart) {
+        TSqlEnv env;
+        env.MakeSourceUnavailable();
+        env.Done();
+        if constexpr (Restart) {
+            RestartController(env, env.Info.ControllerId);
+            UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+        }
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        env.AssertSourceRetained();
+    }
+
+    // Catches path-name based CASCADE deletion of an unrelated replacement.
+    Y_UNIT_TEST(ForceCascadePreservesSameNameReplacement) {
+        TSqlEnv env;
+        env.MakeSourceUnavailable();
+        env.Done();
+        env.SchemeOk("DROP TABLE `/Root/replica1`;");
+        CreateSourceTable(env, "replica1");
+        const auto replacement = env.GetPathId("/Root/replica1");
+        UNIT_ASSERT(replacement != env.Destination);
+        env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'replacement'), (9, 'unrelated');");
+        RestartController(env, env.Info.ControllerId);
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), replacement);
+        AssertDestinationWritable(env);
+        env.AssertRows("replacement", "unrelated");
+        env.AssertSourceRetained();
+    }
+
+    // Catches changes to the omitted option's source cleanup, and FALSE being
+    // interpreted as FORCE merely because the option is present.
+    Y_UNIT_TEST_TWIN(LegacyDropAfterDoneCleansSource, ExplicitFalse) {
+        TSqlEnv env;
+        env.Done();
+        RestartController(env, env.Info.ControllerId);
+        env.Data("UPSERT INTO `/Root/replica1` (key, value) VALUES (7, 'retained'), (9, 'ordinary-drop');");
+        env.SchemeOk(ExplicitFalse
+            ? "DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = FALSE);"
+            : "DROP ASYNC REPLICATION `/Root/replication`;");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        AssertDestinationWritable(env);
+        env.AssertRows("retained", "ordinary-drop");
+    }
+
+    // Catches unsafe admission before terminal DONE. The follow-up public
+    // ALTER proves rejection did not leave the schema path locked for DROP.
+    Y_UNIT_TEST_TWIN(ForceRejectsNonDoneWithoutDamagingPath, Paused) {
+        TSqlEnv env;
+        if constexpr (Paused) {
+            env.Pause();
+        }
+        const auto rejected = env.Scheme("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        UNIT_ASSERT_C(!rejected.IsSuccess(), "FORCE must require DONE");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        if constexpr (Paused) {
+            env.SchemeOk("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");
+            env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+            AttachWorkers(env, env.Info.ControllerId, {env.Worker});
+            env.WorkerState = TSqlEnv::EWorkerState::Attached;
+        }
+        env.Done();
+    }
+
+    // Catches malformed options reaching destructive admission. These negative
+    // assertions alone do not establish that the new syntax is implemented.
+    Y_UNIT_TEST(InvalidOptionsLeaveDoneReplicationUsable) {
+        TSqlEnv env;
+        env.Done();
+        for (const TString& options : {
+                "FORCE = 'TRUE'", "FORCE = 1", "FORCE = NULL", "FORCE = TRUE, FORCE = FALSE", "UNKNOWN = TRUE"})
+        {
+            const auto rejected = env.Scheme(TStringBuilder()
+                << "DROP ASYNC REPLICATION `/Root/replication` WITH (" << options << ");");
+            UNIT_ASSERT_C(!rejected.IsSuccess(), options);
+            UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
+            UNIT_ASSERT(DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+            UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        }
+        env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication`;");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 0);
+    }
+
+    // Catches confusing schema desired DONE with actual DONE, fallback to
+    // source cleanup during detach retries, and a lost local continuation.
+    Y_UNIT_TEST(PrematureForceDuringLocalDoneRetrySurvivesControllerRestart) {
+        TSqlEnv env;
+        auto& runtime = env.GetRuntime();
+        env.MakeSourceUnavailable();
+        bool blockDetach = true;
+        ui32 rejectedDetach = 0;
+        ui32 forwardedDrop = 0;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvController::EvDropReplication) {
+                ++forwardedDrop;
+            }
+            if (!blockDetach || ev->GetTypeRewrite() != NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                return;
+            }
+            auto* request = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            for (const auto& tx : request->Record.GetTransaction()) {
+                if (tx.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable
+                    || !tx.GetAlterTable().HasReplicationConfig()
+                    || tx.GetAlterTable().GetReplicationConfig().GetMode()
+                        != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE
+                    || tx.GetAlterTable().GetPathId().GetLocalId() != env.Destination.LocalPathId)
+                {
+                    continue;
+                }
+                runtime.EnableScheduleForActor(ev->Sender);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                        NKikimrScheme::StatusResourceExhausted,
+                        request->Record.GetTxId(), env.Destination.OwnerId, "injected local detach limit")));
+                ++rejectedDetach;
+                ev.Reset();
+                return;
+            }
+        });
+        env.SchemeOk(R"(
+            ALTER ASYNC REPLICATION `/Root/replication`
+            SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');
+        )");
+        env.StopWorkerIfAttached();
+        runtime.WaitFor("unfinished local DONE", [&] { return rejectedDetach != 0; }, TDuration::Seconds(30));
+        UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription()
+            .GetState().HasDone());
+        UNIT_ASSERT(!DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone());
+        auto drop = env.Session.ExecuteSchemeQuery(
+            "DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        runtime.WaitFor("FORCE admission decision", [&] {
+            return drop.HasValue() || forwardedDrop != 0;
+        });
+        // Either an early rejection with an intact path, or a durable local
+        // continuation is permitted. A successful DROP cannot precede detach.
+        const bool earlyReply = drop.HasValue();
+        if (earlyReply) {
+            const auto result = drop.GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "Premature FORCE completed before actual DONE");
+            UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replication"), env.Info.PathId);
+        }
+        env.Source->AssertUnused();
+        RestartController(env, env.Info.ControllerId);
+        const auto beforeRestart = rejectedDetach;
+        runtime.WaitFor("local continuation after restart", [&] {
+            return rejectedDetach > beforeRestart;
+        }, TDuration::Seconds(30));
+        env.Source->AssertUnused();
+        blockDetach = false;
+        if (earlyReply) {
+            runtime.WaitFor("actual DONE after retry", [&] {
+                return DescribeReplication(env, env.Info)->Get()->Record.GetState().HasDone();
+            }, TDuration::Seconds(30));
+            env.SchemeOk("DROP ASYNC REPLICATION `/Root/replication` WITH (FORCE = TRUE);");
+        } else {
+            const auto result = runtime.WaitFuture(std::move(drop));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), env.Destination);
+        AssertDestinationWritable(env);
+        env.AssertSourceRetained();
+    }
+
+    // Catches reporting successful FORCE CASCADE after a failed local DROP,
+    // or losing its persisted deletion work when the controller restarts.
+    Y_UNIT_TEST_TWIN(ForceCascadeRetriesLocalDropFailure, Restart) {
+        TSqlEnv env;
+        auto& runtime = env.GetRuntime();
+        env.MakeSourceUnavailable();
+        env.Done();
+        bool failDrop = true;
+        ui32 rejectedDrop = 0;
+        auto observer = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (!failDrop) {
+                    return;
+                }
+                for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                    if (tx.GetOperationType() != NKikimrSchemeOp::ESchemeOpDropTable
+                        || tx.GetDrop().GetId() != env.Destination.LocalPathId)
+                    {
+                        continue;
+                    }
+                    runtime.EnableScheduleForActor(ev->Sender);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                            NKikimrScheme::StatusResourceExhausted,
+                            ev->Get()->Record.GetTxId(), env.Destination.OwnerId, "injected local drop limit")));
+                    ++rejectedDrop;
+                    ev.Reset();
+                    return;
+                }
+            });
+        auto drop = env.Session.ExecuteSchemeQuery(
+            "DROP ASYNC REPLICATION `/Root/replication` CASCADE WITH (FORCE = TRUE);");
+        runtime.WaitFor("local FORCE CASCADE deletion", [&] {
+            return rejectedDrop != 0 || drop.HasValue();
+        });
+        if (!rejectedDrop) {
+            const auto result = drop.GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_FAIL("FORCE CASCADE completed without attempting its owned local destination");
+        }
+        NTestSuiteStatsDescription::DescribeStats(env, env.Info);
+        env.Source->AssertUnused();
+        if constexpr (Restart) {
+            RestartController(env, env.Info.ControllerId);
+            NTestSuiteStatsDescription::DescribeStats(env, env.Info);
+            env.Source->AssertUnused();
+        }
+        failDrop = false;
+        const auto result = runtime.WaitFuture(std::move(drop));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        env.AssertSourceRetained();
+    }
+}
+
 Y_UNIT_TEST_SUITE(StreamResultFreshness) {
     void CheckReplacement(bool describeOnly, bool currentFailure) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);

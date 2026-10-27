@@ -433,6 +433,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         Put(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
         Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
+        Get(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
     }
 
     CUSTOM_UNIT_TEST(TestCreatePDiskAndEncryptedGroup) {
@@ -456,6 +457,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         Put(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
         Get(runtime, sender1, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
+        Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 1, 0, 3, 0), "yyy");
     }
 
 }

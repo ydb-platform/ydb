@@ -241,16 +241,19 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
     if (replication->GetState() == TReplication::EState::Removing
-        && GetStreamState() == EStreamState::Removed
-        && GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching)
+        && GetStreamState() == EStreamState::Removed)
     {
-        if (HasWorkers()) {
-            RemoveWorkers(ctx);
-        } else {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
-                replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+        Reset(StreamCreator);
+        Reset(StreamRemover);
+        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
+            if (HasWorkers()) {
+                RemoveWorkers(ctx);
+            } else {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            }
+            return;
         }
-        return;
     }
 
     if (CanDetachWithoutStream()) {

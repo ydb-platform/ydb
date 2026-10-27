@@ -105,6 +105,8 @@ class TestRolling(RollingUpgradeAndDowngradeFixture):
 class TestReplicationForceDropRolling(compatibility.RollingDowngradeAndUpgradeFixture):
     @pytest.fixture(autouse=True)
     def base_setup(self):
+        if compatibility.current_name != "current":
+            pytest.skip("FORCE DROP requires YDB_COMPAT_TARGET_REF=current")
         self.all_binary_paths = [
             compatibility.current_binary_path,
             yatest.common.get_param("force_drop_previous_binary", compatibility.inter_stable_binary_path),

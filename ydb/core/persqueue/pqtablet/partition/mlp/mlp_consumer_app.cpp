@@ -33,12 +33,25 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                     LAYOUT_COLUMN() {
                         PROPERTIES("Generic") {
                             PROPERTY("First offset", Storage->GetFirstOffset());
-                            PROPERTY("Pending read requests", PendingReadQueue.size());
                             PROPERTY("Last offset", Storage->GetLastOffset());
                             PROPERTY("Message counts", Storage->GetMessageCount());
                             PROPERTY("Keep message order", Storage->GetKeepMessageOrder() ? "Yes" : "No");
                             PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsIdSize());
                             PROPERTY("Free message groups", freeMessageGroups.size());
+                        }
+
+                        PROPERTIES("Queue") {
+                            PROPERTY("Read requests", ReadRequestsQueue.size());
+                            PROPERTY("Commit requests", CommitRequestsQueue.size());
+                            PROPERTY("Unlock requests", UnlockRequestsQueue.size());
+                            PROPERTY("Change message deadline requests", ChangeMessageDeadlineRequestsQueue.size());
+                            PROPERTY("Purge requests", PurgeRequestsQueue.size());
+                            PROPERTY("Update external locked message groups requests", UpdateExternalLockedMessageGroupsIdRequestsQueue.size());
+                            PROPERTY("Pending read requests", PendingReadQueue.size());
+                            PROPERTY("Pending commit requests", PendingCommitQueue.size());
+                            PROPERTY("Pending unlock requests", PendingUnlockQueue.size());
+                            PROPERTY("Pending change message deadline requests", PendingChangeMessageDeadlineQueue.size());
+                            PROPERTY("Pending purge requests", PendingPurgeQueue.size());
                         }
 
                         PROPERTIES("Total metrics") {

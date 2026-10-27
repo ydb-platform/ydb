@@ -963,9 +963,12 @@ private:
         auto* msg = ev->Get();
 
         // This state is only entered when ForceAcquireSnapshot() returned true,
-        // which is guaranteed to be false for streaming queries.
+        // which is guaranteed to be false for streaming queries. The context must
+        // always be propagated with the tasks graph: a missing context would also
+        // silently disable the streaming bypass in ForceAcquireSnapshot().
         const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
-        AFL_ENSURE(!(userRequestContext && userRequestContext->IsStreamingQuery));
+        AFL_ENSURE(userRequestContext);
+        AFL_ENSURE(!userRequestContext->IsStreamingQuery);
 
         YDB_LOG_TRACE("Read snapshot result",
             {"marker", "KQPDATA"},

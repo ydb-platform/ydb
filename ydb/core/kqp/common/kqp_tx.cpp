@@ -81,8 +81,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     Y_UNUSED(config);
 
     if (isStreamingQuery) {
-        // Streaming queries must never acquire a snapshot: they are long-running
-        // and each read must see the latest committed data.
+        // Streaming queries are long-running; pinning an MVCC snapshot would freeze
+        // their view and hold history on datashards, so reads must not be snapshot-based.
         return false;
     }
 

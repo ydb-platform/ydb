@@ -1,6 +1,7 @@
 #pragma once
 
 #include "replication.h"
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
@@ -310,7 +311,16 @@ struct TEvPrivate {
         ui64 ReplicationId;
         ui64 TargetId;
 
+        THashSet<ui64> Workers;
+        bool HasPartitionGraph = false;
+
         TEvCompleteWorkerSet(ui64 rid, ui64 tid);
+        TEvCompleteWorkerSet(ui64 rid, ui64 tid, THashSet<ui64> workers, bool hasPartitionGraph)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Workers(std::move(workers))
+            , HasPartitionGraph(hasPartitionGraph)
+        {}
         TString ToString() const override;
     };
 
@@ -320,6 +330,8 @@ struct TEvPrivate {
         const TActorId Sender;
         const ui64 ReplicationId;
         TResult Result;
+        ui64 Cookie = 0;
+        std::optional<Ydb::Replication::SourceVersion> RequestedAppliedVersion;
 
         explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
         TString ToString() const override;

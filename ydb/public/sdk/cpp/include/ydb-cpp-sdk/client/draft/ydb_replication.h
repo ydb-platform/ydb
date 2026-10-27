@@ -25,9 +25,29 @@ namespace NYdb::inline Dev::NReplication {
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
 
+struct TSourceVersion {
+    uint64_t Step = 0;
+    uint64_t TxId = 0;
+};
+
+struct TReplicationApplyProgress {
+    enum class EState { Unspecified, Initializing, WaitingHeartbeats, WaitingCommits, Applied, Blocked };
+    TSourceVersion RequestedVersion;
+    EState State = EState::Unspecified;
+    bool WorkerSetComplete = false;
+    uint64_t ExpectedWorkers = 0;
+    uint64_t WorkersAtBoundary = 0;
+    std::optional<TSourceVersion> MinAppliedHeartbeat;
+    uint64_t PendingVersions = 0;
+    uint64_t AssignedTransactions = 0;
+    bool CommitInProgress = false;
+    NYdb::NIssue::TIssues Issues;
+};
+
 struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {
     using TSelf = TDescribeReplicationSettings;
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_OPTIONAL(TSourceVersion, RequestedAppliedVersion);
 };
 
 struct TDescribeTransferSettings: public TDescribeReplicationSettings {
@@ -179,9 +199,12 @@ class TDescribeReplicationResult: public NScheme::TDescribePathResult {
 public:
     TDescribeReplicationResult(TStatus&& status, Ydb::Replication::DescribeReplicationResult&& desc);
     const TReplicationDescription& GetReplicationDescription() const;
+    // Missing progress (e.g. an older server) must never be interpreted as Applied.
+    const std::optional<TReplicationApplyProgress>& GetApplyProgress() const { return ApplyProgress_; }
 
 private:
     TReplicationDescription ReplicationDescription_;
+    std::optional<TReplicationApplyProgress> ApplyProgress_;
     std::unique_ptr<Ydb::Replication::DescribeReplicationResult> Proto_;
 };
 

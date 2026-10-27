@@ -181,8 +181,18 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         Self->CompleteWorkerSets.insert({Event->Get()->ReplicationId, Event->Get()->TargetId});
+        const auto replication = Self->Find(Event->Get()->ReplicationId);
+        auto* target = replication ? replication->FindTarget(Event->Get()->TargetId) : nullptr;
+        if (target && target->CompleteWorkerSet(Event->Sender,
+                std::move(Event->Get()->Workers), Event->Get()->HasPartitionGraph)
+            && !Self->AssignedTxIds.empty())
+        {
+            // Registration and its durable worker rows precede this completion.
+            // Heartbeats may already be present, so recheck the commit quorum.
+            Self->RunTxHeartbeat(ctx);
+        }
     }
 };
 

@@ -180,6 +180,9 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
+    bool HasEnumeratedWorkerSets(const TReplication& replication) const;
+    void FillApplyProgress(const TReplication& replication, const Ydb::Replication::SourceVersion& boundary,
+        Ydb::Replication::ReplicationApplyProgress& progress) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);

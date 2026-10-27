@@ -95,6 +95,8 @@ void TTargetBase::SetDstState(const EDstState value) {
         Reset(DstCreator);
     }
     if (DstState != EDstState::Ready) {
+        InvalidateWorkerSet();
+        WorkerSetEnumerated = false;
         Reset(WorkerRegistar);
     }
     if (DstState != EDstState::Alter) {
@@ -153,6 +155,11 @@ EStreamState TTargetBase::GetStreamState() const {
 }
 
 void TTargetBase::SetStreamState(EStreamState value) {
+    if (value != EStreamState::Ready) {
+        InvalidateWorkerSet();
+        WorkerSetEnumerated = false;
+        Reset(WorkerRegistar);
+    }
     StreamState = value;
 }
 
@@ -173,12 +180,38 @@ void TTargetBase::SetIssue(const TString& value) {
     TruncatedIssue(Issue);
 }
 
+bool TTargetBase::CompleteWorkerSet(const TActorId& registrar, THashSet<ui64> workers, bool hasPartitionGraph) {
+    if (registrar != WorkerRegistar || DstState != EDstState::Ready || StreamState != EStreamState::Ready) {
+        return false;
+    }
+    WorkerSetEnumerated = !workers.empty();
+    ExpectedWorkers = std::move(workers);
+    PartitionGraph = hasPartitionGraph;
+    return true;
+}
+
+bool TTargetBase::IsWorkerSetComplete() const {
+    if (!ExpectedWorkers || ExpectedWorkers->empty() || ExpectedWorkers->size() != Workers.size()) {
+        return false;
+    }
+    for (const auto id : *ExpectedWorkers) {
+        if (!Workers.contains(id)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void TTargetBase::AddWorker(ui64 id) {
+    if (ExpectedWorkers && !ExpectedWorkers->contains(id)) {
+        InvalidateWorkerSet();
+    }
     Workers.emplace(id, TWorker{});
     TLagProvider::AddPendingLag(id);
 }
 
 void TTargetBase::RemoveWorker(ui64 id) {
+    InvalidateWorkerSet();
     Workers.erase(id);
 }
 
@@ -250,6 +283,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             // Registration also captures connection settings for the workers.
             // Restart this read-only actor so both its proxy and settings refresh.
             Reset(WorkerRegistar);
+            InvalidateWorkerSet();
+            WorkerSetEnumerated = false;
         }
         if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
@@ -292,6 +327,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
 }
 
 void TTargetBase::Shutdown(const TActorContext& ctx) {
+    InvalidateWorkerSet();
+    WorkerSetEnumerated = false;
     TVector<TActorId*> toShutdown = {
         &DstCreator,
         &DstAlterer,

@@ -159,7 +159,8 @@ public:
         }
 
         const auto participants = Self->CountHeartbeatParticipants();
-        if (!participants || participants != Self->WorkersWithHeartbeat.size()) {
+        if (!Self->HasEnumeratedWorkerSets(*replication)
+            || !participants || participants != Self->WorkersWithHeartbeat.size()) {
             return true; // no quorum
         }
 
@@ -298,6 +299,7 @@ public:
         Self->AdvanceVerifyingSchemaBarriers(db);
 
         if (it == Self->AssignedTxIds.end() || Self->WorkersByHeartbeat.empty()
+            || !Self->HasEnumeratedWorkerSets(*replication)
             || Self->CountHeartbeatParticipants() != Self->WorkersWithHeartbeat.size())
         {
             return true;

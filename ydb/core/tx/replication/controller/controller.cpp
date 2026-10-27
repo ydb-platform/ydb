@@ -709,6 +709,9 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
+    if (auto* target = FindTarget(id)) {
+        target->InvalidateWorkerSet();
+    }
 
     auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
         auto it = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});

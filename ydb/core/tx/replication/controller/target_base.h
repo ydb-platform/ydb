@@ -83,6 +83,11 @@ public:
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
+    bool CompleteWorkerSet(const TActorId& registrar, THashSet<ui64> workers, bool hasPartitionGraph) override;
+    bool IsWorkerSetComplete() const override;
+    bool IsWorkerSetEnumerated() const override { return WorkerSetEnumerated; }
+    bool HasPartitionGraph() const override { return PartitionGraph; }
+    void InvalidateWorkerSet() override { ExpectedWorkers.reset(); }
     void AddWorker(ui64 id) override;
     void RemoveWorker(ui64 id) override;
     TVector<ui64> GetWorkers() const override;
@@ -115,6 +120,9 @@ private:
     TActorId DstRemover;
     TActorId WorkerRegistar;
     TActorId WorkerRegistarProxy;
+    std::optional<THashSet<ui64>> ExpectedWorkers;
+    bool PartitionGraph = false;
+    bool WorkerSetEnumerated = false;
     THashMap<ui64, TWorker> Workers;
     bool PendingRemoveWorkers = false;
 

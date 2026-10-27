@@ -65,6 +65,9 @@ tokens and must not throw.
 
 Shutdown closes admission, detaches notifications and requests cancellation of
 unfinished calls without waiting for cleanup. Results can still be drained.
+The detached wakeup's captures are destroyed outside the registry mutex, after
+cancellation dispatch: releasing their backend state may destroy completion tokens
+and reenter cleanup, even when those tokens already acknowledged Release.
 A notification copied before shutdown can arrive afterwards: the receiver must
 use a lifetime-safe handle and ignore obsolete generations. Context destruction
 discards results; outstanding tokens keep input/reservations alive until cleanup.

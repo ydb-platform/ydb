@@ -51,6 +51,11 @@ public:
     }
 };
 
+struct TWakeupBackend {
+    std::shared_ptr<ICompletion> Completion;
+    size_t Notifications = 0;
+};
+
 TTimePoint At(ui64 tick) {
     return TTimePoint(std::chrono::microseconds(tick));
 }
@@ -577,5 +582,71 @@ Y_UNIT_TEST(ShutdownRacingCompletionsPreservesSingleTerminalResult) {
     }
     UNIT_ASSERT_VALUES_EQUAL(f.Context.GetStats().TrackedOperations, 0);
     UNIT_ASSERT(f.Submit().Status == EAdmission::Closed);
+}
+
+Y_UNIT_TEST(ShutdownReleasesWakeupOwnedPendingCompletion) {
+    auto backend = std::make_shared<TWakeupBackend>();
+    const std::weak_ptr<TWakeupBackend> weak = backend;
+    auto provider = std::make_shared<TManualProvider>();
+    provider->OnStart = [weak](TCall& call) {
+        weak.lock()->Completion = std::move(call.Completion);
+    };
+    bool backendAliveDuringCancel = false;
+    provider->OnCancel = [weak, &backendAliveDuringCancel](TCall&) {
+        if (auto live = weak.lock()) {
+            backendAliveDuringCancel = true;
+            live->Completion->Complete("late");
+        }
+    };
+    TExecutionContext context([backend](ui64) { ++backend->Notifications; });
+    context.RegisterProvider("test", provider);
+    const auto submission = context.Submit("test", {"echo", "input", 16, {}});
+    UNIT_ASSERT(submission.Status == EAdmission::Accepted);
+    // Only the wakeup capture owns backend, which owns the last token.
+    backend.reset();
+    context.Shutdown();
+    UNIT_ASSERT(backendAliveDuringCancel);
+    UNIT_ASSERT(weak.expired());
+    UNIT_ASSERT(provider->Calls.front().Request.expired());
+    UNIT_ASSERT_VALUES_EQUAL(provider->Calls.front().Cancellations, 1);
+    UNIT_ASSERT(context.GetStats().Closed);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().CleanupPending, 0);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().ReservedPayloadBytes, 25);
+    const auto results = context.TakeReady();
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+    UNIT_ASSERT(results.front().Id == submission.Id);
+    UNIT_ASSERT(results.front().Outcome == EOutcome::Cancelled);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().TrackedOperations, 0);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().ReservedPayloadBytes, 0);
+    context.Shutdown();
+    UNIT_ASSERT_VALUES_EQUAL(provider->Calls.front().Cancellations, 1);
+}
+
+Y_UNIT_TEST(ShutdownReleasesWakeupOwnedAcknowledgedCompletion) {
+    auto backend = std::make_shared<TWakeupBackend>();
+    const std::weak_ptr<TWakeupBackend> weak = backend;
+    auto provider = std::make_shared<TManualProvider>();
+    provider->OnStart = [weak](TCall& call) {
+        weak.lock()->Completion = std::move(call.Completion);
+    };
+    TExecutionContext context([backend](ui64) { ++backend->Notifications; });
+    context.RegisterProvider("test", provider);
+    UNIT_ASSERT(context.Submit("test", {"echo", "input", 16, {}}).Status == EAdmission::Accepted);
+    backend->Completion->Complete("done");
+    backend->Completion->Release();
+    const auto results = context.TakeReady();
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+    UNIT_ASSERT(results.front().Outcome == EOutcome::Success);
+    UNIT_ASSERT_VALUES_EQUAL(results.front().Payload, "done");
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().TrackedOperations, 0);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().ReservedPayloadBytes, 0);
+    // Even an acknowledged token calls Release again from its destructor.
+    backend.reset();
+    context.Shutdown();
+    UNIT_ASSERT(weak.expired());
+    UNIT_ASSERT(context.GetStats().Closed);
+    UNIT_ASSERT(context.TakeReady().empty());
+    UNIT_ASSERT_VALUES_EQUAL(provider->Calls.front().Cancellations, 0);
+    UNIT_ASSERT_VALUES_EQUAL(context.GetStats().ReservedPayloadBytes, 0);
 }
 } // Y_UNIT_TEST_SUITE(TAsyncOperationLifecycle)

@@ -338,13 +338,16 @@ void TExecutionContext::Shutdown() noexcept {
     auto state = Impl->State;
     const auto now = state->Clock();
     std::vector<std::pair<TOperationId, TString>> cancellations;
+    // A capture may own the last completion token. Destroy it only after unlock
+    // and cancellation dispatch: its destructor can reenter TState::Release.
+    TWakeup detachedWakeup;
     {
         std::lock_guard guard(state->Mutex);
         if (state->Closed) {
             return;
         }
         state->Closed = true;
-        state->Wakeup = {};
+        detachedWakeup.swap(state->Wakeup);
         for (auto& [sequence, entry] : state->Entries) {
             if (!entry.Finished) {
                 state->Finish(sequence, entry, EOutcome::Cancelled, EError::None, {}, now);

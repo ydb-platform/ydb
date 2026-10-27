@@ -43,7 +43,7 @@ namespace NKikimr {
         }
 
         void AdvanceConfirmed(ui64 lsn) {
-            auto m = Guard(WriteLock);
+            TGuard<TSerializableAccessChecker> guard(WriteLock);
             if (lsn <= static_cast<ui64>(AtomicGet(ConfirmedLsn))) {
                 return;
             }

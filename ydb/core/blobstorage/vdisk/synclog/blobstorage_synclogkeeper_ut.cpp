@@ -386,7 +386,7 @@ namespace NKikimr {
         UNIT_ASSERT(State->PerformInitialCommit());
         TCommitWithNoSwapAndDelChunks commit;
         commit.Start(State.get(), 9);
-        const auto entryPoint = commit.Finish(State.get(), 10);
+        const TEntryPointPair entryPoint = commit.Finish(State.get(), 10);
         CreateState(entryPoint);
         UNIT_ASSERT_VALUES_EQUAL(State->GetSyncLogSnapshot()->LogStartLsn, 10);
         State->AdvanceRecoveryBase(9);

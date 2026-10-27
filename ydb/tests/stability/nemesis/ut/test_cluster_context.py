@@ -36,6 +36,7 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
         )
         for process_type in (
             "KillNodeNemesis",
+            "KillSlotDaemonNemesis",
             "StopStartNodeNemesis",
             "SuspendNodeNemesis",
         ):
@@ -64,3 +65,18 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
                 cluster_context.scheduled_nemesis_rejection_reason(process_type)
                 is None
             )
+        assert (
+            "requires live local harness slots"
+            in cluster_context.scheduled_nemesis_rejection_reason(
+                "KillSlotDaemonNemesis"
+            )
+        )
+
+    safe_cluster.slots = {1: object(), 2: object()}
+    with cluster_context.use_cluster(safe_cluster):
+        assert (
+            cluster_context.scheduled_nemesis_rejection_reason(
+                "KillSlotDaemonNemesis"
+            )
+            is None
+        )

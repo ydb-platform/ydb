@@ -20,6 +20,7 @@ LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillHiveNemesis",
     "KillNodeNemesis",
     "KillSchemeShardNemesis",
+    "KillSlotDaemonNemesis",
     "StopStartNodeNemesis",
     "SuspendNodeNemesis",
 })
@@ -27,12 +28,14 @@ LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
 LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
     "KillNodeNemesis",
+    "KillSlotDaemonNemesis",
     "StopStartNodeNemesis",
     "SuspendNodeNemesis",
 })
 
 LOCAL_HARNESS_NODE_FAULT_TYPES = frozenset({
     "KillNodeNemesis",
+    "KillSlotDaemonNemesis",
     "StopStartNodeNemesis",
     "SuspendNodeNemesis",
 })
@@ -105,6 +108,10 @@ def scheduled_nemesis_rejection_reason(nemesis_type: str) -> str | None:
                 f"{nemesis_type} requires at least 8 block-4-2 nodes in local "
                 f"harness mode; got erasure={erasure or 'unknown'}, nodes={len(nodes)}"
             )
+    if local_harness_mode() and nemesis_type == "KillSlotDaemonNemesis":
+        slots = getattr(_cluster_override, "slots", {}) or {}
+        if not slots:
+            return "KillSlotDaemonNemesis requires live local harness slots"
     if (
         local_harness_mode()
         and nemesis_type not in LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES

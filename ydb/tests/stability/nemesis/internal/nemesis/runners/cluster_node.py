@@ -154,6 +154,27 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
 
     def inject_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            target = target_from_payload(payload)
+            slot_idx = payload.get("slot_idx")
+            if slot_idx is None and target is not None:
+                slot_idx = target.slot_idx
+            if slot_idx is None:
+                raise ValueError(
+                    "KillSlotDaemonNemesis: local harness target must include slot_idx"
+                )
+            restarted = HarnessNodeController(
+                require_cluster()
+            ).kill_slot_and_restart(slot_idx)
+            self._logger.info(
+                "Restarted local harness slot_idx=%d node_id=%d pid=%d->%d",
+                restarted.slot_idx,
+                restarted.node_id,
+                restarted.previous_pid,
+                restarted.current_pid,
+            )
+            self.on_success_inject_fault()
+            return
         cluster = require_external_cluster()
         slot_idx, slot = _slot_from_target(cluster, payload)
         if slot is None:

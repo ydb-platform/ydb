@@ -89,6 +89,19 @@ def local_multinode_cluster():
 
 
 @pytest.fixture(scope="module")
+def local_tenant(local_multinode_cluster):
+    database = "/Root/local_nemesis_tenant"
+    local_multinode_cluster.create_database(database, {"hdd": 1})
+    slots = local_multinode_cluster.register_and_start_slots(database, count=2)
+    local_multinode_cluster.wait_tenant_up(database)
+    try:
+        yield database, slots
+    finally:
+        local_multinode_cluster.unregister_and_stop_slots(slots)
+        local_multinode_cluster.remove_database(database)
+
+
+@pytest.fixture(scope="module")
 def local_multinode_model(local_multinode_cluster):
     view = LocalClusterView.from_cluster(local_multinode_cluster)
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as topology_file:
@@ -946,3 +959,228 @@ def test_suspend_preserves_pid_stops_progress_and_resumes_exact_node(
         if progress_driver is not None:
             progress_driver.stop()
         setup_driver.stop()
+
+
+def test_slot_kill_restarts_one_compute_process_and_releases_slot_budget(
+    local_multinode_cluster,
+    local_tenant,
+):
+    database, slots = local_tenant
+    view = LocalClusterView.from_cluster(local_multinode_cluster)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as topology_file:
+        yaml.safe_dump(view.topology_document(), topology_file)
+        topology_file.flush()
+        topology = ClusterTopologyModel(topology_file.name)
+        inventory = ClusterInventory(topology, cluster_view=view)
+        guard = FailureModelGuard(topology, total_slots=len(view.slots))
+
+    targets = sorted(
+        inventory.entities(TargetKind.SLOT),
+        key=lambda target: target.slot_idx,
+    )
+    assert len(targets) == 2
+    assert len({target.host for target in targets}) == 2
+    assert len({target.ic_port for target in targets}) == 2
+    assert guard.snapshot()["total_slots"] == 2
+    assert guard.snapshot()["max_slots"] == 1
+
+    reporter = HealthCheckReporter(
+        [
+            HealthCheckEndpoint(
+                logical_host=slot.logical_host,
+                connect_host=slot.connect_host,
+                grpc_port=slot.grpc_port,
+                database=database,
+            )
+            for slot in view.slots.values()
+        ],
+        store_results=True,
+        publish_results=False,
+    )
+    reporter.hc_period_seconds = 2
+    reporter.hc_request_timeout_seconds = 30
+    reporter.start_healthchecks()
+
+    metrics = NemesisMetrics(
+        run_id="local-multinode-slot-kill",
+        mon=_NoopMonitor(),
+    )
+    guard.set_metrics(metrics)
+    stuck_faults = []
+    probe = RecoveryProbe(
+        guard=guard,
+        hc_source=reporter,
+        on_stuck=stuck_faults.append,
+        poll_interval=0.1,
+        min_hold_sec=1,
+        max_hc_age_sec=90,
+        metrics=metrics,
+    )
+
+    deadline = time.monotonic() + 120
+    baseline = None
+    while time.monotonic() < deadline:
+        snapshot = probe.snapshot_now()
+        if (
+            snapshot.fresh
+            and snapshot.good == {slot.logical_host for slot in view.slots.values()}
+            and snapshot.alive_compute >= 2
+        ):
+            baseline = snapshot.alive_compute
+            break
+        time.sleep(0.05)
+    assert baseline is not None and baseline >= 2
+    probe.start()
+
+    chaos_store = ChaosOrchestratorStore(
+        failure_guard=guard,
+        inventory=inventory,
+        planner_types=["KillSlotDaemonNemesis"],
+    )
+    slot_hosts = {target.host for target in targets}
+    schedule = OrchestratorNemesisSchedule(
+        chaos_store=chaos_store,
+        get_hosts=lambda: list(slot_hosts),
+        is_local_host=lambda host: host in slot_hosts,
+        get_app_port=lambda: 0,
+        failure_guard=guard,
+        recovery_probe=probe,
+        inventory=inventory,
+        metrics=metrics,
+    )
+    scheduler = BoundaryNemesisScheduler(
+        guard=guard,
+        inventory=inventory,
+        plan_inject=chaos_store.plan_inject_target,
+        plan_extract=chaos_store.plan_extract_target,
+        dispatch=lambda command: schedule.dispatch_command(
+            command,
+            track_history=True,
+        ),
+        recovery_probe=probe,
+        enabled_types=["KillSlotDaemonNemesis"],
+        base_interval=5,
+        jitter=0,
+        max_per_tick=1,
+        max_bypass_per_tick=1,
+        rng=random.Random(4),
+    )
+
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database=database,
+            endpoint=slots[0].endpoint,
+        )
+    )
+    driver.wait(timeout=60)
+    process_offset = len(agent_router.manager.get_all())
+    node_pids_before = {
+        node_id: node.pid
+        for node_id, node in local_multinode_cluster.nodes.items()
+    }
+    slot_pids_before = {
+        slot_idx: slot.pid
+        for slot_idx, slot in local_multinode_cluster.slots.items()
+    }
+    workload_progress = 0
+    try:
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries(
+                """
+                CREATE TABLE `slot_restart` (
+                    id Uint64 NOT NULL,
+                    value Uint64,
+                    PRIMARY KEY (id)
+                )
+                """
+            )
+            with use_cluster(local_multinode_cluster):
+                assert scheduler.status()["enabled_types"] == [
+                    "KillSlotDaemonNemesis"
+                ]
+                assert scheduler.status()["max_per_tick"] == 1
+                assert scheduler.tick() == 1
+                assert guard.snapshot()["impaired_slots"] == 1
+                agent_router.wait_for_local_processes()
+
+                executions = agent_router.manager.get_all()[process_offset:]
+                assert len(executions) == 1
+                assert executions[0]["type"] == "KillSlotDaemonNemesis"
+                assert executions[0]["status"] == "finished", executions[0]["logs"]
+                assert executions[0]["ret_code"] == 0
+
+                deadline = time.monotonic() + 120
+                while time.monotonic() < deadline:
+                    try:
+                        pool.execute_with_retries(
+                            f"""
+                            UPSERT INTO `slot_restart` (id, value)
+                            VALUES (1, {workload_progress})
+                            """
+                        )
+                        result = pool.execute_with_retries(
+                            """
+                            SELECT value
+                            FROM `slot_restart`
+                            WHERE id = 1
+                            """
+                        )
+                        assert result[0].rows[0]["value"] == workload_progress
+                        workload_progress += 1
+                    except ydb.Error:
+                        pass
+                    if (
+                        workload_progress > 0
+                        and guard.snapshot()["tracked_executions"] == 0
+                    ):
+                        break
+                    time.sleep(0.05)
+
+        slot_pids_after = {
+            slot_idx: slot.pid
+            for slot_idx, slot in local_multinode_cluster.slots.items()
+        }
+        changed_slots = [
+            slot_idx
+            for slot_idx in slot_pids_before
+            if slot_pids_before[slot_idx] != slot_pids_after[slot_idx]
+        ]
+        assert len(changed_slots) == 1
+        changed_slot = changed_slots[0]
+        assert all(
+            slot_pids_before[slot_idx] == slot_pids_after[slot_idx]
+            for slot_idx in slot_pids_before
+            if slot_idx != changed_slot
+        )
+        assert all(
+            node.pid == node_pids_before[node_id]
+            for node_id, node in local_multinode_cluster.nodes.items()
+        )
+        assert workload_progress > 0
+        assert guard.snapshot()["tracked_executions"] == 0
+        assert guard.snapshot()["impaired_slots"] == 0
+        assert probe.pending() == []
+        assert stuck_faults == []
+        assert probe.snapshot_now().alive_compute >= baseline
+
+        events = metrics.recent_events(100)
+        acquired = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_ACQUIRED
+        ]
+        released = [
+            event
+            for event in events
+            if event["event"] == EVENT_BUDGET_RELEASED
+        ]
+        assert len(acquired) == 1
+        assert len(released) == 1
+        assert acquired[0]["lease_id"] == released[0]["lease_id"]
+        assert acquired[0]["target"]["slot_idx"] == changed_slot
+        assert released[0]["reason"] == "recovered"
+    finally:
+        scheduler.stop()
+        probe.stop()
+        reporter.stop_healthchecks()
+        driver.stop()

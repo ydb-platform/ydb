@@ -19,9 +19,21 @@ class LocalNodeView:
 
 
 @dataclass(frozen=True)
+class LocalSlotView:
+    slot_idx: int
+    node_id: int
+    logical_host: str
+    connect_host: str
+    grpc_port: int
+    mon_port: int
+    ic_port: int
+
+
+@dataclass(frozen=True)
 class LocalClusterView:
     nodes: dict[int, LocalNodeView]
     static_erasure: str
+    slots: dict[int, LocalSlotView]
 
     @classmethod
     def from_cluster(cls, cluster: Any) -> "LocalClusterView":
@@ -50,9 +62,23 @@ class LocalClusterView:
                 datacenter=str(datacenter) if datacenter is not None else None,
             )
 
+        slots = {}
+        for slot_idx, slot in getattr(cluster, "slots", {}).items():
+            slot_idx = int(slot_idx)
+            slots[slot_idx] = LocalSlotView(
+                slot_idx=slot_idx,
+                node_id=int(slot.node_id),
+                logical_host=f"slot-{slot_idx}",
+                connect_host=str(slot.host),
+                grpc_port=int(slot.grpc_port),
+                mon_port=int(slot.mon_port),
+                ic_port=int(slot.ic_port),
+            )
+
         return cls(
             nodes=nodes,
             static_erasure=str(cluster.config.static_erasure),
+            slots=slots,
         )
 
     def topology_document(self) -> dict:

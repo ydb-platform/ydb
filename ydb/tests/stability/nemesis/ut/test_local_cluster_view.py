@@ -52,6 +52,15 @@ def test_local_cluster_view_separates_identity_from_connection_address():
                 ic_port=31103,
             ),
         },
+        slots={
+            1: SimpleNamespace(
+                node_id=9,
+                host="localhost",
+                grpc_port=32001,
+                mon_port=32002,
+                ic_port=32003,
+            ),
+        },
     )
 
     view = LocalClusterView.from_cluster(cluster)
@@ -62,6 +71,15 @@ def test_local_cluster_view_separates_identity_from_connection_address():
     ]
     assert {node.connect_host for node in view.nodes.values()} == {"localhost"}
     assert [node.grpc_port for node in view.nodes.values()] == [31001, 31101]
+    assert [
+        (
+            slot.logical_host,
+            slot.node_id,
+            slot.connect_host,
+            slot.grpc_port,
+        )
+        for slot in view.slots.values()
+    ] == [("slot-1", 9, "localhost", 32001)]
     assert view.topology_document() == {
         "static_erasure": "block-4-2",
         "hosts": [
@@ -88,4 +106,10 @@ def test_local_cluster_view_separates_identity_from_connection_address():
     ] == [
         ("node-1", 1, 31003),
         ("node-2", 2, 31103),
+    ]
+    assert [
+        (target.host, target.slot_idx, target.node_id, target.ic_port)
+        for target in inventory.entities(TargetKind.SLOT)
+    ] == [
+        ("slot-1", 1, 9, 32003),
     ]

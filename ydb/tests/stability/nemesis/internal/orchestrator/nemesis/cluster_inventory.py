@@ -126,9 +126,19 @@ class ClusterInventory:
                 rack=node.rack,
                 datacenter=node.datacenter,
             )
+        for slot_idx, slot in self._cluster_view.slots.items():
+            self.slots[int(slot_idx)] = SlotInfo(
+                slot_idx=int(slot_idx),
+                host=slot.logical_host,
+                ic_port=int(slot.ic_port),
+                node_id=int(slot.node_id),
+                rack=None,
+                datacenter=None,
+            )
         logger.info(
-            "ClusterInventory: loaded %d local harness node(s)",
+            "ClusterInventory: loaded %d local harness node(s), %d slot(s)",
             len(self.nodes),
+            len(self.slots),
         )
 
     def _synthesize_nodes_from_hosts(self) -> None:
@@ -171,7 +181,11 @@ class ClusterInventory:
                     s.host, slot_idx=s.slot_idx, ic_port=s.ic_port, node_id=s.node_id
                 )
                 for s in self.slots.values()
-                if s.host in self._agent_hosts or not self._agent_hosts
+                if (
+                    self._cluster_view is not None
+                    or s.host in self._agent_hosts
+                    or not self._agent_hosts
+                )
             ]
         if kind is TargetKind.DISK:
             # Disk path chosen on agent; plan at node granularity.

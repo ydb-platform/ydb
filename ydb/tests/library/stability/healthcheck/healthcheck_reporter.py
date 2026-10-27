@@ -27,6 +27,7 @@ class HealthCheckEndpoint:
     logical_host: str
     connect_host: str
     grpc_port: int = 2135
+    database: str | None = None
 
 
 def _healthcheck_endpoint(value: str | HealthCheckEndpoint) -> HealthCheckEndpoint:
@@ -195,9 +196,15 @@ class HealthCheckReporter():
         cmd = [
             self.ydb_path,
             '--endpoint', f'grpc://{endpoint.connect_host}:{endpoint.grpc_port}',
-            'monitoring', 'healthcheck',
-            '--format', 'json',
         ]
+        if endpoint.database is not None:
+            cmd.extend(['--database', endpoint.database])
+        cmd.extend([
+            'monitoring', 'healthcheck',
+            '-v',
+            '--no-cache',
+            '--format', 'json',
+        ])
         proc = None
         started_at = time.monotonic()
         try:

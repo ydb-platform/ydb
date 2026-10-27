@@ -18,6 +18,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
 class _Node:
     def __init__(self, pid):
         self.pid = pid
+        self.node_id = pid
         self.kill_calls = 0
         self.alive = True
         self.ic_port = pid + 10000
@@ -57,10 +58,14 @@ class _Socket:
         self.closed = True
 
 
-def _cluster(*, erasure="block-4-2", nodes=8):
+def _cluster(*, erasure="block-4-2", nodes=8, slots=2):
     return SimpleNamespace(
         config=SimpleNamespace(static_erasure=erasure),
         nodes={node_id: _Node(100 + node_id) for node_id in range(1, nodes + 1)},
+        slots={
+            slot_idx: _Node(200 + slot_idx)
+            for slot_idx in range(1, slots + 1)
+        },
     )
 
 
@@ -157,6 +162,20 @@ def test_controller_restore_all_unfreezes_every_tracked_node():
     assert controller.frozen_node_ids() == ()
     assert cluster.nodes[2].unfreeze_calls == 1
     assert cluster.nodes[6].unfreeze_calls == 1
+
+
+def test_controller_restarts_exactly_one_harness_slot():
+    cluster = _cluster()
+
+    restarted = HarnessNodeController(cluster).kill_slot_and_restart(2)
+
+    assert restarted.slot_idx == 2
+    assert restarted.node_id == 202
+    assert restarted.previous_pid == 202
+    assert restarted.current_pid == 1202
+    assert cluster.slots[2].kill_calls == 1
+    assert cluster.slots[1].kill_calls == 0
+    assert all(node.kill_calls == 0 for node in cluster.nodes.values())
 
 
 def test_kill_node_runner_uses_harness_controller_without_shell(monkeypatch):

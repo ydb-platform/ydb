@@ -44,6 +44,14 @@ class NodeFreeze:
     pid: int
 
 
+@dataclass(frozen=True)
+class SlotRestart:
+    slot_idx: int
+    node_id: int
+    previous_pid: int
+    current_pid: int
+
+
 @dataclass
 class _StoppedNode:
     result: NodeStop
@@ -199,6 +207,30 @@ class HarnessNodeController:
         with self._lock:
             return tuple(sorted(self._frozen))
 
+    def kill_slot_and_restart(self, slot_idx: int) -> SlotRestart:
+        self._require_safe_node_fault_cluster()
+        slot_idx = int(slot_idx)
+        slot = getattr(self._cluster, "slots", {}).get(slot_idx)
+        if slot is None:
+            raise ValueError(f"Unknown local harness slot_idx={slot_idx}")
+        previous_pid = int(slot.pid)
+        slot.kill()
+        current_pid = int(slot.pid)
+        if not slot.is_alive():
+            raise RuntimeError(
+                f"Local harness slot_idx={slot_idx} did not restart after kill"
+            )
+        if current_pid == previous_pid:
+            raise RuntimeError(
+                f"Local harness slot_idx={slot_idx} retained pid={current_pid} after kill"
+            )
+        return SlotRestart(
+            slot_idx=slot_idx,
+            node_id=int(slot.node_id),
+            previous_pid=previous_pid,
+            current_pid=current_pid,
+        )
+
     def held_ports(self, node_id: int) -> tuple[int, ...]:
         with self._lock:
             stopped = self._stopped.get(int(node_id))
@@ -283,4 +315,5 @@ __all__ = [
     "NodeRestart",
     "NodeStart",
     "NodeStop",
+    "SlotRestart",
 ]

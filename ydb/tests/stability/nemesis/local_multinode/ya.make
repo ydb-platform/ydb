@@ -8,6 +8,8 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:10)
+
 PEERDIR(
     ydb/tests/stability/nemesis
     ydb/tests/library

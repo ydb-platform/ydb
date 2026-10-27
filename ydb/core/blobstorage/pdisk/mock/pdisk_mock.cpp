@@ -1305,8 +1305,10 @@ public:
                 // ensure offset and write sizes are granular
                 Y_VERIFY(msg->Offset % Impl.AppendBlockSize == 0);
                 Y_VERIFY(msg->PartsPtr);
-                Y_VERIFY(msg->PartsPtr->ByteSize() % Impl.AppendBlockSize == 0);
-                Y_VERIFY(msg->Offset + msg->PartsPtr->ByteSize() <= Impl.ChunkSize);
+                // As PDisk does, a write that does not end on an append block is padded with zeroes to the next one;
+                // with sectors a block is the sector payload, so a 4096-byte write takes two blocks.
+                const ui64 writtenBlocks = (msg->PartsPtr->ByteSize() + Impl.AppendBlockSize - 1) / Impl.AppendBlockSize;
+                Y_VERIFY(msg->Offset + writtenBlocks * Impl.AppendBlockSize <= Impl.ChunkSize);
                 // issue write
                 const ui32 offset = msg->Offset;
                 TImpl::TChunkData& chunk = owner->ChunkData[msg->ChunkIdx];
@@ -1352,9 +1354,11 @@ public:
                 for (ui32 i = 0; i < msg->PartsPtr->Size(); ++i) {
                     push((*msg->PartsPtr)[i]);
                 }
+                if (currentBlock) { // pad the last block
+                    push(NPDisk::TEvChunkWrite::IParts::TDataRef(nullptr, static_cast<ui32>(end - ptr)));
+                }
                 if (Impl.FormatContext) { // PDisk salts the sector hashes of a write that carries a blob id
-                    chunk.SetSalt(offset / Impl.AppendBlockSize, msg->PartsPtr->ByteSize() / Impl.AppendBlockSize,
-                        msg->BlobId);
+                    chunk.SetSalt(offset / Impl.AppendBlockSize, writtenBlocks, msg->BlobId);
                 }
             }
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Received TEvChunkWriteResult",

@@ -648,13 +648,15 @@ public:
 private:
     void Handle(NMemory::TEvConsumerRegister::TPtr &ev) {
         auto recorder = MakeIntrusive<TConsumerRecorder>();
+        Send(ev->Sender, new NMemory::TEvConsumerRegistered(ev->Get()->Kind, recorder));
         if (ev->Get()->Kind == NMemory::EMemoryConsumerKind::TabletsElastic) {
             State->TabletsElastic = recorder;
-        } else {
+        } else if (ev->Get()->Kind == NMemory::EMemoryConsumerKind::Tablets) {
             State->Tablets = recorder;
+        } else {
+            return;
         }
         State->Registrant = ev->Sender;
-        Send(ev->Sender, new NMemory::TEvConsumerRegistered(ev->Get()->Kind, std::move(recorder)));
         if (State->InitialZone) {
             Send(ev->Sender, new NMemory::TEvConsumerLimit(ev->Get()->Kind, 4_MB, *State->InitialZone));
         }

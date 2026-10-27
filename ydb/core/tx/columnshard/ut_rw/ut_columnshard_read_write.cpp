@@ -2741,10 +2741,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     schema.MutableColumns(schema.ColumnsSize() - 1)->SetId(trailingColumnId);
                     auto* index = schema.AddIndexes();
                     index->SetId(indexId);
-                    index->SetName("timestamp_max");
-                    index->SetClassName("MAX");
+                    index->SetName("timestamp_min_max");
+                    index->SetClassName("MIN_MAX");
                     index->SetStorageId("__LOCAL_METADATA");
-                    index->MutableMaxIndex()->SetColumnId(schema.GetColumns(0).GetId());
+                    auto* minMax = index->MutableMinMaxIndex();
+                    minMax->SetColumnId(schema.GetColumns(0).GetId());
+                    minMax->MutableDataExtractor()->SetClassName("DEFAULT");
+                    minMax->MutableDataExtractor()->MutableDefault();
                 }, /*overlapPortions=*/true);
         }
     }

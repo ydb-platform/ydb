@@ -36,10 +36,6 @@ namespace NIndexes {
 class TSkipIndex;
 }
 
-namespace NIndexes::NMax {
-class TIndexMeta;
-}
-
 namespace NIndexes::NMinMax {
 class TIndexMeta;
 }
@@ -415,7 +411,6 @@ public:
 
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
         const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
-    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NMinMax::TIndexMeta> GetIndexMetaMinMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 

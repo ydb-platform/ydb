@@ -75,8 +75,8 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории
 [scheme permissions chown](../commands/scheme-permissions.md#chown) | Изменение владельца объекта
 [scheme permissions clear](../commands/scheme-permissions.md#clear) | Очистка разрешений
-[scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Предоставление разрешения
-[scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Удаление разрешения
+[scheme permissions grant](../commands/scheme-permissions.md#grant,-revoke) | Предоставление разрешения
+[scheme permissions revoke](../commands/scheme-permissions.md#grant,-revoke) | Удаление разрешения
 [scheme permissions set](../commands/scheme-permissions.md#set) | Установка разрешений
 [scheme permissions list](../commands/scheme-permissions.md#list) | Просмотр разрешений
 [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений

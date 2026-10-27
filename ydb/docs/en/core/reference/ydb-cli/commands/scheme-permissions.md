@@ -28,9 +28,7 @@ permissions                 Modify permissions
 All commands have an additional parameter, which is not critical for them:
 `--timeout ms` - a technical parameter that sets the server response timeout.
 
-<a id="grant,-revoke"></a>
-
-## grant, revoke {#grant-revoke}
+## grant, revoke
 
 The `grant` and `revoke` commands allow you to establish and revoke, respectively, access rights to schema objects for a user or group of users. Essentially, they are analogues of the corresponding YQL [GRANT](../../../yql/reference/syntax/grant.md) and [REVOKE](../../../yql/reference/syntax/revoke.md) commands.
 
@@ -66,7 +64,7 @@ Command syntax:
 {{ ydb-cli }} [connection options] scheme permissions set  [options...] <path> <subject>
 ```
 
-The values of all parameters are identical to the [`grant`, `revoke`](#grant-revoke) commands. However, the key difference of the `set` command from `grant` and `revoke` is that it sets exactly those access rights to the specified object that are listed in the `-p (--permission)` parameters. Other rights for the specified user or group will be revoked.
+The values of all parameters are identical to the [`grant`, `revoke`](#grant,-revoke) commands. However, the key difference of the `set` command from `grant` and `revoke` is that it sets exactly those access rights to the specified object that are listed in the `-p (--permission)` parameters. Other rights for the specified user or group will be revoked.
 
 For example, previously the user `testuser` was granted rights to the object `'/Root/db1'` such as `"ydb.granular.select_row"`, `"ydb.granular.update_row"`, `"ydb.granular.erase_row"`, `"ydb.granular.read_attributes"`, `"ydb.granular.write_attributes"`, `"ydb.granular.create_directory"`.
 Then, as a result of executing the command, all rights to the specified object will be revoked (as if `revoke` was called for each of the rights) and only the right `"ydb.granular.select_row"` specified in the `set` command will remain:

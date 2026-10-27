@@ -42,8 +42,6 @@ The main role of database nodes is to run various [tablets](#tablet) and [actors
 
 **Static nodes** are configured manually during initial cluster initialization or reconfiguration. As a rule, they act as [storage nodes](#storage-node), but it is technically possible to configure them as [database nodes](#database-node).
 
-<a id="dynamic-node"></a>
-
 #### Dynamic node {#dynamic}
 
 **Dynamic nodes** are added to and removed from the cluster on the fly. They can only act as [database nodes](#database-node).

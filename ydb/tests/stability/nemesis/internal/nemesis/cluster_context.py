@@ -18,11 +18,13 @@ _cluster_override: Any | None = None
 LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
     "KillHiveNemesis",
+    "KillNodeNemesis",
     "KillSchemeShardNemesis",
 })
 
 LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
+    "KillNodeNemesis",
 })
 
 
@@ -80,6 +82,16 @@ def scheduled_nemesis_rejection_reason(nemesis_type: str) -> str | None:
     rejection = nemesis_rejection_reason(nemesis_type)
     if rejection is not None:
         return rejection
+    if local_harness_mode() and nemesis_type == "KillNodeNemesis":
+        nodes = getattr(_cluster_override, "nodes", {}) or {}
+        erasure = str(
+            getattr(getattr(_cluster_override, "config", None), "static_erasure", "")
+        ).lower()
+        if erasure != "block-4-2" or len(nodes) < 8:
+            return (
+                "KillNodeNemesis requires at least 8 block-4-2 nodes in local "
+                f"harness mode; got erasure={erasure or 'unknown'}, nodes={len(nodes)}"
+            )
     if (
         local_harness_mode()
         and nemesis_type not in LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES

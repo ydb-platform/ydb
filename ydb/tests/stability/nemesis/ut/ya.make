@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 TEST_SRCS(
     test_chaos_target.py
+    test_chaos_state.py
     test_boundary_scheduler.py
     test_recovery_probe.py
     test_schedule_loop.py
@@ -16,6 +17,7 @@ TEST_SRCS(
     test_cluster_context.py
     test_healthcheck_endpoints.py
     test_local_cluster_view.py
+    test_local_harness_controller.py
 )
 
 PEERDIR(

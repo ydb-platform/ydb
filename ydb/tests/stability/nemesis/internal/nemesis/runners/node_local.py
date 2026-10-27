@@ -5,6 +5,13 @@ from __future__ import annotations
 import signal
 import subprocess
 
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    local_harness_mode,
+    require_cluster,
+)
+from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import (
+    HarnessNodeController,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
@@ -17,10 +24,28 @@ class KillNodeNemesis(MonitoredAgentActor):
 
     def inject_fault(self, payload=None):
         payload = payload or {}
-        sig_name = payload.get("signal", "SIGKILL")
-        sig = getattr(signal, sig_name, signal.SIGKILL)
         self._logger.info("=== INJECT_FAULT START: KillNodeNemesis ===")
         target = target_from_payload(payload)
+
+        if local_harness_mode():
+            node_id = target.node_id if target is not None else payload.get("node_id")
+            if node_id is None:
+                raise ValueError(
+                    "KillNodeNemesis: local harness target must include node_id"
+                )
+            restarted = HarnessNodeController(require_cluster()).kill_and_restart(node_id)
+            self._logger.info(
+                "Restarted local harness node_id=%d pid=%d->%d",
+                restarted.node_id,
+                restarted.previous_pid,
+                restarted.current_pid,
+            )
+            self.on_success_inject_fault()
+            self._logger.info("=== INJECT_FAULT SUCCESS: KillNodeNemesis ===")
+            return
+
+        sig_name = payload.get("signal", "SIGKILL")
+        sig = getattr(signal, sig_name, signal.SIGKILL)
         ic_port = None
         if target is not None and target.ic_port is not None:
             ic_port = int(target.ic_port)

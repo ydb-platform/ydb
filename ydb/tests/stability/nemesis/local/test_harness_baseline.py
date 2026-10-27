@@ -503,6 +503,7 @@ def test_boundary_scheduler_runs_only_datashard_chaos(local_cluster):
             chaos_store = ChaosOrchestratorStore(
                 failure_guard=guard,
                 inventory=inventory,
+                planner_types=["KillDataShardNemesis"],
             )
             schedule = OrchestratorNemesisSchedule(
                 chaos_store=chaos_store,

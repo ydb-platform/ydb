@@ -11,6 +11,7 @@ SIZE(MEDIUM)
 PEERDIR(
     ydb/tests/stability/nemesis
     ydb/tests/library
+    ydb/public/sdk/python
     contrib/python/PyYAML
 )
 

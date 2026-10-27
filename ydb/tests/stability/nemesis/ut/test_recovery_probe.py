@@ -133,6 +133,19 @@ class TestSnapshot:
             {"h1": _error_entry(), "h2": _hc("h2")}, now=10.0, last_update=10.0, max_age_sec=180.0
         )
         assert snap.fresh and snap.answering == frozenset({"h2"})
+        assert snap.good == frozenset({"h2"})
+
+        degraded = build_snapshot(
+            {"h1": _hc("h1", result="DEGRADED")},
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
+        )
+        assert degraded.answering == frozenset({"h1"})
+        assert degraded.good == frozenset()
+        assert not _node_predicate(ChaosTarget.for_node("h1", node_id=1))(
+            degraded
+        )
 
         results = {
             "h1": _hc("h1", vdisks=[_vdisk("1-1-0", "GREEN")]),

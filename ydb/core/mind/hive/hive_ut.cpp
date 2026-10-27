@@ -598,7 +598,7 @@ public:
         if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
             auto* metrics = Executor()->GetResourceMetrics();
             metrics->TabletMemoryReport = State->Report;
-            metrics->Network.Increment(2_MB);
+            metrics->Network.Increment(2_MB, ActorContext().Now());
             metrics->TryUpdate(ActorContext());
         } else {
             HandleDefaultEvents(ev, SelfId());

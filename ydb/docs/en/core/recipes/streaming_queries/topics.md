@@ -26,7 +26,7 @@ Steps:
 You need:
 
 * A running {{ ydb-short-name }} database — see [quick start](../../quickstart.md);
-* Feature flags `enable_external_data_sources` and `enable_streaming_queries` enabled.
+* [Feature flags](../../reference/configuration/feature_flags.md) `enable_external_data_sources` and `enable_streaming_queries` enabled.
 
 {% list tabs %}
 

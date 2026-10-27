@@ -11,3 +11,5 @@ items:
   href: guide-to-public-material.md
 - name: Документирование новых команд CLI
   href: cli-command-documentation.md
+- name: Функциональность под фича-флагами
+  href: feature-flags.md

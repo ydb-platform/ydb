@@ -53,7 +53,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config generate > config.yaml
     ```
 
-3. Add the following field to the `config.yaml` file obtained in step 1 or 2:
+3. Enable the `switch_to_config_v2` [feature flag](../../../reference/configuration/feature_flags.md) in the `config.yaml` file obtained in step 1 or 2:
 
     ```yaml
     feature_flags:

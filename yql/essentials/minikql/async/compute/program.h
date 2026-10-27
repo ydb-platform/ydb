@@ -11,7 +11,8 @@ namespace NKikimr::NMiniKQL::NAsync {
 enum class EInstruction: ui32 { Input,
                                 Sync,
                                 Branch,
-                                Invoke };
+                                Invoke,
+                                Unwrap };
 struct TInstruction {
     EInstruction Kind = EInstruction::Input;
     std::vector<ui32> Dependencies;
@@ -23,7 +24,7 @@ struct TInstruction {
     Y_SAVELOAD_DEFINE(Kind, Dependencies, Fragment, Arguments, Provider, Operation, MaxResponseBytes);
 };
 struct TProgram {
-    ui32 Version = 1;
+    ui32 Version = 2;
     ui32 Root = 0;
     ui32 MaxFrames = 0;
     std::vector<TInstruction> Instructions;

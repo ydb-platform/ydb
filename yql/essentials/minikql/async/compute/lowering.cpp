@@ -109,12 +109,23 @@ private:
                     copy.Add(bind(call->GetInput(i)));
                 }
                 fragment = TRuntimeNode(copy.Build(), false);
+            } else if (name == "Unwrap") {
+                MKQL_ENSURE(call->GetInputsCount() == 5, "Async Unwrap expects five operands");
+                ins.Kind = EInstruction::Unwrap;
+                TCallableBuilder copy(Pb_.GetTypeEnvironment(), name, node.GetStaticType(), true);
+                copy.Add(bind(call->GetInput(0)));
+                copy.Add(bind(call->GetInput(1)));
+                // Source position is literal metadata inspected by WrapUnwrap.
+                for (ui32 i = 2; i != 5; ++i) {
+                    copy.Add(call->GetInput(i));
+                }
+                fragment = TRuntimeNode(copy.Build(), false);
             } else {
                 // Only strict row primitives. And/Or/Coalesce and other lazy,
                 // higher-order or stateful operators need their own lowering.
                 static const THashSet<TStringBuf> strict = {
                     "Add", "Sub", "Mul", "Div", "Mod", "Equals", "NotEquals", "Less", "LessOrEqual", "Greater", "GreaterOrEqual",
-                    "Member", "Nth", "Not", "Exists", "Just", "Unwrap", "Concat", "Random", "RandomNumber", "RandomUuid", "Now"};
+                    "Member", "Nth", "Not", "Exists", "Just", "Concat", "Random", "RandomNumber", "RandomUuid", "Now"};
                 MKQL_ENSURE(name != "Invoke" || call->GetInputsCount() >= 2, "Invalid strict builtin invocation");
                 const TStringBuf primitive = name == "Invoke"
                                                  ? TStringBuf(AS_VALUE(TDataLiteral, call->GetInput(0))->AsValue().AsStringRef())

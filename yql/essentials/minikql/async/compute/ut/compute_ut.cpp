@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 #include <atomic>
 #include <thread>
@@ -94,6 +95,30 @@ struct TFixture {
         Graph->Prepare();
         Stream = Graph->GetValue();
     }
+    void BuildNested(std::vector<ui64> input, ui32 depth, bool flow = false) {
+        std::vector<TRuntimeNode> rows;
+        auto* type = Pb().NewDataLiteral<ui64>(0).GetStaticType();
+        for (auto value : input) {
+            rows.push_back(Pb().NewDataLiteral<ui64>(value));
+        }
+        auto program = Pb().Iterator(Pb().NewList(type, rows), {});
+        if (flow) {
+            program = Pb().ToFlow(program, {});
+        }
+        for (ui32 i = 0; i < depth; ++i) {
+            auto row = Pb().Arg(type);
+            program = BuildAsyncMap(Pb(), program, row, Echo(row), Registry, 4);
+        }
+        if (flow) {
+            program = Pb().FromFlow(program);
+        }
+        BuildProgram(DeserializeRuntimeNode(SerializeRuntimeNode(program, *Setup.Env), *Setup.Env));
+    }
+    TRuntimeNode EchoMessage(TStringBuf text) {
+        auto message = Pb().NewDataLiteral<NUdf::EDataSlot::String>(text);
+        Registry.Register({"EchoString", message.GetStaticType(), message.GetStaticType(), "native", "message", 1024});
+        return Registry.Call(Pb(), "EchoString", message);
+    }
     void Turn() {
         Services->BeginTurn();
         for (size_t i = 0; i != 1000; ++i) {
@@ -163,6 +188,124 @@ struct TYqlFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TResumableComputation) {
+Y_UNIT_TEST(NestedAsyncMapsProgressWithSingleStepQuantum) {
+    for (auto depth : {2u, 4u}) {
+        for (bool flow : {false, true}) {
+            TFixture f(1);
+            f.Provider->Inline = true;
+            f.BuildNested({7, 8, 9}, depth, flow);
+            f.Turn();
+            f.Pump();
+            UNIT_ASSERT(f.Finished);
+            f.Check({7, 8, 9});
+            UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 3 * depth);
+        }
+    }
+}
+Y_UNIT_TEST(NestedAsyncMapsWaitWithoutPollingAndResumeAfterLastReply) {
+    TFixture f(1);
+    f.BuildNested({7}, 3);
+    f.Turn();
+    f.Pump();
+    for (size_t i = 0; i < 3; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), i + 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Events.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Pump(), 0);
+        UNIT_ASSERT(f.Output.empty());
+        f.Provider->Reply(i);
+        f.Pump();
+    }
+    UNIT_ASSERT(f.Finished);
+    f.Check({7});
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 3);
+}
+Y_UNIT_TEST(NestedAsyncMapsProcessTwoHundredRowsWithSingleStepQuantum) {
+    TFixture f(1);
+    f.Provider->Inline = true;
+    std::vector<ui64> rows;
+    for (ui64 i = 0; i < 200; ++i) {
+        rows.push_back(i);
+    }
+    f.BuildNested(rows, 3);
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 600);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 200);
+    for (ui64 i = 0; i < 200; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(f.Output[i].Get<ui64>(), i);
+    }
+}
+Y_UNIT_TEST(PresentUnwrapSkipsAsyncDiagnostic) {
+    TFixture f(1);
+    auto message = f.EchoMessage("unused diagnostic");
+    f.Build({7, 9}, [&](auto row) {
+        return f.Pb().Unwrap(f.Pb().NewOptional(row), message, "unwrap.sql", 12, 34);
+    }, 2, true, true);
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 0);
+    UNIT_ASSERT(f.Finished);
+    f.Check({7, 9});
+}
+Y_UNIT_TEST(UnwrapResumesOptionalWithoutEvaluatingDiagnostic) {
+    TFixture f(1);
+    auto message = f.EchoMessage("unused diagnostic");
+    f.Build({7, 9}, [&](auto row) {
+        return f.Pb().Unwrap(f.Pb().NewOptional(f.Echo(row)), message, "unwrap.sql", 12, 34);
+    });
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 2);
+    f.Provider->Reply(1);
+    f.Pump();
+    UNIT_ASSERT(f.Output.empty());
+    f.Provider->Reply(0);
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 2);
+    UNIT_ASSERT(f.Finished);
+    f.Check({7, 9});
+}
+Y_UNIT_TEST(UnwrapPresentOuterOptionalPreservesEmptyInnerOptional) {
+    TFixture f(1);
+    auto message = f.EchoMessage("unused diagnostic");
+    f.Build({7}, [&](auto) {
+        auto inner = f.Pb().NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
+        return f.Pb().Unwrap(f.Pb().NewOptional(inner), message, "unwrap.sql", 12, 34);
+    });
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 0);
+    UNIT_ASSERT(f.Finished);
+    UNIT_ASSERT_VALUES_EQUAL(f.Output.size(), 1);
+    UNIT_ASSERT(!f.Output[0]);
+}
+Y_UNIT_TEST(EmptyUnwrapAwaitsDiagnosticOnceAndPreservesErrorPosition) {
+    TOnlyThrowingBindTerminator terminator;
+    TFixture f(1);
+    auto message = f.EchoMessage("deferred diagnostic");
+    f.Build({7}, [&](auto) {
+        return f.Pb().Unwrap(f.Pb().NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id), message, "unwrap.sql", 12, 34);
+    }, 2, false, true);
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+    UNIT_ASSERT(f.Output.empty());
+    UNIT_ASSERT_VALUES_EQUAL(f.Events.load(), 0);
+    f.Turn(); // An unrelated event must not submit the diagnostic twice.
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+    f.Provider->Reply(0);
+    try {
+        f.Pump();
+        UNIT_FAIL("Expected empty optional error");
+    } catch (const yexception& e) {
+        UNIT_ASSERT(TString(e.what()).Contains("unwrap.sql:12:34"));
+        UNIT_ASSERT(TString(e.what()).Contains("deferred diagnostic"));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(f.Services->GetStats().ReservedPayloadBytes, 0);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Turn(), yexception, "execution has failed");
+}
 Y_UNIT_TEST(SuspendResumeDoesNotResubmit) {
     TFixture f;
     f.Build({7}, [&](auto row) { return f.Pb().Add(f.Echo(row), f.Pb().NewDataLiteral<ui64>(2)); });

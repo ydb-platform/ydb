@@ -104,6 +104,24 @@ public:
                 finish(step.Fragment->GetValue(Ctx_));
                 return;
             }
+            if (ins.Kind == EInstruction::Unwrap) {
+                const auto optional = ins.Dependencies[0];
+                const auto message = ins.Dependencies[1];
+                if (!frame.Done[optional]) {
+                    frame.Stack.push_back(optional);
+                    return;
+                }
+                // The diagnostic is lazy, including any external calls in it.
+                if (!frame.Values[optional] && !frame.Done[message]) {
+                    frame.Stack.push_back(message);
+                    return;
+                }
+                step.Arguments[0]->SetValue(Ctx_, NUdf::TUnboxedValue(frame.Values[optional]));
+                step.Arguments[1]->SetValue(Ctx_, NUdf::TUnboxedValue(frame.Values[message]));
+                // Preserve the original optional representation and error position.
+                finish(step.Fragment->GetValue(Ctx_));
+                return;
+            }
             for (auto dependency : ins.Dependencies) {
                 if (!frame.Done[dependency]) {
                     frame.Stack.push_back(dependency);
@@ -195,13 +213,18 @@ public:
                     didWork = true;
                 }
                 if (!Finished_ && !SourceWaiting_ && Frames_.size() < Map_.Program_.MaxFrames) {
-                    if (!Services_->TryStep()) {
+                    if (!SourceFetchCharged_ && !Services_->TryStep()) {
                         Services_->RequestRerun();
                         return NUdf::EFetchStatus::Yield;
                     }
+                    // A nested source may exhaust the shared quantum and Yield.
+                    // Keep this charge until that fetch produces a row or EOF;
+                    // charging again on resume could starve the inner operator.
+                    SourceFetchCharged_ = true;
                     NUdf::TUnboxedValue row;
                     switch (Source_.Fetch(row)) {
                         case NUdf::EFetchStatus::Finish:
+                            SourceFetchCharged_ = false;
                             Finished_ = true;
                             break;
                         case NUdf::EFetchStatus::Yield:
@@ -209,6 +232,7 @@ public:
                             SourceWaitTurn_ = Services_->GetTurn();
                             break;
                         case NUdf::EFetchStatus::Ok: {
+                            SourceFetchCharged_ = false;
                             TFrame frame;
                             frame.Row = std::move(row);
                             frame.Values.resize(Map_.Steps_.size());
@@ -247,6 +271,7 @@ public:
         bool Failed_ = false;
         bool Finished_ = false;
         bool SourceWaiting_ = false;
+        bool SourceFetchCharged_ = false;
         ui64 SourceWaitTurn_ = 0;
     };
 
@@ -289,7 +314,7 @@ IComputationNode* WrapAsyncMap(TCallable& callable, const TComputationNodeFactor
     TStringInput input(metadata);
     TProgram program;
     Load(&input, program);
-    MKQL_ENSURE(program.Version == 1 && program.MaxFrames && program.MaxFrames <= 1024 && program.Root < program.Instructions.size(), "Invalid async program header");
+    MKQL_ENSURE(program.Version == 2 && program.MaxFrames && program.MaxFrames <= 1024 && program.Root < program.Instructions.size(), "Invalid async program header");
     std::vector<TStep> steps;
     for (ui32 i = 0; i < program.Instructions.size(); ++i) {
         const auto& ins = program.Instructions[i];
@@ -297,10 +322,11 @@ IComputationNode* WrapAsyncMap(TCallable& callable, const TComputationNodeFactor
         for (auto dependency : ins.Dependencies) {
             MKQL_ENSURE(dependency < i, "Async program must be acyclic");
         }
-        MKQL_ENSURE(ins.Kind <= EInstruction::Invoke, "Invalid async instruction");
+        MKQL_ENSURE(ins.Kind <= EInstruction::Unwrap, "Invalid async instruction");
         MKQL_ENSURE(ins.Kind != EInstruction::Branch || ins.Dependencies.size() == 3, "Invalid async branch");
         MKQL_ENSURE(ins.Kind != EInstruction::Invoke || ins.Dependencies.size() == 1, "Invalid async invocation");
-        MKQL_ENSURE((ins.Kind != EInstruction::Sync && ins.Kind != EInstruction::Branch) || ins.Arguments.size() == ins.Dependencies.size(), "Invalid async fragment arguments");
+        MKQL_ENSURE(ins.Kind != EInstruction::Unwrap || ins.Dependencies.size() == 2, "Invalid async unwrap");
+        MKQL_ENSURE((ins.Kind != EInstruction::Sync && ins.Kind != EInstruction::Branch && ins.Kind != EInstruction::Unwrap) || ins.Arguments.size() == ins.Dependencies.size(), "Invalid async fragment arguments");
         const bool placeholder = ins.Kind == EInstruction::Input || ins.Kind == EInstruction::Invoke;
         IComputationNode* fragment = placeholder ? LocateExternalNode(ctx.NodeLocator, callable, ins.Fragment)
                                                  : LocateNode(ctx.NodeLocator, callable, ins.Fragment);

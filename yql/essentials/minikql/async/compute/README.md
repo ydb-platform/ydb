@@ -33,8 +33,10 @@ branch operands and provider/operation identifiers, never callbacks or secrets.
 An AsyncInvoke which reaches a scalar computation factory has no sync fallback.
 
 Supported expressions are Data, Optional, Struct and Tuple values, direct row
-arguments, constructors, a closed set of strict scalar primitives, and If
-(including nested If for CASE and an empty optional condition). Unknown, lazy,
+arguments, constructors, a closed set of strict scalar primitives, If
+(including nested If for CASE and an empty optional condition), and Unwrap with
+a lazy diagnostic operand. The internal program uses version 2 for this explicit
+Unwrap instruction; older versions are rejected during preparation. Unknown, lazy,
 higher-order, Resource, list and block contexts fail preparation. This deliberate
 subset avoids changing their evaluation semantics before explicit lowering.
 
@@ -45,7 +47,9 @@ branch dependencies and at most one submitted operation. The C++ stack is not
 preserved. Synchronous fragments bind their inputs from saved slots before
 calling existing computation nodes. A resumed frame never re-evaluates a saved
 volatile expression or submits the same pending call twice. Only the selected
-If branch is visited; a NULL condition visits neither.
+If branch is visited; a NULL condition visits neither. Unwrap evaluates its
+diagnostic, including any async calls, only after finding an empty optional.
+The original MiniKQL fragment retains optional representation and error position.
 
 AsyncMap admits a bounded window (default 16, maximum 1024) of independent frames
 and returns output in input order. Other rows can progress while an earlier row
@@ -78,6 +82,9 @@ allows another event to be posted while the current one is still running.
 - Admission waits retry on a later owner event, including physical-cleanup credit
   notifications. An impossible request with no tracked operations fails.
 - All streams sharing services share the quantum and result dispatcher.
+- A source fetch is charged once until it returns a row or EOF. Its charge is
+  retained across Yield, so nested AsyncMaps can advance even with a one-step
+  shared quantum. Waiting still requires an owner event to retry the source.
 
 There is no thread, timer, sleep or polling loop in this target. Step budgeting
 is cooperative between synchronous fragments, not preemption of arbitrary C++.
@@ -105,5 +112,7 @@ including YQL typing/CSE/lowering, serialized Flow plans, branch laziness, share
 and distinct occurrences, volatile values across interleaved frames, errors,
 cancellation, cleanup admission wakeups and 200 rows. A one-step quantum test
 finishes after the last external event using only runtime reruns; a separate test
-requires a waiting graph to remain idle. These are deterministic owner-event
-queue tests, not yet FQ/KQP actor integration tests (D6).
+requires a waiting graph to remain idle. Nested Stream/Flow maps are checked with
+a one-step quantum, deferred replies and 200 rows; Unwrap covers skipped and
+deferred diagnostics, nested optionals and serialized plans. These are deterministic
+owner-event queue tests, not yet FQ/KQP actor integration tests (D6).

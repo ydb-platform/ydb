@@ -401,6 +401,37 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     auto& copyTables = *cct.MutableCopyTableDescriptions();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
+    // Match each destination independently: a collection may contain tables
+    // belonging to different replications (and ordinary, unrelated tables).
+    THashMap<TString, NKikimrSchemeOp::TTableReplicationConfig> replicationConfigs;
+    THashSet<TString> ambiguousDestinations;
+    for (const auto& [replicationPathId, replication] : context.SS->Replications) {
+        const auto& description = replication->AlterData
+            ? replication->AlterData->Description : replication->Description;
+        const auto& config = description.GetConfig();
+        const auto path = TPath::Init(replicationPathId, context.SS);
+        if (path.IsDeleted() || !config.HasSpecific()
+            || description.GetState().HasDone()) {
+            continue;
+        }
+
+        for (const auto& target : config.GetSpecific().GetTargets()) {
+            const auto destination = CanonizePath(target.GetDstPath());
+            auto [it, inserted] = replicationConfigs.emplace(destination, NKikimrSchemeOp::TTableReplicationConfig{});
+            if (!inserted) {
+                ambiguousDestinations.insert(destination);
+                continue;
+            }
+
+            auto& tableConfig = it->second;
+            tableConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+            tableConfig.SetConsistencyLevel(config.GetConsistencySettings().HasGlobal()
+                ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+                : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+            replicationPathId.ToProto(tableConfig.MutableBootstrapReplication());
+        }
+    }
+
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         std::pair<TString, TString> paths;
         TString err;
@@ -414,6 +445,30 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
         desc.SetDstPath(item.GetPath());
         desc.SetAllowUnderSameOperation(true);
+        const auto destination = CanonizePath(item.GetPath());
+        if (ambiguousDestinations.contains(destination)) {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Multiple replications target restore destination: " << destination)};
+        }
+        if (const auto it = replicationConfigs.find(destination); it != replicationConfigs.end()) {
+            const auto replicationPath = TPath::Init(TPathId::FromProto(it->second.GetBootstrapReplication()), context.SS);
+            const auto checks = replicationPath.Check();
+            checks.NotUnderOperation();
+            if (!checks) {
+                return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            }
+            const auto& replication = context.SS->Replications.at(replicationPath.Base()->PathId)->Description;
+            if (replication.GetConfig().GetInitialScan() || !replication.GetState().HasPaused()) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "Replication must be paused with initial scan disabled before restoring destination: " << destination)};
+            }
+            const auto sourcePath = TPath::Resolve(desc.GetSrcPath(), context.SS);
+            if (sourcePath.IsResolved() && !sourcePath->IsTable()) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "Only row tables can be restored for replication: " << destination)};
+            }
+            desc.MutableReplicationConfig()->CopyFrom(it->second);
+        }
         if (incrBackupNames) {
             desc.SetTargetPathTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
         }

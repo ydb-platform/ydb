@@ -229,12 +229,18 @@ message TEvCreateReplicationResult {
     optional EStatus Status = 3;
 }
 
+message TBootstrapTable {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional string Path = 2;
+}
+
 message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TReplicationLocationConfig Location = 5;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
     optional TReplicationConfig Config = 4;
+    repeated TBootstrapTable BootstrapTables = 6;
 }
 
 message TEvAlterReplicationResult {
@@ -252,6 +258,7 @@ message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional bool Cascade = 3 [default = true];
+    repeated TBootstrapTable BootstrapTables = 4;
 }
 
 message TEvDropReplicationResult {

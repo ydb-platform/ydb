@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>
 #include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
@@ -4472,6 +4473,196 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Record.GetTxId(), txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"),
             {NLs::PathNotExist});
+    }
+
+    void PrepareReplicationBootstrap(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, bool withIndexes = false) {
+        TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        PrepareDirs(runtime, env, txId);
+        for (ui32 i = 1; i <= 3; ++i) {
+            const TString name = TStringBuilder() << "Table" << i;
+            const auto schema = Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                Columns { Name: "ts" Type: "Timestamp" }
+                KeyColumnNames: ["key"]
+                TTLSettings { Enabled { ColumnName: "ts" ExpireAfterSeconds: 300 } }
+            )", name.c_str());
+            if (withIndexes && i == 1) {
+                TestCreateIndexedTable(runtime, ++txId, "/MyRoot", TStringBuilder()
+                    << "TableDescription {" << schema << R"(}
+                    IndexDescription { Name: "SyncIndex" KeyColumnNames: ["value"] Type: EIndexTypeGlobal }
+                    IndexDescription { Name: "AsyncIndex" KeyColumnNames: ["value"] Type: EIndexTypeGlobalAsync }
+                )");
+            } else {
+                TestCreateTable(runtime, ++txId, "/MyRoot", schema);
+            }
+            env.TestWaitNotification(runtime, txId);
+            UploadRow(runtime, "/MyRoot/" + name, 0, {1}, {2, 3},
+                {TCell::Make(1u)}, {TCell::Make(42u), TCell::Make(ui64(1))});
+        }
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "Bootstrap"
+            ExplicitEntryList {
+                Entries { Type: ETypeTable Path: "/MyRoot/Table1" }
+                Entries { Type: ETypeTable Path: "/MyRoot/Table2" }
+                Entries { Type: ETypeTable Path: "/MyRoot/Table3" }
+            }
+            Cluster {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/Bootstrap")");
+        env.TestWaitNotification(runtime, txId);
+        for (ui32 i = 1; i <= 3; ++i) {
+            TestDropTable(runtime, ++txId, "/MyRoot", TStringBuilder() << "Table" << i);
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    void CreateBootstrapReplication(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId,
+            const TString& name, const TString& dst, bool global) {
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "%s"
+            Config {
+                InitialScan: false
+                Specific { Targets { SrcPath: "/MyRoot/Source" DstPath: "%s" } }
+                ConsistencySettings { %s {} }
+            }
+        )", name.c_str(), dst.c_str(), global ? "Global" : "Row"));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RestoreForMultipleReplications) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).InitYdbDriver(true));
+        ui64 txId = 100;
+        PrepareReplicationBootstrap(runtime, env, txId);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table1", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", false);
+        CreateBootstrapReplication(runtime, env, txId, "Unrelated", "/MyRoot/Other", true);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/Bootstrap")");
+        env.TestWaitNotification(runtime, txId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        THashSet<ui64> pendingTtlShards;
+        for (ui32 i = 1; i <= 3; ++i) {
+            const TString path = TStringBuilder() << "/MyRoot/Table" << i;
+            const auto desc = DescribePath(runtime, path);
+            UNIT_ASSERT(desc.GetPathDescription().GetTable().GetTTLSettings().HasEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, path), 1);
+            for (const auto shard : GetTableShards(runtime, TTestTxConfig::SchemeShard, path)) {
+                pendingTtlShards.insert(shard);
+            }
+        }
+
+        // Observe both successful and rejected erases: without replication mode,
+        // this test must fail on lost rows rather than wait for a rejection forever.
+        const auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvEraseRowsResponse::EventType) {
+                pendingTtlShards.erase(ev->Get<TEvDataShard::TEvEraseRowsResponse>()->Record.GetTabletID());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        TControlBoard::SetValue(true, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(35));
+        runtime.WaitFor("TTL attempts on all restored tables", [&] { return pendingTtlShards.empty(); });
+        runtime.SetObserverFunc(previousObserver);
+        const auto rows1 = CountRows(runtime, "/MyRoot/Table1");
+        const auto rows2 = CountRows(runtime, "/MyRoot/Table2");
+        const auto rows3 = CountRows(runtime, "/MyRoot/Table3");
+        Cerr << "Rows after TTL: Table1=" << rows1 << ", Table2=" << rows2 << ", Table3=" << rows3 << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(rows3, 0, "TTL must delete the expired row from the ordinary table");
+        UNIT_ASSERT_VALUES_EQUAL_C(rows1, 1, "TTL deleted the restored row before Replication1 attached");
+        UNIT_ASSERT_VALUES_EQUAL_C(rows2, 1, "TTL deleted the restored row before Replication2 attached");
+
+        for (ui32 i = 1; i <= 3; ++i) {
+            const auto desc = DescribePath(runtime, TStringBuilder() << "/MyRoot/Table" << i);
+            const auto& table = desc.GetPathDescription().GetTable();
+            const auto& config = table.GetReplicationConfig();
+            if (i == 3) {
+                UNIT_ASSERT(!config.HasBootstrapReplication());
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), i == 1
+                    ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+                    : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+                const auto replication = DescribePath(runtime, TStringBuilder() << "/MyRoot/Replication" << i);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetBootstrapReplication().GetLocalId(),
+                    replication.GetPathDescription().GetSelf().GetPathId());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RestoreForReplicationWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).InitYdbDriver(true));
+        ui64 txId = 100;
+        PrepareReplicationBootstrap(runtime, env, txId, true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table1", true);
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/Bootstrap")");
+        env.TestWaitNotification(runtime, txId);
+        const auto sync = DescribePrivatePath(runtime, "/MyRoot/Table1/SyncIndex/indexImplTable", true, true);
+        const auto async = DescribePrivatePath(runtime, "/MyRoot/Table1/AsyncIndex/indexImplTable", true, true);
+        UNIT_ASSERT(sync.GetPathDescription().GetTable().GetReplicationConfig().HasBootstrapReplication());
+        UNIT_ASSERT_VALUES_EQUAL(sync.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(async.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
+
+    Y_UNIT_TEST(RestoreRejectsAmbiguousReplication) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).InitYdbDriver(true));
+        ui64 txId = 100;
+        PrepareReplicationBootstrap(runtime, env, txId);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table2", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", true);
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/Bootstrap")",
+            {NKikimrScheme::StatusPreconditionFailed});
+        for (ui32 i = 1; i <= 3; ++i) {
+            TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/Table" << i), {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(RestoreReplicationCancellation, drop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).InitYdbDriver(true));
+        ui64 txId = 100;
+        PrepareReplicationBootstrap(runtime, env, txId);
+        CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table1", true);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot/Table2", false);
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/Bootstrap")");
+        env.TestWaitNotification(runtime, txId);
+        if (drop) {
+            TestDropReplication(runtime, ++txId, "/MyRoot", "Replication1");
+        } else {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+                Name: "Replication1" State { Done { FailoverMode: FAILOVER_MODE_FORCE } }
+            )");
+        }
+        env.TestWaitNotification(runtime, txId);
+        bool detached = false;
+        for (ui32 attempt = 0; attempt < 60; ++attempt) {
+            const auto description = DescribePath(runtime, "/MyRoot/Table1");
+            if (description.GetPathDescription().GetTable().GetReplicationConfig().GetMode()
+                    == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE) {
+                detached = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(detached, "Restored table was not detached");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 1);
+        if (!drop) {
+            TestDropReplication(runtime, ++txId, "/MyRoot", "Replication1");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 1);
+        }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
     }
 
 } // TBackupCollectionTests

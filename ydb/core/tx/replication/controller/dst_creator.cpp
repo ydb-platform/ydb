@@ -475,7 +475,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || Attaching || IsReplica(desc.GetTable())) {
+            const bool bootstrap = desc.GetTable().GetReplicationConfig().HasBootstrapReplication();
+            if (InitialScan || Attaching || (IsReplica(desc.GetTable()) && !bootstrap)) {
                 return Success();
             }
 
@@ -531,6 +532,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
+        if (got.GetReplicationConfig().HasBootstrapReplication()
+            && TPathId::FromProto(got.GetReplicationConfig().GetBootstrapReplication()) != PathId) {
+            error = "Destination was restored for another replication";
+            return false;
+        }
         const bool needsConfig = InitialScan || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {

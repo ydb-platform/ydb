@@ -113,6 +113,48 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
+    void AttachBootstrappedTable(bool wrongOwner) {
+        TEnv env;
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        table.Name = "Dst";
+        auto dst = MakeTableDescription(table);
+        auto& config = *dst->MutableReplicationConfig();
+        FillReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Global);
+        const auto owner = env.GetPathId(wrongOwner ? "/Root/Source" : "/Root");
+        owner.ToProto(config.MutableBootstrapReplication());
+        env.CreateTable("/Root", *dst);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
+        if (!wrongOwner) {
+            PrepareAttachDst(env);
+        }
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status,
+            wrongOwner ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess);
+        const auto desc = env.GetDescription("/Root/Dst");
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().HasBootstrapReplication(), wrongOwner);
+        if (wrongOwner) {
+            UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "another replication");
+        }
+    }
+
+    Y_UNIT_TEST(AttachBootstrappedTable) {
+        AttachBootstrappedTable(false);
+    }
+
+    Y_UNIT_TEST(RejectBootstrappedTableOwnedByAnotherReplication) {
+        AttachBootstrappedTable(true);
+    }
+
     enum class EAttachmentSchemaChange {
         None,
         Source,

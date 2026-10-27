@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "bootstrap_tables.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -67,6 +68,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        RegisterBootstrapTables(*Replication, record.GetBootstrapTables(), db);
 
         Self->DeferredAlters.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
@@ -105,6 +107,16 @@ public:
                 continue;
             }
 
+            const bool restoredOnly = target->GetSrcPath().empty()
+                && target->GetStreamState() == TReplication::EStreamState::Removed;
+            if (restoredOnly && !record.GetCascade() && !target->GetPendingDstPathId()) {
+                // DONE already detached this synthetic target; it has no source stream.
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Delete();
+                db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Delete();
+                Replication->RemoveTarget(tid);
+                continue;
+            }
+
             Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
@@ -114,13 +126,15 @@ public:
                 target->Shutdown(ctx);
             }
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(target->GetStreamState() == TReplication::EStreamState::Removed
+                && (restoredOnly || target->GetPendingDstPathId())
+                ? TReplication::EStreamState::Removed : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
             // Keep the creator until its submitted ALTER has finished; the imported table is detached afterwards.
-            if (!attaching && record.GetCascade()) {
+            if (!attaching && (record.GetCascade() || target->GetPendingDstPathId())) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())

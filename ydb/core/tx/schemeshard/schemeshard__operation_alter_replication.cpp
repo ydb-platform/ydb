@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_replication_bootstrap.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -108,6 +109,9 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                if (alterData->Description.GetState().HasDone()) {
+                    FillReplicationBootstrapTables(pathId, ev->Record, context.SS);
+                }
                 if (alterData->Description.GetState().GetStateCase() != context.SS->Replications.at(pathId)->Description.GetState().GetStateCase()) {
                     ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
                 }
@@ -406,6 +410,10 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Replications.contains(path.Base()->PathId));
         auto replication = context.SS->Replications.at(path.Base()->PathId);
+
+        if (!CheckReplicationBootstrapTables(path.Base()->PathId, *result, context.SS)) {
+            return result;
+        }
 
         if (replication->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Replication is not created yet");

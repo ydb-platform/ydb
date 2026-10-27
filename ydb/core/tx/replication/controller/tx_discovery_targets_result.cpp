@@ -36,8 +36,9 @@ public:
             return true;
         }
 
-        if (Replication->GetState() != TReplication::EState::Ready
+        if ((Replication->GetState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Paused)
+            || Replication->GetDesiredState() == TReplication::EState::Done)
         {
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
                 {"rid", rid},

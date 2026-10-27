@@ -692,6 +692,8 @@ public:
             }
         }
 
+        const auto replicationConfig = schema.GetReplicationConfig();
+        const bool hasReplicationConfig = schema.HasReplicationConfig();
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
@@ -704,6 +706,9 @@ public:
         }
 
         schema.ClearReplicationConfig();
+        if (hasReplicationConfig) {
+            schema.MutableReplicationConfig()->CopyFrom(replicationConfig);
+        }
         schema.ClearIncrementalBackupConfig();
 
         const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
@@ -976,6 +981,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetCopyFromTable(copying.GetCopyFromTable());
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
+        if (copying.HasReplicationConfig()) {
+            operation->MutableReplicationConfig()->CopyFrom(copying.GetReplicationConfig());
+        }
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
         if (cdcPeerOp) {
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);
@@ -1106,6 +1114,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetCopyFromTable(implTable.PathString());
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
+            if (copying.HasReplicationConfig() && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                operation->MutableReplicationConfig()->CopyFrom(copying.GetReplicationConfig());
+            }
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
             AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));

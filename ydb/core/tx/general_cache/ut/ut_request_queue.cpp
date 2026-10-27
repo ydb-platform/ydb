@@ -310,6 +310,10 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(first->Ready);
         UNIT_ASSERT(first->HasErrors);
 
+        THashMap<NGeneralCacheUt::TAddress, TString> whileAbsent;
+        whileAbsent.emplace(address, "stale");
+        harness.Manager->OnRequestResult(1, std::move(whileAbsent), {}, {}, oldAsk.Cookie);
+
         auto second = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
         const auto freshAsk = harness.Processor->Asks.back();
         UNIT_ASSERT(freshAsk.Cookie != oldAsk.Cookie);
@@ -335,6 +339,25 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(second->Ready);
         UNIT_ASSERT(third->Ready);
         UNIT_ASSERT(!third->HasErrors);
+    }
+
+    Y_UNIT_TEST(ResultForAbsentSourceDoesNotChangeCache) {
+        NGeneralCacheUt::THarness<false> harness(2);
+        auto first = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
+        const auto ask = harness.Processor->Asks.at(0);
+        const NGeneralCacheUt::TAddress address = *ask.Addresses.begin()->second.begin();
+        harness.Finish(ask);
+        UNIT_ASSERT(first->Ready);
+        harness.Manager->AbortSource(1);
+
+        THashSet<NGeneralCacheUt::TAddress> removed;
+        removed.insert(address);
+        harness.Manager->OnRequestResult(1, {}, std::move(removed), {}, ask.Cookie);
+
+        const size_t asks = harness.Processor->Asks.size();
+        auto again = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
+        UNIT_ASSERT(again->Ready);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), asks);
     }
 
     Y_UNIT_TEST(DeadSourceEntriesStayWhenEvictionIsOff) {

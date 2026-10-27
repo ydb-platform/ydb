@@ -614,28 +614,23 @@ public:
         THashMap<TAddress, TString>&& failed, const ui64 sourceCookie) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "on_result"});
+        auto* sourceInfo = MutableSourceInfoOptional(sourceId);
+        if (!sourceInfo || sourceInfo->GetCookie() != sourceCookie) {
+            return;
+        }
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
-        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
-            if (sourceInfo->GetCookie() != sourceCookie) {
-                return;
-            }
-        }
         CleanUseless(add.size());
         AddObjectsToCache(add);
         RemoveObjectsFromCache(removed);
-        if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
-            sourceInfo->AddObjects(std::move(add), false, now);
-            sourceInfo->RemoveObjects(std::move(removed), false, now);
-            sourceInfo->FailObjects(std::move(failed), now);
-            const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
-            if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
-                DrainQueue();
-            } else {
-                DrainQueue(sourceId);
-            }
+        sourceInfo->AddObjects(std::move(add), false, now);
+        sourceInfo->RemoveObjects(std::move(removed), false, now);
+        sourceInfo->FailObjects(std::move(failed), now);
+        const bool inFlightLimitBrokenAfter = !Counters->CheckTotalLimit();
+        if (inFlightLimitBrokenBefore && !inFlightLimitBrokenAfter) {
+            DrainQueue();
         } else {
-            AFL_VERIFY(Counters->CheckTotalLimit() == !inFlightLimitBrokenBefore);
+            DrainQueue(sourceId);
         }
     }
 

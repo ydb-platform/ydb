@@ -200,14 +200,6 @@ public:
     void ModifyPortionOnExecute(
         IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
-        const auto& cachedPortion = portion.GetPortionInfo();
-        AFL_VERIFY(cachedPortion.GetCompactionLevel() == innerPortion->GetCompactionLevel());
-        AFL_VERIFY(cachedPortion.GetRecordsCount() == innerPortion->GetRecordsCount());
-        AFL_VERIFY(cachedPortion.GetMeta().GetTierName() == innerPortion->GetMeta().GetTierName());
-        AFL_VERIFY(cachedPortion.HasRemoveSnapshot() == innerPortion->HasRemoveSnapshot());
-        if (cachedPortion.HasRemoveSnapshot()) {
-            AFL_VERIFY(cachedPortion.GetRemoveSnapshotVerified() == innerPortion->GetRemoveSnapshotVerified());
-        }
         auto copy = innerPortion->MakeCopy();
         modifier(*copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {

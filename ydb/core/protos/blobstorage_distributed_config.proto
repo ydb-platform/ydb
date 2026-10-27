@@ -81,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.
@@ -362,6 +363,9 @@ message TEvNodeConfigInvokeOnRoot {
     // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and turn static
     // groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
     message TConvertToBridge {
+        // existing pools and groups managed by BSC are left non-bridged (they may be converted one by one later), and
+        // non-uniform storage gets activated along with the conversion; BridgeConfig must enable it then
+        bool SkipStoragePoolConversion = 1;
     }
 
     // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
@@ -495,4 +499,9 @@ message TConnectivityPayload {
     optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
     bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
     uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
+}
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
 }

@@ -122,8 +122,9 @@ class BridgeClient(object):
         response.operation.result.Unpack(result)
         return result
 
-    def convert_to_bridge(self):
+    def convert_to_bridge(self, skip_storage_pool_conversion=False):
         request = bridge_api.ConvertToBridgeRequest()
+        request.skip_storage_pool_conversion = skip_storage_pool_conversion
         return self.invoke(request, 'ConvertToBridge')
 
     def add_pile(self, pile_name):

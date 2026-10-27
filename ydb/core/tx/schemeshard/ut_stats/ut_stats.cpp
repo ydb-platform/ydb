@@ -1,8 +1,13 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/public/lib/value/value.h>
+
+#include <util/string/escape.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -745,6 +750,207 @@ Y_UNIT_TEST_SUITE(TStatsParseOffloadTest) {
 }
 
 Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
+    Y_UNIT_TEST(DatabaseUsageAfterRestartDuringMoveWithShardIdxStats) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.NStoragePools(1);
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
+
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableTablePartitionsFormatShardIdx(true);
+        flags.SetEnableTablePartitionsFormatShardIdxByDefault(true);
+
+        const auto sender = runtime.AllocateEdgeActor();
+        auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](auto& ev) {
+            if (ev->Sender != sender) {
+                ev.Reset();
+            }
+        });
+
+        ui64 txId = 100;
+        CreateSimpleTable(runtime, env, txId);
+        const auto tableId = ResolveTableId(runtime, "/MyRoot/Simple");
+        const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        auto update = MakeHolder<TEvDataShard::TEvPeriodicTableStats>(
+            shards.at(0), TTestTxConfig::SchemeShard, tableId.PathId.LocalPathId);
+        update->Record.SetGeneration(1);
+        update->Record.SetRound(1);
+        update->Record.MutableTableStats()->SetDataSize(100);
+        update->Record.MutableTableStats()->SetIndexSize(20);
+        auto* channel = update->Record.MutableTableStats()->AddChannels();
+        channel->SetChannel(1);
+        channel->SetDataSize(100);
+        channel->SetIndexSize(20);
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, update.Release());
+        runtime.WaitFor("persisted source stats", [&] {
+            return DescribePath(runtime, "/MyRoot/Simple").GetPathDescription().GetTableStats().GetDataSize() == 100;
+        });
+
+        const ui64 moveTxId = ++txId;
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [=](const auto& ev) {
+            return ev->Get()->TxId == moveTxId;
+        });
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            MoveTableRequest(moveTxId, "/MyRoot/Simple", "/MyRoot/Moved"));
+        TestModificationResult(runtime, moveTxId, NKikimrScheme::StatusAccepted);
+        runtime.WaitFor("move progress", [&] { return !blockedProgress.empty(); });
+        while (DescribePath(runtime, "/MyRoot/Moved").GetPathDescription().GetTableStats().GetDataSize() != 100) {
+            blockedProgress.Unblock(1);
+            runtime.WaitFor("move progress after next stage", [&] { return !blockedProgress.empty(); });
+        }
+
+        // Both table records still reference the shard, whose owner is now Moved.
+        // Restart must restore only the owner's contribution to database usage.
+        blockedProgress.clear();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.WaitFor("move progress after restart", [&] { return !blockedProgress.empty(); });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::DatabaseSizeIs(120)});
+        const auto usage = DescribePath(runtime, "/MyRoot").GetPathDescription()
+            .GetDomainDescription().GetDiskSpaceUsage();
+        UNIT_ASSERT_VALUES_EQUAL(usage.StoragePoolsUsageSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(usage.GetStoragePoolsUsage(0).GetTotalSize(), 120);
+
+        blockedProgress.Stop().Unblock();
+        env.TestWaitNotification(runtime, moveTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Simple"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Moved"), {NLs::IsTable});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::DatabaseSizeIs(120)});
+    }
+
+    Y_UNIT_TEST(DatabaseUsageAfterRestartWithMixedPartitionStatsFormats) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.NStoragePools(1);
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
+
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableTablePartitionsFormatShardIdxByDefault(false);
+        flags.SetEnableTablePartitionsFormatAutoConvert(false);
+
+        // Only the explicitly injected update may change the restored stats.
+        const auto sender = runtime.AllocateEdgeActor();
+        auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](auto& ev) {
+            if (ev->Sender != sender) {
+                ev.Reset();
+            }
+        });
+
+        ui64 txId = 100;
+        const ui64 schemeShard = TTestTxConfig::SchemeShard;
+        const auto domain = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_GT(domain.StoragePoolsSize(), 0);
+        const auto poolKind = domain.GetStoragePools(0).GetKind();
+        const auto poolStats = [&](ui64 dataSize, ui64 indexSize) {
+            NKikimrTableStats::TStoragePoolsStats stats;
+            auto* pool = stats.AddPoolsUsage();
+            pool->SetPoolKind(poolKind);
+            pool->SetDataSize(dataSize);
+            pool->SetIndexSize(indexSize);
+            return EscapeC(stats.SerializeAsString());
+        };
+
+        auto persistStats = [&](const char* name, bool legacy, bool shardIdx, ui64 dataSize) {
+            CreateTable(runtime, env, "/MyRoot", name, 1, txId);
+            const auto tableId = ResolveTableId(runtime, TStringBuilder() << "/MyRoot/" << name);
+            const auto localPathId = tableId.PathId.LocalPathId;
+
+            const auto partition = LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
+                (
+                    (let key '('('TabId (Uint64 '%lu)) '('Id (Uint64 '0))))
+                    (return (AsList (SetResult 'Partition
+                        (SelectRow 'TablePartitions key '('DatashardIdx)))))
+                )
+            )", localPathId));
+            const ui64 localShardIdx = NClient::TValue::Create(partition)["Partition"]["DatashardIdx"];
+
+            if (legacy) {
+                LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
+                    (
+                        (let key '('('TableOwnerId (Uint64 '%lu))
+                            '('TableLocalId (Uint64 '%lu)) '('PartitionId (Uint64 '0))))
+                        (let stats '('('SeqNoGeneration (Uint64 '1)) '('SeqNoRound (Uint64 '1))
+                            '('DataSize (Uint64 '%lu)) '('IndexSize (Uint64 '10))
+                            '('StoragePoolsStats (String '"%s"))))
+                        (return (AsList (UpdateRow 'TablePartitionStats key stats)))
+                    )
+                )", schemeShard, localPathId, dataSize, poolStats(dataSize, 10).c_str()));
+            }
+
+            if (shardIdx) {
+                // A newer row must override the legacy row before domain aggregation.
+                LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
+                    (
+                        (let key '('('OwnerPathId (Uint64 '%lu)) '('LocalPathId (Uint64 '%lu))
+                            '('OwnerShardIdx (Uint64 '%lu)) '('LocalShardIdx (Uint64 '%lu))))
+                        (let stats '('('SeqNoGeneration (Uint64 '1)) '('SeqNoRound (Uint64 '2))
+                            '('DataSize (Uint64 '%lu)) '('IndexSize (Uint64 '20))
+                            '('StoragePoolsStats (String '"%s"))))
+                        (return (AsList (UpdateRow 'TablePartitionStatsByShardIdx key stats)))
+                    )
+                )", schemeShard, localPathId, schemeShard, localShardIdx, dataSize, poolStats(dataSize, 20).c_str()));
+            }
+        };
+
+        persistStats("Mixed", true, true, 100);
+        persistStats("Legacy", true, false, 50);
+        persistStats("ShardIdx", false, true, 60);
+
+        const auto checkUsage = [&](ui64 mixedDataSize) {
+            for (const auto& [name, dataSize, indexSize] : {
+                std::tuple{"Mixed", mixedDataSize, 20UL},
+                std::tuple{"Legacy", 50UL, 10UL},
+                std::tuple{"ShardIdx", 60UL, 20UL}})
+            {
+                const auto stats = DescribePath(runtime, TStringBuilder() << "/MyRoot/" << name)
+                    .GetPathDescription().GetTableStats();
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetDataSize(), dataSize);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetIndexSize(), indexSize);
+            }
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                {NLs::DatabaseSizeIs(mixedDataSize + 20 + 60 + 80)});
+            const auto usage = DescribePath(runtime, "/MyRoot").GetPathDescription()
+                .GetDomainDescription().GetDiskSpaceUsage();
+            UNIT_ASSERT_VALUES_EQUAL(usage.StoragePoolsUsageSize(), 1);
+            const auto& pool = usage.GetStoragePoolsUsage(0);
+            UNIT_ASSERT_VALUES_EQUAL(pool.GetPoolKind(), poolKind);
+            UNIT_ASSERT_VALUES_EQUAL(pool.GetDataSize(), mixedDataSize + 50 + 60);
+            UNIT_ASSERT_VALUES_EQUAL(pool.GetIndexSize(), 20 + 10 + 20);
+            UNIT_ASSERT_VALUES_EQUAL(pool.GetTotalSize(), mixedDataSize + 20 + 60 + 80);
+        };
+
+        for (ui32 restart = 0; restart < 2; ++restart) {
+            GracefulRestartTablet(runtime, schemeShard, sender);
+            checkUsage(100);
+        }
+
+        const auto tableId = ResolveTableId(runtime, "/MyRoot/Mixed");
+        const auto shards = GetTableShards(runtime, schemeShard, "/MyRoot/Mixed");
+        auto update = MakeHolder<TEvDataShard::TEvPeriodicTableStats>(
+            shards.at(0), schemeShard, tableId.PathId.LocalPathId);
+        update->Record.SetGeneration(1);
+        update->Record.SetRound(3);
+        update->Record.MutableTableStats()->SetDataSize(130);
+        update->Record.MutableTableStats()->SetIndexSize(20);
+        auto* channel = update->Record.MutableTableStats()->AddChannels();
+        channel->SetChannel(1);
+        channel->SetDataSize(130);
+        channel->SetIndexSize(20);
+        runtime.SendToPipe(schemeShard, sender, update.Release());
+
+        while (DescribePath(runtime, "/MyRoot/Mixed").GetPathDescription().GetTableStats().GetDataSize() != 130) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        checkUsage(130);
+
+        GracefulRestartTablet(runtime, schemeShard, sender);
+        checkUsage(130);
+    }
+
     Y_UNIT_TEST(SameAggregatedStatsAfterRestart) {
         TTestBasicRuntime runtime;
 

@@ -32,10 +32,6 @@
 
 namespace NKikimr {
 
-namespace NWorkloadManager {
-class IQueryClassifier;
-} // namespace NWorkloadManager
-
 namespace NKqp {
 
 class TKqpQueryCache;
@@ -142,7 +138,6 @@ public:
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
         UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
-        QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -165,7 +160,6 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;

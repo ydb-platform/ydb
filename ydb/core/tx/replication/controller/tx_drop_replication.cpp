@@ -1,6 +1,8 @@
 #include "controller_impl.h"
 #include "bootstrap_tables.h"
 
+#include <ydb/core/base/path.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -101,6 +103,22 @@ public:
             NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
+        THashSet<TString> retainedTables;
+        for (const auto* target : Replication->GetTargets()) {
+            if (target->GetKind() != TReplication::ETargetKind::Table) {
+                continue;
+            }
+
+            const bool cascadeWithoutDestination = record.GetCascade() && !target->GetDstPathId();
+            const bool pendingAttachment = target->GetPendingDstPathId()
+                && (record.GetCascade() || target->GetDstState() == TReplication::EDstState::Attaching);
+            if (!cascadeWithoutDestination && !pendingAttachment) {
+                continue;
+            }
+
+            retainedTables.insert(CanonizePath(target->GetDstPath()));
+        }
+
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
@@ -121,6 +139,25 @@ public:
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
+            bool detachIndex = false;
+            if (target->GetKind() == TReplication::ETargetKind::IndexTable) {
+                const TString indexPath(ExtractParent(target->GetDstPath()));
+                const auto basePath = CanonizePath(TString(ExtractParent(indexPath)));
+                if (retainedTables.contains(basePath)) {
+                    // A base without a confirmed destination or with a pending
+                    // attachment is preserved. Persist index cleanup ownership
+                    // before the base target can disappear, including on restart.
+                    if (target->GetDstPathId() && !target->GetPendingDstPathId()) {
+                        target->SetPendingDstPathId(target->GetDstPathId());
+                        db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                            NIceDb::TUpdate<Schema::Targets::PendingDstPathOwnerId>(target->GetPendingDstPathId().OwnerId),
+                            NIceDb::TUpdate<Schema::Targets::PendingDstPathLocalId>(target->GetPendingDstPathId().LocalPathId)
+                        );
+                    }
+                    detachIndex = bool(target->GetPendingDstPathId());
+                }
+            }
+
             const bool attaching = target->GetDstState() == TReplication::EDstState::Attaching;
             if (!attaching) {
                 target->Shutdown(ctx);
@@ -134,7 +171,7 @@ public:
             );
 
             // Keep the creator until its submitted ALTER has finished; the imported table is detached afterwards.
-            if (!attaching && (record.GetCascade() || target->GetPendingDstPathId())) {
+            if (!attaching && (record.GetCascade() || detachIndex || target->GetPendingDstPathId())) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
@@ -182,6 +219,7 @@ public:
             Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
+        Replication->Shutdown(ctx);
         Self->Remove(rid);
         Replication.Reset();
 

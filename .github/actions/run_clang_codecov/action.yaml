@@ -39,6 +39,10 @@ inputs:
     description: ya --link-threads
     required: false
     default: "12"
+  muted_tests_file:
+    description: Trusted common mute list; labels failures without excluding tests
+    required: false
+    default: ".github/config/muted_ya.txt"
   pr_number:
     description: PR number (empty on push)
     required: false
@@ -85,15 +89,12 @@ runs:
         TARGETS_JSON: ${{ steps.suite.outputs.targets_json }}
         TEST_THREADS: ${{ inputs.test_threads }}
         LINK_THREADS: ${{ inputs.link_threads }}
+        MUTED_TESTS_FILE: ${{ inputs.muted_tests_file }}
         BAZEL_REMOTE_URI: ${{ inputs.bazel_remote_uri }}
         BAZEL_REMOTE_USERNAME: ${{ inputs.bazel_remote_username }}
         BAZEL_REMOTE_PASSWORD: ${{ inputs.bazel_remote_password }}
       run: |
         set -euo pipefail
-        OUT="$(pwd)/coverage_workspace/${SUITE}"
-        mkdir -p "$OUT"
-        echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
-
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
         printf '%s' "${BAZEL_REMOTE_PASSWORD}" > "$BAZEL_REMOTE_PASSWORD_FILE"
@@ -111,7 +112,6 @@ runs:
           "--coverage-exclude-regexp=${EXCL}"
           --test-threads "${TEST_THREADS}"
           --link-threads "${LINK_THREADS}"
-          --output "$OUT"
           --no-dir-outputs
         )
         if [ -n "${BAZEL_REMOTE_URI}" ]; then
@@ -126,7 +126,35 @@ runs:
           )
         fi
 
-        ./ya make "${params[@]}" "${TARGETS[@]}"
+        python3 .github/scripts/codecov/run_coverage.py \
+          --suite "${SUITE}" \
+          --work-dir "${RUNNER_TEMP}/codecov" \
+          --mute-file "${MUTED_TESTS_FILE}" \
+          --secret-file "$BAZEL_REMOTE_PASSWORD_FILE" \
+          -- ./ya make "${params[@]}" "${TARGETS[@]}"
+
+    - name: Explain retained assertion-failure coverage
+      if: steps.ya.outputs.test_failures != ''
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        TEST_FAILURES: ${{ steps.ya.outputs.test_failures }}
+      run: |
+        printf '### Coverage execution: %s\n\n' "$SUITE" >> "$GITHUB_STEP_SUMMARY"
+        printf 'Retained coverage from a completed test run with %s assertion failure(s). ' "$TEST_FAILURES" >> "$GITHUB_STEP_SUMMARY"
+        printf 'This does not mark the tests as passed. See the coverage diagnostics artifact for failures and mute labels. LLVM export is validated separately below.\n\n' >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload coverage failure diagnostics
+      # Preserve the first failure even when a fresh retry succeeds.
+      if: ${{ always() && steps.ya.outputs.had_failure == 'true' }}
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: codecov-diagnostics-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ steps.ya.outputs.diagnostics_dir }}
+        retention-days: 7
+        compression-level: 3
+        if-no-files-found: warn
 
     - name: Export filtered LCOV
       id: export
@@ -248,6 +276,10 @@ runs:
           exit 1
         fi
         export PATH="${HOME}/.local/bin:${PATH}"
+        # Upload the preserved copy itself, so the patch job cannot read a
+        # different report or merged data from earlier runs at the same SHA.
+        report_copy="${RUNNER_TEMP}/codecov-upload-${SUITE}.lcov"
+        cp "${OUT}/coverage.lcov" "$report_copy"
         upload_args=(
           --fail-on-error
           --git-service github
@@ -256,15 +288,52 @@ runs:
           --branch "${BRANCH}"
           --disable-search
           --plugin noop
-          --file "${OUT}/coverage.lcov"
+          --file "$report_copy"
           --flag "${FLAG}"
-          --name "${SUITE}"
+          --name "${SUITE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         )
         # Needed so Codecov attaches the upload to the PR (statuses / comment), not only the commit.
         if [ -n "${PR_NUMBER}" ]; then
           upload_args+=(--pull-request-number "${PR_NUMBER}")
         fi
         codecovcli upload-coverage "${upload_args[@]}"
+        # Pin the exact successful upload for the patch job. A failed-jobs-only
+        # rerun can legitimately reuse a successful component's older receipt.
+        python3 - <<'PY'
+        import hashlib
+        import json
+        import os
+        from pathlib import Path
+
+        suite = os.environ["SUITE"]
+        run_id = os.environ["GITHUB_RUN_ID"]
+        run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+        report = Path(os.environ["RUNNER_TEMP"]) / f"codecov-upload-{suite}.lcov"
+        receipt = {
+            "version": 2,
+            "head_sha": os.environ["COMMIT_SHA"],
+            "flag": os.environ["FLAG"],
+            "run_id": run_id,
+            "run_attempt": run_attempt,
+            "upload_name": f"{suite}-{run_id}-{run_attempt}",
+            "source_root": str(Path.cwd()),
+            "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+        }
+        path = Path(os.environ["RUNNER_TEMP"]) / f"codecov-upload-{suite}.json"
+        path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+        PY
+
+    - name: Save Codecov upload receipt
+      if: inputs.pr_number != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: codecov-upload-${{ inputs.suite }}-${{ github.run_id }}
+        path: |
+          ${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.json
+          ${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.lcov
+        retention-days: 7
+        if-no-files-found: error
+        overwrite: true
 
     - name: Publish HTML report to Object Storage
       # Still publish HTML if Codecov upload fails.

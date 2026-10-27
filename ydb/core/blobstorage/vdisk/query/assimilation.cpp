@@ -10,6 +10,7 @@ namespace NKikimr {
         THullDsSnap Snap;
         std::unique_ptr<TEvBlobStorage::TEvVAssimilate::THandle> Ev;
         std::unique_ptr<TEvBlobStorage::TEvVAssimilateResult> Result;
+        const TVDiskID VDiskId;
         TActorId ParentId;
         std::optional<TKeyBlock> SkipBlocksUpTo;
         std::optional<TKeyBarrier> SkipBarriersUpTo;
@@ -29,6 +30,7 @@ namespace NKikimr {
             : Snap(std::move(snap))
             , Ev(ev.Release())
             , Result(std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(NKikimrProto::OK, TString(), vdiskId))
+            , VDiskId(vdiskId)
         {
             const auto& record = Ev->Get()->Record;
             if (record.HasSkipBlocksUpTo()) {
@@ -267,6 +269,15 @@ namespace NKikimr {
             PassAway();
         }
 
+        void HandlePoison() {
+            // the VDisk is going away; the request has to be answered anyway, as the client may not learn of it from the
+            // connection (the request goes without QoS, so the VDisk keeps no window for the client to drop)
+            Result = std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(NKikimrProto::ERROR, "VDisk is going away",
+                VDiskId);
+            RecordSize = Result->Record.ByteSizeLong();
+            SendResultAndDie();
+        }
+
         void PassAway() override {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::ActorDied, 0, ParentId, SelfId(), nullptr, 0));
             TActorBootstrapped::PassAway();
@@ -274,7 +285,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateFunc,
             cFunc(EvResume, Quantum);
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            cFunc(TEvents::TSystem::Poison, HandlePoison);
         )
 
     private:

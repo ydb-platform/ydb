@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/util/lz4_data_generator.h>
 
+#include <util/system/type_name.h>
+
 void RunAssimilationTest(bool reverse) {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -440,7 +442,100 @@ void RunAssimilationRestartTest() {
     UNIT_ASSERT_EQUAL(assimilated, blobs);
 }
 
+// the VDisk goes away (its skeleton is stopped, as the skeleton front does on PDisk error) while the assimilation
+// request waits there for the log; the client can't learn of it from the connection, as the request goes without QoS,
+// so the VDisk must answer it, and the rest of the group, being a quorum, completes the request
+void RunVDiskGoesAwayTest() {
+    TEnvironmentSetup env{{
+        .NodeCount = 8,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+    }};
+    auto& runtime = env.Runtime;
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Seconds(30));
+    const auto groups = env.GetGroups();
+    UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+    const ui32 groupId = groups.front();
+
+    const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    const TString data = "assimilated blob";
+    std::set<TLogoBlobID> written;
+    for (ui32 step = 1; step <= 10; ++step) {
+        const TLogoBlobID id(100500, 1, step, 0, data.size(), 0);
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        written.insert(id);
+    }
+
+    // the skeleton of the VDisk on node 2 doesn't get its log written, so it has a write in flight
+    const ui32 nodeId = 2;
+    TActorId skeletonId;
+    bool assimilationPending = false;
+    std::unique_ptr<IEventHandle> result;
+    runtime->FilterFunction = [&](ui32 recipientNodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetRecipientRewrite() == edge) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult) {
+                result = std::move(ev);
+            }
+            return false; // the result of the put below doesn't matter
+        } else if (recipientNodeId != nodeId) {
+            return true;
+        } else if (IActor *actor = runtime->GetActor(ev->GetRecipientRewrite()); !actor ||
+                !TypeName(*actor).EndsWith("::TSkeleton")) {
+            return true;
+        } else if (ev->GetTypeRewrite() == NPDisk::TEvLogResult::EventType) {
+            skeletonId = ev->GetRecipientRewrite();
+            return false;
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVAssimilate) {
+            assimilationPending = true;
+        }
+        return true;
+    };
+    runtime->WrapInActorContext(edge, [&] {
+        const TLogoBlobID id(100500, 1, 100, 0, data.size(), 0);
+        SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+    });
+    for (ui32 i = 0; i < 100 && !skeletonId; ++i) {
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(skeletonId);
+
+    runtime->WrapInActorContext(edge, [&] {
+        SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvAssimilate(std::nullopt, std::nullopt, std::nullopt, true,
+            false));
+    });
+    for (ui32 i = 0; i < 100 && !assimilationPending; ++i) {
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(assimilationPending);
+    env.Sim(TDuration::Seconds(1));
+    UNIT_ASSERT(!result);
+
+    runtime->Send(new IEventHandle(skeletonId, {}, new TEvents::TEvPoisonPill), nodeId);
+    for (ui32 i = 0; i < 60 && !result; ++i) {
+        env.Sim(TDuration::Seconds(10));
+    }
+    runtime->FilterFunction = {};
+
+    UNIT_ASSERT_C(result, "the request has got no reply from the VDisk gone away");
+    auto *msg = result->Get<TEvBlobStorage::TEvAssimilateResult>();
+    UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::OK, msg->ErrorReason);
+    std::set<TLogoBlobID> assimilated;
+    for (const auto& blob : msg->Blobs) {
+        assimilated.insert(blob.Id);
+    }
+    for (const auto& id : written) {
+        UNIT_ASSERT_C(assimilated.contains(id), id);
+    }
+}
+
 Y_UNIT_TEST_SUITE(VDiskAssimilation) {
+    Y_UNIT_TEST(VDiskGoesAway) {
+        RunVDiskGoesAwayTest();
+    }
     Y_UNIT_TEST(RestartKeepsCallerCursors) {
         RunAssimilationRestartTest();
     }

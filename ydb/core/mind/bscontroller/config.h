@@ -61,6 +61,7 @@ namespace NKikimr {
             TBlobStorageController& Self;
 
             // user-defined configuration
+            TCowHolder<TDataCenterStates> DataCenterStates;
             TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs;
             TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
@@ -145,6 +146,8 @@ namespace NKikimr {
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
 
+            std::optional<TString> ApplyDataCenterStates();
+
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
@@ -155,6 +158,7 @@ namespace NKikimr {
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
                     TMonotonic mono, const NKikimrBlobStorage::TStorageConfig *storageConfig = nullptr)
                 : Self(controller)
+                , DataCenterStates(&controller.DataCenterStates)
                 , HostConfigs(&controller.HostConfigs)
                 , Boxes(&controller.Boxes)
                 , StoragePools(&controller.StoragePools)
@@ -206,6 +210,7 @@ namespace NKikimr {
             void Commit() {
                 Y_ABORT_UNLESS(!Fit);
 
+                DataCenterStates.Commit();
                 HostConfigs.Commit();
                 Boxes.Commit();
                 StoragePools.Commit();
@@ -230,7 +235,7 @@ namespace NKikimr {
             }
 
             bool Changed() const {
-                return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
+                return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
                     StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
@@ -377,6 +382,21 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
+<<<<<<< HEAD
+=======
+            void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
+
+            template<typename TCallback>
+            void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);
+
+            // turn ordinary groups of the storage pool being made bridged into inline piles, and give every bridged
+            // group of the pool its parts in all piles
+            void MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId);
+
+            // designate the part every bridged group of the storage pool being made ordinary keeps
+            void MakeStoragePoolGroupsOrdinary(TBoxStoragePoolId storagePoolId, const TString& retainPileName);
+>>>>>>> 32b9cce070f (Add volatile cluster-wide data center states for mirror-3-dc (#56799))
         };
 
     } // NBsController

@@ -418,6 +418,13 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
+<<<<<<< HEAD
+=======
+                    HANDLE_COMMAND(UpdateStoragePoolSettings)
+                    HANDLE_COMMAND(DefineDataCenterStates)
+                    HANDLE_COMMAND(TestResetDataCenterStates)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
+>>>>>>> 32b9cce070f (Add volatile cluster-wide data center states for mirror-3-dc (#56799))
 
                     default: break;
                 }

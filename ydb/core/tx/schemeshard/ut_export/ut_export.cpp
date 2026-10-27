@@ -3180,10 +3180,6 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
-        Env(); // Init test env
-=======
     Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
         CheckRestartUploadOnInvalidPart(Runtime(), Env(), S3Mock(), S3Port(), EMultipartRestartReboot::None);
     }
@@ -3200,9 +3196,8 @@ partitioning_settings {
         CheckRestartUploadOnInvalidPart(Runtime(), Env(), S3Mock(), S3Port(), EMultipartRestartReboot::None, true);
     }
 
-    void CheckMissingMultipartUpload(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,
-            bool returnSimilarKey) {
->>>>>>> dd5bc7af558 (Restart multipart exports with fresh upload sessions (#56756))
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(

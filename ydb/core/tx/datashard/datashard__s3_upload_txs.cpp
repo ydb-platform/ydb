@@ -42,7 +42,7 @@ bool TDataShard::TTxStoreS3UploadId::Execute(TTransactionContext& txc, const TAc
     txc.DB.NoMoreReadsForTx();
 
     const auto& msg = *Ev->Get();
-    const auto& upload = Self->S3Uploads.Add(txc.DB, msg.TxId, msg.UploadId);
+    const auto& upload = Self->S3Uploads.Store(txc.DB, msg.TxId, msg.UploadId);
     Reply.Reset(new TEvDataShard::TEvS3Upload(upload));
 
     return true;

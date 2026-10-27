@@ -183,7 +183,8 @@ void TConfigFlags::InitFlags() {
         if (ForPartialTypeCheck_) {
             return true;
         }
-        if (Types_.UdfBridgeBinaryPath.empty()) {
+        const bool replayingMetadata = Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full;
+        if (Types_.UdfBridgeBinaryPath.empty() && !replayingMetadata) {
             ctx.AddError(TIssue(pos, "udf_bridge is not available"));
             return false;
         }

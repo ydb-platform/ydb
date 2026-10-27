@@ -374,12 +374,14 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
             }
 
             if (etags.size() != it->second.size()) {
-                return HttpBadRequest(params, "Invalid part count");
+                return HttpBadRequest(params,
+                    "<Error><Code>InvalidPart</Code><Message>Invalid part count</Message></Error>");
             }
 
             for (auto i : xrange(etags.size())) {
                 if (etags.at(i) != MD5::Data(it->second.at(i))) {
-                    return HttpBadRequest(params, "Invalid part");
+                    return HttpBadRequest(params,
+                        "<Error><Code>InvalidPart</Code><Message>Invalid part</Message></Error>");
                 }
             }
 

@@ -61,18 +61,14 @@ TString BuildMarkArtifactCompilingQuery(const TString& tablePath);
 //! Records a terminal failure of a compiling artifact. Retry policy belongs to
 //! the controller: do not use this for a failure that is still being retried.
 TString BuildMarkArtifactFailedQuery(const TString& tablePath);
-void SetMarkArtifactFailedParams(Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id, const TString& kind, const TString& uid, const TString& error);
+void SetMarkArtifactFailedParams(
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid, const TString& error);
 TString BuildSelectArtifactCompileStateQuery(const TString& tablePath);
 //! Missing row is a successful read with an empty state; malformed results fail.
-bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
-    TMaybe<TArtifactCompileState>& state);
+bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TMaybe<TArtifactCompileState>& state);
 
 TString BuildSelectModuleByNameQuery(const TString& tablePath);
-void SetSelectModuleByNameParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type);
+void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name, const TString& type);
 
 bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row);
 
@@ -89,11 +85,7 @@ bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& resp
 //! finds nothing means this upload has not been compiled here yet, not that
 //! the module is unknown.
 TString BuildSelectArtifactQuery(const TString& tablePath);
-void SetSelectArtifactParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid);
+void SetSelectArtifactParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid);
 bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmArtifactRow& row);
 
 //! Identity of an artifact without any of its payload. The compile controller
@@ -109,65 +101,36 @@ struct TArtifactKeyRow {
 //! object code is not written yet are skipped: a half-published artifact does
 //! not close a gap.
 TString BuildSelectArtifactKeysQuery(const TString& tablePath);
-bool ParseArtifactKeysResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TVector<TArtifactKeyRow>& rows);
+bool ParseArtifactKeysResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TArtifactKeyRow>& rows);
 
 TString BuildSelectArtifactChunksQuery(const TString& tablePath);
-void SetSelectArtifactChunksParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& blobKind,
-    ui64 firstChunk);
+void SetSelectArtifactChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid,
+    const TString& blobKind, ui64 firstChunk);
 bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
 //! Publishes READY and its completion time together with payload metadata,
 //! preserving compile_started_at. The caller must have written all chunks first.
 TString BuildUpsertArtifactQuery(const TString& tablePath);
-void SetUpsertArtifactParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TWasmArtifactRow& row);
+void SetUpsertArtifactParams(Ydb::Table::ExecuteDataQueryRequest& request, const TWasmArtifactRow& row);
 
 //! Clears a partial write of this very upload before it is retried. Scoped by
 //! uid: at this point the compile has not yet confirmed that its upload is
 //! still the current one, so it has no business touching anybody else's rows.
 TString BuildDeleteArtifactChunksQuery(const TString& tablePath);
-void SetDeleteArtifactChunksParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid);
+void SetDeleteArtifactChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid);
 
 //! Drops everything compiled for this module from uploads other than `uid`.
 //! Gated on `modules` still carrying that same uid in the same statement: a
 //! compile that lost the race to a re-upload must not wipe the winner's rows.
-TString BuildDeleteStaleArtifactChunksQuery(
-    const TString& artifactChunksTablePath,
-    const TString& modulesTablePath);
-TString BuildDeleteStaleArtifactsQuery(
-    const TString& artifactTablePath,
-    const TString& modulesTablePath);
+TString BuildDeleteStaleArtifactChunksQuery(const TString& artifactChunksTablePath, const TString& modulesTablePath);
+TString BuildDeleteStaleArtifactsQuery(const TString& artifactTablePath, const TString& modulesTablePath);
 void SetDeleteStaleArtifactsParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& type);
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid, const TString& type);
 
 TString BuildUpsertArtifactChunkQuery(const TString& tablePath);
-void SetUpsertArtifactChunkParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& blobKind,
-    ui64 chunkIdx,
-    const TString& data);
+void SetUpsertArtifactChunkParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid,
+    const TString& blobKind, ui64 chunkIdx, const TString& data);
 
-bool ExtractQueryResult(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    Ydb::Table::ExecuteQueryResult& result);
+bool ExtractQueryResult(const Ydb::Table::ExecuteDataQueryResponse& response, Ydb::Table::ExecuteQueryResult& result);
 
-} // namespace NKikimr::NUdfStore::NTableQuery
+}   // namespace NKikimr::NUdfStore::NTableQuery

@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     yql/essentials/core
     yql/essentials/core/dq_integration
     yql/essentials/providers/common/dq

@@ -6,14 +6,14 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 
 namespace NFq::NRowDispatcher {
 
 static constexpr ui64 MAX_BATCH_SIZE = 10_MB;
 
-class IClientDataConsumer : public TThrRefBase {
+class IClientDataConsumer: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IClientDataConsumer>;
 
@@ -39,10 +39,10 @@ struct TDataBatch {
     TMaybe<TInstant> Watermark;
     ui64 TotalSize = 0;
     ui64 Rows = 0;
-    ui64 DataSize = 0; // Packed bytes reported by AddDataToClient, before finalizing the batch.
+    ui64 DataSize = 0;   // Packed bytes reported by AddDataToClient, before finalizing the batch.
 };
 
-class ITopicFormatHandler : public TNonCopyable {
+class ITopicFormatHandler: public TNonCopyable {
 private:
     class TDestroy {
     public:
@@ -83,13 +83,16 @@ struct TFormatHandlerConfig {
     std::shared_ptr<NYql::NDq::IMemoryQuotaManager> MemoryQuotaManager;
 };
 
-ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors);
+ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config,
+    const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors);
 
 namespace NTests {
 
-ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters = {});
+ITopicFormatHandler::TPtr CreateTestFormatHandler(
+    const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters = {});
 
-}  // namespace NTests
+}   // namespace NTests
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

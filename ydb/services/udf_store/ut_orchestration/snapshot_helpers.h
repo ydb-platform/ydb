@@ -59,8 +59,7 @@ inline std::shared_ptr<TSnapshot> MakeSnapshot(const TVector<TModuleDesc>& modul
         row.add_items()->set_text_value("md5-" + module.Uid);
         row.add_items()->set_uint64_value(1);
         row.add_items()->set_text_value(TUdfModule::TypeToString(module.Type));
-        row.add_items()->set_text_value(
-            module.Manifest ? module.Manifest : MakeManifest(module.Name));
+        row.add_items()->set_text_value(module.Manifest ? module.Manifest : MakeManifest(module.Name));
     }
 
     auto snapshot = std::make_shared<TSnapshot>(TInstant::Now());
@@ -68,4 +67,4 @@ inline std::shared_ptr<TSnapshot> MakeSnapshot(const TVector<TModuleDesc>& modul
     return snapshot;
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

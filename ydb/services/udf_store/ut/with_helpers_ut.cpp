@@ -16,8 +16,9 @@ Y_UNIT_TEST_SUITE(TWasmUdfWithHelpersTest) {
             (import "env" "BridgeMakeInt64" (func $make (param i64) (result i64)))
             (import "helpers" "helpers_scale" (func $scale (param i64) (result i64)))
             (func (export "scale") (param i64) (param $r i64) (param $a i64)
-                (i64.store (local.get $r) (call $make (call $scale (call $get (local.get $a))))))))", {"scale"});
-        auto fn = env.Function("scale", {env.Type("Int64")}, env.Type("Int64"));
+                (i64.store (local.get $r) (call $make (call $scale (call $get (local.get $a))))))))",
+            { "scale" });
+        auto fn = env.Function("scale", { env.Type("Int64") }, env.Type("Int64"));
         const TUnboxedValuePod arg(i64(7));
         UNIT_ASSERT_VALUES_EQUAL(fn->Invoke(&env.ValueBuilder, &arg).Get<i64>(), 21);
     }

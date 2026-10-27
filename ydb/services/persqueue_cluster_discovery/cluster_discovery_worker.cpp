@@ -114,7 +114,7 @@ public:
             auto& clusterInfo = *sessionClusters.add_clusters();
             clusterInfo.set_endpoint(cluster.Balancer);
             clusterInfo.set_name(cluster.Name);
-            clusterInfo.set_available(cluster.IsEnabled);
+            clusterInfo.set_available(cluster.IsEnabled && cluster.IsAvailable);
         }
 
         return true;

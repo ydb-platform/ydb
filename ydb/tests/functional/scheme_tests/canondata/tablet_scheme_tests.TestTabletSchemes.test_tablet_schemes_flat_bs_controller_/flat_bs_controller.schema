@@ -611,11 +611,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "VDiskHeapAllocatorNumLeadingDisks",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
                 "ColumnType": "Uint64"
@@ -754,13 +749,22 @@
                 "ColumnId": 28,
                 "ColumnName": "DDisk",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "VDiskHeapAllocatorNumLeadingDisks",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "PersistentBufferAllocationMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
                     3,
@@ -788,7 +792,9 @@
                     25,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1072,9 +1078,15 @@
             3,
             4,
             5,
-            6
+            6,
+            7
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "Location",
+                "ColumnType": "String"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
@@ -1110,6 +1122,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

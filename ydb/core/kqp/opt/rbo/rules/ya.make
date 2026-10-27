@@ -52,6 +52,7 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_push_olap.cpp
+    push_olap_aggregate.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
 )

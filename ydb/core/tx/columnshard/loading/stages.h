@@ -115,6 +115,7 @@ public:
 class TTablesManagerInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
+    NColumnShard::TTablesLoadDurations LoadDurations;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
     virtual std::shared_ptr<ITxReader> BuildNextReaderAfterLoad() override;
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

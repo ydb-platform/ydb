@@ -1163,6 +1163,9 @@ public:
         for (auto problem : Problems) {
             Result.AddProblems(problem);
         }
+        for (auto& tenant : *Result.MutableTenantInfo()) {
+            tenant.SetName(RestorePath(tenant.GetName(), "database"));
+        }
         ReplyAndPassAway(GetHTTPOKJSON(Result));
     }
 

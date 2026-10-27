@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -28,14 +29,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
         const ui64 tabletId = partitions[0].GetTabletId();
 
-        WriteTopicMessages(topicName, {"first", "second", "third"}, 0, /* local */ true);
+        WriteTopicMessages(topicName, { "first", "second", "third" }, 0, /* local */ true);
 
         NYdb::NTopic::TTopicClientSettings settings;
         settings.Database(TEST_DATABASE);
         if constexpr (LocalClient) {
             settings.CredentialsProviderFactory(NYql::CreateStructuredTokenCredentialsFactory()->Create(
-                NYql::ComposeStructuredTokenJsonForTransientTokenAuth(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString())
-            ));
+                NYql::ComposeStructuredTokenJsonForTransientTokenAuth(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString())));
         } else {
             settings.DiscoveryEndpoint(GetKikimrRunner()->GetEndpoint());
             settings.AuthToken(BUILTIN_ACL_ROOT);
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto gateway = SetupRealPqGateway();
         const auto client = gateway->GetTopicClient(topicName, *PqGatewayDriver, settings);
         const auto describeConsumer = [&]() {
-            return client->DescribeConsumer(consumer, {.IncludeStats = true, .IncludeGeneration = true}).GetValue(TEST_OPERATION_TIMEOUT);
+            return client->DescribeConsumer(consumer, { .IncludeStats = true, .IncludeGeneration = true }).GetValue(TEST_OPERATION_TIMEOUT);
         };
 
         const auto initial = describeConsumer();
@@ -85,9 +85,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             return generation;
         };
 
-        for (const ui64 committedOffset : {3, 1}) {
+        for (const ui64 committedOffset : { 3, 1 }) {
             // The initial commit and subsequent out-of-session rewind must both persist.
-            const auto committed = client->CommitPosition(NFq::TMessageStreamPartitionId{0}, consumer, committedOffset).GetValue(TEST_OPERATION_TIMEOUT);
+            const auto committed =
+                client->CommitPosition(NFq::TMessageStreamPartitionId{ 0 }, consumer, committedOffset).GetValue(TEST_OPERATION_TIMEOUT);
             UNIT_ASSERT_C(committed.IsSuccess(), committed.Issues.ToOneLineString());
             const auto generation = checkStatistics(committedOffset);
             tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), tabletId);
@@ -101,33 +102,26 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         // DataStreams is not allowed.
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
                     SOURCE_TYPE="DataStreams",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+            )sql", "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::SCHEME_ERROR);
 
         // "YdbTopics" is NOT a valid EDS source type for user creation.
         // It was an internal type that is now removed. Users should use "Ydb" instead.
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
                     SOURCE_TYPE="{source_type}",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "source_type"_a = "YdbTopics",
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::BAD_REQUEST);
+            )sql", "source_type"_a = "YdbTopics", "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceBasic, TStreamingTestFixture) {
@@ -138,24 +132,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         SetupAppConfig().MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
 
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+            )sql", "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST_F(LegacyYdbTopicsInAvailableExternalDataSources, TStreamingTestFixture) {
         // Test backward compatibility: "YdbTopics" in available_external_data_sources config
         // should enable "Ydb" type (legacy config alias, not for EDS creation)
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("YdbTopics");  // Legacy config value (ONLY YdbTopics, no "Ydb")
+        cfg.AddAvailableExternalDataSources("YdbTopics");   // Legacy config value (ONLY YdbTopics, no "Ydb")
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
@@ -164,32 +155,25 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         // 1. Schema validation: Should succeed - "YdbTopics" in config enables "Ydb" type
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `{source}` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "source"_a = sourceName,
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::SUCCESS);
+            )sql", "source"_a = sourceName, "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::SUCCESS);
 
         // 2. Schema validation: Users CANNOT create EDS with SOURCE_TYPE="YdbTopics"
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
                     SOURCE_TYPE="YdbTopics",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::BAD_REQUEST);
+            )sql", "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::BAD_REQUEST);
 
         // 3. E2E smoke test: Full streaming workflow should work
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
@@ -202,15 +186,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 )
             )
             LIMIT 2;
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName
-        ));
+            )", "source"_a = sourceName, "topic"_a = topicName));
 
         WriteTopicMessages(topicName, {
-            R"({"key": "key1", "value": "value1"})",
-            R"({"key": "key1", "value": "value1"})",
-        });
+                                          R"({"key": "key1", "value": "value1"})", R"({"key": "key1", "value": "value1"})",
+                                      });
         CheckScriptResult(scriptExecutionOperation, 2, 2, [](TResultSetParser& result) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
@@ -232,9 +212,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
-            )",
-            "source"_a=sourceName
-        ), EExecStatus::Failed);
+            )", "source"_a = sourceName), EExecStatus::Failed);
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
@@ -267,8 +245,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);
         const auto& status = operation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-            "database is not configured for connector table access");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "database is not configured for connector table access");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
@@ -280,8 +257,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto topicName = MakeExternalName("topicName");
         ui32 partitionCount = 10;
 
-        CreateScopedTopicExt(topicName, NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount));
+        CreateScopedTopicExt(topicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
 
         CreatePqSource(sourceName);
 
@@ -295,11 +271,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 )
             )
             LIMIT {partition_count};
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName,
-            "partition_count"_a=partitionCount
-        ));
+            )", "source"_a = sourceName, "topic"_a = topicName, "partition_count"_a = partitionCount));
 
         for (ui32 i = 0; i < partitionCount; ++i) {
             WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})", i);
@@ -332,17 +304,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         ExecSchemeQuery(fmt::format(
-            R"sql(
+                            R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
-            )sql",
-            "location"_a = YDB_ENDPOINT,
-            "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+            )sql", "location"_a = YDB_ENDPOINT, "database_name"_a = YDB_DATABASE), EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
@@ -360,11 +329,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CreatePqSourceBasicAuth(sourceName);
 
-        const auto result = GetQueryClient()->ExecuteQuery(fmt::format(
-            R"(SELECT * FROM `{source}`.`{topic}` WITH (STREAMING = "TRUE"))",
-            "source"_a=sourceName,
-            "topic"_a=topicName
-        ), TTxControl::NoTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
+        const auto result =
+            GetQueryClient()
+                ->ExecuteQuery(fmt::format(R"(SELECT * FROM `{source}`.`{topic}` WITH (STREAMING = "TRUE"))", "source"_a = sourceName,
+                                   "topic"_a = topicName), TTxControl::NoTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain))
+                .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         const auto& stats = result.GetStats();
@@ -403,11 +372,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             );
             INSERT INTO `{source}`.`{output_topic}`
                 SELECT key || value FROM $input;
-            )",
-            "source"_a=sourceName,
-            "input_topic"_a=inputTopicName,
-            "output_topic"_a=outputTopicName
-        ));
+            )", "source"_a = sourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessage(outputTopicName, "key1value1");
@@ -453,10 +418,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key String NOT NULL
                 )
             ) LIMIT 1;
-            )",
-            "source"_a=pqSourceName,
-            "topic"_a=topicName
-        ));
+            )", "source"_a = pqSourceName, "topic"_a = topicName));
 
         WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
 
@@ -481,10 +443,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto op = ExecScript(fmt::format(R"(
             PRAGMA OrderedColumns;
             SELECT * FROM `{source}`.`{topic}` WITH (STREAMING = "TRUE") LIMIT 1;
-            )",
-            "source"_a=pqSourceName,
-            "topic"_a=topicName
-        ));
+            )", "source"_a = pqSourceName, "topic"_a = topicName));
 
         WriteTopicMessage(topicName, R"({"key":"key1", "value": "value1"})");
 
@@ -518,11 +477,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                         key String NOT NULL,
                         value String NOT NULL
                     )
-                ) LIMIT 1;)",
-                "s3_sink"_a = s3SinkName,
-                "source"_a = pqSourceName,
-                "topic"_a = topicName
-            ), settings);
+                ) LIMIT 1;)", "s3_sink"_a = s3SinkName, "source"_a = pqSourceName, "topic"_a = topicName), settings);
 
             WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
             WaitScriptExecution(operationId);
@@ -530,18 +485,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             return executionId;
         };
 
-        const auto executionId = executeQuery({.SaveState = true});
+        const auto executionId = executeQuery({ .SaveState = true });
         const std::string sampleResult = "{\"key\":\"key1\",\"value\":\"value1\"}\n";
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), sampleResult);
 
         ExecQuery(fmt::format(R"(
             DROP EXTERNAL DATA SOURCE `{s3_sink}`;
-            DROP EXTERNAL DATA SOURCE `{pq_source}`;)",
-            "s3_sink"_a = s3SinkName,
-            "pq_source"_a = pqSourceName
-        ));
+            DROP EXTERNAL DATA SOURCE `{pq_source}`;)", "s3_sink"_a = s3SinkName, "pq_source"_a = pqSourceName));
 
-        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({ .SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId) });
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
@@ -575,16 +527,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 GROUP BY
                     HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
                     event
-                LIMIT 1;)",
-                "source_topic"_a = sourceTopicName,
-                "sink_topic"_a = sinkTopicName,
-                "source"_a = pqSourceName
-            ), settings);
+                LIMIT 1;)", "source_topic"_a = sourceTopicName, "sink_topic"_a = sinkTopicName, "source"_a = pqSourceName), settings);
 
-            WriteTopicMessages(sourceTopicName, {
-                R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-                R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
-            });
+            WriteTopicMessages(sourceTopicName,
+                { R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})" });
 
             expectedMessages.emplace_back("A");
             ReadTopicMessages(sinkTopicName, expectedMessages);
@@ -594,14 +540,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             return executionId;
         };
 
-        const auto executionId = executeQuery({.SaveState = true});
+        const auto executionId = executeQuery({ .SaveState = true });
 
         ExecQuery(fmt::format(R"(
-            DROP EXTERNAL DATA SOURCE `{source}`;)",
-            "source"_a = pqSourceName
-        ));
+            DROP EXTERNAL DATA SOURCE `{source}`;)", "source"_a = pqSourceName));
 
-        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({ .SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId) });
     }
 
     Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphOnRetry, ModernChannels, TStreamingTestFixture) {
@@ -632,24 +576,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key String NOT NULL,
                     value String NOT NULL
                 )
-            ) LIMIT 1;)",
-            "s3_sink"_a = s3SinkName,
-            "source"_a = pqSourceName,
-            "topic"_a = topicName
-        ), {
-            .SaveState = true,
-            .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
-        });
+            ) LIMIT 1;)", "s3_sink"_a = s3SinkName, "source"_a = pqSourceName, "topic"_a = topicName),
+            { .SaveState = true, .RetryMapping = CreateRetryMapping({ Ydb::StatusIds::BAD_REQUEST }) });
 
-        pqGateway->WaitReadSession(topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
 
         ExecQuery(fmt::format(R"(
             DROP EXTERNAL DATA SOURCE `{s3_sink}`;
-            DROP EXTERNAL DATA SOURCE `{pq_source}`;)",
-            "s3_sink"_a = s3SinkName,
-            "pq_source"_a = pqSourceName
-        ));
+            DROP EXTERNAL DATA SOURCE `{pq_source}`;)", "s3_sink"_a = s3SinkName, "pq_source"_a = pqSourceName));
 
         pqGateway->WaitReadSession(topicName)->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         WaitScriptExecution(operationId);
@@ -680,15 +615,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     )
                 );
                 INSERT INTO `{source}`.`{output_topic}`
-                    SELECT key || value FROM $input;)",
-                "source"_a = sourceName,
-                "input_topic"_a = inputTopicName,
-                "output_topic"_a = outputTopicName
-            ), {
-                .SaveState = true,
-                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST}),
-                .CheckpointId = checkpointId
-            });
+                    SELECT key || value FROM $input;)", "source"_a = sourceName, "input_topic"_a = inputTopicName,
+                                                                      "output_topic"_a = outputTopicName),
+            { .SaveState = true, .RetryMapping = CreateRetryMapping({ Ydb::StatusIds::BAD_REQUEST }), .CheckpointId = checkpointId });
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
@@ -701,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
         WaitCheckpointUpdate(checkpointId);
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
         WaitCheckpointUpdate(checkpointId);
@@ -736,19 +665,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     event String NOT NULL
                 )
             )
-            GROUP BY HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"), event;)",
-            "source"_a = sourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), {
-            .SaveState = true,
-            .CheckpointId = checkpointId
-        });
+            GROUP BY HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"), event;)", "source"_a = sourceName, "input_topic"_a = inputTopicName,
+                                                                      "output_topic"_a = outputTopicName),
+            { .SaveState = true, .CheckpointId = checkpointId });
 
-        WriteTopicMessages(inputTopicName, {
-            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
-            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
-        });
+        WriteTopicMessages(inputTopicName,
+            { R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})" });
         ReadTopicMessage(outputTopicName, "A");
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
@@ -804,14 +726,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     event String NOT NULL
                 )
             )
-            GROUP BY HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"), event;)",
-            "source"_a = sourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ), {
-            .SaveState = true,
-            .CheckpointId = checkpointId
-        });
+            GROUP BY HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"), event;)", "source"_a = sourceName, "input_topic"_a = inputTopicName,
+                                                                      "output_topic"_a = outputTopicName),
+            { .SaveState = true, .CheckpointId = checkpointId });
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
         ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
@@ -824,7 +741,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
-            readSession->AddDataReceivedEvent(i, fmt::format(R"({{"time": "{time}", "event": "{event}"}})", "time"_a = time.ToString(), "event"_a = value));
+            readSession->AddDataReceivedEvent(
+                i, fmt::format(R"({{"time": "{time}", "event": "{event}"}})", "time"_a = time.ToString(), "event"_a = value));
         }
 
         Sleep(TDuration::Seconds(6));
@@ -854,12 +772,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     data String NOT NULL
                 )
             )
-        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
-            .SaveState = true
-        }, /* waitRunning */ false);
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath),
+            { .SaveState = true }, /* waitRunning */ false);
 
         const auto& readyOp = WaitScriptExecution(operationId);
-        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_STRING_CONTAINS(
+            readyOp.Status().GetIssues().ToString(), "Runtime listing is not supported for streaming queries, pragma value was ignored");
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
     }
 
@@ -882,12 +800,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     data String NOT NULL
                 )
             )
-        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
-            .SaveState = true
-        }, /* waitRunning */ false);
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath),
+            { .SaveState = true }, /* waitRunning */ false);
 
         const auto& readyOp = WaitScriptExecution(operationId);
-        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_STRING_CONTAINS(
+            readyOp.Status().GetIssues().ToString(), "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
     }
 
@@ -919,9 +837,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key Uint64 NOT NULL
                 )
             )
-        )", "s3_source"_a = s3SourceName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName), {
-            .SaveState = true
-        });
+        )", "s3_source"_a = s3SourceName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName),
+            { .SaveState = true });
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(0, R"({"data": "x", "key": 0})");
@@ -947,27 +864,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 fqdn String,
                 payload String,
                 PRIMARY KEY (fqdn)
-            ))",
-            "table"_a = ydbTable
-        ));
+            ))", "table"_a = ydbTable));
         Y_DEFER {
             ExecExternalQuery(fmt::format(R"(
-                DROP TABLE `{table}`;)",
-                "table"_a = ydbTable
-            ));
+                DROP TABLE `{table}`;)", "table"_a = ydbTable));
         };
 
         {   // Prepare connector mock
-            const std::vector<TColumn> columns = {
-                {"fqdn", Ydb::Type::STRING},
-                {"payload", Ydb::Type::STRING}
-            };
-            SetupMockConnectorTableDescription(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .DescribeCount = 1,
-                .ListSplitsCount = 0
-            });
+            const std::vector<TColumn> columns = { { "fqdn", Ydb::Type::STRING }, { "payload", Ydb::Type::STRING } };
+            SetupMockConnectorTableDescription(
+                connectorClient, { .TableName = ydbTable, .Columns = columns, .DescribeCount = 1, .ListSplitsCount = 0 });
         }
 
         ExecQuery(fmt::format(R"(
@@ -980,10 +886,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 CROSS JOIN (
                     SELECT * FROM `{ydb_source}`.`{table}`
                 ) AS l
-            )",
-            "ydb_source"_a = ydbSourceName,
-            "table"_a = ydbTable
-        ), EStatus::SCHEME_ERROR, "Cannot find table '/Root/unknown-datasource.[unknown-topic]' because it does not exist or you do not have access permissions");
+            )", "ydb_source"_a = ydbSourceName, "table"_a = ydbTable), EStatus::SCHEME_ERROR,
+            "Cannot find table '/Root/unknown-datasource.[unknown-topic]' because it does not exist or you do not have access permissions");
     }
 
     Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
@@ -1014,20 +918,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 PRIMARY KEY (C)
             ) WITH (
                 STORE = COLUMN
-            );)",
-            "source_table"_a = sourceTable,
-            "source_settings"_a = UseColumnTable ? "WITH (STORE = COLUMN)" : "",
-            "row_table"_a = rowSinkTable,
-            "column_table"_a = columnSinkTable
-        ));
+            );)", "source_table"_a = sourceTable, "source_settings"_a = UseColumnTable ? "WITH (STORE = COLUMN)" : "",
+            "row_table"_a = rowSinkTable, "column_table"_a = columnSinkTable));
 
         ExecQuery(fmt::format(R"(
             UPSERT INTO `{table}`
                 (Data)
             VALUES
-                ("{{\"Val\": \"ABC\"}}");)",
-            "table"_a = sourceTable
-        ));
+                ("{{\"Val\": \"ABC\"}}");)", "table"_a = sourceTable));
 
         TInstant disposition = TInstant::Now();
 
@@ -1037,11 +935,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 $rows = SELECT Data FROM `{source_table}`;
                 INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Unwrap(CAST("[" || Data || "]" AS Json)) AS A FROM $rows;
                 INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Unwrap(CAST(Data || "-B" AS String)) AS B FROM $rows;)",
-                "source_table"_a = sourceTable,
-                "pq_source"_a = pqSource,
-                "output_topic1"_a = firstOutputTopic,
-                "output_topic2"_a = secondOutputTopic
-            ), EStatus::SUCCESS, "", AstChecker(1, 1));
+                          "source_table"_a = sourceTable, "pq_source"_a = pqSource, "output_topic1"_a = firstOutputTopic,
+                          "output_topic2"_a = secondOutputTopic), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             ReadTopicMessage(secondOutputTopic, R"({"Val": "ABC"}-B)", disposition);
@@ -1074,15 +969,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
                 INSERT INTO `{solomon_sink}`.`{second_solomon_project}/{second_solomon_folder}/{second_solomon_service}`
                 SELECT Unwrap(CAST(Data || "-B" AS String)) AS sensor, 2 AS value, Timestamp("2025-03-12T14:40:39Z") AS ts FROM $rows;)",
-                "source_table"_a = sourceTable,
-                "solomon_sink"_a = solomonSink,
-                "first_solomon_project"_a = firstSoLocation.ProjectId,
-                "first_solomon_folder"_a = firstSoLocation.FolderId,
-                "first_solomon_service"_a = firstSoLocation.Service,
-                "second_solomon_project"_a = secondSoLocation.ProjectId,
-                "second_solomon_folder"_a = secondSoLocation.FolderId,
-                "second_solomon_service"_a = secondSoLocation.Service
-            ), EStatus::SUCCESS, "", AstChecker(1, 1));
+                          "source_table"_a = sourceTable, "solomon_sink"_a = solomonSink, "first_solomon_project"_a = firstSoLocation.ProjectId,
+                          "first_solomon_folder"_a = firstSoLocation.FolderId, "first_solomon_service"_a = firstSoLocation.Service,
+                          "second_solomon_project"_a = secondSoLocation.ProjectId, "second_solomon_folder"_a = secondSoLocation.FolderId,
+                          "second_solomon_service"_a = secondSoLocation.Service), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             std::string expectedMetrics = R"([
   {
@@ -1127,23 +1017,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 $rows = SELECT Data FROM `{source_table}`;
                 UPSERT INTO `{column_table}` SELECT Unwrap(CAST(Data || "-C" AS String)) AS C FROM $rows;
                 INSERT INTO `{pq_source}`.`{output_topic}` SELECT Unwrap(CAST("[" || Data || "]" AS Json)) AS A FROM $rows;
-                UPSERT INTO `{row_table}` SELECT Unwrap(CAST(Data || "-B" AS Utf8)) AS B FROM $rows;)",
-                "source_table"_a = sourceTable,
-                "pq_source"_a = pqSource,
-                "output_topic"_a = firstOutputTopic,
-                "row_table"_a = rowSinkTable,
-                "column_table"_a = columnSinkTable
-            ), EStatus::SUCCESS, "", AstChecker(2, 4));
+                UPSERT INTO `{row_table}` SELECT Unwrap(CAST(Data || "-B" AS Utf8)) AS B FROM $rows;)", "source_table"_a = sourceTable,
+                          "pq_source"_a = pqSource, "output_topic"_a = firstOutputTopic, "row_table"_a = rowSinkTable,
+                          "column_table"_a = columnSinkTable), EStatus::SUCCESS, "", AstChecker(2, 4));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             disposition = TInstant::Now();
 
             const auto& results = ExecQuery(fmt::format(R"(
                 SELECT * FROM `{row_table}`;
-                SELECT * FROM `{column_table}`;)",
-                "row_table"_a = rowSinkTable,
-                "column_table"_a = columnSinkTable
-            ));
+                SELECT * FROM `{column_table}`;)", "row_table"_a = rowSinkTable, "column_table"_a = columnSinkTable));
             UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
 
             CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
@@ -1174,10 +1057,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SELECT * FROM `{input_topic}` WITH (
                     STREAMING = "TRUE"
                 ) LIMIT 2
-            )",
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), TTxControl::NoTx());
+            )", "input_topic"_a = inputTopic, "output_topic"_a = outputTopic), TTxControl::NoTx());
 
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopic, "data", 0, /* local */ true);
@@ -1214,19 +1094,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
                 INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
-            )",
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: db.[/Root/" << outputTopic);
+            )", "input_topic"_a = inputTopic, "output_topic"_a = outputTopic), EStatus::GENERIC_ERROR,
+            TStringBuilder()
+                << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: db.[/Root/"
+                << outputTopic);
 
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
                 INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
-            )",
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: /Root/" << pqSource << ".[" << outputTopic);
+            )", "pq_source"_a = pqSource, "input_topic"_a = inputTopic, "output_topic"_a = outputTopic), EStatus::GENERIC_ERROR,
+            TStringBuilder()
+                << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: /Root/"
+                << pqSource << ".[" << outputTopic);
     }
 
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
@@ -1265,20 +1144,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             INSERT INTO `{solomon_sink2}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
                 (value, sensor, ts)
             VALUES
-                (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)",
-            "pq_source1"_a = pqSource1,
-            "pq_source2"_a = pqSource2,
-            "output_topic1"_a = firstOutputTopic,
-            "output_topic2"_a = secondOutputTopic,
-            "solomon_sink1"_a = solomonSink1,
-            "solomon_sink2"_a = solomonSink2,
-            "solomon_project"_a = soLocation.ProjectId,
-            "solomon_folder"_a = soLocation.FolderId,
-            "solomon_service"_a = soLocation.Service
-        ), EStatus::SUCCESS, "", AstChecker(1, 5));
+                (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)", "pq_source1"_a = pqSource1, "pq_source2"_a = pqSource2,
+                      "output_topic1"_a = firstOutputTopic, "output_topic2"_a = secondOutputTopic, "solomon_sink1"_a = solomonSink1,
+                      "solomon_sink2"_a = solomonSink2, "solomon_project"_a = soLocation.ProjectId, "solomon_folder"_a = soLocation.FolderId,
+                      "solomon_service"_a = soLocation.Service), EStatus::SUCCESS, "", AstChecker(1, 5));
 
         ReadTopicMessage(firstOutputTopic, "TestData1");
-        ReadTopicMessages(secondOutputTopic, {"TestData2", "TestData2"});
+        ReadTopicMessages(secondOutputTopic, { "TestData2", "TestData2" });
 
         std::string expectedMetrics = R"([
   {
@@ -1370,9 +1242,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                         value String NOT NULL
                     )
             );
-            SELECT part_id || "-" || offset || "-" || cluster || "-" || value FROM $input;)",
-            "topic"_a = topicName
-        ));
+            SELECT part_id || "-" || offset || "-" || cluster || "-" || value FROM $input;)", "topic"_a = topicName));
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "0-0--value1");
         });
@@ -1395,9 +1265,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                         key Uint64 NOT NULL,
                         value String NOT NULL
                     )
-            );)",
-            "topic"_a = topicName
-        ));
+            );)", "topic"_a = topicName));
 
         auto resultSet = results[0];
         auto columns = resultSet.GetColumnsMeta();
@@ -1435,10 +1303,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                         key Uint64 NOT NULL,
                         value String NOT NULL
                     )
-                );)",
-            "topic"_a = topicName
-        ),
-        EStatus::GENERIC_ERROR);
+                );)", "topic"_a = topicName), EStatus::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
@@ -1453,7 +1318,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
 
         WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
-        WriteTopicMessage(topic, "data", 1, /* local */ true);  // wrong schema
+        WriteTopicMessage(topic, "data", 1, /* local */ true);   // wrong schema
 
         Sleep(TDuration::Seconds(1));
 
@@ -1464,10 +1329,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 key as data
             FROM `{topic}`
             WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-            WHERE __ydb_partition_id = 1)",
-            "topic"_a = topic
-        ),
-        EStatus::PRECONDITION_FAILED, "Cannot parse input");
+            WHERE __ydb_partition_id = 1)", "topic"_a = topic), EStatus::PRECONDITION_FAILED, "Cannot parse input");
     }
 
     Y_UNIT_TEST_F(TableModeWithPartitionPredicate, TStreamingTestFixture) {
@@ -1482,7 +1344,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
 
         WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
-        WriteTopicMessage(topic, "data", 1, /* local */ true);  // wrong schema
+        WriteTopicMessage(topic, "data", 1, /* local */ true);   // wrong schema
         WriteTopicMessage(topic, "{\"key\": \"data2\"}", 2, /* local */ true);
         WriteTopicMessage(topic, "{\"key\": \"data3\"}", 3, /* local */ true);
 
@@ -1496,30 +1358,29 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-                WHERE {filter})",
-                "topic"_a = topic,
-                "filter"_a = filter
-            );
+                WHERE {filter})", "topic"_a = topic, "filter"_a = filter);
             auto result = ExecQuery(text);
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("__ydb_partition_id > 42", 0, [&](TResultSetParser&) {});
+        test("__ydb_partition_id > 42", 0, [&](TResultSetParser&) {
+        });
         test("__ydb_partition_id IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
         });
 
-        test("__ydb_partition_id = 0 \
+        test(
+            "__ydb_partition_id = 0 \
            OR __ydb_partition_id >= 2", 3, [&](TResultSetParser& resultSet) {
-            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
-            || resultSet.ColumnParser(2).GetString() == "data2"
-            || resultSet.ColumnParser(2).GetString() == "data3");
-        });
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0" || resultSet.ColumnParser(2).GetString() == "data2" ||
+                            resultSet.ColumnParser(2).GetString() == "data3");
+            });
 
-        test("(__ydb_partition_id = 0 AND __ydb_offset >=0) \
+        test(
+            "(__ydb_partition_id = 0 AND __ydb_offset >=0) \
            OR (__ydb_partition_id = 2 AND __ydb_offset >=1)", 1, [&](TResultSetParser& resultSet) {
-            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
-        });
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
+            });
 
         test("__ydb_partition_id = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 0);
@@ -1538,10 +1399,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ui32 partitionCount = 1;
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
 
-        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "data", 0, /* local */ true);   // wrong schema
         WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
         WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
-        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "data", 0, /* local */ true);   // wrong schema
 
         Sleep(TDuration::Seconds(1));
 
@@ -1553,43 +1414,44 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-                WHERE {filter})",
-                "topic"_a = topic,
-                "filter"_a = filter
-            );
+                WHERE {filter})", "topic"_a = topic, "filter"_a = filter);
             auto result = ExecQuery(text);
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("__ydb_offset < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("__ydb_offset < -42 AND __ydb_offset > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("__ydb_offset <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("__ydb_offset >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        test("__ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
-            });
-        test("__ydb_offset IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
-            });
-        test("__ydb_offset >= 1 AND __ydb_offset < 3", 2,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
-            });
+        test("__ydb_offset < -42", 0, [&](TResultSetParser& /*resultSet*/) {
+        });
+        test("__ydb_offset < -42 AND __ydb_offset > 42", 0, [&](TResultSetParser& /*resultSet*/) {
+        });
+        test("__ydb_offset <   0", 0, [&](TResultSetParser& /*resultSet*/) {
+        });
+        test("__ydb_offset >  42", 0, [&](TResultSetParser& /*resultSet*/) {
+        });
+        test("__ydb_offset = 1", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
+        test("__ydb_offset IS NOT DISTINCT FROM 1", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
+        test("__ydb_offset >= 1 AND __ydb_offset < 3", 2, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
         // bug
         // test("NOT (__ydb_offset < 1 AND NOT __ydb_offset < 3)", 2,  [&](TResultSetParser& resultSet) {
         //         UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
         //     });
-        test("1 <= __ydb_offset AND 3 > __ydb_offset", 2,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
-            });
-        test("__ydb_offset IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
-            });
-        test("__ydb_offset BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
-            });
-        test("__ydb_offset == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
-            });
+        test("1 <= __ydb_offset AND 3 > __ydb_offset", 2, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
+        test("__ydb_offset IN (1, 2)", 2, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
+        test("__ydb_offset BETWEEN 1 AND 2", 2, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
+        test("__ydb_offset == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
     }
 
     Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {
@@ -1625,23 +1487,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key as data
                 FROM `{topic}`
                 WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-                WHERE {filter})",
-                "topic"_a = topic,
-                "filter"_a = filter
-            );
+                WHERE {filter})", "topic"_a = topic, "filter"_a = filter);
             auto result = ExecQuery(text);
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
-        test("__ydb_partition_id = 0 AND __ydb_offset = 1", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
-            });
-        test("__ydb_partition_id = 1 AND __ydb_offset >= 2", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
-            });
-        test("__ydb_partition_id = 2 AND __ydb_offset < 1", 1,  [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
-            });
+        test("__ydb_partition_id = 0 AND __ydb_offset = 1", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
+        });
+        test("__ydb_partition_id = 1 AND __ydb_offset >= 2", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
+        test("__ydb_partition_id = 2 AND __ydb_offset < 1", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
+        });
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
@@ -1649,28 +1508,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
-        constexpr char cloudId[] =  "testcloud4";
-        constexpr char cloudIdAlt[] =  "testcloud5";
+        constexpr char cloudId[] = "testcloud4";
+        constexpr char cloudIdAlt[] = "testcloud5";
 
         constexpr char sourceName[] = "sourceName";
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
-        constexpr char serviceAccountId[] = "foobar"; // not verified
+        constexpr char serviceAccountId[] = "foobar";   // not verified
 
         // Prepare "mock cloud" database
-        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, { { "cloud_id", cloudId } });
         auto location = GetKikimrRunner()->GetEndpoint();
         NYdb::TDriver driver(
-            NYdb::TDriverConfig()
-                .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
-                .SetEndpoint(location)
-                .SetDatabase(databasePath)
-        );
+            NYdb::TDriverConfig().SetDiscoveryMode(NYdb::EDiscoveryMode::Async).SetEndpoint(location).SetDatabase(databasePath));
         NYdb::NTopic::TTopicClient topicClient(driver);
         {
             WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
                 auto result = topicClient.CreateTopic(topicName).GetValueSync();
                 if (result.IsSuccess()) {
-                   return true;
+                    return true;
                 }
                 error = result.GetIssues().ToString();
                 UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
@@ -1690,63 +1545,33 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 INITIAL_TOKEN_SECRET_PATH = "{secret}",
                 SERVICE_ACCOUNT_ID = "{service_account_id}"
             );)";
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = missingSecretPath,
-                "service_account_id"_a = serviceAccountId
-            ),
-            EStatus::BAD_REQUEST,
-            fmt::format(
-                R"(Error: secret `/Root/{secret}` not found)",
-                "secret"_a = missingSecretPath));
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = sourceName, "pq_location"_a = location,
+                      "pq_database_name"_a = databasePath, "secret"_a = missingSecretPath, "service_account_id"_a = serviceAccountId),
+            EStatus::BAD_REQUEST, fmt::format(R"(Error: secret `/Root/{secret}` not found)", "secret"_a = missingSecretPath));
 
         // Check bad INITIAL_TOKEN
         constexpr char badSecretPath[] = "eds_bad_iam_token";
         ExecQuery(fmt::format(R"(
                 CREATE SECRET `{secret}` WITH (value = "{token}");
-            )",
-            "secret"_a = badSecretPath,
-            "token"_a = "xyz@builtin"
-            ));
+            )", "secret"_a = badSecretPath, "token"_a = "xyz@builtin"));
 
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = badSecretPath,
-                "service_account_id"_a = serviceAccountId
-            ),
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = sourceName, "pq_location"_a = location,
+                      "pq_database_name"_a = databasePath, "secret"_a = badSecretPath, "service_account_id"_a = serviceAccountId),
             EStatus::UNAUTHORIZED, "Error: Access denied");
 
         constexpr char secretPath[] = "eds_iam_token";
         ExecQuery(fmt::format(R"(
                 CREATE SECRET `{secret}` WITH (value = "{token}");
-            )",
-            "secret"_a = secretPath,
-            "token"_a = BUILTIN_ACL_ROOT
-            ));
+            )", "secret"_a = secretPath, "token"_a = BUILTIN_ACL_ROOT));
 
         // Check successful EDS creation
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = serviceAccountId
-        ));
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = sourceName, "pq_location"_a = location,
+            "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = serviceAccountId));
 
         // Verify EDS description
         {
-            const auto externalDataSourceDesc = Navigate(
-                    GetRuntime(),
-                    GetRuntime().AllocateEdgeActor(),
-                    TStringBuilder() << "/Root/" << sourceName,
-                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(),
+                TStringBuilder() << "/Root/" << sourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -1768,24 +1593,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("{test_data}");
-                )",
-                "pq_source"_a = sourceName,
-                "topic_name"_a = topicName,
-                "test_data"_a = testData
-            ));
+                )", "pq_source"_a = sourceName, "topic_name"_a = topicName, "test_data"_a = testData));
 
-        ReadTopicMessages(topicName, TVector<std::string> { testData }, topicClient, now, true);
+        ReadTopicMessages(topicName, TVector<std::string>{ testData }, topicClient, now, true);
 
         driver.Stop(true);
 
-        ExecQuery(fmt::format(
-                "DROP EXTERNAL DATA SOURCE {pq_source}",
-                "pq_source"_a = sourceName
-        ));
+        ExecQuery(fmt::format("DROP EXTERNAL DATA SOURCE {pq_source}", "pq_source"_a = sourceName));
 
         // Check successful EDS creation with overridden RESOURCE_ID
         ExecQuery(fmt::format(
-                R"(
+            R"(
                 CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                     SOURCE_TYPE = "Ydb",
                     LOCATION = "{pq_location}",
@@ -1794,22 +1612,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     INITIAL_TOKEN_SECRET_PATH = "{secret}",
                     RESOURCE_ID = "{cloud_id}",
                     SERVICE_ACCOUNT_ID = "{service_account_id}"
-                );)",
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = badSecretPath,
-                "cloud_id"_a = cloudIdAlt,
-                "service_account_id"_a = serviceAccountId
-        ));
+                );)", "pq_source"_a = sourceName, "pq_location"_a = location, "pq_database_name"_a = databasePath, "secret"_a = badSecretPath,
+            "cloud_id"_a = cloudIdAlt, "service_account_id"_a = serviceAccountId));
 
         // Verify EDS description
         {
-            const auto externalDataSourceDesc = Navigate(
-                    GetRuntime(),
-                    GetRuntime().AllocateEdgeActor(),
-                    TStringBuilder() << "/Root/" << sourceName,
-                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(),
+                TStringBuilder() << "/Root/" << sourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -1825,53 +1634,27 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudIdAlt);
         }
 
-        ExecQuery(fmt::format(
-                "DROP EXTERNAL DATA SOURCE {pq_source}",
-                "pq_source"_a = sourceName
-        ));
+        ExecQuery(fmt::format("DROP EXTERNAL DATA SOURCE {pq_source}", "pq_source"_a = sourceName));
 
         // Check successful EDS creation with sa returning invalid tokens
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = "bad-token"
-        ));
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = sourceName, "pq_location"_a = location,
+            "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = "bad-token"));
 
         // Confirm write to topic via eds fails
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for bad token");
-                )",
-                "pq_source"_a = sourceName,
-                "topic_name"_a = topicName
-            ),
-            EStatus::GENERIC_ERROR, "Error: Access denied");
+                )", "pq_source"_a = sourceName, "topic_name"_a = topicName), EStatus::GENERIC_ERROR, "Error: Access denied");
 
-        ExecQuery(fmt::format(
-                "DROP EXTERNAL DATA SOURCE {pq_source}",
-                "pq_source"_a = sourceName
-        ));
+        ExecQuery(fmt::format("DROP EXTERNAL DATA SOURCE {pq_source}", "pq_source"_a = sourceName));
 
         constexpr char serviceAccountUnavailableToken[] = "unavailable-token";
         // Check with "unavailable-token" SA
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = sourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = serviceAccountUnavailableToken
-        ));
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = sourceName, "pq_location"_a = location,
+            "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = serviceAccountUnavailableToken));
 
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("data for unavailable-token");
-                )",
-                "pq_source"_a = sourceName,
-                "topic_name"_a = topicName
-            ),
-            EStatus::GENERIC_ERROR,
+                )", "pq_source"_a = sourceName, "topic_name"_a = topicName), EStatus::GENERIC_ERROR,
             TStringBuilder() << "Too busy to respond forever");
 
         // Check solomon cloud auth
@@ -1897,15 +1680,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     CLUSTER = "{cluster}",
                     USE_TLS = "false"
                 );
-            )sql",
-            "secret"_a = secretPath,
-            "cloud_id"_a = cloudId,
-            "project"_a = soLocation.ProjectId,
-            "cluster"_a = soLocation.FolderId,
-            "service_account_id"_a = serviceAccountId,
-            "solomon_source"_a = solomonSourceName,
-            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-        ));
+            )sql", "secret"_a = secretPath, "cloud_id"_a = cloudId, "project"_a = soLocation.ProjectId, "cluster"_a = soLocation.FolderId,
+            "service_account_id"_a = serviceAccountId, "solomon_source"_a = solomonSourceName, "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")));
 
         CleanupSolomon(soLocation);
         ExecQuery(fmt::format(R"(
@@ -1914,10 +1690,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 13333 AS value,
                 "test-insert" AS sensor,
                 Timestamp("2025-03-12T14:40:39Z") AS ts;
-            )",
-            "solomon_sink"_a = solomonSourceName,
-            "solomon_service"_a = soLocation.Service
-            ));
+            )", "solomon_sink"_a = solomonSourceName, "solomon_service"_a = soLocation.Service));
 
         std::string expectedMetrics = R"([
   {
@@ -1941,29 +1714,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         constexpr char serviceAccountBadId[] = "bad-sa";
         // Check with "bad-sa" SA
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = pqBadSourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = serviceAccountBadId
-            ),
-            EStatus::UNAUTHORIZED,
-            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::PERMISSION_DENIED << ", ");
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = pqBadSourceName, "pq_location"_a = location,
+                      "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = serviceAccountBadId),
+            EStatus::UNAUTHORIZED, TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::PERMISSION_DENIED << ", ");
 
         constexpr char serviceAccountUnavailable[] = "unavailable";
         // Check with "unavailable" SA
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = pqBadSourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = serviceAccountUnavailable
-            ),
-            EStatus::UNAVAILABLE,
-            TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::UNAVAILABLE << ", ");
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = pqBadSourceName, "pq_location"_a = location,
+                      "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = serviceAccountUnavailable),
+            EStatus::UNAVAILABLE, TStringBuilder() << "Error: gRpcStatusCode: " << (int)grpc::StatusCode::UNAVAILABLE << ", ");
 
         // Check with disabled feature-flag
         {
@@ -1978,23 +1737,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // a) A new query must fail during scheme entry lookup when IAM credentials are disabled.
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
-                )",
-                "pq_source"_a = sourceName,
-                "topic_name"_a = topicName
-            ),
-            EStatus::GENERIC_ERROR, "Failed to get scheme entry type: AUTH_METHOD=IAM is disabled");
+                )", "pq_source"_a = sourceName, "topic_name"_a = topicName), EStatus::GENERIC_ERROR,
+            "Failed to get scheme entry type: AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
-        ExecQuery(fmt::format(
-                createExternalDataSourceTemplate,
-                "pq_source"_a = pqBadSourceName,
-                "pq_location"_a = location,
-                "pq_database_name"_a = databasePath,
-                "secret"_a = secretPath,
-                "service_account_id"_a = serviceAccountId
-            ),
-            EStatus::UNSUPPORTED,
-            "Error: AUTH_METHOD=IAM is disabled");
+        ExecQuery(fmt::format(createExternalDataSourceTemplate, "pq_source"_a = pqBadSourceName, "pq_location"_a = location,
+                      "pq_database_name"_a = databasePath, "secret"_a = secretPath, "service_account_id"_a = serviceAccountId),
+            EStatus::UNSUPPORTED, "Error: AUTH_METHOD=IAM is disabled");
     }
 
     Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
@@ -2022,64 +1771,45 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ExecQuery(fmt::format(R"sql(
                 $p = SELECT LENGTH(Data) AS l FROM `{source}`.`{i1}` WITH (STREAMING = "TRUE");
                 SELECT * FROM `{source}`.`{i2}` WITH (STREAMING = "TRUE") LIMIT (SELECT l FROM $p);
-            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2),
-            EStatus::GENERIC_ERROR,
-            "Unsupported callable for streaming processing: 'Condense'"
-        );
+            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2), EStatus::GENERIC_ERROR,
+            "Unsupported callable for streaming processing: 'Condense'");
 
         // Streaming filter precompute
         ExecQuery(fmt::format(R"sql(
                 $p = SELECT Data FROM `{source}`.`{i1}` WITH (STREAMING = "TRUE");
                 SELECT * FROM `{source}`.`{i2}` WITH (STREAMING = "TRUE") WHERE Data = (SELECT Data FROM $p);
-            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2),
-            EStatus::GENERIC_ERROR,
-            "Unsupported callable for streaming processing: 'Condense'"
-        );
+            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2), EStatus::GENERIC_ERROR,
+            "Unsupported callable for streaming processing: 'Condense'");
 
         //// Sorting ////
 
         // Simple sort
         ExecQuery(fmt::format(R"sql(
                 SELECT * FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") ORDER BY Data;
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Sorting of streaming input is not supported"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Sorting of streaming input is not supported");
 
         // Sort with limit
         ExecQuery(fmt::format(R"sql(
                 SELECT * FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") ORDER BY LENGTH(Data) LIMIT 10;
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Sorting of streaming input is not supported"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Sorting of streaming input is not supported");
 
         //// Aggregations ////
 
         // Simple agg
         ExecQuery(fmt::format(R"sql(
                 SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") GROUP BY Data;
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Streaming aggregation output must be written to a table"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Streaming aggregation output must be written to a table");
 
         // Distinct agg
         ExecQuery(fmt::format(R"sql(
                 SELECT DISTINCT Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Streaming aggregation output must be written to a table"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Streaming aggregation output must be written to a table");
 
         // Agg by sessions
         ExecQuery(fmt::format(R"sql(
                 SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
                 GROUP BY Data, SessionWindow(CAST(Data AS Timestamp), Interval("PT1S"));
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Session windows are not supported for streaming aggregation"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Session windows are not supported for streaming aggregation");
 
         //// Window functions ////
 
@@ -2087,10 +1817,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ExecQuery(fmt::format(R"sql(
                 SELECT COUNT(*) OVER w AS DataCnt, Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
                 WINDOW w AS (PARTITION BY Data ORDER BY LENGTH(Data));
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Window function over streaming input is not supported"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Window function over streaming input is not supported");
 
         //// Process ////
 
@@ -2102,10 +1829,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 }};
                 PROCESS `{source}`.`{i}` WITH (STREAMING = "TRUE")
                 USING $serialize_json(TableRows());
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Unsupported callable for streaming processing: 'Apply'"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Unsupported callable for streaming processing: 'Apply'");
 
         //// Reduce ////
 
@@ -2114,10 +1838,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 $r = ($stream) -> (YQL::Map($stream, ($row) -> (<|Data: $row.Data || "X"|>)));
                 REDUCE `{source}`.`{i}` WITH (STREAMING = "TRUE") ON Data
                 USING ALL $r(TableRows());
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Reducing by keys of streaming input is not supported"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Reducing by keys of streaming input is not supported");
 
         // Reduce with order
         ExecQuery(fmt::format(R"sql(
@@ -2125,10 +1846,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 REDUCE `{source}`.`{i}` WITH (STREAMING = "TRUE")
                 PRESORT LENGTH(Data) ON Data
                 USING ALL $r(TableRows());
-            )sql", "source"_a = source, "i"_a = input1),
-            EStatus::GENERIC_ERROR,
-            "Reducing by keys of streaming input is not supported"
-        );
+            )sql", "source"_a = source, "i"_a = input1), EStatus::GENERIC_ERROR, "Reducing by keys of streaming input is not supported");
     }
 
     Y_UNIT_TEST_F(StreamingJoinConstraintsValidation, TStreamingTestFixture) {
@@ -2168,21 +1886,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         // Algo, lStream, rStream, Error
         const std::vector<std::tuple<TString, std::optional<bool>, std::optional<bool>, TString>> joinTestCases = {
-            {"FULL OUTER", std::nullopt, std::nullopt, "Streaming inputs are not supported for FULL OUTER join"},
-            {"EXCLUSION", std::nullopt, std::nullopt, "Streaming inputs are not supported for EXCLUSION join"},
-            {"LEFT", std::nullopt, true, "Streaming right input is not supported for LEFT join"},
-            {"LEFT ONLY", std::nullopt, true, "Streaming right input is not supported for LEFT ONLY join"},
-            {"LEFT SEMI", std::nullopt, true, "Streaming right input is not supported for LEFT SEMI join"},
-            {"RIGHT", true, std::nullopt, "Streaming left input is not supported for RIGHT join"},
-            {"RIGHT ONLY", true, std::nullopt, "Streaming left input is not supported for RIGHT ONLY join"},
-            {"RIGHT SEMI", true, std::nullopt, "Streaming left input is not supported for RIGHT SEMI join"},
-            {"INNER", true, true, "Join of two streaming inputs is not supported"},
-            {"CROSS", true, true, "Join of two streaming inputs is not supported"},
+            { "FULL OUTER", std::nullopt, std::nullopt, "Streaming inputs are not supported for FULL OUTER join" },
+            { "EXCLUSION", std::nullopt, std::nullopt, "Streaming inputs are not supported for EXCLUSION join" },
+            { "LEFT", std::nullopt, true, "Streaming right input is not supported for LEFT join" },
+            { "LEFT ONLY", std::nullopt, true, "Streaming right input is not supported for LEFT ONLY join" },
+            { "LEFT SEMI", std::nullopt, true, "Streaming right input is not supported for LEFT SEMI join" },
+            { "RIGHT", true, std::nullopt, "Streaming left input is not supported for RIGHT join" },
+            { "RIGHT ONLY", true, std::nullopt, "Streaming left input is not supported for RIGHT ONLY join" },
+            { "RIGHT SEMI", true, std::nullopt, "Streaming left input is not supported for RIGHT SEMI join" },
+            { "INNER", true, true, "Join of two streaming inputs is not supported" },
+            { "CROSS", true, true, "Join of two streaming inputs is not supported" },
         };
         const auto anyJoinError = "Using ANY JOIN is not supported for streaming inputs";
 
         // Test that "map" and "grace" `PRAGMA ydb.HashJoinMode` options => same as without `PRAGMA ydb.HashJoinMode`
-        const std::vector<TString> hashModes = {"", "map", "grace"};
+        const std::vector<TString> hashModes = { "", "map", "grace" };
 
         enum ENUM_TEST_OPTIONS {
             TEST_OPT_LEFT_STREAM = 1,
@@ -2240,12 +1958,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                                 DataLeft String NOT NULL
                             )
                         )
-                    )sql",
-                    "source"_a = source,
-                    "i1"_a = input1,
-                    "left_settings"_a = lStream ? "TRUE" : "FALSE",
-                    "left_any"_a = lAny ? "ANY" : ""
-                );
+                    )sql", "source"_a = source, "i1"_a = input1, "left_settings"_a = lStream ? "TRUE" : "FALSE",
+                    "left_any"_a = lAny ? "ANY" : "");
                 const auto rStreamSql = fmt::format(
                     R"sql(
                         {right_any} `{source}`.`{i2}` WITH (
@@ -2255,12 +1969,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                                 DataRight String NOT NULL
                             )
                         )
-                    )sql",
-                    "source"_a = source,
-                    "i2"_a = isSelf ? input1 : input2,
-                    "right_settings"_a = rStream ? "TRUE" : "FALSE",
-                    "right_any"_a = rAny ? "ANY" : ""
-                );
+                    )sql", "source"_a = source, "i2"_a = isSelf ? input1 : input2, "right_settings"_a = rStream ? "TRUE" : "FALSE",
+                    "right_any"_a = rAny ? "ANY" : "");
 
                 if (isSelf) {
                     // TODO: remove it when topic self join is fixed in YQ-5353
@@ -2270,55 +1980,46 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 // Execute topic X topic join
                 const auto& hashMode = hashModes[i / TEST_OPT_MAX];
                 ExecQuery(fmt::format(
-                    R"sql(
+                              R"sql(
                         {hash_mode};
                         SELECT * FROM {left_stream} AS tp
                         {algo} JOIN {right_stream} AS tb
                         {correlation};
-                    )sql",
-                    "left_stream"_a = lStreamSql,
-                    "right_stream"_a = rStreamSql,
-                    "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
-                    "algo"_a = algo,
-                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
-                ), EStatus::GENERIC_ERROR, error);
+                    )sql", "left_stream"_a = lStreamSql, "right_stream"_a = rStreamSql,
+                              "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\""
+                                                       : TStringBuilder(), "algo"_a = algo,
+                              "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""), EStatus::GENERIC_ERROR, error);
 
                 const auto finiteTableName = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable;
 
                 // Execute topic X table join
                 if (!rStream) {
-                    ExecQuery(fmt::format(
-                        R"sql(
+                    ExecQuery(
+                        fmt::format(
+                            R"sql(
                             {hash_mode};
                             SELECT * FROM {left_stream} AS tp
                             {algo} JOIN {right_any} {right_table} AS tb
                             {correlation};
-                        )sql",
-                        "left_stream"_a = lStreamSql,
-                        "right_table"_a = finiteTableName,
-                        "right_any"_a = rAny ? "ANY" : "",
-                        "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
-                        "algo"_a = algo,
-                        "correlation"_a = algo != "CROSS" ? "ON CAST(tp.DataLeft AS Int32) = tb.id" : ""
-                    ), EStatus::GENERIC_ERROR, error);
+                        )sql", "left_stream"_a = lStreamSql, "right_table"_a = finiteTableName, "right_any"_a = rAny ? "ANY" : "",
+                            "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                            "algo"_a = algo, "correlation"_a = algo != "CROSS" ? "ON CAST(tp.DataLeft AS Int32) = tb.id" : ""),
+                        EStatus::GENERIC_ERROR, error);
                 }
 
                 // Execute table X topic join
                 if (!lStream) {
-                    ExecQuery(fmt::format(
-                        R"sql(
+                    ExecQuery(
+                        fmt::format(
+                            R"sql(
                             {hash_mode};
                             SELECT * FROM {left_any} {left_table} AS tp
                             {algo} JOIN {right_stream} AS tb
                             {correlation};
-                        )sql",
-                        "left_table"_a = finiteTableName,
-                        "right_stream"_a = rStreamSql,
-                        "left_any"_a = lAny ? "ANY" : "",
-                        "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
-                        "algo"_a = algo,
-                        "correlation"_a = algo != "CROSS" ? "ON tp.id = CAST(tb.DataRight AS Int32)" : ""
-                    ), EStatus::GENERIC_ERROR, error);
+                        )sql", "left_table"_a = finiteTableName, "right_stream"_a = rStreamSql, "left_any"_a = lAny ? "ANY" : "",
+                            "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                            "algo"_a = algo, "correlation"_a = algo != "CROSS" ? "ON tp.id = CAST(tb.DataRight AS Int32)" : ""),
+                        EStatus::GENERIC_ERROR, error);
                 }
             }
         }
@@ -2329,9 +2030,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
         auto pqGateway = SetupMockPqGateway();
 
-        const std::vector<TString> tableData = {"X", "TT", "X"};
-        const std::vector<TString> lStreamData = {"X", "YY", "X"};
-        const std::vector<TString> rStreamData = {"X", "ZZ", "X"};
+        const std::vector<TString> tableData = { "X", "TT", "X" };
+        const std::vector<TString> lStreamData = { "X", "YY", "X" };
+        const std::vector<TString> rStreamData = { "X", "ZZ", "X" };
 
         constexpr char input1[] = "streamingQueryJoinTypesFirstInputTopic";
         constexpr char input2[] = "streamingQueryJoinTypesSecondInputTopic";
@@ -2369,7 +2070,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 ]);
         )sql", "t"_a = columnTable));
 
-        const auto testJoinQuery = [&](const TString& text, const TString& hashMode, const TString& algo, bool lAny, bool rAny, bool lStream, bool rStream, bool self) {
+        const auto testJoinQuery = [&](const TString& text, const TString& hashMode, const TString& algo, bool lAny, bool rAny, bool lStream,
+                                       bool rStream, bool self) {
             const auto fullText = fmt::format(R"sql(
                     {opt_pragma};
                     PRAGMA ydb.UseGraceJoinCoreForMap = "true";
@@ -2381,12 +2083,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                         TryMember(TableRow(), "DataLeft", TryMember(TableRow(), "id", NULL)) ?? "null" AS Left,
                         TryMember(TableRow(), "DataRight", TryMember(TableRow(), "id", NULL)) ?? "null" AS Right
                     ))))) FROM $data;
-                )sql",
-                "opt_pragma"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
-                "query_text"_a = text,
-                "pq_source"_a = source,
-                "output_topic"_a = outputTopic
-            );
+                )sql", "opt_pragma"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                "query_text"_a = text, "pq_source"_a = source, "output_topic"_a = outputTopic);
             Cerr << "Running query:\n" << fullText << Endl;
 
             auto resultFuture = GetQueryClient()->ExecuteQuery(fullText, TTxControl::NoTx());
@@ -2394,7 +2092,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             if (resultFuture.HasValue() || resultFuture.HasException()) {
                 const auto result = resultFuture.ExtractValueSync();
-                UNIT_FAIL("Query unexpectedly finished with status: " << result.GetStatus() << ", and issues:\n" << result.GetIssues().ToOneLineString() << "\nQuery text:\n" << text);
+                UNIT_FAIL("Query unexpectedly finished with status: " << result.GetStatus() << ", and issues:\n"
+                                                                      << result.GetIssues().ToOneLineString() << "\nQuery text:\n"
+                                                                      << text);
             }
 
             const auto writeData = [&](IMockPqReadSession::TPtr session, const std::vector<TString>& data) {
@@ -2430,29 +2130,26 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 for (const auto& r : rData) {
                     std::optional<std::pair<TString, TString>> res;
                     if (algo == "LEFT" && l != "null" && (l == r || (r == "null" && !std::binary_search(rData.begin(), rData.end(), l)))) {
-                        res = {l, l == r ? r : "null"};
+                        res = { l, l == r ? r : "null" };
                     } else if (algo == "LEFT ONLY" && r == "null" && !std::binary_search(rData.begin(), rData.end(), l)) {
-                        res = {l, "null"};
+                        res = { l, "null" };
                     } else if (algo == "LEFT SEMI" && r == "null" && l != "null" && std::binary_search(rData.begin(), rData.end(), l)) {
-                        res = {l, "null"};
-                    } else if (algo == "RIGHT" && r != "null" && (l == r || (l == "null" && !std::binary_search(lData.begin(), lData.end(), r)))) {
-                        res = {l == r ? l : "null", r};
+                        res = { l, "null" };
+                    } else if (algo == "RIGHT" && r != "null" &&
+                               (l == r || (l == "null" && !std::binary_search(lData.begin(), lData.end(), r)))) {
+                        res = { l == r ? l : "null", r };
                     } else if (algo == "RIGHT ONLY" && l == "null" && !std::binary_search(lData.begin(), lData.end(), r)) {
-                        res = {"null", r};
+                        res = { "null", r };
                     } else if (algo == "RIGHT SEMI" && l == "null" && r != "null" && std::binary_search(lData.begin(), lData.end(), r)) {
-                        res = {"null", r};
+                        res = { "null", r };
                     } else if (algo == "INNER" && l != "null" && l == r) {
-                        res = {l, r};
+                        res = { l, r };
                     } else if (algo == "CROSS" && l != "null" && r != "null") {
-                        res = {l, r};
+                        res = { l, r };
                     }
 
                     if (res) {
-                        messages.emplace_back(fmt::format(
-                            R"({{"Left":"{l}","Right":"{r}"}})",
-                            "l"_a = res->first,
-                            "r"_a = res->second
-                        ));
+                        messages.emplace_back(fmt::format(R"({{"Left":"{l}","Right":"{r}"}})", "l"_a = res->first, "r"_a = res->second));
                     }
                 }
             }
@@ -2466,8 +2163,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // stream Cross finite
         // finite Cross stream
 
-        const std::vector<TString> joinAlgos = {"LEFT", "LEFT ONLY", "LEFT SEMI", "RIGHT", "RIGHT ONLY", "RIGHT SEMI", "INNER", "CROSS"};
-        const std::vector<TString> hashModes = {"", "map", "grace"};
+        const std::vector<TString> joinAlgos = { "LEFT", "LEFT ONLY", "LEFT SEMI", "RIGHT", "RIGHT ONLY", "RIGHT SEMI", "INNER", "CROSS" };
+        const std::vector<TString> hashModes = { "", "map", "grace" };
 
         enum ENUM_TEST_OPTIONS {
             TEST_OPT_STREAM_SIDE = 1,
@@ -2501,12 +2198,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                                 DataLeft String NOT NULL
                             )
                         ) LIMIT {limit})
-                    )sql",
-                    "source"_a = source,
-                    "i1"_a = input1,
-                    "left_settings"_a = lStream ? "TRUE" : "FALSE",
-                    "limit"_a = lStreamData.size()
-                );
+                    )sql", "source"_a = source, "i1"_a = input1, "left_settings"_a = lStream ? "TRUE" : "FALSE", "limit"_a = lStreamData.size());
                 const auto rStreamSql = fmt::format(
                     R"sql(
                         (SELECT * FROM `{source}`.`{i2}` WITH (
@@ -2516,12 +2208,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                                 DataRight String NOT NULL
                             )
                         ) LIMIT {limit})
-                    )sql",
-                    "source"_a = source,
-                    "i2"_a = isSelf ? input1 : input2,
-                    "right_settings"_a = !lStream ? "TRUE" : "FALSE",
-                    "limit"_a = isSelf ? lStreamData.size() : rStreamData.size()
-                );
+                    )sql", "source"_a = source, "i2"_a = isSelf ? input1 : input2, "right_settings"_a = !lStream ? "TRUE" : "FALSE",
+                    "limit"_a = isSelf ? lStreamData.size() : rStreamData.size());
 
                 if (isSelf) {
                     // TODO: remove it when topic self join is fixed in YQ-5353
@@ -2531,54 +2219,40 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 // Execute topic X topic join
                 const auto& hashMode = hashModes[i / TEST_OPT_MAX];
                 testJoinQuery(fmt::format(
-                    R"sql(
+                                  R"sql(
                         SELECT * FROM {left_any} {left_stream} AS tp
                         {algo} JOIN {right_any} {right_stream} AS tb
                         {correlation};
-                    )sql",
-                    "left_stream"_a = lStreamSql,
-                    "right_stream"_a = rStreamSql,
-                    "left_any"_a = (!lStream && any) ? "ANY" : "",
-                    "right_any"_a = (lStream && any) ? "ANY" : "",
-                    "algo"_a = algo,
-                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
-                ), hashMode, algo, (!lStream && any), (lStream && any), /* lStream */ true, /* rStream */ true, isSelf);
+                    )sql", "left_stream"_a = lStreamSql, "right_stream"_a = rStreamSql, "left_any"_a = (!lStream && any) ? "ANY" : "",
+                                  "right_any"_a = (lStream && any) ? "ANY" : "", "algo"_a = algo,
+                                  "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""), hashMode, algo, (!lStream && any),
+                    (lStream && any), /* lStream */ true, /* rStream */ true, isSelf);
 
-                const auto finiteTableSql = fmt::format(
-                    R"sql((SELECT id FROM {table}))sql",
-                    "table"_a = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable
-                );
+                const auto finiteTableSql =
+                    fmt::format(R"sql((SELECT id FROM {table}))sql", "table"_a = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable);
 
                 // Execute topic X table join
                 if (lStream) {
                     testJoinQuery(fmt::format(
-                        R"sql(
+                                      R"sql(
                             SELECT * FROM {left_stream} AS tp
                             {algo} JOIN {right_any} {right_table} AS tb
                             {correlation};
-                        )sql",
-                        "left_stream"_a = lStreamSql,
-                        "right_table"_a = finiteTableSql,
-                        "right_any"_a = any ? "ANY" : "",
-                        "algo"_a = algo,
-                        "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.id" : ""
-                    ), hashMode, algo, /* lAny*/ false, any, /* lStream */ true, /* rStream */ false, isSelf);
+                        )sql", "left_stream"_a = lStreamSql, "right_table"_a = finiteTableSql, "right_any"_a = any ? "ANY" : "", "algo"_a = algo,
+                                      "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.id" : ""), hashMode, algo, /* lAny*/ false, any,
+                        /* lStream */ true, /* rStream */ false, isSelf);
                 }
 
                 // Execute table X topic join
                 if (!lStream) {
                     testJoinQuery(fmt::format(
-                        R"sql(
+                                      R"sql(
                             SELECT * FROM {left_any} {left_table} AS tp
                             {algo} JOIN {right_stream} AS tb
                             {correlation};
-                        )sql",
-                        "left_table"_a = finiteTableSql,
-                        "right_stream"_a = rStreamSql,
-                        "left_any"_a = any ? "ANY" : "",
-                        "algo"_a = algo,
-                        "correlation"_a = algo != "CROSS" ? "ON tp.id = tb.DataRight" : ""
-                    ), hashMode, algo, any, /* rAny*/ false, /* lStream */ false, /* rStream */ true, isSelf);
+                        )sql", "left_table"_a = finiteTableSql, "right_stream"_a = rStreamSql, "left_any"_a = any ? "ANY" : "", "algo"_a = algo,
+                                      "correlation"_a = algo != "CROSS" ? "ON tp.id = tb.DataRight" : ""), hashMode, algo, any, /* rAny*/ false,
+                        /* lStream */ false, /* rStream */ true, isSelf);
                 }
             }
         }
@@ -2603,13 +2277,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 )
             )
             LIMIT 1;
-        )",
-            "source"_a = sourceName,
-            "topic"_a = topicName
-        ),
-        EStatus::GENERIC_ERROR,
-        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
-        );
+        )", "source"_a = sourceName, "topic"_a = topicName), EStatus::GENERIC_ERROR,
+            "SystemMetadata is not allowed, use __ydb_-prefixed columns instead");
     }
 
     Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInTableMode, TStreamingTestFixture) {
@@ -2629,12 +2298,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key String NOT NULL
                 )
             );
-        )",
-            "topic"_a = topicName
-        ),
-        EStatus::GENERIC_ERROR,
-        "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"
-        );
+        )", "topic"_a = topicName), EStatus::GENERIC_ERROR, "SystemMetadata is not allowed, use __ydb_-prefixed columns instead");
     }
 
     Y_UNIT_TEST_F(ForbidYqlSysColumnsAllowsYdbColumnsInTableMode, TStreamingTestFixture) {
@@ -2656,9 +2320,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     key Uint64 NOT NULL,
                     value String NOT NULL
                 )
-            );)",
-            "topic"_a = topicName
-        ));
+            );)", "topic"_a = topicName));
 
         CheckScriptResult(results[0], 3, 1, [](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("__ydb_partition_id").GetUint64(), 0);
@@ -2675,7 +2337,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateScopedTopic(topicName);
         CreatePqSource(sourceName);
 
-        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+        for (const char* column : { "_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time" }) {
             auto query = fmt::format(R"(
                 SELECT `{column}` FROM `{source}`.`{topic}` WITH (
                     STREAMING = "TRUE",
@@ -2698,7 +2360,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char topicName[] = "yqlSysColsTableTopic";
         CreateTopic(topicName, std::nullopt, true);
 
-        for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
+        for (const char* column : { "_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time" }) {
             auto query = fmt::format(R"(
                 SELECT `{column}` FROM {topic} WITH (
                     FORMAT = "json_each_row",
@@ -2722,9 +2384,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(topicName, std::nullopt, true);
 
         for (const auto& [column, predicate] : std::vector<std::pair<const char*, const char*>>{
-            {"_yql_sys_partition_id", "_yql_sys_partition_id = 0"},
-            {"_yql_sys_offset", "_yql_sys_offset >= 0"}
-        }) {
+                 { "_yql_sys_partition_id", "_yql_sys_partition_id = 0" }, { "_yql_sys_offset", "_yql_sys_offset >= 0" } }) {
             auto query = fmt::format(R"(
                 SELECT key FROM {topic} WITH (
                     FORMAT = "json_each_row",
@@ -2745,10 +2405,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}`
-            SELECT String::JoinFromList(ListReplicate("X", 6000000), "-");)",
-            "pq_source"_a = pqSourceName,
-            "output_topic"_a = outputTopic
-        ));
+            SELECT String::JoinFromList(ListReplicate("X", 6000000), "-");)", "pq_source"_a = pqSourceName, "output_topic"_a = outputTopic));
 
         std::string expectedMessage(6000000 * 2 - 1, '-');
         for (size_t i = 0; i < expectedMessage.size(); i += 2) {
@@ -2758,4 +2415,4 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -1,20 +1,18 @@
-#include <ydb/library/yql/providers/ydb_external/actors/read_stream.h>
-#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/ydb_external/actors/read_stream.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
-#include <library/cpp/testing/common/network.h>
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <arrow/api.h>
 #include <arrow/ipc/writer.h>
 #include <grpcpp/grpcpp.h>
-
-#include <util/string/builder.h>
+#include <library/cpp/testing/common/network.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/str.h>
 #include <util/stream/zlib.h>
+#include <util/string/builder.h>
 
 #include <atomic>
 #include <chrono>
@@ -47,8 +45,8 @@ Ydb::Query::ExecuteQueryResponsePart Batch(ui64 rows = 1) {
         UNIT_ASSERT(builder.Append(42 + row).ok());
     }
     auto array = builder.Finish().ValueOrDie();
-    auto schema = arrow::schema({arrow::field("value", arrow::uint64())});
-    auto batch = arrow::RecordBatch::Make(schema, rows, {array});
+    auto schema = arrow::schema({ arrow::field("value", arrow::uint64()) });
+    auto batch = arrow::RecordBatch::Make(schema, rows, { array });
     Ydb::Query::ExecuteQueryResponsePart part;
     part.set_status(Ydb::StatusIds::SUCCESS);
     auto* result = part.mutable_result_set();
@@ -58,8 +56,8 @@ Ydb::Query::ExecuteQueryResponsePart Batch(ui64 rows = 1) {
     return part;
 }
 
-class TDeferredCredentialsFactory final : public NYdb::ICredentialsProviderFactory {
-    class TProvider final : public NYdb::ICredentialsProvider {
+class TDeferredCredentialsFactory final: public NYdb::ICredentialsProviderFactory {
+    class TProvider final: public NYdb::ICredentialsProvider {
     public:
         std::string GetAuthInfo() const override {
             UNIT_ASSERT(Ready.HasValue());
@@ -71,20 +69,26 @@ class TDeferredCredentialsFactory final : public NYdb::ICredentialsProviderFacto
             return Ready.GetFuture();
         }
 
-        bool IsValid() const override { return true; }
+        bool IsValid() const override {
+            return true;
+        }
 
         NThreading::TPromise<std::string> Ready = NThreading::NewPromise<std::string>();
         mutable NThreading::TPromise<void> Requested = NThreading::NewPromise<void>();
     };
 
 public:
-    NYdb::TCredentialsProviderPtr CreateProvider() const override { return Provider_; }
+    NYdb::TCredentialsProviderPtr CreateProvider() const override {
+        return Provider_;
+    }
 
     void WaitUntilRequested() const {
         UNIT_ASSERT(Provider_->Requested.GetFuture().Wait(WaitTimeout));
     }
 
-    void SetReady() { Provider_->Ready.SetValue("test-token"); }
+    void SetReady() {
+        Provider_->Ready.SetValue("test-token");
+    }
 
 private:
     const std::shared_ptr<TProvider> Provider_ = std::make_shared<TProvider>();
@@ -100,7 +104,11 @@ class TQueryServer {
 
 public:
     struct TCall {
-        TCall() : Writer(&Context) {}
+        TCall()
+            : Writer(&Context)
+        {
+        }
+
         grpc::ServerContext Context;
         Ydb::Query::ExecuteQueryRequest Request;
         grpc::ServerAsyncWriter<Ydb::Query::ExecuteQueryResponsePart> Writer;
@@ -116,9 +124,12 @@ public:
         Queue_ = builder.AddCompletionQueue();
         Server_ = builder.BuildAndStart();
         UNIT_ASSERT(Server_);
-        auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Remote")
-            .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetNetworkThreadsNum(2)
-            .SetMaxInboundMessageSize(maxInboundBytes);
+        auto config = NYdb::TDriverConfig()
+                          .SetEndpoint(endpoint)
+                          .SetDatabase("/Remote")
+                          .SetDiscoveryMode(NYdb::EDiscoveryMode::Off)
+                          .SetNetworkThreadsNum(2)
+                          .SetMaxInboundMessageSize(maxInboundBytes);
         Driver_ = std::make_unique<NYdb::TDriver>(config);
         TlsDriver_ = std::make_unique<NYdb::TDriver>(config);
         Client = CreateClient(false);
@@ -129,7 +140,8 @@ public:
         Queue_->Shutdown();
         void* tag = nullptr;
         bool ok = false;
-        while (Queue_->Next(&tag, &ok)) {}
+        while (Queue_->Next(&tag, &ok)) {
+        }
         Client.reset();
         Driver_->Stop(true);
         TlsDriver_->Stop(true);
@@ -138,8 +150,7 @@ public:
     TCall& ExpectCall() {
         auto& call = *Calls_.emplace_back(std::make_unique<TCall>());
         call.Context.AsyncNotifyWhenDone(&call.Done);
-        Service_.RequestExecuteQuery(&call.Context, &call.Request, &call.Writer,
-            Queue_.get(), Queue_.get(), &call.Accepted);
+        Service_.RequestExecuteQuery(&call.Context, &call.Request, &call.Writer, Queue_.get(), Queue_.get(), &call.Accepted);
         return call;
     }
 
@@ -177,15 +188,12 @@ public:
         return WaitFor(call.Accepted, timeout, false);
     }
 
-    std::shared_ptr<NYdb::NQuery::TQueryClient> CreateClient(bool useTls,
-            NYdb::TCredentialsProviderFactoryPtr credentials = {}) {
-        auto settings = NYdb::NQuery::TClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off)
-            .SslCredentials(NYdb::TSslCredentials(useTls));
+    std::shared_ptr<NYdb::NQuery::TQueryClient> CreateClient(bool useTls, NYdb::TCredentialsProviderFactoryPtr credentials = {}) {
+        auto settings = NYdb::NQuery::TClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off).SslCredentials(NYdb::TSslCredentials(useTls));
         if (credentials) {
             settings.CredentialsProviderFactory(std::move(credentials));
         }
-        return std::make_shared<NYdb::NQuery::TQueryClient>(useTls ? *TlsDriver_ : *Driver_,
-            settings);
+        return std::make_shared<NYdb::NQuery::TQueryClient>(useTls ? *TlsDriver_ : *Driver_, settings);
     }
 
     std::shared_ptr<NYdb::NQuery::TQueryClient> Client;
@@ -241,15 +249,23 @@ void AssertStreamReleased(const std::weak_ptr<IReadStream>& stream) {
 }
 
 // Count public Next invocations while using the real SDK below the adapter.
-class TCountingStream final : public IReadStream {
+class TCountingStream final: public IReadStream {
 public:
     TCountingStream(std::shared_ptr<IReadStream> stream, std::atomic<ui32>& reads)
-        : Stream_(std::move(stream)), Reads_(reads) {}
+        : Stream_(std::move(stream))
+        , Reads_(reads)
+    {
+    }
+
     NThreading::TFuture<TReadResult> Next() override {
         ++Reads_;
         return Stream_->Next();
     }
-    void Cancel() override { Stream_->Cancel(); }
+
+    void Cancel() override {
+        Stream_->Cancel();
+    }
+
 private:
     std::shared_ptr<IReadStream> Stream_;
     std::atomic<ui32>& Reads_;
@@ -262,27 +278,40 @@ public:
             NDqProto::TTaskInput input;
             THashMap<TString, TString> params;
             TVector<TString> ranges;
-            auto [asyncInput, readActor] = CreateNativeReadActor([this](const auto& context) {
-                if (++Attempts == 1) {
-                    Deadline = context.Deadline;
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(context.Deadline, Deadline);
-                }
-                return std::make_shared<TCountingStream>(CreateReadStream(Server.Client, Source(), context), Reads);
-            }, {.Timeout = TDuration::Seconds(60), .MaxBatchBytes = 1024 * 1024, .MaxRowBytes = MaxOutputRowBytes,
-                .MaxRetries = 2, .Columns = {"value"}},
-            IDqAsyncIoFactory::TSourceArguments{
-                .InputDesc = input, .InputIndex = 0, .StatsLevel = {}, .TxId = {}, .TaskId = 1,
-                .SecureParams = params, .TaskParams = params, .ReadRanges = ranges,
-                .ComputeActorId = actor.SelfId(), .TypeEnv = actor.TypeEnv,
-                .HolderFactory = actor.HolderFactory, .ProgramBuilder = actor.ProgramBuilder,
-            });
+            auto [asyncInput, readActor] = CreateNativeReadActor(
+                [this](const auto& context) {
+                    if (++Attempts == 1) {
+                        Deadline = context.Deadline;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(context.Deadline, Deadline);
+                    }
+                    return std::make_shared<TCountingStream>(CreateReadStream(Server.Client, Source(), context), Reads);
+                },
+                { .Timeout = TDuration::Seconds(60), .MaxBatchBytes = 1024 * 1024, .MaxRowBytes = MaxOutputRowBytes, .MaxRetries = 2,
+                    .Columns = { "value" } },
+                IDqAsyncIoFactory::TSourceArguments{
+                    .InputDesc = input,
+                    .InputIndex = 0,
+                    .StatsLevel = {},
+                    .TxId = {},
+                    .TaskId = 1,
+                    .SecureParams = params,
+                    .TaskParams = params,
+                    .ReadRanges = ranges,
+                    .ComputeActorId = actor.SelfId(),
+                    .TypeEnv = actor.TypeEnv,
+                    .HolderFactory = actor.HolderFactory,
+                    .ProgramBuilder = actor.ProgramBuilder,
+                });
             actor.InitAsyncInput(asyncInput, readActor);
         });
-        Setup.Execute([](TFakeActor&) {});
+        Setup.Execute([](TFakeActor&) {
+        });
     }
 
-    ~TActorFixture() { Setup.Terminate(); }
+    ~TActorFixture() {
+        Setup.Terminate();
+    }
 
     NThreading::TFuture<void> Pull(i64 freeSpace, ui64 expectedRows = 0) {
         NThreading::TFuture<void> notification;
@@ -305,7 +334,7 @@ public:
     std::atomic<ui32> Reads = 0;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
     Y_UNIT_TEST(IndependentDriversCannotReusePlaintextChannelForTlsClient) {
@@ -496,7 +525,7 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
         server.Open(call);
         auto part = Batch();
         part.mutable_result_set()->set_data(std::string(testInboundLimit + 1, 'x'));
-        server.Write(call, part, false); // The receiver can reject its advertised size before Write completes.
+        server.Write(call, part, false);   // The receiver can reject its advertised size before Write completes.
         AssertError(result);
         stream->Cancel();
         server.Cancelled(call);
@@ -533,12 +562,12 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
             ++blocks;
             next = stream->Next();
             if (received < 200000) {
-                UNIT_ASSERT(next.HasValue()); // Buffered output requires no RPC.
+                UNIT_ASSERT(next.HasValue());   // Buffered output requires no RPC.
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(received, 200000);
         UNIT_ASSERT(blocks > 1);
-        UNIT_ASSERT(!next.HasValue()); // Only now is another SDK read pending.
+        UNIT_ASSERT(!next.HasValue());   // Only now is another SDK read pending.
         server.Finish(call);
         UNIT_ASSERT(next.Wait(WaitTimeout));
         UNIT_ASSERT(next.GetValue().Finished);
@@ -560,9 +589,8 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
         UNIT_ASSERT(next.HasValue());
         AssertError(next);
         stream.reset();
-        AssertStreamReleased(lifetime); // Retained compact output must not own stream/IPC state.
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Array&>(
-            *first.GetValue().Batch->column(0)).Value(0), 42);
+        AssertStreamReleased(lifetime);   // Retained compact output must not own stream/IPC state.
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Array&>(*first.GetValue().Batch->column(0)).Value(0), 42);
         server.Cancelled(call);
         server.Finish(call);
     }
@@ -574,8 +602,7 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
         auto error = fixture.Setup.AsyncInputPromises->FatalError.GetFuture();
         fixture.Pull(1);
         fixture.Server.Open(first);
-        fixture.Server.Finish(first, grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED,
-            "private query or authentication details"));
+        fixture.Server.Finish(first, grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "private query or authentication details"));
         UNIT_ASSERT(error.Wait(WaitTimeout));
         const auto issues = error.GetValue().ToString();
         UNIT_ASSERT_STRING_CONTAINS(issues, "CLIENT_RESOURCE_EXHAUSTED");
@@ -586,7 +613,7 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
 
     Y_UNIT_TEST(SchemaAndFormatErrorsHaveSafeCategories) {
         TQueryServer server;
-        for (bool valueFormat : {false, true}) {
+        for (bool valueFormat : { false, true }) {
             auto& call = server.ExpectCall();
             auto source = Source();
             source.MutableColumns(0)->MutableType()->set_type_id(Ydb::Type::STRING);
@@ -601,8 +628,7 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
             }
             server.Write(call, part);
             AssertError(result);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error,
-                valueFormat ? "required Arrow format" : "schema changed; recompile");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error, valueFormat ? "required Arrow format" : "schema changed; recompile");
             UNIT_ASSERT(!result.GetValue().Retryable);
             stream->Cancel();
             server.Cancelled(call);
@@ -767,4 +793,4 @@ Y_UNIT_TEST_SUITE(YdbExternalReadTransport) {
     }
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

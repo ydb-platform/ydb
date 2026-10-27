@@ -4,6 +4,8 @@ TIMEOUT(600)
 
 SIZE(MEDIUM)
 
-DEPENDS(yql/essentials/udfs/common/histogram)
+DEPENDS(
+    yql/essentials/udfs/common/histogram/impl
+)
 
 END()

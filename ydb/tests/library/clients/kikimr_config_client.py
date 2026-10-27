@@ -14,11 +14,13 @@ from ydb.public.api.protos import ydb_config_pb2 as config_api
 logger = logging.getLogger()
 
 
-def config_client_factory(server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
+def config_client_factory(server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None,
+                          timeout=None):
     return ConfigClient(
         server, port, cluster=cluster,
         retry_count=retry_count,
         ca_path=ca_path, cert_path=cert_path, key_path=key_path,
+        timeout=timeout,
     )
 
 
@@ -38,10 +40,12 @@ class ConfigClient(object):
         ATTACH_STORAGE_CONFIG_SECTION = 3
         ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG = 4
 
-    def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
+    def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None,
+                 timeout=None):
         self.server = server
         self.port = port
         self._cluster = cluster
+        self._timeout = timeout
         self.__domain_id = 1
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
@@ -79,7 +83,7 @@ class ConfigClient(object):
                     metadata.append(('x-ydb-auth-ticket', self._auth_token))
                 if database:
                     metadata.append(('x-ydb-database', database))
-                return callee(request, metadata=metadata)
+                return callee(request, metadata=metadata, timeout=self._timeout)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 

@@ -208,7 +208,8 @@ def write_report(report_path, output_dir, build_output=None):
                       autoescape=True, undefined=StrictUndefined)
     env.globals.update(format_usage=format_usage, coverage_key=coverage_key)
     html = env.get_template("resource_usage.html").render(**usage)
-    (output_dir / "index.html").write_text(html, encoding="utf-8")
+    # S3 publication generates directory listings named index.html.
+    (output_dir / "report.html").write_text(html, encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,13 @@
     .suite { white-space: normal; overflow-wrap: anywhere; min-width: 280px; }
     .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; }
     select, input { font: inherit; padding: 6px; }
-    .area-filter { border: 0; background: none; color: #185ca0; cursor: pointer; font: inherit; }
+    .area-toggle, .metric-link { border: 0; background: none; color: #185ca0; cursor: pointer; font: inherit; padding: 0; }
+    .area-toggle .arrow { display: inline-block; margin-right: 8px; }
+    .area-toggle[aria-expanded="true"] .arrow { transform: rotate(90deg); }
+    .area-details > td { padding: 16px; text-align: left; background: #f1f6fc; white-space: normal; }
+    .area-details .scroll { max-height: 520px; overflow: auto; }
+    .area-details th { position: sticky; top: 0; }
+    .area-details h3 { margin: 0; }
     .muted { color: #596776; }
     [hidden] { display: none !important; }
   </style>
@@ -31,7 +37,7 @@
 <p><a href="../ya-test.html">← Test results for this try</a> · <a href="suites.csv">Suites CSV</a> · <a href="areas.csv">Areas CSV</a> · <a href="usage.json">JSON</a></p>
 <h1>Test CPU, disk I/O and binary size by area</h1>
 <p class="notes">CPU and I/O in this try are summed over test chunks; binary sizes are counted once per suite. All statuses are included, including failed and muted tests.
-  Retries in other <code>try_N</code> reports are separate. Click an area to see its suites; click a column heading to sort.</p>
+  Retries in other <code>try_N</code> reports are separate. Expand an area to see its suites, or click its resource usage to see the largest consumers of that resource first.</p>
 <div class="cards">
   <div class="card">Suites / chunks<strong>{{ totals.suites }} / {{ totals.chunks }}</strong></div>
   <div class="card">CPU · hours<strong>{{ format_usage(totals, 'cpu_seconds') }}</strong></div>
@@ -62,8 +68,18 @@
 </details>
 {% macro pct(value) -%}{{ '%.1f%%'|format(value) if value is not none else '—' }}{%- endmacro %}
 {% macro metric_cells(row, key, suite=false) %}
-  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured {{ 'suites' if key == 'binary_bytes' else 'chunks' }}: {{ row[coverage_key(key)] }} / {{ row.get('suites', 1) if key == 'binary_bytes' else row.chunks }}">{{ format_usage(row, key) }}</td>
-  <td data-sort="{{ row[key + '_pct_total'] if row[key + '_pct_total'] is not none else '' }}">{{ pct(row[key + '_pct_total']) }}{% if suite %} / {{ pct(row[key + '_pct_area']) }}{% endif %}</td>
+  <td data-sort="{{ row[key] if row[key] is not none else '' }}" title="Measured {{ 'suites' if key == 'binary_bytes' else 'chunks' }}: {{ row[coverage_key(key)] }} / {{ row.get('suites', 1) if key == 'binary_bytes' else row.chunks }}">{% if not suite %}<button type="button" class="metric-link" data-metric="{{ key }}" title="Show suites ranked by this resource">{% endif %}{{ format_usage(row, key) }}{% if not suite %}</button>{% endif %}</td>
+  <td data-sort="{{ row[key + '_pct_total'] if row[key + '_pct_total'] is not none else '' }}">{% if not suite %}<button type="button" class="metric-link" data-metric="{{ key }}" title="Show suites ranked by this resource">{% endif %}{{ pct(row[key + '_pct_total']) }}{% if suite %} / {{ pct(row[key + '_pct_area']) }}{% else %}</button>{% endif %}</td>
+{% endmacro %}
+{% macro suite_headers() %}
+  <thead><tr>
+    <th><button type="button" data-text>Suite ↕</button></th><th><button type="button" data-text>Area ↕</button></th>
+    <th><button type="button">Chunks ↕</button></th>
+    <th><button type="button" data-metric="cpu_seconds">CPU · h ↕</button></th><th><button type="button">CPU share ↕</button></th>
+    <th><button type="button" data-metric="read_bytes">Read · GiB ↕</button></th><th><button type="button">Read share ↕</button></th>
+    <th><button type="button" data-metric="write_bytes">Written · GiB ↕</button></th><th><button type="button">Write share ↕</button></th>
+    <th><button type="button" data-metric="binary_bytes">Binaries · GiB ↕</button></th><th><button type="button">Binary share ↕</button></th>
+  </tr></thead>
 {% endmacro %}
 <h2>Areas</h2>
 <div class="scroll"><table id="areas">
@@ -74,11 +90,23 @@
     <th><button type="button">Written · GiB ↕</button></th><th><button type="button">% of writes ↕</button></th>
     <th><button type="button">Binaries · GiB ↕</button></th><th><button type="button">% of binaries ↕</button></th>
   </tr></thead>
-  <tbody>{% for row in areas %}<tr>
-    <td><button class="area-filter" data-area="{{ row.area }}">{{ row.area }}</button></td><td data-sort="{{ row.suites }}">{{ row.suites }}</td>
+  {% for row in areas %}<tbody class="area-group" data-area="{{ row.area }}"><tr>
+    <td><button type="button" class="area-toggle" aria-expanded="false" aria-controls="area-details-{{ loop.index }}"><span class="arrow" aria-hidden="true">▶</span>{{ row.area }}</button></td><td data-sort="{{ row.suites }}">{{ row.suites }}</td>
     {{ metric_cells(row, 'cpu_seconds') }}{{ metric_cells(row, 'read_bytes') }}{{ metric_cells(row, 'write_bytes') }}
     {{ metric_cells(row, 'binary_bytes') }}
-  </tr>{% endfor %}</tbody>
+  </tr><tr class="area-details" id="area-details-{{ loop.index }}" hidden><td colspan="10">
+    <h3>{{ row.area }}: suites</h3>
+    <div class="controls">
+      <label>Rank by <select class="rank-metric">
+        <option value="cpu_seconds">CPU time</option><option value="read_bytes">Disk reads</option>
+        <option value="write_bytes">Disk writes</option><option value="binary_bytes">Binary size</option>
+      </select></label>
+      <label>Suite <input class="area-search" type="search" placeholder="Filter by path"></label>
+      <span class="area-count muted"></span>
+    </div>
+    <p class="muted">Shares: % of all suites / % of this area. Largest consumers first; click column headings to change sorting.</p>
+    <div class="scroll"><table class="area-suites">{{ suite_headers() }}<tbody></tbody></table></div>
+  </td></tr></tbody>{% endfor %}
 </table></div>
 <h2 id="suite-heading">Suites</h2>
 <div class="controls">
@@ -88,14 +116,7 @@
 </div>
 <p class="muted">Shares: % of all suites / % of own area. † Partial measurement; hover over a value for coverage.</p>
 <div class="scroll"><table id="suites">
-  <thead><tr>
-    <th><button type="button" data-text>Suite ↕</button></th><th><button type="button" data-text>Area ↕</button></th>
-    <th><button type="button">Chunks ↕</button></th>
-    <th><button type="button">CPU · h ↕</button></th><th><button type="button">CPU share ↕</button></th>
-    <th><button type="button">Read · GiB ↕</button></th><th><button type="button">Read share ↕</button></th>
-    <th><button type="button">Written · GiB ↕</button></th><th><button type="button">Write share ↕</button></th>
-    <th><button type="button">Binaries · GiB ↕</button></th><th><button type="button">Binary share ↕</button></th>
-  </tr></thead>
+  {{ suite_headers() }}
   <tbody>{% for row in suites %}<tr data-area="{{ row.area }}" data-path="{{ row.suite_folder }}">
     <td class="suite">{{ row.suite_folder }}</td><td>{{ row.area }}</td><td data-sort="{{ row.chunks }}">{{ row.chunks }}</td>
     {{ metric_cells(row, 'cpu_seconds', true) }}{{ metric_cells(row, 'read_bytes', true) }}{{ metric_cells(row, 'write_bytes', true) }}
@@ -118,28 +139,74 @@
   }
   area.addEventListener('change', filterSuites);
   search.addEventListener('input', filterSuites);
-  document.querySelectorAll('.area-filter').forEach(button => button.addEventListener('click', () => {
-    area.value = button.dataset.area;
-    filterSuites();
-    document.getElementById('suite-heading').scrollIntoView();
-  }));
-  document.querySelectorAll('th button').forEach(button => button.addEventListener('click', () => {
-    const table = button.closest('table');
-    const column = button.closest('th').cellIndex;
-    const text = button.hasAttribute('data-text');
-    const ascending = button.dataset.ascending !== 'true';
-    const direction = text ? (ascending ? 1 : -1) : (ascending ? -1 : 1);
-    button.dataset.ascending = String(ascending);
-    const rows = Array.from(table.tBodies[0].rows);
-    rows.sort((a, b) => {
-      const x = a.cells[column], y = b.cells[column];
+  function sortTable(table, column, text, direction) {
+    // Keep each area's summary and expanded details together when sorting areas.
+    const grouped = table.id === 'areas';
+    const items = Array.from(grouped ? table.tBodies : table.tBodies[0].rows);
+    const cell = item => (grouped ? item.rows[0] : item).cells[column];
+    items.sort((a, b) => {
+      const x = cell(a), y = cell(b);
       if (text) return direction * x.textContent.localeCompare(y.textContent);
       if (x.dataset.sort === '') return y.dataset.sort === '' ? 0 : 1;
       if (y.dataset.sort === '') return -1;
       return direction * (Number(x.dataset.sort) - Number(y.dataset.sort));
     });
-    for (const row of rows) table.tBodies[0].appendChild(row);
+    const parent = grouped ? table : table.tBodies[0];
+    for (const item of items) parent.appendChild(item);
+    for (const th of table.tHead.rows[0].cells) th.removeAttribute('aria-sort');
+    table.tHead.rows[0].cells[column].setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+  }
+  document.querySelectorAll('th button').forEach(button => button.addEventListener('click', () => {
+    const table = button.closest('table');
+    const text = button.hasAttribute('data-text');
+    const direction = button.dataset.direction ? -Number(button.dataset.direction) : (text ? 1 : -1);
+    button.dataset.direction = String(direction);
+    sortTable(table, button.closest('th').cellIndex, text, direction);
   }));
+  document.querySelectorAll('.area-group').forEach(group => {
+    const details = group.querySelector('.area-details');
+    const toggle = group.querySelector('.area-toggle');
+    const table = group.querySelector('.area-suites');
+    const rank = group.querySelector('.rank-metric');
+    const search = group.querySelector('.area-search');
+    function filter() {
+      const query = search.value.trim().toLowerCase();
+      let visible = 0;
+      for (const row of table.tBodies[0].rows) {
+        row.hidden = !row.dataset.path.toLowerCase().includes(query);
+        if (!row.hidden) visible++;
+      }
+      group.querySelector('.area-count').textContent = `${visible} / ${table.tBodies[0].rows.length} suites`;
+    }
+    function sortByResource() {
+      const button = table.tHead.querySelector(`button[data-metric="${rank.value}"]`);
+      button.dataset.direction = '-1';
+      sortTable(table, button.closest('th').cellIndex, false, -1);
+    }
+    function expand(metric) {
+      if (!group.dataset.loaded) {
+        for (const row of suiteRows) {
+          if (row.dataset.area === group.dataset.area) table.tBodies[0].appendChild(row.cloneNode(true));
+        }
+        group.dataset.loaded = 'true';
+      }
+      if (metric) rank.value = metric;
+      details.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      filter();
+      sortByResource();
+    }
+    toggle.addEventListener('click', () => {
+      if (details.hidden) expand();
+      else {
+        details.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+    group.querySelectorAll('.metric-link').forEach(button => button.addEventListener('click', () => expand(button.dataset.metric)));
+    rank.addEventListener('change', sortByResource);
+    search.addEventListener('input', filter);
+  });
 </script>
 </body>
 </html>

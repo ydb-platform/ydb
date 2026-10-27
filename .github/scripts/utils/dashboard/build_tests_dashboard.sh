@@ -17,7 +17,7 @@ if timeout 120 python3 .github/scripts/tests/resource_usage_report.py \
   > "$RESOURCE_USAGE_DIR/build.log" 2>&1; then
   rm -f "$RESOURCE_USAGE_DIR/build.log"
 else
-  rm -f "$RESOURCE_USAGE_DIR/index.html"
+  rm -f "$RESOURCE_USAGE_DIR/report.html"
   echo "Test resource report generation failed (see test_resources/build.log)"
 fi
 

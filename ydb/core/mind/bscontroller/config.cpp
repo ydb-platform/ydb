@@ -339,6 +339,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            if (const auto error = state.ApplyDataCenterStates()) {
+                *errorDescription = *error;
+                return false;
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -1494,6 +1499,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

@@ -7301,6 +7301,53 @@ selector_config: []
         CheckBridgeCommittedCatchup(EBridgeCommittedCatchup::ColdIntermediate);
     }
 
+    Y_UNIT_TEST(DisableFlatStateStorageRingPreservesReplicaIds) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto *stateStorage = fixture.Config.MutableStateStorageConfig();
+        stateStorage->SetSSId(1);
+        auto *flatRing = stateStorage->MutableRing();
+        flatRing->SetNToSelect(3);
+        flatRing->AddNode(1);
+        flatRing->AddNode(2);
+        flatRing->AddNode(3);
+        const auto before = BuildStateStorageInfo(*stateStorage);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+
+        const TActorId edge = fixture.Runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableReassignStateStorageNode();
+        command->SetFrom(2);
+        command->SetTo(4);
+        command->SetStateStorage(true);
+        command->SetDisableRing(true);
+        fixture.Runtime.Send(new IEventHandle(fixture.Root(), edge, request.release()), 1);
+        auto response = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == TResult::OK,
+            response->Get()->Record.DebugString());
+
+        const auto committed = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        const auto& ring = committed.GetStateStorageConfig().GetRing();
+        UNIT_ASSERT_VALUES_EQUAL(ring.NodeSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ring.RingSize(), 3);
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).NodeSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).GetNode(0), i + 1);
+            UNIT_ASSERT(ring.GetRing(i).GetUseSingleNodeActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).GetIsDisabled(), i == 1);
+        }
+        const auto after = BuildStateStorageInfo(committed.GetStateStorageConfig());
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(before->RingGroups[0].Rings[i].Replicas,
+                after->RingGroups[0].Rings[i].Replicas);
+        }
+    }
+
     Y_UNIT_TEST(ReassignVDiskStatusTimeoutReleasesQueue) {
         TCommitConfirmationFixture fixture;
         fixture.Start();

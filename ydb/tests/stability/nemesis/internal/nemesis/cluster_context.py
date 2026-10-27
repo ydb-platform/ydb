@@ -21,17 +21,20 @@ LOCAL_HARNESS_NEMESIS_TYPES = frozenset({
     "KillNodeNemesis",
     "KillSchemeShardNemesis",
     "StopStartNodeNemesis",
+    "SuspendNodeNemesis",
 })
 
 LOCAL_HARNESS_SCHEDULED_NEMESIS_TYPES = frozenset({
     "KillDataShardNemesis",
     "KillNodeNemesis",
     "StopStartNodeNemesis",
+    "SuspendNodeNemesis",
 })
 
 LOCAL_HARNESS_NODE_FAULT_TYPES = frozenset({
     "KillNodeNemesis",
     "StopStartNodeNemesis",
+    "SuspendNodeNemesis",
 })
 
 

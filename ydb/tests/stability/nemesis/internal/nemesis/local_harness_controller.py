@@ -38,6 +38,12 @@ class NodeStart:
     log_file: str | None
 
 
+@dataclass(frozen=True)
+class NodeFreeze:
+    node_id: int
+    pid: int
+
+
 @dataclass
 class _StoppedNode:
     result: NodeStop
@@ -51,6 +57,7 @@ class HarnessNodeController:
         self._cluster = cluster
         self._lock = threading.RLock()
         self._stopped: dict[int, _StoppedNode] = {}
+        self._frozen: dict[int, NodeFreeze] = {}
         self._incarnations: dict[int, int] = {}
 
     def kill_and_restart(self, node_id: int) -> NodeRestart:
@@ -154,6 +161,44 @@ class HarnessNodeController:
         with self._lock:
             return tuple(sorted(self._stopped))
 
+    def freeze(self, node_id: int) -> NodeFreeze:
+        self._require_safe_node_fault_cluster()
+        node_id = int(node_id)
+        with self._lock:
+            frozen = self._frozen.get(node_id)
+            if frozen is not None:
+                return frozen
+            node = self._node(node_id)
+            if not node.is_alive():
+                raise RuntimeError(
+                    f"Local harness node_id={node_id} is not alive before freeze"
+                )
+            frozen = NodeFreeze(node_id=node_id, pid=int(node.pid))
+            node.freeze()
+            self._frozen[node_id] = frozen
+            return frozen
+
+    def unfreeze(self, node_id: int) -> NodeFreeze | None:
+        self._require_safe_node_fault_cluster()
+        node_id = int(node_id)
+        with self._lock:
+            frozen = self._frozen.get(node_id)
+            if frozen is None:
+                return None
+            node = self._node(node_id)
+            if int(node.pid) != frozen.pid:
+                raise RuntimeError(
+                    f"Frozen local harness node_id={node_id} changed pid "
+                    f"from {frozen.pid} to {node.pid}"
+                )
+            node.unfreeze()
+            self._frozen.pop(node_id, None)
+            return frozen
+
+    def frozen_node_ids(self) -> tuple[int, ...]:
+        with self._lock:
+            return tuple(sorted(self._frozen))
+
     def held_ports(self, node_id: int) -> tuple[int, ...]:
         with self._lock:
             stopped = self._stopped.get(int(node_id))
@@ -161,6 +206,11 @@ class HarnessNodeController:
 
     def restore_all(self) -> None:
         errors = []
+        for node_id in self.frozen_node_ids():
+            try:
+                self.unfreeze(node_id)
+            except Exception as error:
+                errors.append((node_id, error))
         for node_id in self.stopped_node_ids():
             try:
                 self.start(node_id)
@@ -229,6 +279,7 @@ class HarnessNodeController:
 
 __all__ = [
     "HarnessNodeController",
+    "NodeFreeze",
     "NodeRestart",
     "NodeStart",
     "NodeStop",

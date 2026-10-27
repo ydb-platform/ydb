@@ -371,6 +371,46 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
     def __init__(self) -> None:
         super().__init__(scope="node")
         self._suspended_ic_port: int | None = None
+        self._local_cluster = None
+        self._local_controller: HarnessNodeController | None = None
+        self._local_controller_lock = threading.Lock()
+
+    def _controller(self) -> HarnessNodeController:
+        cluster = require_cluster()
+        with self._local_controller_lock:
+            if self._local_cluster is cluster and self._local_controller is not None:
+                return self._local_controller
+            if (
+                self._local_controller is not None
+                and self._local_controller.frozen_node_ids()
+            ):
+                raise RuntimeError(
+                    "Cannot replace local harness controller while nodes are frozen"
+                )
+            self._local_cluster = cluster
+            self._local_controller = HarnessNodeController(cluster)
+            return self._local_controller
+
+    @staticmethod
+    def _local_node_id(payload: dict) -> int:
+        target = target_from_payload(payload)
+        node_id = payload.get("node_id")
+        if node_id is None and target is not None:
+            node_id = target.node_id
+        if node_id is None:
+            raise ValueError(
+                "SuspendNodeNemesis: local harness target must include node_id"
+            )
+        return int(node_id)
+
+    def restore_local_harness_nodes(self) -> None:
+        controller = self._local_controller
+        if controller is not None:
+            controller.restore_all()
+
+    def local_frozen_node_ids(self) -> tuple[int, ...]:
+        controller = self._local_controller
+        return controller.frozen_node_ids() if controller is not None else ()
 
     def _try_cont(self) -> bool:
         if self._suspended_ic_port is None:
@@ -382,12 +422,33 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
         return True
 
     def extract_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            node_id = self._local_node_id(payload)
+            unfrozen = self._controller().unfreeze(node_id)
+            if unfrozen is not None:
+                self._logger.info(
+                    "Resumed local harness node_id=%d pid=%d",
+                    unfrozen.node_id,
+                    unfrozen.pid,
+                )
+            self.on_success_extract_fault()
+            return
         if not self._try_cont():
             self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
         payload = payload if isinstance(payload, dict) else {}
+        if local_harness_mode():
+            node_id = self._local_node_id(payload)
+            frozen = self._controller().freeze(node_id)
+            self._logger.info(
+                "Suspended local harness node_id=%d pid=%d",
+                frozen.node_id,
+                frozen.pid,
+            )
+            self.on_success_inject_fault()
+            return
         cluster = require_external_cluster()
         if len(cluster.nodes) < 8:
             self._logger.info("Suspend prohibited (< 8 nodes)")

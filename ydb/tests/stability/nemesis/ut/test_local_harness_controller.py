@@ -25,6 +25,8 @@ class _Node:
         self.mon_port = pid + 12000
         self.grpc_ssl_port = None
         self.ydbd_log_file_path = f"log-{pid}"
+        self.freeze_calls = 0
+        self.unfreeze_calls = 0
 
     def kill(self):
         self.kill_calls += 1
@@ -39,6 +41,12 @@ class _Node:
 
     def set_log_file_prefix(self, prefix):
         self.ydbd_log_file_path = f"{prefix}test.log"
+
+    def freeze(self):
+        self.freeze_calls += 1
+
+    def unfreeze(self):
+        self.unfreeze_calls += 1
 
 
 class _Socket:
@@ -119,6 +127,36 @@ def test_controller_holds_stopped_node_by_id_and_restarts_idempotently(
     assert all(sock.closed for sock in sockets.values())
     assert controller.stopped_node_ids() == ()
     assert controller.start(3) is None
+
+
+def test_controller_freezes_by_node_id_and_unfreezes_idempotently():
+    cluster = _cluster()
+    controller = HarnessNodeController(cluster)
+
+    frozen = controller.freeze(5)
+    assert frozen.node_id == 5
+    assert frozen.pid == 105
+    assert controller.freeze(5) is frozen
+    assert controller.frozen_node_ids() == (5,)
+    assert cluster.nodes[5].freeze_calls == 1
+
+    assert controller.unfreeze(5) is frozen
+    assert cluster.nodes[5].unfreeze_calls == 1
+    assert controller.frozen_node_ids() == ()
+    assert controller.unfreeze(5) is None
+
+
+def test_controller_restore_all_unfreezes_every_tracked_node():
+    cluster = _cluster()
+    controller = HarnessNodeController(cluster)
+    controller.freeze(2)
+    controller.freeze(6)
+
+    controller.restore_all()
+
+    assert controller.frozen_node_ids() == ()
+    assert cluster.nodes[2].unfreeze_calls == 1
+    assert cluster.nodes[6].unfreeze_calls == 1
 
 
 def test_kill_node_runner_uses_harness_controller_without_shell(monkeypatch):

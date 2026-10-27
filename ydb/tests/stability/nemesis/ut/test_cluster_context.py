@@ -34,7 +34,11 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
             )
             is None
         )
-        for process_type in ("KillNodeNemesis", "StopStartNodeNemesis"):
+        for process_type in (
+            "KillNodeNemesis",
+            "StopStartNodeNemesis",
+            "SuspendNodeNemesis",
+        ):
             assert cluster_context.nemesis_rejection_reason(process_type) is None
             assert (
                 "requires at least 8 block-4-2 nodes"
@@ -51,7 +55,11 @@ def test_local_harness_uses_explicit_manual_and_scheduled_allowlists():
         nodes={node_id: object() for node_id in range(1, 9)},
     )
     with cluster_context.use_cluster(safe_cluster):
-        for process_type in ("KillNodeNemesis", "StopStartNodeNemesis"):
+        for process_type in (
+            "KillNodeNemesis",
+            "StopStartNodeNemesis",
+            "SuspendNodeNemesis",
+        ):
             assert (
                 cluster_context.scheduled_nemesis_rejection_reason(process_type)
                 is None

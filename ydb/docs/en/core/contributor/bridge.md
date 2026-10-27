@@ -79,6 +79,8 @@ To transition from mode `PRIMARY/NOT_SYNCHRONIZED` to `PRIMARY/SYNCHRONIZED`, sy
 
 `HOT_STANDBY` keeps a pile connected while excluding it from read, write, and configuration quorums. For groups replicated across piles, dsproxy-proxy sends `Put`, `Patch`, `Block`, and `KEEP` flags to the standby in the background. Client completion depends only on the required piles; standby replies, including errors and generation mismatches (`RACE`), neither delay completion nor restart the client request. Reads do not use the standby. A group whose only authoritative copy is in that pile cannot use this behavior to acknowledge writes elsewhere.
 
+Database endpoint discovery does not advertise endpoints in `HOT_STANDBY` piles for client traffic. The response still includes these piles in the pile-state metadata.
+
 To enable the prototype for an existing secondary pile, use the hidden `update` command:
 
 ```bash

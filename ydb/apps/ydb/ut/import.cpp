@@ -463,6 +463,8 @@ Y_UNIT_TEST_SUITE(ImportTest) {
 
         const TString s3Endpoint = GetS3Endpoint();
 
+        Service<TSchemeImpl>().Database = "import-root";
+        Service<TSchemeImpl>().ExpectChild("/", "test_database", Ydb::Scheme::Entry::DIRECTORY);
         Service<TImportImpl>()
             .ExpectBucket(TEST_BUCKET)
             .ExpectS3Endpoint(s3Endpoint)
@@ -476,7 +478,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             {
                 "-v",
                 "-e", GetEndpoint(),
-                "-d", GetDatabase(),
+                "-d", "import-root",
                 "import", "s3",
                 "--bucket", TEST_BUCKET,
                 "--s3-endpoint", s3Endpoint,
@@ -484,7 +486,7 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--access-key", "test-key",
                 "--secret-key", "test-access-key",
                 "--use-virtual-addressing", "false",
-                "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--item", "src=source/prefix,dst=.",
                 "--exclude", "skip",
             }
         );

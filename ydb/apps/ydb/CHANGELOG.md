@@ -8,6 +8,8 @@
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
 * Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
+* Added support for database paths relative to the cluster root in the YDB CLI when the server's `EnableRelativePaths` flag is enabled. Only paths starting with `/` are absolute; slashless paths starting with the cluster name are now relative too.
+* Resource paths in the YDB CLI are relative to the database unless they start with `/`. The CLI expands relative database names against the cluster root before resolving resource paths. Existing CLI handling of `.` and `./path` is preserved. `ydb tools restore` supports relative destinations whose parent directories do not yet exist.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.

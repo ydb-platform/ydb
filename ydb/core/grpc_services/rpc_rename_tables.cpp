@@ -45,7 +45,7 @@ private:
 
         try {
             for (const auto& item: req->tables()) {
-                const TString destinationPath = Request_->NormalizePath(item.destination_path());
+                const TString destinationPath = Request_->GetDatabaseRelativePath(item.destination_path());
                 if (item.replace_destination()) {
                     auto* modifyScheme = transaction.AddTransactionalModification();
                     modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
@@ -58,7 +58,7 @@ private:
                 auto* modifyScheme = transaction.AddTransactionalModification();
                 modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
                 auto* description = modifyScheme->MutableMoveTable();
-                description->SetSrcPath(Request_->NormalizePath(item.source_path()));
+                description->SetSrcPath(Request_->GetDatabaseRelativePath(item.source_path()));
                 description->SetDstPath(destinationPath);
             }
         } catch (const std::exception& ex) {

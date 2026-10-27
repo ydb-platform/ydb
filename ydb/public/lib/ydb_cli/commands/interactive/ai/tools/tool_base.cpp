@@ -8,6 +8,15 @@
 
 namespace NYdb::NConsoleClient::NAi {
 
+namespace {
+
+TString CanonizeAbsolutePath(const TString& path) {
+    auto canonical = CanonizeYdbPath(path);
+    return canonical.empty() ? TString("/") : canonical;
+}
+
+} // anonymous namespace
+
 TToolBase::TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description)
     : ParametersSchema(parametersSchema)
     , Description(description)
@@ -54,18 +63,18 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
 
 TDatabaseToolBase::TDatabaseToolBase(const TString& database, const NJson::TJsonValue& parametersSchema, const TString& description)
     : TBase(parametersSchema, description)
-    , Database(CanonizeYdbPath(database))
+    , Database(database.StartsWith('/') ? CanonizeAbsolutePath(database) : database)
 {}
 
 TString TDatabaseToolBase::CanonizePath(const TString& path) const {
-    auto result = Strip(path);
+    const auto result = Strip(path);
+    if (!Database.StartsWith('/')) {
+        return result.StartsWith('/') ? CanonizeAbsolutePath(result) : result;
+    }
     auto canonical = CanonizeYdbPath(result);
     if (!result.StartsWith('/') || !canonical.StartsWith(Database)) {
-        // If path starts with '/' but not with Database prefix, assume it is relative to Database.
-        // This is a common confusion for AI agents who see file lists without full path prefix.
         canonical = JoinYdbPath({Database, result});
     }
-
     return canonical;
 }
 

@@ -17,6 +17,18 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_.reset();
     }
 
+    TString IAuditCtx::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
+        if (!AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            return NormalizePath(path);
+        }
+        auto database = GetDatabaseName().GetOrElse(TString());
+        if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)) {
+            database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->Domain->Name, CGIUnescapeRet(*header));
+        }
+        return NormalizePath(PrependDomainIfNeeded(
+            base.empty() ? database : PrependDomainIfNeeded(database, base), path));
+    }
+
     bool IRequestCtxBaseMtSafe::IsPathNormalizationEnabled() const noexcept {
         return PathNormalizationEnabled_;
     }

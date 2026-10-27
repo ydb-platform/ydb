@@ -85,7 +85,8 @@ namespace {
         for (const auto& table : ret.Entries) {
             TStringBuilder dstPathBuilder;
             if (dstPath) { // It is not recommended to use this path for encrypted exports, because it shows real database structure in S3
-                dstPathBuilder << dstPath << TStringBuf(table.Name).RNextTok(srcPath);
+                Y_ENSURE(TStringBuf(table.Name).StartsWith(srcPath));
+                dstPathBuilder << dstPath << TStringBuf(table.Name).SubStr(srcPath.size());
             }
             result.emplace_back(table.Name, dstPathBuilder);
         }
@@ -194,7 +195,7 @@ void TCommandExportToYt::Parse(TConfig& config) {
 void TCommandExportToYt::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
-        NConsoleClient::AdjustPath(item.Source, config);
+        AdjustPathToDatabase(item.Source, config);
 
         const bool hasAppendPrefix = item.Destination.StartsWith(AppendPrefix);
         if (item.Append && !hasAppendPrefix) {
@@ -353,7 +354,7 @@ void TCommandExportBase::ExtractParams(TConfig& config) {
         if (CommonSourcePath && item.Source && item.Source[0] != '/') {
             item.Source = CommonSourcePath + "/" + item.Source;
         }
-        NConsoleClient::AdjustPath(item.Source, config);
+        AdjustPathToDatabase(item.Source, config);
     }
 }
 
@@ -433,7 +434,9 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
     if (expandItems && settings.Item_.empty()) {
         constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
+        TString source = CommonSourcePath ? CommonSourcePath : TString(".");
+        AdjustPathToDatabase(source, config);
+        settings.AppendItem(typename TSettings::TItem{.Src = source, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
     const auto driver = CreateDriver(config);

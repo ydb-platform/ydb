@@ -590,6 +590,8 @@ Y_UNIT_TEST(SharedCache) {
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetHardLimitBytes(200_MB);
+    // Keep room for this consumer after the scheduler and GML reservations.
+    memoryControllerConfig->SetCompactionLimitPercent(5);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     auto& runtime = *server->GetRuntime();
@@ -639,6 +641,8 @@ Y_UNIT_TEST(SharedCache_ConfigLimit) {
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetHardLimitBytes(300_MB);
+    // Keep room for this consumer after the scheduler and GML reservations.
+    memoryControllerConfig->SetCompactionLimitPercent(5);
     serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(50_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
@@ -671,6 +675,8 @@ Y_UNIT_TEST(MemTable) {
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetHardLimitBytes(200_MB);
+    // Keep room for this consumer after the scheduler and GML reservations.
+    memoryControllerConfig->SetCompactionLimitPercent(5);
     // Leave room above fixed grants to exercise MemTable growth and later compaction.
     memoryControllerConfig->SetTargetUtilizationPercent(75);
     memoryControllerConfig->SetSharedCacheMinBytes(0);
@@ -786,6 +792,8 @@ Y_UNIT_TEST(ResourceBroker_QueryExecutionLimitNotLessThanActivitiesLimit) {
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetActivitiesLimitPercent(30);
     memoryControllerConfig->SetQueryExecutionLimitPercent(40);
+    // Isolate resource-broker configuration from competing compaction reservations.
+    memoryControllerConfig->SetCompactionLimitPercent(0);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
@@ -1591,9 +1599,11 @@ Y_UNIT_TEST(QueryExecutionConsumer) {
     queriesConsumer->SetConsumption(20_MB);
     fixture.Tick();
 
-    // The reported memory moves from the other consumption to the consumers, so the elastic limits don't change
+    // The queries also reserve their unused grant, reducing room for the cache.
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 50_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Reservation"), 30_MB);
+    UNIT_ASSERT_LT(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
 
     // The reported consumption replaces the global page pool estimation, the limit stays fixed
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), 20_MB);

@@ -2,8 +2,53 @@
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
+#include <ydb/core/mind/bscontroller/group_geometry_info.h>
 
 namespace NKikimr::NStorage {
+
+    namespace {
+        std::optional<TString> ValidateStaticPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) {
+            const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+            try {
+                for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                    if (!group.HasBridgePileId() || !group.RingsSize()) {
+                        continue;
+                    }
+                    const auto pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                    if (!pileId || pileId.GetPileIndex() >= registry.PilesSize()) {
+                        continue;
+                    }
+                    auto settings = config.GetSelfManagementConfig();
+                    const auto& name = registry.GetPiles(pileId.GetPileIndex()).GetName();
+                    if (const auto *rule = FindStoragePoolPileOverride(config.GetBlobStorageConfig(), name, std::nullopt)) {
+                        ApplyStoragePoolPileOverride(settings, *rule);
+                    }
+                    auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies());
+                    if (settings.HasErasureSpecies() && !TBlobStorageGroupType::ParseErasureName(erasure, settings.GetErasureSpecies())) {
+                        return "invalid static group ErasureSpecies";
+                    }
+                    const NBsController::TGroupGeometryInfo geometry(TBlobStorageGroupType(erasure), settings.GetGeometry());
+                    if (erasure != group.GetErasureSpecies() || group.RingsSize() != geometry.GetNumFailRealms()) {
+                        return "storage pool pile override changes erasure or topology of existing static group";
+                    }
+                    for (const auto& realm : group.GetRings()) {
+                        if (realm.FailDomainsSize() != geometry.GetNumFailDomainsPerFailRealm()) {
+                            return "storage pool pile override changes topology of existing static group";
+                        }
+                        for (const auto& domain : realm.GetFailDomains()) {
+                            if (domain.VDiskLocationsSize() != geometry.GetNumVDisksPerFailDomain()) {
+                                return "storage pool pile override changes topology of existing static group";
+                            }
+                        }
+                    }
+                }
+            } catch (const std::exception& ex) {
+                return TStringBuilder() << "invalid static group pile override: " << ex.what();
+            }
+            return std::nullopt;
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Inter-config validation
@@ -154,6 +199,11 @@ namespace NKikimr::NStorage {
 
         if (auto error = ValidateConfig(proposed)) {
             return TStringBuilder() << "proposed config validation failed: " << *error;
+        }
+        if (current.GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            if (auto error = ValidateStaticPileOverrides(proposed)) {
+                return error;
+            }
         }
         if (current.GetClusterStateDetails().GetNonUniformStorageEnabled()
                 && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()) {
@@ -421,6 +471,21 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfig(const NKikimrConfig::TBlobStorageConfig& config, const THashSet<ui32>& nodeIds) {
+        if (auto error = ValidateStoragePoolPileOverrides(config)) {
+            return error;
+        }
+        try {
+            for (const auto& rule : config.GetStoragePoolPileOverrides()) {
+                if (rule.HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies erasure;
+                    TBlobStorageGroupType::ParseErasureName(erasure, rule.GetErasureSpecies());
+                    const NBsController::TGroupGeometryInfo geometry(TBlobStorageGroupType(erasure), rule.GetGeometry());
+                }
+            }
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "invalid storage pool pile override geometry: " << ex.what();
+        }
+
         if (config.HasServiceSet()) {
             if (auto error = ValidateConfig(config.GetServiceSet(), nodeIds)) {
                 return error;
@@ -474,6 +539,27 @@ namespace NKikimr::NStorage {
                 return "PileRegistry is set for not bridged cluster";
             } else if (auto error = NBridge::ValidatePileRegistry(details.GetPileRegistry(), config.GetClusterState())) {
                 return *error;
+            }
+        }
+
+        if (config.HasClusterState() && config.GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelPileOverrides) {
+                return "storage pool pile overrides require the corresponding bridge feature level";
+            }
+            const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+            for (const auto& rule : config.GetBlobStorageConfig().GetStoragePoolPileOverrides()) {
+                for (const auto& name : rule.GetPileName()) {
+                    bool found = false;
+                    for (const auto& pile : registry.GetPiles()) {
+                        found |= pile.HasName() && pile.GetName() == name;
+                    }
+                    if (!found) {
+                        return TStringBuilder() << "unknown pile in storage pool pile override: " << name;
+                    }
+                }
+            }
+            if (auto error = ValidateStaticPileOverrides(config)) {
+                return error;
             }
         }
 

@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     yql/essentials/core
     yql/essentials/core/type_ann
+    ydb/library/pretty_types_print/protobuf
     ydb/library/yql/dq/expr_nodes
     yql/essentials/core/dq_integration
     yql/essentials/providers/common/config

@@ -729,7 +729,8 @@ private:
         }
 
         // We need to unpack all tuples to get proper column pointers
-        std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
+        auto& bytesPerColumn = UnpackBytesPerColumn_;
+        bytesPerColumn.clear();
         TupleLayout_->CalculateColumnSizes(
             packedData, count, bytesPerColumn);
 
@@ -737,11 +738,22 @@ private:
         Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
             "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << InnerExtractors_.size());
 
-        TVector<TVector<ui8>> columnsDataStorage;
-        TVector<TVector<ui8>> columnsNullBitmapStorage;
-
-        TVector<ui8*> columnsData;
-        TVector<ui8*> columnsNullBitmap;
+        auto& columnsDataStorage = UnpackDataStorage_;
+        auto& columnsNullBitmapStorage = UnpackBitmapStorage_;
+        auto& columnsData = UnpackColumnsData_;
+        auto& columnsNullBitmap = UnpackColumnsNullBitmap_;
+        columnsData.clear();
+        columnsNullBitmap.clear();
+        size_t dataUsed = 0;
+        size_t bitmapUsed = 0;
+        auto takeBuffer = [](TVector<TVector<ui8>>& storage, size_t& used, size_t size) -> ui8* {
+            if (used == storage.size()) {
+                storage.emplace_back();
+            }
+            auto& buf = storage[used++];
+            buf.assign(size, 0);
+            return buf.data();
+        };
 
         // Create buffers based on InnerExtractors (= ColumnDescs count)
         // Note: strings will create 2 pointers (offset + data)
@@ -751,31 +763,24 @@ private:
             // For variable-size columns (strings), we need to create offset buffer first
             if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
                 // Offset buffer: (NTuples + 1) * sizeof(ui32)
-                columnsDataStorage.emplace_back((count + 1) * sizeof(ui32));
-                std::memset(columnsDataStorage.back().data(), 0, (count + 1) * sizeof(ui32));
-                columnsData.push_back(columnsDataStorage.back().data());
+                columnsData.push_back(takeBuffer(columnsDataStorage, dataUsed, (count + 1) * sizeof(ui32)));
 
                 // Null bitmap for offset buffer
                 ui32 bitmapBytes = (count + 7) / 8;
-                columnsNullBitmapStorage.emplace_back(bitmapBytes);
-                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+                columnsNullBitmap.push_back(takeBuffer(columnsNullBitmapStorage, bitmapUsed, bitmapBytes));
 
                 // Data buffer
-                columnsDataStorage.emplace_back(bytesPerColumn[i]);
-                columnsData.push_back(columnsDataStorage.back().data());
+                columnsData.push_back(takeBuffer(columnsDataStorage, dataUsed, bytesPerColumn[i]));
 
                 // Null bitmap for data buffer (dummy)
-                columnsNullBitmapStorage.emplace_back(1);
-                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+                columnsNullBitmap.push_back(takeBuffer(columnsNullBitmapStorage, bitmapUsed, 1));
             } else {
                 // For fixed-size columns, just allocate data buffer
-                columnsDataStorage.emplace_back(bytesPerColumn[i]);
-                columnsData.push_back(columnsDataStorage.back().data());
+                columnsData.push_back(takeBuffer(columnsDataStorage, dataUsed, bytesPerColumn[i]));
 
                 // Allocate bitmap storage
                 ui32 bitmapBytes = (count + 7) / 8;
-                columnsNullBitmapStorage.emplace_back(bitmapBytes);
-                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+                columnsNullBitmap.push_back(takeBuffer(columnsNullBitmapStorage, bitmapUsed, bitmapBytes));
             }
         }
 
@@ -809,6 +814,12 @@ private:
             }
         }
     }
+
+    std::vector<ui64, TMKQLAllocator<ui64>> UnpackBytesPerColumn_;
+    TVector<TVector<ui8>> UnpackDataStorage_;
+    TVector<TVector<ui8>> UnpackBitmapStorage_;
+    TVector<ui8*> UnpackColumnsData_;
+    TVector<ui8*> UnpackColumnsNullBitmap_;
 
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;

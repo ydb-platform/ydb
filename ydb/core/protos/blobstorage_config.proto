@@ -147,6 +147,24 @@ message TPDiskFilter {
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
 }
 
+// Allocation overrides shared by BSC and distconf. Selectors are independent: an empty Kind list selects no
+// dynamic pools unless AllKinds is set; StaticGroupOverride selects static groups without reserving a pool kind.
+message TStoragePoolPileOverride {
+    repeated string PileName = 1; // nonempty list of distinct pile names; settings apply to every listed pile
+    repeated string Kind = 2;
+    bool AllKinds = 3;
+    bool StaticGroupOverride = 4;
+
+    optional string ErasureSpecies = 5;
+    // Replaces the whole geometry; {} selects the erasure's default geometry. Required with ErasureSpecies.
+    TGroupGeometry Geometry = 6;
+    message TPDiskFilters {
+        repeated TPDiskFilter PDiskFilter = 1;
+    }
+    // Replaces all filters, including with an empty list. Omission inherits the base filters.
+    TPDiskFilters PDiskFilters = 7;
+}
+
 message TDefineStoragePool {
     message TExistingGroups {
         repeated uint32 GroupId = 1;
@@ -363,6 +381,25 @@ message TChangeGroupSizeInUnits {
     uint64 StoragePoolId = 2;
     repeated uint32 GroupId = 4; // if absent, then all groups in the pool are resized
     uint32 SizeInUnits = 5;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
+// Change BridgeMode of the storage pool of the bridged cluster with non-uniform storage enabled; groups created
+// afterwards follow the new mode, while existing groups keep their ids and data. Making the pool bridged turns its
+// ordinary groups into inline piles in the piles they reside in (each group must reside in a single pile), then the
+// groups get their parts in other piles, which are synced in the background. Making the pool ordinary leaves every
+// bridged group with its part in a single pile, the other parts are deleted in the background.
+message TChangeStoragePoolBridgeMode {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    bool BridgeMode = 3;
+
+    // the pile which bridged groups keep their parts in when the pool is made ordinary; by default, the group keeps
+    // the part it relies on (e.g. the one it has been made bridged from), its inline pile, or its part in the primary
+    // pile
+    string RetainPileName = 4;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
@@ -746,6 +783,7 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
+            TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

@@ -174,6 +174,9 @@ namespace NKikimr::NStorage {
             details->SetNonUniformStorageEnabled(true);
             next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelNonUniformStorage));
         }
+        if (config->GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelPileOverrides));
+        }
         config->MutableClusterStateDetails()->MutablePileRegistry()->Swap(&next);
         return std::nullopt;
     }
@@ -188,10 +191,14 @@ namespace NKikimr::NStorage {
 
         config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize()));
         *config->MutableClusterStateDetails()->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(*cfg.BridgeConfig);
+        if (config->GetBlobStorageConfig().StoragePoolPileOverridesSize()) {
+            config->MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelPileOverrides);
+        }
         if (cfg.BridgeConfig->GetEnableNonUniformStorage()) {
             auto *details = config->MutableClusterStateDetails();
             details->SetNonUniformStorageEnabled(true);
-            details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelNonUniformStorage);
+            details->MutablePileRegistry()->SetRequiredFeatureLevel(Max<ui32>(
+                details->GetPileRegistry().GetRequiredFeatureLevel(), BridgeFeatureLevelNonUniformStorage));
         }
     }
 
@@ -233,8 +240,11 @@ namespace NKikimr::NStorage {
                     return true;
                 };
 
-                if (!state->GetUnsyncedBSC() && checkIfStaticGroupsSynced()) {
-                    // fully synced, can switch to SYNCHRONIZED
+                if (!state->GetUnsyncedBSC() && config->GetClusterState().GetPerPileState(bridgePileId.GetPileIndex())
+                        == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2 && checkIfStaticGroupsSynced()) {
+                    // fully synced, can switch to SYNCHRONIZED; only the pile going through its sync
+                    // (NOT_SYNCHRONIZED_2) finishes it, the one waiting to start (NOT_SYNCHRONIZED_1) may have parts
+                    // reported synced by BSC for their previous sync, which are going to be reset
                     pileSyncState->DeleteSubrange(stateIndex--, 1);
                     config->MutableClusterState()->SetPerPileState(bridgePileId.GetPileIndex(),
                         NKikimrBridge::TClusterState::SYNCHRONIZED);
@@ -399,12 +409,14 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-            const NKikimrConfig::TBridgeConfig& bridgeConfig) {
+            const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion) {
         if (config->HasClusterState()) {
             return "cluster is already bridged one";
         } else if (bridgeConfig.PilesSize() != 1) {
             return "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
-        } else if (bridgeConfig.GetEnableNonUniformStorage()) {
+        } else if (skipStoragePoolConversion && !bridgeConfig.GetEnableNonUniformStorage()) {
+            return "skipping storage pool conversion requires bridge_config.enable_non_uniform_storage";
+        } else if (!skipStoragePoolConversion && bridgeConfig.GetEnableNonUniformStorage()) {
             return "enable non-uniform storage only after BSC conversion completes";
         }
 
@@ -412,7 +424,12 @@ namespace NKikimr::NStorage {
         // the pile is the implicit one, as nodes and groups of the cluster have no pile settings yet
         config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
         auto *details = config->MutableClusterStateDetails();
-        details->SetBscConversionPending(true);
+        if (skipStoragePoolConversion) {
+            // BSC has nothing to convert: its pools and groups stay non-bridged in the cluster supporting both kinds
+            details->SetNonUniformStorageEnabled(true);
+        } else {
+            details->SetBscConversionPending(true);
+        }
         *details->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(bridgeConfig);
         // nodes of older versions don't handle inline piles (their VDisks abort, their bridge proxies loop), so they
         // must neither get the converted config nor connect to the ones having it
@@ -522,6 +539,14 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "can't find erasure of bridged static group GroupId# " << proxyGroupId;
             }
 
+            // New parts inherit the configured static base, not whichever heterogeneous part is found first.
+            if (config->GetSelfManagementConfig().HasErasureSpecies()) {
+                TBlobStorageGroupType::EErasureSpecies species;
+                if (!TBlobStorageGroupType::ParseErasureName(species, config->GetSelfManagementConfig().GetErasureSpecies())) {
+                    return "invalid static group ErasureSpecies";
+                }
+                groupType = TBlobStorageGroupType(species);
+            }
             ++nextGroupId;
             try {
                 AllocateStaticGroup({

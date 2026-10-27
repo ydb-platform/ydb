@@ -9,9 +9,13 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <util/generic/map.h>
+#include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/purecalc/common/fwd.h>
+
+namespace NYql::NPureCalc {
+class IProgramFactory;
+}
 
 namespace NFq {
 
@@ -29,7 +33,7 @@ public:
 
 public:
     // Perform program creation and saving
-    virtual void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) = 0;
+    virtual void CreateProgram(TIntrusivePtr<NYql::NPureCalc::IProgramFactory> programFactory) = 0;
 
     virtual TStringBuf GetQuery() const {
         return "";

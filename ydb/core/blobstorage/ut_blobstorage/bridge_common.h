@@ -137,8 +137,11 @@ namespace NBridgeTest {
         return res->Get()->Record;
     }
 
-    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env) {
-        return InvokeDistconf(env, [](auto& record) { record.MutableConvertToBridge(); });
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env,
+            bool skipStoragePoolConversion = false) {
+        return InvokeDistconf(env, [&](auto& record) {
+            record.MutableConvertToBridge()->SetSkipStoragePoolConversion(skipStoragePoolConversion);
+        });
     }
 
     inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
@@ -182,27 +185,62 @@ namespace NBridgeTest {
         return res;
     }
 
-    // define new storage pool with the same settings as the existing one
-    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+    inline NKikimrBlobStorage::TDefineStoragePool ReadStoragePool(TEnvironmentSetup& env, ui64 storagePoolId) {
         NKikimrBlobStorage::TConfigRequest request;
         auto *read = request.AddCommand()->MutableReadStoragePool();
         read->SetBoxId(1);
-        read->AddStoragePoolId(1);
-        auto response = env.Invoke(request);
+        read->AddStoragePoolId(storagePoolId);
+        const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
+        return response.GetStatus(0).GetStoragePool(0);
+    }
 
-        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
+    inline void SetNumGroups(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups) {
+        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, storagePoolId);
+        pool.SetNumGroups(numGroups);
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // move one of the group's VDisks to another PDisk; this also bumps the group generation
+    inline void ReassignOneDisk(TEnvironmentSetup& env, ui32 groupId) {
+        const auto baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                target = &vslot;
+                break;
+            }
+        }
+        UNIT_ASSERT(target);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+        reassign->SetGroupId(groupId);
+        reassign->SetGroupGeneration(target->GetGroupGeneration());
+        reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+        reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+        reassign->SetVDiskIdx(target->GetVDiskIdx());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // define new storage pool with the same settings as the existing one
+    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
         pool.SetStoragePoolId(storagePoolId);
         pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
         pool.SetKind(pool.GetName());
         pool.SetNumGroups(1);
         pool.ClearItemConfigGeneration();
 
-        request.Clear();
+        NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
-        response = env.Invoke(request);
+        const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
@@ -275,8 +313,17 @@ namespace NBridgeTest {
             TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
     }
 
-    // group info as BSC distributes it to nodes
+    // group info from distconf for static groups and from BSC for dynamic ones
     inline NKikimrBlobStorage::TGroupInfo GetGroupInfo(TEnvironmentSetup& env, ui32 groupId) {
+        if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            const auto config = QueryStorageConfig(env);
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    return group;
+                }
+            }
+            UNIT_FAIL("static group not found GroupId# " << groupId);
+        }
         const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         auto request = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
         request->Record.AddGroupIDs(groupId);
@@ -349,17 +396,23 @@ namespace NBridgeTest {
     }
 
     // create cluster with dynamic groups and convert it into single-pile bridged one; returns the first group id, which
-    // some data is written to
-    inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1) {
+    // some data is written to; groups of BSC stay non-bridged when skipStoragePoolConversion is set, which requires
+    // non-uniform storage to be enabled in the bridge config
+    inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1,
+            bool skipStoragePoolConversion = false) {
         const ui32 groupId = CreatePoolAndGetGroup(env, numGroups);
 
         checker.Write(groupId);
+        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(skipStoragePoolConversion);
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
 
-        const auto res = ConvertToBridge(env);
+        const auto res = ConvertToBridge(env, skipStoragePoolConversion);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
-        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        const auto config = QueryStorageConfig(env);
+        const auto& details = config.GetClusterStateDetails();
+        UNIT_ASSERT(!details.GetBscConversionPending());
+        UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
         return groupId;
     }
 

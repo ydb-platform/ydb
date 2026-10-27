@@ -1,10 +1,9 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeFailover.TwoFailedPilesPrimarySurvives
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeRestart.RegistrationSnapshotPrecedesDiskUpdates
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
@@ -24,6 +23,7 @@ ydb/core/kqp/ut/tracing TKqpQueryTrace.SpillingReportsFollowRequestedStatsMode
 ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
 ydb/core/memory_controller/ut TMemoryController.MemTable
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
+ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/tablet/ut TNodeDatabaseMetricsAggregatorTest.ConcurrentPackSeesWholeBuckets
 ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch
@@ -62,14 +62,12 @@ ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.Missing
 ydb/core/tx/replication/controller/ut_target_discoverer TargetDiscoverer.SourceAuthorizationFailureRemainsTerminal
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_export TExportToS3Tests.CheckItemProgress
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ImportBigEncryptedFileWithRebootAfterLastPortion
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
-ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/metadata/secret/ut Secret.SimpleQueryService
@@ -101,7 +99,6 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-4-1_to_stable-26-3-1-True]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-4-1-codec2-ROW]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/datashard/set_column_constraint/concurrency py3test.[test_set_not_null_concurrency.py */*] chunk
 ydb/tests/datashard/set_column_constraint/concurrency test_set_not_null_concurrency.py.TestSetNotNullConcurrency.test_set_not_null_with_concurrent_upserts

@@ -1,5 +1,7 @@
 #include "dsproxy_blackboard.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
+
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -237,6 +239,10 @@ bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlob
                 layout.AddItem(diskIdx, partIdx, info.Type);
             }
         }
+    }
+    if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+        const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, Id.Hash());
+        return checker && checker->CheckQuorumForLayout(layout);
     }
     return info.GetQuorumChecker().GetBlobState(layout, {&info.GetTopology()}) == TBlobStorageGroupInfo::EBS_FULL;
 }

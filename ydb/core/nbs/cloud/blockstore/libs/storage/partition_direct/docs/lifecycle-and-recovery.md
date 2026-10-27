@@ -54,19 +54,34 @@ aggregates PB metadata by vChunk and makes it available through
 original `(Generation, Lsn)`, range and host into the dirty map. Reads and
 writes wait for the vChunk's dirty-map readiness future.
 
-The dirty map merges replicas of the same key. A recovered record without a
-PB quorum starts in `PBufferIncompleteWrite`; it becomes written after a
-quorum is known. Restored data resumes the normal flush and erase machinery.
-PB's own restart replay is a separate layer described in the shared PB page.
+The dirty map merges replicas of the same key. `RestorePBuffer` applies one
+recovered copy and marks that host confirmed. While fewer than three hosts
+are confirmed the record is `PBufferIncompleteWrite`. The call that confirms
+the third host moves it to `PBufferWritten`. When every listed host has
+answered, `FinishPBufferRestore` discards a record that is still below three
+copies: the copies found are erased by address, and the restore barrier
+finishes the record.
+
+A host whose list returns an error makes the aggregated response partial.
+`TRestoreRequestExecutor` returns the copies already collected and sets
+`response.Error`. `TVChunk::UpdateDirtyMap` applies those copies and does
+not call `FinishPBufferRestore`. A host that did not answer may still hold
+a copy, so a write that reached quorum must not be discarded. Any record
+still below three copies stays in `PBufferIncompleteWrite`.
+
+The PB recovers its own on-disk records before it answers the list. That
+recovery is described on the shared
+[PersistentBuffer](../../../../../../../../docs/en/core/contributor/distributed-storage/persistent-buffer.md)
+page. The partition consumes the list that recovery publishes.
 
 Two implementation boundaries need care when extending recovery:
 
 - `TRestoreRequestExecutor::Run` currently enumerates the five initial host
   positions. Do not assume that this scans all positions appended later.
-- `TInflightInfo` registers incomplete records in `ReadyToClone`, but the
-  current vChunk maintenance path does not consume that queue. The presence
-  of the state is not evidence of an implemented automatic PB re-replication
-  worker. Reads overlapping such a record wait on its quorum-ready future.
+- `TInflightInfo` registers an incomplete record in `ReadyToClone`, but the
+  vChunk maintenance path does not consume that queue. The state is not an
+  automatic re-replication worker. A read overlapping a record that is still
+  `PBufferIncompleteWrite` waits on its quorum-ready future.
 
 Tests of complete-quorum restart do not establish behavior for either case.
 
@@ -75,11 +90,32 @@ Tests of complete-quorum restart do not establish behavior for either case.
 The per-record progression is:
 
 ```text
-PendingWrite -- write quorum --> Written --> Flushing --> Flushed
-IncompleteWrite -- restored quorum --^                     |
-                                                          v
-                                                       Erasing --> Erased
+PBufferPendingWrite -- OnWriteWithoutQuorum --> PBufferDiscarded -----+
+                                                     erase or barrier |
+PBufferPendingWrite -- RestorePBuffer --> PBufferIncompleteWrite      |
+                       below quorum         |                         |
+                                            | RestorePBuffer          |
+                                            | confirms the third copy |
+                                            v                         |
+PBufferPendingWrite -- OnWritten --> PBufferWritten                   |
+                                            |                         |
+                                            | RequestFlush            |
+                                            v                         |
+                                     PBufferFlushing                  |
+                                            |                         |
+                                            | MaybeAdvanceToFlushed   |
+                                            v                         |
+                                     PBufferFlushed                   |
+                                            |                         |
+                                            | erase or barrier        |
+                                            v                         |
+                                      PBufferErased <-----------------+
 ```
+
+The vertical `RestorePBuffer` arrow is one call per recovered host. The
+call that confirms the third copy enters `PBufferWritten`. After a complete
+list, `FinishPBufferRestore` moves a record still in
+`PBufferIncompleteWrite` to `PBufferDiscarded`.
 
 [TVChunk::DoFlush](../vchunk.cpp) obtains dirty-map hints and creates one
 [TFlushRequestExecutor](../flush_request.cpp) per PB-source/DDisk-destination
@@ -110,11 +146,49 @@ persistence. The cleanup timer retries small tails when no writes or flushes
 are in flight. Its forced pass still honors read locks, host availability and
 the persist-before-erase condition.
 
-Explicit erase batches target the PB positions where writes were requested,
-including handoffs. They are separate requests to each PB. Failed erases are
-eligible for retry. A disabled host does not answer erases, so a flushed
-record whose only unerased copies are on disabled hosts cannot be finished by
-an explicit erase. The restore barrier of the vChunk finishes such records:
+Explicit erase batches go to PBs that confirmed the write, including
+handoffs. Each PB is a separate request, and a failed erase is retried.
+The partition sends the erase only after that host's write reply.
+
+One interconnect session and one channel deliver one sender's events into
+the recipient mailbox in send order. A replacement session is a new
+boundary: an event on the new session and an event still in flight on the
+old one can be handled in either order. An indirect write is forwarded by
+a coordinator on another node, so it shares no session with this erase.
+
+On the PBuffer, batch erase looks only at `Records`. A missing key is
+answered `OK` with an empty trace. That status does not mean the copy is
+gone; another status would mean the same. The key enters `Records` in
+`FinishPersistentBufferWrite`, after disk IO. The write handler has
+already returned by then, so an erase processed in between does not see
+the key. An erase `OK` before the write reply only means the key was not
+in `Records` yet. A write `OK` means the key was in `Records` when the
+reply was sent.
+
+A host that never confirms is not erased by address. Its unanswered write
+does not hold the restore barrier, so the record can be covered while that
+write is still in flight. A belated success while the record is still in
+the dirty map confirms the host, and the erase is sent then. A success
+after the barrier is committed finds the record already gone and is
+ignored.
+
+Two rules decide whether a copy is still valid:
+
+- Address erase deletes a confirmed copy on that PB.
+- The restore barrier forgets a dirty-map record whose remaining copies
+  are on disabled hosts or on hosts that never confirmed the write. On
+  restart `TBlocksDirtyMap::RestorePBuffer` skips every key at or below
+  the persisted barrier, so those copies are not restored. A key above
+  the barrier with fewer than three copies is discarded: the copies
+  found are erased by address, and this barrier finishes the record.
+
+Bytes left on the PBuffer after that are garbage. The PB cleanup barrier
+removes every key below the oldest record still in the dirty map,
+including a copy written after the restore barrier was committed. This
+pass only frees space. See
+[Barrier cleanup and deletion](#barrier-cleanup-and-deletion).
+
+The restore barrier moves as follows:
 
 1. The dirty map takes the largest key among such records that no read holds
    as the barrier target. The target stays below every record that is not
@@ -123,14 +197,9 @@ an explicit erase. The restore barrier of the vChunk finishes such records:
    state.
 3. Once that state is committed, the records at or below the barrier count as
    erased and leave the dirty map.
-4. On restart, recovery skips PB copies at or below the persisted barrier. The
-   copies left on disabled hosts are removed by PB barrier cleanup, which is a
-   separate mechanism; see
-   [Barrier cleanup and deletion](#barrier-cleanup-and-deletion).
 
-Belated successful writes have a separate erase queue. For the disk-level
-meaning of exact erases, compact erase records and barriers, use the shared PB
-page.
+For the disk-level meaning of exact erases, compact erase records and
+barriers, use the shared PB page.
 
 ## Persisted DDisk state and repair
 

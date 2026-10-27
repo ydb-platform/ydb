@@ -55,9 +55,14 @@ private:
     // Sends one direct write in place of a failed one, or replies when the
     // quorum is unreachable. Does nothing after the reply.
     void MaybeSendReplacementDirectWrite(const NProto::TError& error);
-    void MaybeReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
+
+    // A host is fully answered when every write sent to it has answered:
+    // a hedged direct write and the indirect one can both be in flight.
+    // Only such a host is reported to the record.
+    void MaybeReplyOrNotifyBelated(THostMask fullyAnsweredHosts);
     void Reply(NProto::TError error);
-    void NotifyBelated(THostMask completedOnCurrentResponse);
+    // Hosts whose last in-flight write closed in this response.
+    void NotifyBelated(THostMask fullyAnsweredHosts);
 
     void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();
@@ -68,6 +73,7 @@ private:
     [[nodiscard]] bool IsQuorumReachable() const;
     [[nodiscard]] size_t GetQuorumDeficit() const;
     [[nodiscard]] THostMask GetRunningDirectWrites() const;
+    [[nodiscard]] THostMask GetFullyAnsweredHosts() const;
 
     TString ExtendedDebugState() const;
     TString PrintHostAndNode(THostIndex host) const;
@@ -85,6 +91,8 @@ private:
     THostMask IndirectCoordinator;
     THostMask RequestedIndirectWrites;
     THostMask RequestedDirectWrites;
+    THostMask AnsweredIndirectWrites;
+    THostMask AnsweredDirectWrites;
     THostMask CompletedWrites;
     THostMask FailedWrites;
     bool IsReplied = false;

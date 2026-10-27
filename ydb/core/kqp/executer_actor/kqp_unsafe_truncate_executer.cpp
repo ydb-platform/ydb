@@ -164,11 +164,8 @@ private:
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
-        // An empty token still fails the DescribeSchema ACL check with an empty SID, and the
-        // scheme cache reports that as PathErrorUnknown.
-        if (UserToken && !UserToken->GetSerializedToken().empty()) {
-            request->UserToken = UserToken;
-        }
+        // Like TKqpTableResolver, refresh metadata here and check operation permissions in ResolveTables.
+        // DescribeSchema was checked by the metadata loader during compilation.
 
         for (const size_t i : PendingNavigate) {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -198,9 +195,9 @@ private:
             auto& table = Tables.at(PendingNavigate[r]);
 
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    TStringBuilder() << "Failed to navigate " << table.Path << " for unsafe truncate: "
-                                     << ToString(entry.Status));
+                ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Failed to resolve table `" << table.Path << "` status: "
+                                     << entry.Status << '.');
                 return;
             }
 
@@ -281,8 +278,6 @@ private:
     void ResolveTables() {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Database;
-        // An empty token still fails the DescribeSchema ACL check with an empty SID, and the
-        // scheme cache reports that as PathErrorUnknown.
         if (UserToken && !UserToken->GetSerializedToken().empty()) {
             request->UserToken = UserToken;
         }
@@ -308,31 +303,16 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         auto& request = ev->Get()->Request;
 
-        if (request->ErrorCount > 0) {
-            TStringBuilder details;
-            bool accessDenied = false;
-            for (size_t i = 0; i < request->ResultSet.size(); ++i) {
-                const auto& entry = request->ResultSet[i];
-                if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-                    continue;
-                }
-                accessDenied = accessDenied
-                    || entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::AccessDenied;
-                details << " " << Tables.at(i).Path << ": " << ToString(entry.Status);
-            }
-            if (accessDenied) {
-                ReplyError(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
-                    TStringBuilder() << "Access denied for unsafe TRUNCATE TABLE:" << details);
-                return;
-            }
-            ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                TStringBuilder() << "Failed to resolve tables for unsafe truncate:" << details);
-            return;
-        }
-
         for (size_t i = 0; i < request->ResultSet.size(); ++i) {
             const auto& entry = request->ResultSet[i];
             const auto& table = Tables.at(i);
+
+            if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+                ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Failed to resolve table `" << table.Path << "` status: "
+                                     << entry.Status << '.');
+                return;
+            }
 
             if (entry.KeyDescription->GetPartitions().empty()) {
                 ReplyError(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,

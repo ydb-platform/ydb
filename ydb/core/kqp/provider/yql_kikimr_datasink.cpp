@@ -199,7 +199,9 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleTruncateTable(NNodes::TKiTruncateTable, TExprContext&) override {
+    TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext&) override {
+        SessionCtx->Tables().GetOrAddTable(TString(node.DataSink().Cluster()), SessionCtx->GetDatabase(),
+            TString(node.TablePath().Value()));
         return TStatus::Ok;
     }
 

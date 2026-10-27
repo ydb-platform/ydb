@@ -1909,6 +1909,83 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, implPath), 0u);
     }
 
+    Y_UNIT_TEST_TWIN(MissingTableMatchesDelete, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto erase = ExecuteQuery(session, R"(
+            DELETE FROM `/Root/MissingTable` ON SELECT CAST(1 AS Uint64) AS Key;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto truncate = ExecuteQuery(session, R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
+            TRUNCATE TABLE `/Root/MissingTable` WITH (unsafe = true);
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(erase.GetStatus(), EStatus::SCHEME_ERROR, erase.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(truncate.GetStatus(), erase.GetStatus(), truncate.GetIssues().ToString());
+        const TString expected = "Cannot find table 'db.[/Root/MissingTable]' because it does not exist "
+            "or you do not have access permissions.";
+        UNIT_ASSERT_STRING_CONTAINS(erase.GetIssues().ToString(), expected);
+        UNIT_ASSERT_STRING_CONTAINS(truncate.GetIssues().ToString(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+    }
+
+    Y_UNIT_TEST_QUAD(AclMatchesDelete, UseQueryService, HasDescribeSchema) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        for (bool hasEraseRow : {false, true}) {
+            const TString user = "truncate-user@builtin";
+            auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+            auto admin = GetClient<UseQueryService>(kikimr).GetSession().GetValueSync().GetSession();
+            CreateAndFill(admin);
+
+            auto grant = [&](const TString& path, const std::vector<std::string>& rights) {
+                auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+                    .SetEndpoint(kikimr.GetEndpoint()).SetDatabase("/Root").SetAuthToken("root@builtin"));
+                auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+                auto result = schemeClient.ModifyPermissions(path,
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                        NYdb::NScheme::TPermissions(user, rights))).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+            };
+            grant("/Root", {"ydb.database.connect"});
+            WaitForProxy(kikimr, user);
+            std::vector<std::string> rights;
+            if constexpr (HasDescribeSchema) {
+                rights.emplace_back("ydb.deprecated.describe_schema");
+            }
+            if (hasEraseRow) {
+                rights.emplace_back("ydb.deprecated.erase_row");
+            }
+            grant(TablePath, rights);
+
+            auto client = GetClient<UseQueryService>(kikimr, user);
+            auto session = client.GetSession().GetValueSync().GetSession();
+            // DELETE ON with literal keys needs EraseRow without requiring SelectRow.
+            auto erase = ExecuteQuery(session, Sprintf(
+                "DELETE FROM `%s` ON SELECT CAST(1 AS Uint64) AS Key;", TablePath),
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            const auto expectedStatus = !HasDescribeSchema ? EStatus::SCHEME_ERROR
+                : hasEraseRow ? EStatus::SUCCESS : EStatus::ABORTED;
+            UNIT_ASSERT_VALUES_EQUAL_C(erase.GetStatus(), expectedStatus, erase.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(admin), erase.IsSuccess() ? 2u : 3u);
+
+            auto truncate = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(truncate.GetStatus(), erase.GetStatus(), truncate.GetIssues().ToString());
+            if (!HasDescribeSchema || !hasEraseRow) {
+                const TString expected = !HasDescribeSchema
+                    ? Sprintf("Cannot find table 'db.[%s]' because it does not exist or you do not have access permissions.", TablePath)
+                    : Sprintf("Failed to resolve table `%s` status: AccessDenied.", TablePath);
+                UNIT_ASSERT_STRING_CONTAINS(erase.GetIssues().ToString(), expected);
+                UNIT_ASSERT_STRING_CONTAINS(truncate.GetIssues().ToString(), expected);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(admin), truncate.IsSuccess() ? 0u : 3u);
+        }
+    }
+
     // Wiping a table is at least as destructive as deleting its rows, so the statement must require
     // the same right a DELETE does. The UPSERT and the plain TRUNCATE under the same user are the
     // negative controls: if either of them were allowed, the environment would be enforcing nothing
@@ -1959,9 +2036,8 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::UNAUTHORIZED, plain.GetIssues().ToString());
 
         auto unsafe = ExecuteQuery(reader, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_UNEQUAL_C(unsafe.GetStatus(), EStatus::SUCCESS,
-            "a user who may not even delete a row must not be able to wipe the table");
-        UNIT_ASSERT_STRING_CONTAINS(unsafe.GetIssues().ToString(), "Access denied");
+        UNIT_ASSERT_VALUES_EQUAL_C(unsafe.GetStatus(), EStatus::ABORTED, unsafe.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(unsafe.GetIssues().ToString(), "AccessDenied");
 
         UNIT_ASSERT_VALUES_EQUAL_C(CountRows(admin), 3u, "nothing may have been wiped");
     }

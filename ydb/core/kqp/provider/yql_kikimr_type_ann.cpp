@@ -3108,6 +3108,12 @@ private:
             return TStatus::Error;
         }
 
+        if (unsafe && !SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
+            TString(node.TablePath().Value()), node.Pos(), ctx))
+        {
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 

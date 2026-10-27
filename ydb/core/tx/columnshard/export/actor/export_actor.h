@@ -29,6 +29,8 @@ private:
 
     using TBase = NBackground::TSessionActor;
     std::optional<TActorId> ScanActorId;
+    bool AllowScanPings = false;
+    std::optional<TString> PendingAbortReason;
 
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
@@ -47,6 +49,7 @@ private:
     void SwitchStage(const EStage from, const EStage to);
 
     void AbortExport(const TString& errorMessage);
+    void FinishAbortExport(const TString& errorMessage);
     void KillExporter();
     void AbortScanIfKnown(const TString& reason);
 

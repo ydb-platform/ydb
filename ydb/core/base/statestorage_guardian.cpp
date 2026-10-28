@@ -364,7 +364,9 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
     }
 
     void Ping() {
+        // the replica has registered the follower, so it is not missing any more, as with the info of a leader
         DowntimeFrom = TInstant::Max();
+        ReplicaMissing(false);
     }
 
 public:

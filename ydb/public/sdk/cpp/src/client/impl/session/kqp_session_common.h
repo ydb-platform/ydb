@@ -72,7 +72,7 @@ public:
     std::optional<TDeadline> PropagatedDeadline_;
 
 protected:
-    TAdaptiveLock Lock_;
+    mutable TAdaptiveLock Lock_;
 
 private:
     const std::string SessionId_;

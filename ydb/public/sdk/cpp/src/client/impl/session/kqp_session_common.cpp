@@ -106,7 +106,7 @@ bool TKqpSessionCommon::MarkIdle() {
 }
 
 bool TKqpSessionCommon::CanReturnToPool() const {
-    std::lock_guard guard(const_cast<TAdaptiveLock&>(Lock_));
+    std::lock_guard guard(Lock_);
     return State_ == S_IDLE && !CloseRequested_;
 }
 
@@ -116,7 +116,7 @@ bool TKqpSessionCommon::IsOwnedBySessionPool() const {
 
 TKqpSessionCommon::EState TKqpSessionCommon::GetState() const {
     // See comments in InjectSessionStatusInterception about lock
-    std::lock_guard guard(const_cast<TAdaptiveLock&>(Lock_));
+    std::lock_guard guard(Lock_);
     return State_;
 }
 

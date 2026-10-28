@@ -2776,6 +2776,20 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
         out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
         break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatBinary:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetCompression()) {
+    case NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionNone:
+        out.set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_NONE);
+        break;
+    case NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionZstd:
+        out.set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD);
+        break;
     default:
         break;
     }
@@ -2851,9 +2865,27 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     case Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson);
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_BINARY:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatBinary);
+        break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "Invalid changefeed format";
+        return false;
+    }
+
+    switch (in.compression()) {
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_UNSPECIFIED:
+        break;
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_NONE:
+        out.SetCompression(NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionNone);
+        break;
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD:
+        out.SetCompression(NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionZstd);
+        break;
+    default:
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid changefeed compression";
         return false;
     }
 

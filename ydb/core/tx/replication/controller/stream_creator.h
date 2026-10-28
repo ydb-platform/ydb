@@ -15,6 +15,7 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
     bool initialScan = true, bool describeOnly = false,
     TDuration streamRetentionPeriod = TDuration::Seconds(1),
     TDuration consumerAvailabilityPeriod = TDuration::Days(1),
-    bool consumerImportant = false);
+    bool consumerImportant = false,
+    bool binaryFormat = false, bool zstdCompression = false);
 
 }

@@ -304,7 +304,7 @@ private:
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
-            auto proto = GetDeserializedData(result.GetData());   // may rethrow exception
+            auto proto = GetDeserializedData(result.GetData());
 
             auto messageMeta = MakeIntrusive<NYdb::NTopic::TMessageMeta>();
             for (auto& v : *proto.MutableMessageMeta()) {

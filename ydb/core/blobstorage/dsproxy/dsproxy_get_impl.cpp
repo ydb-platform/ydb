@@ -4,7 +4,8 @@
 #include "dsproxy_strategy_base.h"
 #include "dsproxy_blackboard.h"
 
-#include "dsproxy_strategy_get_mirror3dc.h"
+#include "dsproxy_strategy_get_m3dc_basic.h"
+#include "dsproxy_strategy_get_m3dc_restore.h"
 #include "dsproxy_strategy_get_m3of4.h"
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_get_bold.h"
@@ -60,11 +61,6 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
-                        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-                        const auto realmState = Info->GetFailRealmState(Info->GetVDiskId(disk.OrderNumber).FailRealm);
-                        if (realmState == R::F) {
-                            continue;
-                        }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                             bool possible;
                             switch (Info->Type.GetErasure()) {
@@ -103,11 +99,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                     }
 
                     const TBlobStorageGroupInfo::TSubgroupVDisks zero(&Info->GetTopology());
-                    const auto mirror3dcChecker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, query.Id.Hash());
-                    const auto state = mirror3dcChecker
-                        ? mirror3dcChecker->GetBlobState(possiblyPresent, zero)
-                        : Info->GetQuorumChecker().GetBlobState(possiblyPresent, zero);
-                    const bool canBeRestored = state != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+                    const auto& checker = Info->GetQuorumChecker();
+                    const bool canBeRestored = checker.GetBlobState(possiblyPresent, zero) != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
                     if (canBeRestored) {
                         okay = false; // there is a slight chance that we can restore that blob
                     }
@@ -330,8 +323,9 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
-    return Blackboard.RunStrategy(logCtx,
-        TMirror3dcGetStrategy(NodeLayout, PhantomCheck, MustRestoreFirst, false), AccelerationParams);
+    return MustRestoreFirst
+        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
+        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {

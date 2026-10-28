@@ -2078,7 +2078,7 @@ namespace NKikimr {
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
                                                           MinHugeBlobInBytes,
-                                                          Db->GetVDiskIncarnationGuid(true));
+                                                          Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
             UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
@@ -2796,13 +2796,6 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
-            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
-                // An excluded realm must answer requests, but must not start recovery or background work.
-                SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
-                    NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
-                UpdateWhiteboard(ctx);
-                return;
-            }
             // generation independent self VDisk Id
             auto genIndSelfVDiskId = SelfVDiskId;
             genIndSelfVDiskId.GroupGeneration = -1;

@@ -467,7 +467,7 @@ bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx) {
     }
 
     if (ctx.GetAuditMode().IsModifying) {
-        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method: " << method,
+        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method",
             {"method", method});
         return false;
     }

@@ -93,17 +93,8 @@ TMirrorer::TMirrorer(
     Counters.ResetCounters();
 }
 
-void TMirrorer::Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx) {
-    if (ReadBalancerActor != ev->Get()->ReadBalancerActorId) {
-        LastReplicationDataNotification = TInstant::Zero();
-    }
-    ReadBalancerActor = ev->Get()->ReadBalancerActorId;
-    TryNotifyReplicationDataFinished(ctx);
-    TryToSplitMerge(ctx);
-}
-
 void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext&) {
-    if (ReplicationDataFinished && ev->Sender == ReadBalancerActor
+    if (ReplicationDataFinished && ev->Sender == PartitionActor
         && ev->Cookie == ReplicationDataNotificationCookie
         && ev->Get()->Record.HasPartitionId() && ev->Get()->Record.GetPartitionId() == Partition) {
         ReplicationDataPersisted = true;
@@ -111,14 +102,14 @@ void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, cons
 }
 
 void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
-    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted || !ReadBalancerActor) {
+    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted) {
         return;
     }
     if (LastReplicationDataNotification != TInstant::Zero()
         && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
         return;
     }
-    ctx.Send(ReadBalancerActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
+    ctx.Send(PartitionActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
     LastReplicationDataNotification = ctx.Now();
 }
 

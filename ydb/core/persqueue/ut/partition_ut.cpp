@@ -3094,6 +3094,93 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
 
 } // namespace
 
+Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 0, .Config = initialConfig}, initialConfig);
+
+    TActorId mirrorer;
+    const auto balancer = Ctx->Runtime->AllocateEdgeActor();
+    const auto restartedBalancer = Ctx->Runtime->AllocateEdgeActor();
+    struct TNotification {
+        TActorId Sender;
+        TActorId Recipient;
+        ui64 Cookie;
+    };
+    TVector<TNotification> notifications;
+    TVector<TNotification> acknowledgements;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPQ::TEvInitCredentials::EventType) {
+            mirrorer = ev->Recipient;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType
+            && (ev->Recipient == balancer || ev->Recipient == restartedBalancer)) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetPartitionId(), 0);
+            notifications.push_back({ev->Sender, ev->Recipient, ev->Cookie});
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinishedAck::EventType && ev->Recipient == mirrorer) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionReplicationFinishedAck>()->Record.GetPartitionId(), 0);
+            acknowledgements.push_back({ev->Sender, ev->Recipient, ev->Cookie});
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    auto drain = [&] { Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100)); };
+    auto notify = [&](ui64 cookie) {
+        Ctx->Runtime->Send(new IEventHandle(ActorId, mirrorer, new TEvPQ::TEvPartitionReplicationFinished(0), 0, cookie), 0, true);
+        drain();
+    };
+    auto ack = [&](const TActorId& sender, ui32 partition, ui64 cookie) {
+        Ctx->Runtime->Send(new IEventHandle(ActorId, sender, new TEvPQ::TEvPartitionReplicationFinishedAck(partition), 0, cookie), 0, true);
+        drain();
+    };
+
+    Config.SetVersion(2);
+    Config.MutablePartitionConfig()->MutableMirrorFrom()->SetIsForTopicReplication(true);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+    drain();
+    UNIT_ASSERT(mirrorer);
+
+    notify(41);
+    UNIT_ASSERT(notifications.empty());
+    SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(balancer));
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(notifications.back().Sender, ActorId);
+    const auto firstCookie = notifications.back().Cookie;
+
+    SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(restartedBalancer));
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(notifications.back().Recipient, restartedBalancer);
+    ack(balancer, 0, firstCookie);
+    ack(restartedBalancer, 1, firstCookie);
+    ack(restartedBalancer, 0, firstCookie + 1);
+    UNIT_ASSERT(acknowledgements.empty());
+
+    ack(restartedBalancer, 0, firstCookie);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Sender, ActorId);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Cookie, 41);
+
+    // A delayed reply for the old notification must not acknowledge a new one.
+    notify(42);
+    UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 3);
+    const auto secondCookie = notifications.back().Cookie;
+    UNIT_ASSERT(secondCookie != firstCookie);
+    ack(restartedBalancer, 0, firstCookie);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 1);
+    ack(restartedBalancer, 0, secondCookie);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Cookie, 42);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
 Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyReplicationReads, TPartitionFixture)
 {
     const TConfigParams initialConfig{

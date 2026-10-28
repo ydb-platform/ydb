@@ -4254,6 +4254,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     CreateCompacter();
     InitializeMLPConsumers();
 
+    ReplicationFinishedMirrorerCookie.reset();
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -5216,19 +5217,45 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
 }
 
 void TPartition::CreateMirrorerActor() {
+    ReplicationFinishedMirrorerCookie.reset();
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
-    if (ReadBalancerActorId) {
-        Send(Mirrorer->Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
-    }
 }
 
 void TPartition::Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx) {
     ReadBalancerActorId = ev->Get()->ReadBalancerActorId;
-    if (Mirrorer) {
-        ctx.Send(Mirrorer->Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+    ForwardReplicationFinished(ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
+    if (!Mirrorer || ev->Sender != Mirrorer->Actor || !ev->Get()->Record.HasPartitionId()
+        || ev->Get()->Record.GetPartitionId() != Partition.InternalPartitionId) {
+        return;
     }
+    if (!ReplicationFinishedMirrorerCookie || *ReplicationFinishedMirrorerCookie != ev->Cookie) {
+        ReplicationFinishedMirrorerCookie = ev->Cookie;
+        ++ReplicationFinishedForwardCookie;
+    }
+    ForwardReplicationFinished(ctx);
+}
+
+void TPartition::ForwardReplicationFinished(const TActorContext& ctx) {
+    if (Mirrorer && ReadBalancerActorId && ReplicationFinishedMirrorerCookie) {
+        ctx.Send(ReadBalancerActorId, new TEvPQ::TEvPartitionReplicationFinished(Partition.OriginalPartitionId),
+            0, ReplicationFinishedForwardCookie);
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx) {
+    if (!Mirrorer || !ReplicationFinishedMirrorerCookie || ev->Sender != ReadBalancerActorId
+        || ev->Cookie != ReplicationFinishedForwardCookie || !ev->Get()->Record.HasPartitionId()
+        || ev->Get()->Record.GetPartitionId() != Partition.OriginalPartitionId) {
+        return;
+    }
+    ctx.Send(Mirrorer->Actor, new TEvPQ::TEvPartitionReplicationFinishedAck(Partition.InternalPartitionId),
+        0, *ReplicationFinishedMirrorerCookie);
+    ReplicationFinishedMirrorerCookie.reset();
 }
 
 bool TPartition::IsQuotingEnabled() const

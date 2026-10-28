@@ -349,7 +349,6 @@ struct TMirrorerEnv {
     TActorId Tablet;
     TActorId Partition;
     TActorId Mirrorer;
-    TActorId ReadBalancer;
     TMockMirrorFactory Factory;
     TPersQueueCounters Counters;
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
@@ -391,10 +390,9 @@ struct TMirrorerEnv {
 
         Tablet = Runtime.AllocateEdgeActor();
         Partition = Runtime.AllocateEdgeActor();
-        ReadBalancer = Runtime.AllocateEdgeActor();
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == ReadBalancer && ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType) {
+            if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType) {
                 ReplicationFinishedCookie = ev->Cookie;
                 CapturedReplicationFinished.emplace_back(ev->Release<TEvPQ::TEvPartitionReplicationFinished>());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -497,13 +495,6 @@ struct TMirrorerEnv {
             Mirrorer,
             Tablet,
             MakeWriteResponse(offset, cookie, alreadyWritten).Release()
-        ), 0, true);
-        Dispatch();
-    }
-
-    void SendReadBalancerActorId() {
-        Runtime.Send(new IEventHandle(
-            Mirrorer, Partition, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancer)
         ), 0, true);
         Dispatch();
     }
@@ -761,7 +752,6 @@ Y_UNIT_TEST(StatusWrongSessionIgnored) {
 
 Y_UNIT_TEST(ReplicationFinishedWaitsForWrites) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
-    env.SendReadBalancerActorId();
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 10);
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
@@ -781,12 +771,12 @@ Y_UNIT_TEST(ReplicationFinishedWaitsForWrites) {
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished[0]->Record.GetPartitionId(), env.PartitionId);
 
     env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Partition, new TEvents::TEvWakeup()), 0, true);
-    env.SendReadBalancerActorId();
+    env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
     UNIT_ASSERT(env.CapturedScale.empty());
 }
 
-Y_UNIT_TEST(ReplicationFinishedWaitsForReadBalancer) {
+Y_UNIT_TEST(ReplicationFinishedIsSentToPartition) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
@@ -794,16 +784,12 @@ Y_UNIT_TEST(ReplicationFinishedWaitsForReadBalancer) {
         env.Factory.Session(0).Partition, {}, {}
     ));
     env.Dispatch();
-    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
-
-    env.SendReadBalancerActorId();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished[0]->Record.GetPartitionId(), env.PartitionId);
 }
 
 Y_UNIT_TEST(ReplicationFinishedRetriesUntilPersistedAck) {
     TMirrorerEnv env({.IsForTopicReplication = true});
-    env.SendReadBalancerActorId();
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
@@ -816,19 +802,18 @@ Y_UNIT_TEST(ReplicationFinishedRetriesUntilPersistedAck) {
     // Retry must work even after TryToSplitMerge has cleared EndPartitionSessionEvent.
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 2u);
-    env.AckReplicationFinished(env.ReadBalancer, env.PartitionId + 1, env.ReplicationFinishedCookie);
-    env.AckReplicationFinished(env.ReadBalancer, env.PartitionId, env.ReplicationFinishedCookie + 1);
+    env.AckReplicationFinished(env.Partition, env.PartitionId + 1, env.ReplicationFinishedCookie);
+    env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie + 1);
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 3u);
 
-    env.AckReplicationFinished(env.ReadBalancer, env.PartitionId, env.ReplicationFinishedCookie);
+    env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie);
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 3u);
 }
 
-Y_UNIT_TEST(ReplicationFinishedRetriesAfterReadBalancerRestart) {
+Y_UNIT_TEST(ReplicationFinishedIgnoresAckFromOtherActor) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
-    env.SendReadBalancerActorId();
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
@@ -837,22 +822,17 @@ Y_UNIT_TEST(ReplicationFinishedRetriesAfterReadBalancerRestart) {
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
 
-    const auto oldReadBalancer = env.ReadBalancer;
-    env.ReadBalancer = env.Runtime.AllocateEdgeActor();
-    env.SendReadBalancerActorId();
+    env.AckReplicationFinished(env.Runtime.AllocateEdgeActor(), env.PartitionId, env.ReplicationFinishedCookie);
+    env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 2u);
-    env.AckReplicationFinished(oldReadBalancer, env.PartitionId, env.ReplicationFinishedCookie);
-    env.Advance(TDuration::Seconds(6));
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 3u);
 
-    env.AckReplicationFinished(env.ReadBalancer, env.PartitionId, env.ReplicationFinishedCookie);
+    env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie);
     env.Advance(TDuration::Seconds(6));
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 2u);
 }
 
 Y_UNIT_TEST(RegularMirrorDoesNotSendReplicationFinished) {
     TMirrorerEnv env;
-    env.SendReadBalancerActorId();
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 10);
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(

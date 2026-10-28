@@ -47,7 +47,6 @@ private:
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
-            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -67,7 +66,6 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
-            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
@@ -126,7 +124,6 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
     void TryNotifyReplicationDataFinished(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
@@ -149,7 +146,6 @@ public:
 
 private:
     const TActorId PartitionActor;
-    TActorId ReadBalancerActor;
     const NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     const bool IsLocalDC;

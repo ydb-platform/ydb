@@ -19,7 +19,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    grpc_choose_proxy_ut.cpp
+    grpc_unauthenticated_methods_ut.cpp
     msgbus_server_pq_metarequest_ut.cpp
 )
 

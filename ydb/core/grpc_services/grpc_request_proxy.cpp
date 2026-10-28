@@ -15,9 +15,6 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
-#include <util/generic/hash_set.h>
-#include <util/system/mutex.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
@@ -451,24 +448,6 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
     }
 }
 
-namespace {
-
-void WarnIgnoredModifyingMethod(const TString& method) {
-    static TAdaptiveLock lock;
-    static THashSet<TString> warned;
-    bool first = false;
-    {
-        TGuard<TAdaptiveLock> guard(lock);
-        first = warned.insert(method).second;
-    }
-    if (first) {
-        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method",
-            {"method", method});
-    }
-}
-
-} // namespace
-
 bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx) {
     const TString method = ctx.GetRpcMethodName();
     if (!method) {
@@ -488,7 +467,8 @@ bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx) {
     }
 
     if (ctx.GetAuditMode().IsModifying) {
-        WarnIgnoredModifyingMethod(method);
+        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method: " << method,
+            {"method", method});
         return false;
     }
 

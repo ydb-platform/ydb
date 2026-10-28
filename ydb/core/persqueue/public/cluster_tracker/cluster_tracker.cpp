@@ -371,10 +371,9 @@ private:
                     UpdateAccountsList(record.GetResponse().GetYdbResults(0));
                     return;
                 }
-                if (!success && IssuesLookLikeMissingAccountTable(issues)) {
-                    YDB_LOG_DEBUG_CTX(Ctx(), "Account table is absent, account cluster lists are empty",
+                if (record.GetYdbStatus() == Ydb::StatusIds::SCHEME_ERROR) {
+                    YDB_LOG_DEBUG_CTX(Ctx(), "Account list scheme error, keep the previous account lists",
                         {"record", record});
-                    LastAccounts.clear();
                 } else {
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to list accounts, publish clusters with last account cache",
                         {"record", record});

@@ -223,9 +223,4 @@ bool IssuesLookLikeClusterSchemaGone(TStringBuf issues) {
     return IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues);
 }
 
-bool IssuesLookLikeMissingAccountTable(TStringBuf issues) {
-    return issues.Contains("Account")
-        && (IssuesLookLikeMissingTable(issues) || issues.Contains("Member not found"));
-}
-
 } // namespace NKikimr::NPQ::NClusterTracker

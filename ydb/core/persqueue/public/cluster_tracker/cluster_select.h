@@ -30,6 +30,5 @@ bool IssuesLookLikeMissingTable(TStringBuf issues);
 bool IssuesLookLikeMissingColumn(TStringBuf issues);
 bool IssuesLookLikeMissingVersionsTable(TStringBuf issues);
 bool IssuesLookLikeClusterSchemaGone(TStringBuf issues);
-bool IssuesLookLikeMissingAccountTable(TStringBuf issues);
 
 } // namespace NKikimr::NPQ::NClusterTracker

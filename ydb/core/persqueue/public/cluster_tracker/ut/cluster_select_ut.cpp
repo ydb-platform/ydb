@@ -248,9 +248,6 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(accountsQuery.Contains("$from"));
         UNIT_ASSERT(!accountsQuery.Contains("Versions"));
         UNIT_ASSERT(!accountsQuery.Contains("name == 'Account'"));
-        UNIT_ASSERT(IssuesLookLikeMissingAccountTable("Cannot find table `/Root/PQ/Config/V2/Account`"));
-        UNIT_ASSERT(IssuesLookLikeMissingAccountTable("Member not found: readClusters. Path: /Root/PQ/Config/V2/Account"));
-        UNIT_ASSERT(!IssuesLookLikeMissingAccountTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));

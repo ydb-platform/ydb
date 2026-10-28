@@ -158,12 +158,13 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         Send(recp, msg.Release());
     }
 
-    void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
+    void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status,
+            ui64 eventCookie = 0) {
         THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
         msg->Record.SetConfigContentHash(Info->ContentHash());
-        Send(recp, msg.Release());
+        Send(recp, msg.Release(), 0, eventCookie);
     }
 
     bool EraseFollowerAndNotify(ui64 tabletId, TEntry &tabletEntry, TActorId followerGuardian) {
@@ -334,9 +335,10 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
         CheckConfigVersion(ev->Sender, msg);
 
+        // the cookie of the event goes back, so the proxy knows the ring group of the reply
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt == Tablets.end()) {
-            ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::ALREADY);
+            ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::ALREADY, ev->Cookie);
             return;
         }
 
@@ -347,7 +349,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         }
 
         Tablets.erase(tabletIt);
-        ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::OK);
+        ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::OK, ev->Cookie);
     }
 
     void CheckConfigVersion(const TActorId &sender, const auto *msg) {

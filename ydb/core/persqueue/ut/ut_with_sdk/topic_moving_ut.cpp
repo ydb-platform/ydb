@@ -112,7 +112,7 @@ public:
             if (auto* start = std::get_if<TEvent::TStartPartitionSessionEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), first);
                 started = true;
-                start->Confirm(std::nullopt, std::nullopt, first + count);
+                start->Confirm(std::nullopt, std::nullopt, first + count - 1);
             } else if (auto* data = std::get_if<TEvent::TDataReceivedEvent>(&*event)) {
                 for (auto& message : data->GetMessages()) {
                     UNIT_ASSERT_C(received < count, "Read more messages than requested");

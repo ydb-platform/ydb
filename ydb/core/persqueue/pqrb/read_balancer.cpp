@@ -276,6 +276,9 @@ void TPersQueueReadBalancer::RequestMovingStatus(NKikimrPQ::ETopicMovingStatus s
     // SchemeShard preserves the current key schema; specifying it in alter is forbidden.
     config->ClearPartitionKeySchema();
     config->SetMovingStatus(status);
+    if (status == NKikimrPQ::MovingDone) {
+        config->MutablePartitionConfig()->ClearMirrorFrom();
+    }
 
     MovingStatusRequestActor = ctx.Register(CreateMovingStatusRequest(SelfId(), std::move(proposal)));
 }

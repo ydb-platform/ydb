@@ -92,4 +92,68 @@ Y_UNIT_TEST_SUITE(BridgePutResult) {
         }
     }
 
+    // Two puts go to a remote pile the interpile way in one batch. The VDisks there never answer the second one; the
+    // first one has a short deadline and must end by it, not wait for the whole batch.
+    Y_UNIT_TEST(InterpileBatchKeepsDeadlineOfEachPut) {
+        TEnvironmentSetup env(MakeSettings(true));
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        const TString data = "blob put in a batch";
+        Put(env, groupId, TLogoBlobID(100500, 1, 1, 0, data.size(), 0), data);
+        env.Sim(TDuration::Seconds(5));
+
+        const TLogoBlobID shortId(100500, 1, 2, 0, data.size(), 0);
+        const TLogoBlobID stuckId(100500, 1, 3, 0, data.size(), 0);
+        ui32 maxInterpileBatch = 0;
+        ui32 numDropped = 0;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePut) {
+                maxInterpileBatch = Max<ui32>(maxInterpileBatch, ev->Get<TEvInterpilePut>()->Record.ItemsSize());
+            }
+            auto isStuck = [&](const auto& blobId, const auto& vdiskId) {
+                return LogoBlobIDFromLogoBlobID(blobId).FullID() == stuckId &&
+                    VDiskIDFromVDiskID(vdiskId).GroupID.GetRawId() != pileGroups[0];
+            };
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut && ev->HasEvent()) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVPut>()->Record;
+                if (isStuck(record.GetBlobID(), record.GetVDiskID())) {
+                    ++numDropped;
+                    return false;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVMultiPut && ev->HasEvent()) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVMultiPut>()->Record;
+                for (const auto& item : record.GetItems()) {
+                    if (isStuck(item.GetBlobID(), record.GetVDiskID())) {
+                        ++numDropped;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(10);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(shortId, data, deadline), 1);
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(stuckId, data, TInstant::Max()), 2);
+        });
+        std::unique_ptr<TEvBlobStorage::TEvPutResult> shortResult;
+        // the stuck put ends by the maximum put timeout of the proxy, a minute; the put with the short deadline must
+        // not wait for that
+        const TInstant waitDeadline = deadline + TDuration::Seconds(5);
+        while (!shortResult) {
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false, waitDeadline);
+            UNIT_ASSERT_C(res, "no reply to the put with the short deadline soon after its deadline");
+            if (res->Get()->Id == shortId) {
+                shortResult.reset(res->Release().Release());
+            }
+        }
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(maxInterpileBatch >= 2, "the puts didn't go the interpile way in one batch");
+        UNIT_ASSERT(numDropped);
+    }
+
 }

@@ -7920,6 +7920,71 @@ selector_config: []
         UNIT_ASSERT_C(reassignedNode || reconfigured, "self-heal didn't move the state storage off node 3");
     }
 
+    // The allowed nodes of state storage self-heal are no longer in the cluster, so no configuration can be made for
+    // it. The update of node states, which forces the heal, must fail instead of applying the empty configuration.
+    Y_UNIT_TEST(SelfHealWithoutAllowedNodesFails) {
+        TCommitConfirmationFixture fixture(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {10, 11, 12}) {
+            fixture.Config.MutableSelfManagementConfig()->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        auto makeConfig = [](auto *config) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : {1, 2, 3}) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig());
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig());
+        makeConfig(fixture.Config.MutableSchemeBoardConfig());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> result;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (edge && ev->GetRecipientRewrite() == edge
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                return false;
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        for (ui32 nodeId : {1, 2, 3}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(0);
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return result.has_value(); }), "no reply to the node state update");
+        UNIT_ASSERT_C(result->GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result->DebugString());
+        const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(),
+            fixture.Config.GetStateStorageConfig().SerializeAsString());
+    }
+
     void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal, bool changePileList = false) {
         TCommitConfirmationFixture fixture(false, 5);
         fixture.Config = MakeTwoPileBridgedConfig("pile0", "pile1");

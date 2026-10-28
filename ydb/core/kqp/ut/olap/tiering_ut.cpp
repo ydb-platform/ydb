@@ -2,6 +2,7 @@
 #include "helpers/local.h"
 #include "helpers/query_executor.h"
 #include "helpers/writer.h"
+#include "tiering_test_enums.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <util/generic/size_literals.h>
@@ -193,7 +194,9 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTiering) {
-    Y_UNIT_TEST_QUAD(TieringNeedActualization, InStore, Reboot) {
+    Y_UNIT_TEST(TieringNeedActualization, ETieringTableKind, ETieringReboot) {
+        const bool inStore = Arg<0>() == ETieringTableKind::InStore;
+        const bool reboot = Arg<1>() == ETieringReboot::Reboot;
         using namespace NWrappers::NExternalStorage;
         auto* storage = Singleton<TFakeExternalStorage>();
         storage->Clear();
@@ -204,11 +207,11 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& controller = tieringHelper.GetCsController();
         controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
         controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        const TString tablePath = InStore ? DEFAULT_TABLE_PATH : TString("/Root/olapTable");
-        const TString objectPath = InStore ? TString("/Root/olapStore") : tablePath;
-        const TString objectType = InStore ? "TABLESTORE" : "TABLE";
+        const TString tablePath = inStore ? DEFAULT_TABLE_PATH : TString("/Root/olapTable");
+        const TString objectPath = inStore ? TString("/Root/olapStore") : tablePath;
+        const TString objectType = inStore ? "TABLESTORE" : "TABLE";
         tieringHelper.SetTablePath(tablePath);
-        if (InStore) {
+        if (inStore) {
             tieringHelper.GetOlapHelper().CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         } else {
             tieringHelper.GetOlapHelper().CreateTestOlapStandaloneTable("olapTable", 1);
@@ -229,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto desc = testHelper.GetKikimr().GetTestClient().Ls(objectPath);
             UNIT_ASSERT(desc);
             const auto& path = desc->Record.GetPathDescription();
-            const auto& schema = InStore ? path.GetColumnStoreDescription().GetSchemaPresets(0).GetSchema()
+            const auto& schema = inStore ? path.GetColumnStoreDescription().GetSchemaPresets(0).GetSchema()
                                         : path.GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetOptions().GetTieringNeedActualization(), expected);
         };
@@ -246,6 +249,25 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             const auto rows = ExecuteScanQuery(client, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`;");
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 2000);
+        };
+
+        const auto waitMigrated = [&](const TString& prefix) {
+            controller->WaitCondition(TDuration::Seconds(60), [&]() {
+                const auto keys = storage->GetBucket("olap-tier1").GetObjectKeys();
+                if (keys.empty()) {
+                    return false;
+                }
+
+                for (const auto& key : keys) {
+                    if (!key.StartsWith(prefix + "/")) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            checkRows();
         };
 
         checkOption(false);
@@ -270,8 +292,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         alterPrefix("archive/data");
         controller->WaitActualization(TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(storage->GetWritesCount(), writesBefore);
+        UNIT_ASSERT(storage->GetBucket("olap-tier1").GetObjectKeys() == oldKeys);
+        checkRows();
 
-        if (Reboot) {
+        if (reboot) {
             controller->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
         }
 
@@ -279,27 +303,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         const auto unrelated = alterOptions("SCAN_READER_POLICY_NAME=`SIMPLE`");
         UNIT_ASSERT_C(unrelated.IsSuccess(), unrelated.GetIssues().ToString());
         checkOption(true);
-        if (Reboot) {
+        if (reboot) {
             testHelper.RebootTablets(tablePath);
             controller->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
         }
 
-        // Wait for both migration and GC: no object in the old layout may remain.
-        controller->WaitCondition(TDuration::Seconds(60), [&]() {
-            const auto keys = storage->GetBucket("olap-tier1").GetObjectKeys();
-            if (keys.empty()) {
-                return false;
-            }
+        waitMigrated("archive/data");
 
-            for (const auto& key : keys) {
-                if (!key.StartsWith("archive/data/")) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-        checkRows();
+        const auto writesBeforeAlter = storage->GetWritesCount();
+        alterPrefix("archive/migrated");
+        waitMigrated("archive/migrated");
+        UNIT_ASSERT(storage->GetWritesCount() > writesBeforeAlter);
 
         setActualization(false);
         checkOption(false);

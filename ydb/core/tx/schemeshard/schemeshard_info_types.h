@@ -3574,6 +3574,7 @@ struct TCdcStreamSettings {
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+    using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3593,6 +3594,12 @@ struct TCdcStreamSettings {
     OPTION(bool, TraceIds);
 
     #undef OPTION
+
+    ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
+    TSelf&& WithCompression(ECompression value) && {
+        Compression = value;
+        return std::move(*this);
+    }
 };
 
 struct TCdcStreamInfo
@@ -3640,6 +3647,7 @@ struct TCdcStreamInfo
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
+            .WithCompression(desc.GetCompression())
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3666,6 +3674,9 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
+        if (Compression != NKikimrSchemeOp::ECdcStreamCompressionUnspecified) {
+            desc.SetCompression(Compression);
+        }
     }
 
     void FinishAlter() {

@@ -527,6 +527,7 @@ RECURSE_FOR_TESTS(
     ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
+    ut_cdc_binary
     ut_change_exchange
     ut_compaction
     ut_disk_quotas

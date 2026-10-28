@@ -266,6 +266,12 @@ public:
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
             break;
+        case NKikimrSchemeOp::ECdcStreamFormatBinary:
+            if (!AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "BINARY format is not supported yet");
+                return result;
+            }
+            break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -291,6 +297,17 @@ public:
             return result;
         }
 
+        switch (newStreamDesc.GetCompression()) {
+        case NKikimrSchemeOp::ECdcStreamCompressionUnspecified:
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                << "Invalid stream compression: " << static_cast<ui32>(newStreamDesc.GetCompression()));
+            return result;
+        }
+
         if (!newStreamDesc.GetAwsRegion().empty()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
@@ -306,6 +323,7 @@ public:
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -318,6 +336,7 @@ public:
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -329,6 +348,7 @@ public:
         if (newStreamDesc.GetSchemaChanges()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,

@@ -844,13 +844,9 @@ public:
             }
         }
 
-<<<<<<< HEAD
-        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
-=======
         ui64 ScaleGroupResource(ui64 value) const;
 
-        bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
->>>>>>> d064c9daee0 (Fix UB overflow in BSC (#55126))
+        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
             TBlobStorageController *self) const;
         bool FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
         bool FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;

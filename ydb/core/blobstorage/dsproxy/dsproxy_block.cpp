@@ -67,6 +67,9 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
             SeenAlready = !IsIdempotent;
             status = IsIdempotent ? NKikimrProto::OK : NKikimrProto::ERROR;
         }
+        if (IsIdempotent && status == NKikimrProto::OK && !incarnationGuid) {
+            status = NKikimrProto::ERROR;
+        }
         switch (NKikimrProto::EReplyStatus newStatus = incarnationGuid
                 ? QuorumTracker.ProcessReplyWithCooldown(vdisk, status, TActivationContext::Now(), *incarnationGuid, queryStatus, resend)
                 : QuorumTracker.ProcessReply(vdisk, status)) {

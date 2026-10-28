@@ -145,9 +145,89 @@ public:
     }
 };
 
+void CheckDelayedBlockReplyWithoutIncarnationGuid(NKikimrProto::EReplyStatus status) {
+    TBlockSyncTest test;
+    test.BlockGroup(test.Target);
+    auto& runtime = test.Env.Runtime;
+    std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> replies(test.Target->GetTotalVDisksNum());
+    ui32 numReplies = 0;
+    bool holdReplies = true;
+    bool captureResult = true;
+    std::unique_ptr<IEventHandle> result;
+    auto filter = std::move(runtime->FilterFunction);
+    runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvVBlockResult) {
+            auto& record = ev->Get<TEvBlobStorage::TEvVBlockResult>()->Record;
+            const auto vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+            const auto *recipient = runtime->GetActor(ev->GetRecipientRewrite());
+            if (vdisk.GroupID == test.Target->GroupID && recipient &&
+                    TypeName(*recipient).Contains("TBlobStorageGroupBlockRequest")) {
+                const ui32 order = test.Target->GetOrderNumber(vdisk);
+                if (order == 5) {
+                    record.SetStatus(status);
+                    record.ClearIncarnationGuid();
+                }
+                if (holdReplies) {
+                    UNIT_ASSERT(!replies[order].second);
+                    replies[order] = {nodeId, std::move(ev)};
+                    ++numReplies;
+                    return false;
+                }
+            }
+        }
+        if (captureResult && ev->GetRecipientRewrite() == test.Edge &&
+                ev->GetTypeRewrite() == TEvBlobStorage::EvBlockResult) {
+            UNIT_ASSERT(!result);
+            result = std::move(ev);
+            return false;
+        }
+        return filter(nodeId, ev);
+    };
+    runtime->WrapInActorContext(test.Edge, [&] {
+        auto request = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max());
+        request->IsIdempotent = true;
+        request->ForceGroupGeneration = test.Target->GroupGeneration;
+        SendToBSProxy(test.Edge, test.Target->GroupID, request.release());
+    });
+    test.Wait([&] { return numReplies == replies.size(); });
+    holdReplies = false;
+    auto release = [&](ui32 order) {
+        auto& [nodeId, ev] = replies[order];
+        runtime->Send(ev.release(), nodeId);
+    };
+    for (ui32 order = 0; order < 5; ++order) {
+        UNIT_ASSERT(replies[order].second->Get<TEvBlobStorage::TEvVBlockResult>()->Record.HasIncarnationGuid());
+        release(order);
+    }
+    test.Env.Sim(VDiskCooldownTimeoutOnProxy + TDuration::Seconds(1));
+    UNIT_ASSERT(!result);
+    release(5);
+    test.Env.Sim(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_C(!result, "A reply without GUID completed a quorum using expired confirmations");
+    for (ui32 order = 6; order < replies.size(); ++order) {
+        auto& record = replies[order].second->Get<TEvBlobStorage::TEvVBlockResult>()->Record;
+        record.SetStatus(NKikimrProto::ERROR);
+        record.ClearIncarnationGuid();
+        release(order);
+    }
+    test.Wait([&] { return bool(result); });
+    UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvBlobStorage::TEvBlockResult>()->Status, NKikimrProto::ERROR);
+    captureResult = false;
+    test.BlockGroup(test.Target, true);
+    runtime->FilterFunction = std::move(filter);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeBlockQuorum) {
+    Y_UNIT_TEST(DelayedAlreadyWithoutIncarnationGuidCannotCompleteQuorum) {
+        CheckDelayedBlockReplyWithoutIncarnationGuid(NKikimrProto::ALREADY);
+    }
+
+    Y_UNIT_TEST(DelayedOkWithoutIncarnationGuidCannotCompleteQuorum) {
+        CheckDelayedBlockReplyWithoutIncarnationGuid(NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(AlreadyAndTwoErrorsWaitForQuorum) {
         TBlockSyncTest test;
         test.BlockGroup(test.Source);

@@ -48,7 +48,6 @@ Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
-            .TokenRecheckIntervalMs = 0,
         });
         auto* runtime = testServer.KikimrServer->GetRuntime();
         runtime->GetAppData().EnforceUserTokenRequirement = false;

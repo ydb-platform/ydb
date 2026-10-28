@@ -430,6 +430,9 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             YA_MAKE_COMMAND+=" --retest"
           fi
+          if [ "${PREBUILD}" = "true" ]; then
+            . .github/actions/test_ya/prebuild.sh
+          fi
           $YA_MAKE_COMMAND -k --cache-tests \
             --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
             $YA_MAKE_TARGET
@@ -453,10 +456,6 @@ runs:
 
         analytics track runner_info --kind info --runner
         analytics flush
-
-        if [ "${PREBUILD}" = "true" ]; then
-          . .github/actions/test_ya/prebuild.sh
-        fi
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)

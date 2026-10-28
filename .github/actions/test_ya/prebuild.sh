@@ -2,11 +2,32 @@
 # Build test binaries into the local ya cache without running tests.
 # Sourced from action.yml so analytics / params / GRAPH_* stay in the same shell.
 set +e
-echo "Prebuild: ya make -A --build-only-test-deps (no test run), then tests use local cache"
+echo "Prebuild: ya make --build-only-test-deps (no test-selection flags), then tests use local cache"
 analytics start ya_prebuild
-./ya make "${params[@]}" --build-only-test-deps \
-  ${GRAPH_PATH:+--build-custom-json=$GRAPH_PATH} \
-  ${CONTEXT_PATH:+--custom-context=$CONTEXT_PATH} \
+
+# Keep build configuration, but do not pass test selection or execution flags
+# to the prebuild. In particular, -T and -A would make this run tests.
+PREBUILD_PARAMS=()
+SKIP_PREBUILD_PARAM_VALUE=0
+for param in "${params[@]}"; do
+  if [ "$SKIP_PREBUILD_PARAM_VALUE" -eq 1 ]; then
+    SKIP_PREBUILD_PARAM_VALUE=0
+    continue
+  fi
+  case "$param" in
+    --add-peerdirs-tests|--test-failure-code|--test-threads|--link-threads|--test-blacklist-path)
+      SKIP_PREBUILD_PARAM_VALUE=1
+      ;;
+    -T|-A|-X|--retest|--test-*|--cache-tests|--dont-merge-split-tests|--cleanup-child-processes)
+      ;;
+    *)
+      PREBUILD_PARAMS+=("$param")
+      ;;
+  esac
+done
+
+./ya make "${PREBUILD_PARAMS[@]}" --build-only-test-deps \
+  --save-graph-to "$GRAPH_PATH" --save-context-to "$CONTEXT_PATH" \
   $YA_MAKE_TARGET
 PREBUILD_RC=$?
 set -e

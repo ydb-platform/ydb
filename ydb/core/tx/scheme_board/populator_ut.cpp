@@ -862,6 +862,80 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             "replay of the latest description must use that description's current path for routing");
     }
 
+    // The path and the path id select different replicas. Two replicas selected by the path only acknowledge the
+    // update: that is a majority of the path selection, but none of the path id selection, which subscribers by path
+    // id read. The publication must wait for the path id selection too.
+    Y_UNIT_TEST(QuorumNeedsMajorityOfEachSelection) {
+        TTestBasicRuntime runtime;
+        TStateStorageInfo::TRingGroup group;
+        group.NToSelect = 3;
+        constexpr size_t replicaCount = 7;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto info = GetStateStorageInfo(runtime);
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        THashMap<TActorId, TActorId> actorToService;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                actorToService[runtime.GetLocalServiceId(replica)] = replica;
+            }
+        }
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        commits.Remove();
+
+        auto select = [&](ui64 hash) {
+            TStateStorageInfo::TSelection selection;
+            info->SelectReplicas(hash, &selection, 0);
+            return THashSet<TActorId>(selection.begin(), selection.end());
+        };
+        const auto idSelection = select(pathId.Hash());
+        TString path;
+        TVector<TActorId> pathOnly; // replicas selected by the path, but not by the path id
+        for (size_t i = 0; i != 1000 && pathOnly.size() < 2; ++i) {
+            path = TStringBuilder() << "/Root/Path" << i;
+            pathOnly.clear();
+            for (const auto& replica : select(CityHash64(path))) {
+                if (!idSelection.contains(replica)) {
+                    pathOnly.push_back(replica);
+                }
+            }
+        }
+        UNIT_ASSERT_C(pathOnly.size() >= 2, "no path selecting two replicas the path id doesn't select");
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<TUpdateAck> replicaAcks(runtime, [&](const auto& ev) {
+            return actorToService.contains(ev->Sender) && ev->Get()->GetPathId() == pathId;
+        });
+        auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        desc->Record = GenerateDescribe(path, pathId, 1);
+        desc->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        const size_t recipients = pathOnly.size() + idSelection.size(); // the union of both selections
+        runtime.WaitFor("replica ACKs", [&] { return replicaAcks.size() == recipients; }, TDuration::Seconds(10));
+
+        // only the ACKs of two replicas selected by the path only go
+        size_t front = 0;
+        for (size_t i = 0; i != replicaAcks.size(); ++i) {
+            const TActorId service = actorToService.at(replicaAcks[i]->Sender);
+            if (service == pathOnly[0] || service == pathOnly[1]) {
+                replicaAcks[i].Swap(replicaAcks[front++]);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(front, 2);
+        replicaAcks.Unblock(2);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 0,
+            "the path id selection has no ACK, yet the publication is acknowledged");
+
+        replicaAcks.Stop().Unblock();
+        auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(mainAck->Cookie, cookie);
+    }
+
     void TestColdDeletionWithPathWaitsForReplicaQuorum(bool subscribeBeforeDeletion) {
         TTestBasicRuntime runtime;
         TStateStorageInfo::TRingGroup group{};

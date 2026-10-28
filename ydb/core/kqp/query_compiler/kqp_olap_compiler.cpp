@@ -1,5 +1,6 @@
 #include "kqp_olap_compiler.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
@@ -1236,16 +1237,21 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
     TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
 
-    CompileOlapProgramImpl(lambda.Body(), ctx);
-    CompileFinalProjection(ctx);
-
-    ctx.SerializeToProto();
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program");
+        CompileOlapProgramImpl(lambda.Body(), ctx);
+        CompileFinalProjection(ctx);
+    }
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Serialize OLAP program");
+        ctx.SerializeToProto();
+    }
 }
 
 } // namespace NKqp

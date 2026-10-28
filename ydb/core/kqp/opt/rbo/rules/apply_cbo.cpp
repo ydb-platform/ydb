@@ -69,6 +69,9 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
+    auto* trace = ctx.GetCompileTrace();
+    std::optional<TCompileTraceScope> prepareScope(std::in_place, trace, TCompileTraceLevels::Detail,
+        "Prepare join order search");
     ++cboStats.TreesTotal;
     const auto leaves = BuildCBOLeaves(*cboTree);
 
@@ -138,8 +141,11 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     );
 
     LogAndTraceJoinTree(ctx, "Converted join tree", joinTree);
+    prepareScope.reset();
 
     {
+        // Exponential in the number of joins at worst, so it is a phase.
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Phase, "Search join order");
         YQL_PROFILE_SCOPE(TRACE, "CBO");
         if (cboRunTiming) {
             const auto startedAt = std::chrono::steady_clock::now();
@@ -154,6 +160,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     LogAndTraceJoinTree(ctx, "Optimized join tree", joinTree);
 
+    TCompileTraceScope rebuildScope(trace, TCompileTraceLevels::Detail, "Rebuild joins in join order");
     return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos);
 }
 

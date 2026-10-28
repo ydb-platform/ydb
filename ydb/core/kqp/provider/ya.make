@@ -35,6 +35,7 @@ PEERDIR(
     ydb/core/kqp/opt/cbo
     ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
+    ydb/core/kqp/tracing
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -24,7 +25,8 @@ public:
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt,
-        NWilson::TTraceId traceId = {})
+        NWilson::TTraceId traceId = {},
+        TCompileTrace::TPtr compileTrace = nullptr)
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
@@ -32,6 +34,7 @@ public:
         , TempTablesState(std::move(tempTablesState))
         , FederatedQuerySetup(federatedQuerySetup)
         , TraceId(std::move(traceId))
+        , CompileTrace(std::move(compileTrace))
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -51,20 +54,21 @@ protected:
 private:
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataImpl(
         const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings,
-        const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
+        const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose,
+        const NWilson::TTraceId& traceParent);
 
     template<typename TPath>
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataCache(
         const TString& cluster, const TPath& id, NYql::IKikimrGateway::TLoadTableMetadataSettings settings, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose, const NWilson::TTraceId& traceParent);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadataByPathId(
         const TString& cluster, const NKikimr::TIndexId& indexId, const TString& tableName, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const NWilson::TTraceId& traceParent);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadata(
         NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const NWilson::TTraceId& traceParent);
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
@@ -80,6 +84,14 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     NWilson::TTraceId TraceId;
+    // Parents requests under the compilation span running when a load starts.
+    // Each load passes that parent down to its follow-up requests: they are sent
+    // from callbacks, when an unrelated compilation span may be running.
+    TCompileTrace::TPtr CompileTrace;
+
+    NWilson::TTraceId GetTraceParent() const {
+        return CompileTrace ? CompileTrace->GetCurrentParent() : NWilson::TTraceId(TraceId);
+    }
 };
 
 } // namespace NKikimr::NKqp

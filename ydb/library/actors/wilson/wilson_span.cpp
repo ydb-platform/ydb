@@ -5,6 +5,8 @@
 #include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <ctime>
+
 namespace NWilson {
 
     using namespace NActors;
@@ -57,7 +59,7 @@ namespace NWilson {
     TSpan::TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
             TFlags flags, NActors::TActorSystem* actorSystem)
         : Data(parentId && parentId.IsWilsonTrace()
-                ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
+                ? std::make_unique<TData>(NowUnixNano(), parentId.Span(verbosity), flags, actorSystem)
                 : nullptr)
     {
         if (Y_UNLIKELY(*this)) {
@@ -65,7 +67,7 @@ namespace NWilson {
                 if (!parentId.IsRoot()) {
                     Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
                 }
-                Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
+                Data->Span.set_start_time_unix_nano(Data->StartTimeUnixNano);
                 Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
 
                 std::visit(TOverloaded{
@@ -127,7 +129,8 @@ namespace NWilson {
             if (!Data->EndAsIs) {
                 Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
                 Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
-                Data->Span.set_end_time_unix_nano(TimeUnixNano());
+                // A clock step back must not produce a negative duration.
+                Data->Span.set_end_time_unix_nano(std::max(NowUnixNano(), Data->StartTimeUnixNano));
             }
             Send();
         } else {
@@ -137,9 +140,16 @@ namespace NWilson {
 
     const TSpan TSpan::Empty;
 
-    TSpan::TData::TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
-        : StartTime(startTime)
-        , StartCycles(startCycles)
+    ui64 TSpan::NowUnixNano() {
+        // The wall clock in nanoseconds where the platform has them: std::chrono::system_clock
+        // ticks in microseconds in libc++. On Linux this is clock_gettime(CLOCK_REALTIME).
+        timespec ts;
+        std::timespec_get(&ts, TIME_UTC);
+        return static_cast<ui64>(ts.tv_sec) * 1'000'000'000 + ts.tv_nsec;
+    }
+
+    TSpan::TData::TData(ui64 startTimeUnixNano, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
+        : StartTimeUnixNano(startTimeUnixNano)
         , TraceId(std::move(traceId))
         , Flags(flags)
         , ActorSystem(actorSystem ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
@@ -148,15 +158,22 @@ namespace NWilson {
     }
 
     TSpan TSpan::ConstructTerminated(const NWilson::TTraceId& parentId, const NWilson::TTraceId& spanId,
-            TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode, const TString& name) {
+            TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode, const TString& name,
+            NActors::TActorSystem* actorSystem) {
+        return ConstructTerminated(parentId, spanId, startTs.NanoSeconds(), endTs.NanoSeconds(), statusCode, name,
+            actorSystem);
+    }
+
+    TSpan TSpan::ConstructTerminated(const NWilson::TTraceId& parentId, const NWilson::TTraceId& spanId,
+            ui64 startUnixNano, ui64 endUnixNano, NTraceProto::Status::StatusCode statusCode, const TString& name,
+            NActors::TActorSystem* actorSystem) {
         TSpan res;
-        res.Data = std::make_unique<TData>(TInstant::Zero(), 0, NWilson::TTraceId(spanId), EFlags::NONE,
-                nullptr);
+        res.Data = std::make_unique<TData>(startUnixNano, NWilson::TTraceId(spanId), EFlags::NONE, actorSystem);
         res.Data->Span.set_trace_id(parentId.GetTraceIdPtr(), parentId.GetTraceIdSize());
         res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
         res.Data->Span.set_span_id(spanId.GetSpanIdPtr(), spanId.GetSpanIdSize());
-        res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
-        res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
+        res.Data->Span.set_start_time_unix_nano(startUnixNano);
+        res.Data->Span.set_end_time_unix_nano(endUnixNano);
         res.Data->Span.mutable_status()->set_code(statusCode);
         res.Name(name);
         res.Data->EndAsIs = true;

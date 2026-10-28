@@ -1,6 +1,7 @@
 #include "kqp_query_rendering.h"
 
 #include "kqp_query_stats_rendering.h"
+#include "kqp_trace_flow.h"
 #include "kqp_trace_settings.h"
 
 #include <ydb/core/kqp/common/simple/helpers.h>
@@ -55,6 +56,8 @@ NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::T
     const TString name = loadsMetadata ? "Load metadata" : "Load statistics";
     NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Detailed,
         NWilson::TTraceId(parent), name, NWilson::EFlags::NONE, actorSystem);
+    // Served by a request handler actor, concurrently with the requester.
+    MarkAsyncFlow(span);
     span.Attribute("db.collection.name", table);
     span.Attribute("ydb.actor.type", TString("TActorRequestHandler"));
     span.Attribute("ydb.code.component", TString("KqpTableMetadataLoader"));

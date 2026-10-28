@@ -95,4 +95,34 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
         UNIT_ASSERT(!(nodeDir / "config.yaml").Exists());
         UNIT_ASSERT_C((nodeDir / "storage.yaml").Exists(), "the storage YAML is gone while the main YAML wasn't saved");
     }
+
+    // Switching to the single config, deleting the storage YAML fails (here it is a directory with a file in it). The
+    // failure must be retried as a failed save is, not end the process of NodeWarden.
+    Y_UNIT_TEST(FailedDeleteOfStorageYamlIsRetried) {
+        TTempDir dir;
+        TEnvironmentSetup env{{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .ConfigPreprocessor = [&](ui32 nodeId, TNodeWardenConfig& config) {
+                config.ConfigDirPath = (dir.Path() / ToString(nodeId)).GetPath();
+            },
+        }};
+        env.Sim(TDuration::Seconds(10));
+
+        const TFsPath nodeDir = dir.Path() / "1";
+        (nodeDir / "storage.yaml").MkDirs();
+        TFileOutput(nodeDir / "storage.yaml" / "file").Write("keeps the directory from being deleted\n");
+
+        auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        auto *yaml = update->Record.MutableYamlConfig();
+        yaml->SetMainConfig("single config\n");
+        yaml->SetMainConfigVersion(1000);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), env.Runtime->AllocateEdgeActor(1),
+            update.release()), 1);
+        env.Sim(TDuration::Seconds(10));
+
+        // the exception escaping the save would have ended the process by now
+        UNIT_ASSERT((nodeDir / "config.yaml").Exists());
+        UNIT_ASSERT((nodeDir / "storage.yaml").Exists());
+    }
 }

@@ -117,31 +117,6 @@
 /ydb/tests/postgres_integrations @ydb-platform/qp
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
-/ydb/library/benchmarks @ydb-platform/engineering
-/ydb/library/drr/ut @ydb-platform/engineering
-/ydb/library/fyamlcpp/ut @ydb-platform/engineering
-/ydb/library/grpc/server/ut @ydb-platform/engineering
-/ydb/library/http/ut @ydb-platform/engineering
-/ydb/library/intersection_tree/ut @ydb-platform/engineering
-/ydb/library/json_index/ut @ydb-platform/engineering
-/ydb/library/keys/ut @ydb-platform/engineering
-/ydb/library/kll_median/ut @ydb-platform/engineering
-/ydb/library/lockfree_bucket/ut @ydb-platform/engineering
-/ydb/library/naming_conventions/ut @ydb-platform/engineering
-/ydb/library/ncloud/impl/ut @ydb-platform/engineering
-/ydb/library/net/ut @ydb-platform/engineering
-/ydb/library/plan2svg/ut @ydb-platform/engineering
-/ydb/library/planner/share/ut @ydb-platform/engineering
-/ydb/library/protobuf_printer/ut @ydb-platform/engineering
-/ydb/library/range_treap/ut_range_treap @ydb-platform/engineering
-/ydb/library/schlab/ut @ydb-platform/engineering
-/ydb/library/shop/ut @ydb-platform/engineering
-/ydb/library/table_creator/ut @ydb-platform/engineering
-/ydb/library/testlib/ut @ydb-platform/engineering
-/ydb/library/time_series_vec/ut @ydb-platform/engineering
-/ydb/library/union_copy_set/ut @ydb-platform/engineering
-/ydb/library/workload @ydb-platform/engineering
-/ydb/library/ycloud/impl/ut @ydb-platform/engineering
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/functional/restarts @ydb-platform/engineering

@@ -24,7 +24,7 @@ bool WriteTopic(const Env& env, const TString& topicPath, Message&& data, NYdb::
 
     return result;
 }
-} // namespace NImpl {
+} // namespace NImpl
 
 template <typename Env>
 bool WriteTopic(const Env& env, const TString& topicPath, const std::string_view& data, NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::GZIP) {

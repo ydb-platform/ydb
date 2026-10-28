@@ -235,8 +235,6 @@ table_service_config:
 
 {% endnote %}
 
-<a id="trebovaniya-k-fajlovoj-sisteme"></a>
-
 ### Требования к файловой системе {#file-system-requirements}
 
 #### Файловые дескрипторы

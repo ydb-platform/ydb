@@ -6,8 +6,6 @@
 
 {% endnote %}
 
-<a id="podgotovte-okruzhenie"></a>
-
 ## Подготовьте окружение {#deployment-preparation}
 
 Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
@@ -20,8 +18,6 @@ cd deployment
 mkdir -p inventory/group_vars/ydb
 mkdir files
 ```
-
-<a id="sozdajte-konfiguracionnyj-fajl-ansible"></a>
 
 ## Создайте конфигурационный файл Ansible {#ansible-creat-config}
 
@@ -273,8 +269,6 @@ plugin: ydb_platform.ydb.ydb_inventory
 ydb_config: "files/config.yaml"
   ```
 
-<a id="razvernite-klaster-ydb"></a>
-
 ## Разверните кластер {{ ydb-short-name }} {#cluster-deployment}
 
 После завершения всех описанных выше подготовительных действий фактическое первоначальное развёртывание кластера сводится к выполнению следующей команды из рабочей директории:
@@ -310,8 +304,6 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 {% endcut %}
 
 В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../../concepts/glossary.md#scheme-root) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `db`) и начального [пользователя](../../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
-
-<a id="dopolnitelnye-shagi"></a>
 
 ## Дополнительные шаги {#additional-steps}
 

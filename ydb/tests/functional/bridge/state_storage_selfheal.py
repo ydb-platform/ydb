@@ -356,7 +356,9 @@ class BridgeStateStorageSelfHeal:
                     next_phase += 1
             assert next_phase == len(expected_phases), (name, next_phase, self.snapshots)
 
-    def wait_converged(self, expected):
+    def wait_converged(self, expected=None, *, check_config=None):
+        assert expected is not None or check_config is not None
+
         def local_meta(node):
             response = requests.get(
                 f"http://{node.host}:{node.mon_port}/actors/nodewarden?page=distconf&json=1", timeout=10,
@@ -368,8 +370,11 @@ class BridgeStateStorageSelfHeal:
 
         def converged():
             actual = self.read_config()
-            for name in CONFIG_NAMES:
-                assert actual[name] == expected[name], (name, actual[name], expected[name])
+            if expected is not None:
+                for name in CONFIG_NAMES:
+                    assert actual[name] == expected[name], (name, actual[name], expected[name])
+            if check_config is not None:
+                check_config(actual)
             # GetStateStorageConfig is forwarded to the root. Compare local
             # effective fingerprints as well, so this checks propagation to every
             # live node rather than repeatedly reading the root through proxies.

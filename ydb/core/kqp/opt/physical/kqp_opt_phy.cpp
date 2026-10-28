@@ -688,6 +688,7 @@ protected:
             pushLeftStage, TypesCtx, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
             KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false),
+            KqpCtx.Config->GetUseScalarHashJoin(),
             KqpCtx.Config->GetUseScalarHashJoinForMap()
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);

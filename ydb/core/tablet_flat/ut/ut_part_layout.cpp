@@ -31,7 +31,7 @@ namespace {
         { .SeparateDescriptorCollection = true },
     };
 
-    TString Describe(const TPartLayout& layout, EIndex index) {
+    TString Describe(const TPartLayout& layout) {
         TStringBuilder out;
         out << "Layout{";
         if (layout.SeparateDescriptorCollection) {
@@ -43,8 +43,13 @@ namespace {
         if (!layout.GroupIndexesInDescriptor) {
             out << " !GroupIndexesInDescriptor";
         }
-        out << " } " << (index == EIndex::V1 ? "V1" : index == EIndex::V2 ? "V2" : "V2WithV1Shadow");
+        out << " }";
         return out;
+    }
+
+    TString Describe(const TPartLayout& layout, EIndex index) {
+        return TStringBuilder() << Describe(layout) << " "
+            << (index == EIndex::V1 ? "V1" : index == EIndex::V2 ? "V2" : "V2WithV1Shadow");
     }
 
     void SetIndex(NPage::TConf& conf, EIndex index) {
@@ -245,6 +250,19 @@ Y_UNIT_TEST_SUITE(TPartLayout) {
                 CheckPlacement(MassEggs(layout, index), oldMass, layout, "Mass " + message);
                 CheckPlacement(HistoryEggs(layout, index), oldHistory, layout, "History " + message);
             }
+        }
+    }
+
+    Y_UNIT_TEST(SlotLeaderGroup) {
+        TVector<TPartLayout> layouts = SeparateLayouts;
+        layouts.push_back({ });
+        for (const auto& layout : layouts) {
+            const TPartSlots slots(3, layout);
+            const auto message = Describe(layout);
+            for (ui32 group : xrange(3)) {
+                UNIT_ASSERT_VALUES_EQUAL_C(slots.SlotLeaderGroup(slots.DataSlot(NPage::TGroupId(group))), group, message);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(slots.SlotLeaderGroup(slots.DescriptorSlot()), 0u, message);
         }
     }
 

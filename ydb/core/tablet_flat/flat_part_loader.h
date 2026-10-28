@@ -111,7 +111,9 @@ namespace NTable {
             }
 
             /**
-             * Returns missing pages of a single page collection, they are expected to be saved before the next fetch
+             * Returns missing pages of a single page collection: only one fetch may be outstanding and its pages
+             * are saved before the next fetch. Pages of other page collections are requested by the next fetches
+             * when the stage is run again, so stages must be safe to re-run
              */
             TFetch GetFetch()
             {

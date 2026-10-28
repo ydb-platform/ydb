@@ -81,6 +81,19 @@ namespace NTable {
         }
 
         /**
+         * Column group whose settings (cache mode, stickiness) apply to the slot: the group of its data
+         * pages, or the main group for a separate descriptor collection
+         */
+        ui32 SlotLeaderGroup(ui32 slot) const
+        {
+            Y_ENSURE(slot < SlotsCount(), "Page collection " << slot << " has no leader group");
+            if (Layout.SeparateDescriptorCollection) {
+                return slot == DescriptorSlot() ? 0 : slot - 1;
+            }
+            return slot;
+        }
+
+        /**
          * Slot with outer (packed) values
          */
         ui32 OuterSlot() const noexcept

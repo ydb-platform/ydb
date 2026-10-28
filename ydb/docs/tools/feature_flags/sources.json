@@ -1,0 +1,32 @@
+{
+  "proto_sources": [
+    "ydb/core/protos/feature_flags.proto",
+    "ydb/core/protos/table_service_config.proto",
+    "ydb/core/protos/config.proto",
+    "ydb/core/protos/pqconfig.proto",
+    "ydb/core/protos/flat_scheme_op.proto",
+    "ydb/core/protos/blobstorage_config.proto",
+    "ydb/core/protos/auth.proto",
+    "ydb/core/protos/kqp_physical.proto",
+    "ydb/core/protos/kqp.proto",
+    "ydb/core/viewer/protos/viewer.proto",
+    "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto",
+    "ydb/public/api/protos/ydb_common.proto",
+    "ydb/public/api/protos/ydb_table.proto",
+    "ydb/public/api/protos/ydb_operation.proto"
+  ],
+  "proto_globs": [
+    "ydb/core/fq/libs/config/protos/*.proto"
+  ],
+  "cpp_sources": [
+    {
+      "path": "ydb/library/actors/core/executor_pool_basic_feature_flags.h",
+      "namespace": "NActors::NFeatures",
+      "structs": [
+        "TCommonFeatureFlags",
+        "TSpinFeatureFlags"
+      ]
+    }
+  ],
+  "retired_references": []
+}

@@ -752,21 +752,9 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
 
 namespace {
 
-// The group whose cache settings apply to a page collection of the part: the group of its data pages,
-// or the main group for a separate descriptor page collection (written to the leader family channel).
-size_t SlotLeaderGroup(const NTable::TPartStore& partStore, ui32 slot) {
-    for (size_t groupIndex : xrange(partStore.GroupsCount)) {
-        if (partStore.DataSlot(NTable::NPage::TGroupId(groupIndex)) == slot) {
-            return groupIndex;
-        }
-    }
-    Y_ENSURE(slot == partStore.DescriptorSlot(), "Page collection " << slot << " has no leader group");
-    return 0;
-}
-
 // A page collection is sticky when its leader group is sticky.
 bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<bool>& stickyGroups) {
-    return stickyGroups[SlotLeaderGroup(partStore, slot)];
+    return stickyGroups[partStore.Slots.SlotLeaderGroup(slot)];
 }
 
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
@@ -852,7 +840,7 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
 
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
         partStore->PageCollections[slot]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[SlotLeaderGroup(*partStore, slot)].Columns, cacheModes)
+            GetCacheMode(partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
         );
     }
 
@@ -1646,7 +1634,7 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
-        const size_t groupIndex = SlotLeaderGroup(*partStore, slot);
+        const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
         auto* pageCollection = partStore->PageCollections[slot].Get();
 

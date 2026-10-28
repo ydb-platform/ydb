@@ -32,6 +32,8 @@
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 
+#include <ydb/core/cms/console/console.h>
+
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <util/system/thread.h>
@@ -1039,6 +1041,55 @@ config:
         const TString database = CreateDatabaseWithOwner(server, "db_owner_user", "user@builtin");
         ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
+    }
+
+    // The database YAML goes to Console; the request made for it must keep dry_run and allow_unknown_fields. The dry
+    // run of a YAML with an unknown field succeeds and commits nothing, so the replacement after it takes the same version.
+    Y_UNIT_TEST(DatabaseConfigKeepsDryRunAndUnknownFields) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_dry_run", "user@builtin");
+        // Console checks a database YAML together with the main YAML, and only when database YAMLs are allowed
+        {
+            auto stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server.GetChannel());
+            Ydb::DynamicConfig::ReplaceConfigRequest request;
+            request.set_config(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    database_yaml_config_allowed: true
+)");
+            Ydb::DynamicConfig::ReplaceConfigResponse response;
+            grpc::ClientContext ctx;
+            ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "user@builtin");
+            stub->ReplaceConfig(&ctx, request, &response);
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        }
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!server.GetRuntime()->GetAppData(0).FeatureFlags.GetDatabaseYamlConfigAllowed()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "database YAMLs were not allowed on the node of Console");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
+
+        auto replace =[&](const TString& yaml, bool dryRun, bool allowUnknownFields) {
+            auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+            Ydb::Config::ReplaceConfigRequest request;
+            request.set_replace(yaml);
+            request.set_dry_run(dryRun);
+            request.set_allow_unknown_fields(allowUnknownFields);
+            Ydb::Config::ReplaceConfigResponse response;
+            grpc::ClientContext ctx;
+            ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "user@builtin");
+            stub->ReplaceConfig(&ctx, request, &response);
+            return response;
+        };
+        const auto dryRun = replace(MakeDatabaseConfigYaml(database) + "  unknown_field_of_test: 1\n", true, true);
+        UNIT_ASSERT_CHECK_STATUS(dryRun.operation(), Ydb::StatusIds::SUCCESS);
+        const auto replaced = replace(MakeDatabaseConfigYaml(database), false, false);
+        UNIT_ASSERT_CHECK_STATUS(replaced.operation(), Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminDisabled) {

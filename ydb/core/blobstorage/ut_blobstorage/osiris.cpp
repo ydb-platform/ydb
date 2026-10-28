@@ -345,6 +345,219 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
     UNIT_ASSERT_VALUES_EQUAL(badCases, 0);
 }
 
+enum class EMirror3dcDisconnectionScenario {
+    Circular,
+    SwitchToRestoredRealm,
+};
+
+void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+    NKikimrBlobStorage::TGroupInfo originalGroup;
+    ui32 revision = 0;
+    std::map<ui32, ui32> nodeRealms;
+    std::array<ui32, 3> startupSyncDone{};
+    std::array<ui32, 3> fullSyncRequests{};
+    TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+        .NodeCount = 9,
+        .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+    });
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+        const ui32 type = event->GetTypeRewrite();
+        if (type == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+            NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate* record = &event->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+            for (NKikimrBlobStorage::TGroupInfo& group : *record->MutableServiceSet()->MutableGroups()) {
+                if (!revision) {
+                    originalGroup = group;
+                } else if (group.GetGroupID() == originalGroup.GetGroupID()) {
+                    group.SetGroupGeneration(originalGroup.GetGroupGeneration() + revision);
+                    for (ui32 realm = 0; realm < 3; ++realm) {
+                        group.MutableRings(realm)->SetState(states[realm]);
+                    }
+                }
+            }
+        }
+        if (type == TEvBlobStorage::EvStartupDataSyncDone && nodeRealms.contains(nodeId)) {
+            ++startupSyncDone[nodeRealms.at(nodeId)];
+        }
+        if (type == TEvBlobStorage::EvVSyncFull && nodeRealms.contains(event->Sender.NodeId())) {
+            ++fullSyncRequests[nodeRealms.at(event->Sender.NodeId())];
+        }
+        const bool peerRequest = type == TEvBlobStorage::EvVPut || type == TEvBlobStorage::EvVMultiPut
+            || type == TEvBlobStorage::EvVGet || type == TEvBlobStorage::EvVSync
+            || type == TEvBlobStorage::EvVSyncFull || type == TEvBlobStorage::EvVSyncGuid;
+        const std::function<bool(ui32)> excluded = [&](ui32 node) {
+            const auto it = nodeRealms.find(node);
+            return it != nodeRealms.end() && states[it->second] == TFailRealm::F;
+        };
+        if (peerRequest && (excluded(nodeId) || excluded(event->Sender.NodeId()))) {
+            std::unique_ptr<IEventHandle> undelivered = IEventHandle::ForwardOnNondelivery(std::move(event),
+                TEvents::TEvUndelivered::Disconnected);
+            if (undelivered) {
+                env.Runtime->Send(undelivered.release(), nodeId);
+            }
+            return false;
+        }
+        return true;
+    };
+    env.CreateBoxAndPool(1, 1);
+    env.UpdateSettings(false, false);
+    env.Sim(TDuration::Seconds(30));
+    const ui32 groupId = env.GetGroups().front();
+    const TIntrusivePtr<TBlobStorageGroupInfo> originalInfo = env.GetGroupInfo(groupId);
+    UNIT_ASSERT_VALUES_EQUAL(originalGroup.RingsSize(), 3);
+    for (ui32 disk = 0; disk < originalInfo->GetTotalVDisksNum(); ++disk) {
+        nodeRealms.emplace(originalInfo->GetActorId(disk).NodeId(), originalInfo->GetVDiskId(disk).FailRealm);
+    }
+    std::function<void(std::array<TFailRealm::EState, 3>)> setStates = [&](std::array<TFailRealm::EState, 3> next) {
+        states = next;
+        revision += 100;
+        Cerr << "Applying realm states; revision# " << revision << Endl;
+        for (ui32 node = 1; node <= 9; ++node) {
+            std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, node);
+            *update->Record.MutableServiceSet()->AddGroups() = originalGroup;
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), {}, update.release()), node);
+        }
+        env.Sim(TDuration::Seconds(5));
+        Cerr << "Realm states applied; revision# " << revision << Endl;
+    };
+    const TString data(4096, 'O');
+    const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
+    std::function<void()> checkBlob = [&] {
+        ui32 clientNode = 0;
+        for (const auto& [node, realm] : nodeRealms) {
+            if (states[realm] == TFailRealm::N1) {
+                clientNode = node;
+                break;
+            }
+        }
+        UNIT_ASSERT(clientNode);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(clientNode);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(blobId, 0, 0,
+                env.Runtime->GetClock() + TDuration::Seconds(10), NKikimrBlobStorage::FastRead));
+        });
+        const TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Buffer.ConvertToString(), data);
+    };
+    const std::function<void(ui32)> waitForReplication = [&](ui32 realm) {
+        bool replicated = false;
+        for (ui32 attempt = 0; attempt < 120 && !replicated; ++attempt) {
+            replicated = true;
+            for (ui32 disk = 0; disk < originalInfo->GetTotalVDisksNum(); ++disk) {
+                TVDiskID vdiskId = originalInfo->GetVDiskId(disk);
+                if (vdiskId.FailRealm != realm) {
+                    continue;
+                }
+                vdiskId.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+                const TActorId service = originalInfo->GetActorId(disk);
+                const TActorId edge = env.Runtime->AllocateEdgeActor(service.NodeId());
+                env.Runtime->Send(new IEventHandle(service, edge,
+                    new TEvBlobStorage::TEvVStatus(vdiskId)), service.NodeId());
+                const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
+                const NKikimrBlobStorage::TEvVStatusResult& record = response->Get()->Record;
+                replicated &= record.GetStatus() == NKikimrProto::OK && record.GetReplicated();
+            }
+            if (!replicated) {
+                env.Sim(TDuration::Seconds(1));
+            }
+        }
+        UNIT_ASSERT_C(replicated, "Realm must complete replication; realm# " << realm);
+    };
+    if (scenario == EMirror3dcDisconnectionScenario::SwitchToRestoredRealm) {
+        // N0/N0/F: explicitly seed exactly two copies in each available realm.
+        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        originalInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        TString encryptedData = data;
+        char* buffer = encryptedData.Detach();
+        Encrypt(buffer, buffer, 0, encryptedData.size(), blobId, *originalInfo);
+        std::array<ui32, 3> seededCopies{};
+        for (ui32 idx = 0; idx < subgroup.size(); ++idx) {
+            TVDiskID disk = originalInfo->GetVDiskId(subgroup[idx]);
+            if (states[disk.FailRealm] == TFailRealm::F || seededCopies[disk.FailRealm] == 2) {
+                continue;
+            }
+            disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+            const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
+            env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
+                TLogoBlobID(blobId, idx % 3 + 1), TRope(encryptedData), disk, false, nullptr,
+                TInstant::Max(), NKikimrBlobStorage::TabletLog, false)), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVPutResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            ++seededCopies[disk.FailRealm];
+        }
+        UNIT_ASSERT_VALUES_EQUAL(seededCopies[0], 2);
+        UNIT_ASSERT_VALUES_EQUAL(seededCopies[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(seededCopies[2], 0);
+        env.Sim(TDuration::Seconds(10));
+
+        // N0/N0/R -> N0/N0/N0: bring back the previously empty realm and collect metadata.
+        const ui32 startupDoneBefore = startupSyncDone[2];
+        const ui32 requestsBefore = fullSyncRequests[2];
+        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::R});
+        for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[2] < startupDoneBefore + 3; ++attempt) {
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(startupSyncDone[2] >= startupDoneBefore + 3, "Returning realm must finish full sync");
+        UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore, "F->R must start full sync");
+        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::N0});
+
+        // N1/F/N1: repeat Osiris and replicate D=2+2 into the restored realm.
+        setStates({TFailRealm::N1, TFailRealm::F, TFailRealm::N1});
+        waitForReplication(0);
+        waitForReplication(2);
+        checkBlob();
+
+        // F/F/N1: the only readable realm had no copy when the blob was written.
+        setStates({TFailRealm::F, TFailRealm::F, TFailRealm::N1});
+        checkBlob();
+        env.Runtime->FilterFunction = {};
+        return;
+    }
+    // Seed the blob while every realm is online; the rolling test preserves disk contents.
+    setStates({TFailRealm::N1, TFailRealm::N1, TFailRealm::N1});
+    env.PutBlob(groupId, blobId, data);
+    env.Sim(TDuration::Seconds(5));
+    checkBlob();
+
+    ui32 survivor = 0;
+    // Two rotations with intact disks: each realm becomes the sole source twice.
+    for (ui32 round = 0; round < 6; ++round) {
+        const ui32 returning = (survivor + 1) % 3;
+        std::array<TFailRealm::EState, 3> next{TFailRealm::F, TFailRealm::F, TFailRealm::F};
+        next[survivor] = TFailRealm::N1;
+        setStates(next);
+        checkBlob();
+
+        const ui32 startupDoneBefore = startupSyncDone[returning];
+        const ui32 requestsBefore = fullSyncRequests[returning];
+        next[returning] = TFailRealm::R;
+        setStates(next);
+        for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[returning] < startupDoneBefore + 3; ++attempt) {
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(startupSyncDone[returning] >= startupDoneBefore + 3,
+            "Returning realm must finish startup full sync; round# " << round);
+        UNIT_ASSERT_C(fullSyncRequests[returning] > requestsBefore,
+            "F->R must trigger full sync without wiping disks; round# " << round);
+
+        waitForReplication(returning);
+        next[returning] = TFailRealm::N1;
+        setStates(next);
+        next[survivor] = TFailRealm::F;
+        setStates(next);
+        checkBlob();
+        survivor = returning;
+    }
+    env.Runtime->FilterFunction = {};
+}
+
 }
 
 Y_UNIT_TEST_SUITE(Osiris) {
@@ -496,155 +709,11 @@ Y_UNIT_TEST_SUITE(Osiris) {
     }
 
     Y_UNIT_TEST(Mirror3dcCircularRealmDisconnection) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-        NKikimrBlobStorage::TGroupInfo originalGroup;
-        ui32 revision = 0;
-        std::map<ui32, ui32> nodeRealms;
-        std::array<ui32, 3> startupSyncDone{};
-        std::array<ui32, 3> fullSyncRequests{};
-        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 9,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
-        });
-        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
-            const ui32 type = event->GetTypeRewrite();
-            if (type == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
-                NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate* record = &event->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
-                for (NKikimrBlobStorage::TGroupInfo& group : *record->MutableServiceSet()->MutableGroups()) {
-                    if (!revision) {
-                        originalGroup = group;
-                    } else if (group.GetGroupID() == originalGroup.GetGroupID()) {
-                        group.SetGroupGeneration(originalGroup.GetGroupGeneration() + revision);
-                        for (ui32 realm = 0; realm < 3; ++realm) {
-                            group.MutableRings(realm)->SetState(states[realm]);
-                        }
-                    }
-                }
-            }
-            if (type == TEvBlobStorage::EvStartupDataSyncDone && nodeRealms.contains(nodeId)) {
-                ++startupSyncDone[nodeRealms.at(nodeId)];
-            }
-            if (type == TEvBlobStorage::EvVSyncFull && nodeRealms.contains(event->Sender.NodeId())) {
-                ++fullSyncRequests[nodeRealms.at(event->Sender.NodeId())];
-            }
-            const bool peerRequest = type == TEvBlobStorage::EvVPut || type == TEvBlobStorage::EvVMultiPut
-                || type == TEvBlobStorage::EvVGet || type == TEvBlobStorage::EvVSync
-                || type == TEvBlobStorage::EvVSyncFull || type == TEvBlobStorage::EvVSyncGuid;
-            const std::function<bool(ui32)> excluded = [&](ui32 node) {
-                const auto it = nodeRealms.find(node);
-                return it != nodeRealms.end() && states[it->second] == TFailRealm::F;
-            };
-            if (peerRequest && (excluded(nodeId) || excluded(event->Sender.NodeId()))) {
-                std::unique_ptr<IEventHandle> undelivered = IEventHandle::ForwardOnNondelivery(std::move(event),
-                    TEvents::TEvUndelivered::Disconnected);
-                if (undelivered) {
-                    env.Runtime->Send(undelivered.release(), nodeId);
-                }
-                return false;
-            }
-            return true;
-        };
-        env.CreateBoxAndPool(1, 1);
-        env.UpdateSettings(false, false);
-        env.Sim(TDuration::Seconds(30));
-        const ui32 groupId = env.GetGroups().front();
-        const TIntrusivePtr<TBlobStorageGroupInfo> originalInfo = env.GetGroupInfo(groupId);
-        UNIT_ASSERT_VALUES_EQUAL(originalGroup.RingsSize(), 3);
-        for (ui32 disk = 0; disk < originalInfo->GetTotalVDisksNum(); ++disk) {
-            nodeRealms.emplace(originalInfo->GetActorId(disk).NodeId(), originalInfo->GetVDiskId(disk).FailRealm);
-        }
-        std::function<void(std::array<TFailRealm::EState, 3>)> setStates = [&](std::array<TFailRealm::EState, 3> next) {
-            states = next;
-            revision += 100;
-            Cerr << "Applying realm states; revision# " << revision << Endl;
-            for (ui32 node = 1; node <= 9; ++node) {
-                std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, node);
-                *update->Record.MutableServiceSet()->AddGroups() = originalGroup;
-                env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), {}, update.release()), node);
-            }
-            env.Sim(TDuration::Seconds(5));
-            Cerr << "Realm states applied; revision# " << revision << Endl;
-        };
-        const TString data(4096, 'O');
-        const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
-        std::function<void()> checkBlob = [&] {
-            ui32 clientNode = 0;
-            for (const auto& [node, realm] : nodeRealms) {
-                if (states[realm] == TFailRealm::N1) {
-                    clientNode = node;
-                    break;
-                }
-            }
-            UNIT_ASSERT(clientNode);
-            const TActorId edge = env.Runtime->AllocateEdgeActor(clientNode);
-            env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(blobId, 0, 0,
-                    env.Runtime->GetClock() + TDuration::Seconds(10), NKikimrBlobStorage::FastRead));
-            });
-            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Buffer.ConvertToString(), data);
-        };
-        // Seed the blob while every realm is online; the rolling test preserves disk contents.
-        setStates({TFailRealm::N1, TFailRealm::N1, TFailRealm::N1});
-        env.PutBlob(groupId, blobId, data);
-        env.Sim(TDuration::Seconds(5));
-        checkBlob();
+        DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario::Circular);
+    }
 
-        ui32 survivor = 0;
-        // Two rotations with intact disks: each realm becomes the sole source twice.
-        for (ui32 round = 0; round < 6; ++round) {
-            const ui32 returning = (survivor + 1) % 3;
-            std::array<TFailRealm::EState, 3> next{TFailRealm::F, TFailRealm::F, TFailRealm::F};
-            next[survivor] = TFailRealm::N1;
-            setStates(next);
-            checkBlob();
-
-            const ui32 startupDoneBefore = startupSyncDone[returning];
-            const ui32 requestsBefore = fullSyncRequests[returning];
-            next[returning] = TFailRealm::R;
-            setStates(next);
-            for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[returning] < startupDoneBefore + 3; ++attempt) {
-                env.Sim(TDuration::MilliSeconds(100));
-            }
-            UNIT_ASSERT_C(startupSyncDone[returning] >= startupDoneBefore + 3,
-                "Returning realm must finish startup full sync; round# " << round);
-            UNIT_ASSERT_C(fullSyncRequests[returning] > requestsBefore,
-                "F->R must trigger full sync without wiping disks; round# " << round);
-
-            bool replicated = false;
-            for (ui32 attempt = 0; attempt < 120 && !replicated; ++attempt) {
-                replicated = true;
-                for (ui32 disk = 0; disk < originalInfo->GetTotalVDisksNum(); ++disk) {
-                    TVDiskID vdiskId = originalInfo->GetVDiskId(disk);
-                    if (vdiskId.FailRealm != returning) {
-                        continue;
-                    }
-                    vdiskId.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
-                    const TActorId service = originalInfo->GetActorId(disk);
-                    const TActorId edge = env.Runtime->AllocateEdgeActor(service.NodeId());
-                    env.Runtime->Send(new IEventHandle(service, edge,
-                        new TEvBlobStorage::TEvVStatus(vdiskId)), service.NodeId());
-                    const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
-                    const NKikimrBlobStorage::TEvVStatusResult& record = response->Get()->Record;
-                    replicated &= record.GetStatus() == NKikimrProto::OK && record.GetReplicated();
-                }
-                if (!replicated) {
-                    env.Sim(TDuration::Seconds(1));
-                }
-            }
-            UNIT_ASSERT_C(replicated, "Returning realm must complete replication before R->N1; round# " << round);
-            next[returning] = TFailRealm::N1;
-            setStates(next);
-            next[survivor] = TFailRealm::F;
-            setStates(next);
-            checkBlob();
-            survivor = returning;
-        }
-        env.Runtime->FilterFunction = {};
+    Y_UNIT_TEST(Mirror3dcReadsFromRestoredRealmAfterSourceDisconnection) {
+        DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario::SwitchToRestoredRealm);
     }
 
     Y_UNIT_TEST(Mirror3dcRestoresDurabilityBeyondWriteQuorum) {

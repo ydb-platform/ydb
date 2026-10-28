@@ -68,24 +68,25 @@ struct TIssueInfo {
     }
 };
 
-<<<<<<< HEAD
 TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
+    if (request->Database) {
+        return *request->Database;
+    }
     TString database = ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, request->ContentType);
     if (!database.empty() && HasAppData() && AppData()->PathNormalizer) {
         database = AppData()->PathNormalizer->NormalizePath(CanonizePath(database));
-=======
-TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
-    NHttp::THeaders headers(request->Headers);
-    return ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, headers.Get("Content-Type"));
+    }
+    return database;
 }
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
-    event->Database = ExtractMonDatabaseParam(event->Request.Get());
-    if (!event->Database.empty() && event->PathNormalizer && *event->PathNormalizer) {
-        event->Database = (**event->PathNormalizer)(CanonizePath(event->Database));
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
+    auto* request = event->Request.Get();
+    TString database = ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, request->ContentType);
+    if (!database.empty() && event->PathNormalizer && *event->PathNormalizer) {
+        database = (**event->PathNormalizer)(CanonizePath(database));
     }
-    return database;
+    // The 26.3 authorizer receives the HTTP request, not the actor event.
+    request->Database = std::move(database);
 }
 
 void LogAuthorizedHttpRequest(
@@ -633,14 +634,9 @@ public:
             LogAuthorizedHttpRequest(AppData(), result, *request);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
-<<<<<<< HEAD
-        Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken), IEventHandle::FlagTrackDelivery);
-=======
-        auto* requestEvent = new NMon::TEvHttpInfo(Container, serializedToken, Event->Get()->Database);
+        auto* requestEvent = new NMon::TEvHttpInfo(Container, serializedToken);
         requestEvent->PathNormalizer = Event->Get()->PathNormalizer;
         Send(ActorMonPage->TargetActorId, requestEvent, IEventHandle::FlagTrackDelivery);
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -729,6 +725,7 @@ public:
         if (!ev->Get()->PathNormalizer) {
             ev->Get()->PathNormalizer = PathNormalizer;
         }
+        InitMonHttpIncomingRequest(ev->Get());
         Register(new THttpMonLegacyActorRequest(std::move(ev), ActorMonPage));
     }
 
@@ -1608,6 +1605,7 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
         if (!ev->Get()->PathNormalizer) {
             ev->Get()->PathNormalizer = PathNormalizer;
         }
+        InitMonHttpIncomingRequest(ev->Get());
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
@@ -1635,20 +1633,14 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
 // receives everyhing not related to actor communcation, converts them to request-actors
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
-<<<<<<< HEAD
-    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
-                         TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true)
-=======
     THttpMonIndexService(
         const TActorId& httpProxyActorId,
         TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
         TVector<TString> allowedSIDs,
         TMon::TRequestAuthorizer authorizer,
-        NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters,
         TPathNormalizer pathNormalizer,
         const TString& redirectRoot = {},
         bool needMonLegacyAudit = true)
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , IndexMonPage(std::move(indexMonPage))
@@ -1691,6 +1683,7 @@ public:
         if (!ev->Get()->PathNormalizer) {
             ev->Get()->PathNormalizer = PathNormalizer;
         }
+        InitMonHttpIncomingRequest(ev->Get());
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
@@ -1854,16 +1847,10 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Y_ABORT_UNLESS(actorSystem);
     TGuard<TMutex> g(Mutex);
     ActorSystem = actorSystem;
-<<<<<<< HEAD
-=======
     if (!PathNormalizer) {
         auto* appData = ActorSystem->AppData<NKikimr::TAppData>();
         PathNormalizer = MakePathNormalizer(appData ? appData->PathNormalizer : nullptr);
     }
-    if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
-        GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);
-    }
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
     Register(new TIndexRedirectMonPage(IndexMonPage));
     Register(new NMonitoring::TVersionMonPage);
     Register(new NMonitoring::TBootstrapCssMonPage);
@@ -1887,19 +1874,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-<<<<<<< HEAD
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, *PathNormalizer, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, false),
-=======
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, *PathNormalizer, Config.RedirectMainPageTo),
-        TMailboxType::ReadAsFilled,
-        executorPool);
-    HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, *PathNormalizer, Config.RedirectMainPageTo, false),
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
+        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, *PathNormalizer, Config.RedirectMainPageTo, false),
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();

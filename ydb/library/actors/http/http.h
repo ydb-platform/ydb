@@ -8,6 +8,8 @@
 #include <util/generic/intrlist.h>
 #include "http_config.h"
 
+#include <optional>
+
 // TODO(xenoxeno): hide in implementation
 template <typename Type>
 struct THash<TIntrusivePtr<Type>> {
@@ -1045,6 +1047,7 @@ public:
     THttpConfig::SocketAddressType Address;
     THPTimer Timer;
     TString MTlsClientCertificate;
+    std::optional<TString> Database; // pinned by monitoring for legacy authorizers
 
     THttpIncomingRequest();
     THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address);

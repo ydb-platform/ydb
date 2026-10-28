@@ -267,8 +267,7 @@ private:
             const auto& tx = physicalQuery.GetTransactions(task.GetTxId());
             const auto stageIdBase = stageIdBases.at(task.GetTxId());
             const auto stageId = checkpointTask.GetStageId();
-            Y_VALIDATE(stageId >= stageIdBase && stageId - stageIdBase < static_cast<ui64>(tx.StagesSize()),
-                "Missing task stage");
+            Y_VALIDATE(stageId >= stageIdBase && stageId - stageIdBase < static_cast<ui64>(tx.StagesSize()), "Missing task stage");
             const auto& stage = tx.GetStages(stageId - stageIdBase);
             const auto& program = stage.GetProgram();
             graphParams.MutableStageProgram()->try_emplace(checkpointTask.GetStageId(), program.GetRaw());

@@ -261,7 +261,10 @@ public:
     // UnauthenticatedGrpcMethods is read from AppData, which requires an actor
     // activation. The secure-request bootstrap calls this before checking the token.
     void PrepareAuthentication() {
-        if (TBase::GetSecurityToken().empty() && IsAnonymousGrpcMethodAllowed(*GrpcRequestBaseCtx_)) {
+        // An empty auth header still leaves SecurityToken empty and hides a client
+        // certificate. Do not treat that request as anonymous.
+        const bool hasCertificate = !GrpcRequestBaseCtx_->FindClientCertPropertyValues().empty();
+        if (TBase::GetSecurityToken().empty() && !hasCertificate && IsAnonymousGrpcMethodAllowed(*GrpcRequestBaseCtx_)) {
             TBase::SetAllowMissingToken();
         }
     }

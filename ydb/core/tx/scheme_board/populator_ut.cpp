@@ -15,6 +15,8 @@
 
 #include <util/generic/map.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NSchemeBoard {
 
@@ -453,20 +455,28 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         TestPublicationSurvivesReplicaReplacement(false, true);
     }
 
-    Y_UNIT_TEST(ReplayUsesCurrentDescriptionPath) {
+    void TestReplayUsesCurrentDescriptionPath(bool replaceReplicas) {
         TTestBasicRuntime runtime;
         TStateStorageInfo::TRingGroup group{};
         group.NToSelect = 3;
         constexpr size_t replicaCount = 7;
-        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group, group}, replicaCount));
         const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
         const auto info = GetStateStorageInfo(runtime);
+        auto original = MakeIntrusive<TStateStorageInfo>();
+        original->RingGroups.push_back(info->RingGroups[0]);
+        auto replacement = MakeIntrusive<TStateStorageInfo>();
+        replacement->RingGroups.push_back(info->RingGroups[1]);
+        const auto current = replaceReplicas ? replacement : original;
         constexpr ui64 owner = TTestTxConfig::SchemeShard;
         const TPathId pathId(owner, 100);
         THashMap<TActorId, TActorId> actorToService;
-        for (const auto& ring : info->RingGroups.front().Rings) {
-            for (const auto& replica : ring.Replicas) {
-                actorToService[runtime.GetLocalServiceId(replica)] = replica;
+        for (const auto& ringGroup : info->RingGroups) {
+            for (const auto& ring : ringGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    actorToService[runtime.GetLocalServiceId(replica)] = replica;
+                }
             }
         }
         THashMap<TActorId, TActorId> childToService;
@@ -475,35 +485,57 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         });
         size_t committed = 0;
         auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
-        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
-        runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        TActorId populator;
+        auto configObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto& ev) {
+            if (ev->Recipient == populator) {
+                ev->Get()->Info = original;
+            }
+        });
+        populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all original replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(childToService.size(), replicaCount);
-        auto select = [&](const TString& path) {
-            THashSet<TActorId> selected;
+        configObserver.Remove();
+        auto select = [&](const TStateStorageInfo& config, ui64 key) {
             TStateStorageInfo::TSelection selection;
-            info->SelectReplicas(GetSchemeBoardSelectionKey(path), &selection, 0);
-            selected.insert(selection.begin(), selection.end());
-            info->SelectReplicas(GetSchemeBoardSelectionKey(pathId), &selection, 0);
-            selected.insert(selection.begin(), selection.end());
-            return selected;
+            config.SelectReplicas(key, &selection, 0);
+            return THashSet<TActorId>(selection.begin(), selection.end());
         };
-        const TString oldPath = "/Root/OldPath";
-        const auto oldSelection = select(oldPath);
+        auto overlap = [](const auto& lhs, const auto& rhs) {
+            size_t count = 0;
+            for (const auto& replica : lhs) {
+                count += rhs.contains(replica);
+            }
+            return count;
+        };
+        const auto idSelection = select(*current, GetSchemeBoardSelectionKey(pathId));
         TString newPath;
         THashSet<TActorId> newSelection;
-        for (size_t i = 0; i != 100; ++i) {
+        for (size_t i = 0; i != 1000; ++i) {
             newPath = TStringBuilder() << "/Root/NewPath" << i;
-            newSelection = select(newPath);
-            if (newSelection != oldSelection) {
+            newSelection = select(*current, GetSchemeBoardSelectionKey(newPath));
+            if (newSelection == idSelection) {
                 break;
             }
         }
-        UNIT_ASSERT_C(newSelection != oldSelection, "test paths must select different replica sets");
-        // Hold all publications on the parent-to-child links in their original
-        // order. No ACK can complete the old publication before replay.
-        TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
-            return ev->Sender == populator;
-        });
+        UNIT_ASSERT_C(newSelection == idSelection, "the new path and PathId must select the same replicas");
+        TString oldPath;
+        THashSet<TActorId> oldPathSelection;
+        for (size_t i = 0; i != 1000; ++i) {
+            oldPath = TStringBuilder() << "/Root/OldPath" << i;
+            oldPathSelection = select(*current, GetSchemeBoardSelectionKey(oldPath));
+            if (overlap(oldPathSelection, newSelection) < 2) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(overlap(oldPathSelection, newSelection) < 2,
+            "all current destinations must be insufficient for the old path quorum");
+        const auto originalIdSelection = select(*original, GetSchemeBoardSelectionKey(pathId));
+        const auto originalOldPathSelection = select(*original, GetSchemeBoardSelectionKey(oldPath));
+        UNIT_ASSERT(overlap(originalOldPathSelection, originalIdSelection) < 2);
+        auto oldSelection = originalOldPathSelection;
+        oldSelection.insert(originalIdSelection.begin(), originalIdSelection.end());
+        const auto originalNewSelection = select(*original, GetSchemeBoardSelectionKey(newPath));
+        UNIT_ASSERT(originalNewSelection == originalIdSelection);
         auto publish = [&](const TString& path, ui64 version, ui64 cookie) {
             auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
             desc->Record = GenerateDescribe(path, pathId, version);
@@ -511,15 +543,43 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
         };
         constexpr ui64 oldCookie = 12345;
+        THashMap<ui64, ui64> completed;
+        auto completions = runtime.AddObserver<TUpdateAck>([&](auto& ev) {
+            if (ev->Recipient == edge) {
+                completed[ev->Cookie] = ev->Get()->Record.GetVersion();
+            }
+        });
+        TBlockEvents<TUpdateAck> oldAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == populator && ev->Cookie == oldCookie;
+        });
         publish(oldPath, 1, oldCookie);
-        runtime.WaitFor("old publication", [&] { return updates.size() == oldSelection.size(); }, TDuration::Seconds(10));
-        publish(newPath, 2, oldCookie + 1);
-        const auto originalCount = oldSelection.size() + newSelection.size();
-        runtime.WaitFor("new publication", [&] { return updates.size() == originalCount; }, TDuration::Seconds(10));
-        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(info)));
+        runtime.WaitFor("original publication ACKs", [&] { return oldAcks.size() == oldSelection.size(); }, TDuration::Seconds(10));
+        oldAcks.Stop();
+        TVector<TUpdateAck::TPtr> oldIdAcks;
+        for (const auto& ev : oldAcks) {
+            if (originalIdSelection.contains(childToService.at(ev->Sender))) {
+                oldIdAcks.emplace_back(ev);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(oldIdAcks.size(), 3);
+        // This is a quorum for the new route, but not for the old path.
+        // Keep one more old-version ACK in flight across replay.
+        runtime.Send(oldIdAcks[0].Release());
+        runtime.Send(oldIdAcks[1].Release());
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(completed.empty());
+        TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
+            return ev->Sender == populator;
+        });
+        publish(newPath, 2, oldCookie + 1);
+        runtime.WaitFor("new publication", [&] { return updates.size() == originalNewSelection.size(); }, TDuration::Seconds(10));
+        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(current)));
+        const auto expectedCommits = replaceReplicas ? 2 * replicaCount : replicaCount;
+        runtime.WaitFor("replay to the current replica children", [&] {
+            return committed == expectedCommits && updates.size() == originalNewSelection.size() + 2 * newSelection.size();
+        }, TDuration::Seconds(10));
         THashSet<TActorId> replayedTo;
-        for (size_t i = originalCount; i < updates.size(); ++i) {
+        for (size_t i = originalNewSelection.size(); i < updates.size(); ++i) {
             const auto& ev = updates[i];
             if (ev->Cookie == oldCookie) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPath(), newPath);
@@ -528,6 +588,40 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         }
         UNIT_ASSERT_C(replayedTo == newSelection,
             "replay of the latest description must use that description's current path for routing");
+        const auto delayedAckSender = oldIdAcks[2]->Sender;
+        runtime.Send(oldIdAcks[2].Release());
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!completed.contains(oldCookie),
+            "a delayed ACK of the old path must not complete the new route's quorum");
+        TBlockEvents<TUpdateAck> replayAcks(runtime, [&](const auto& ev) {
+            return ev->Recipient == populator && ev->Cookie == oldCookie && ev->Get()->Record.GetVersion() == 2;
+        });
+        updates.Stop().Unblock();
+        runtime.WaitFor("ACKs of the replayed description", [&] { return replayAcks.size() == newSelection.size(); }, TDuration::Seconds(10));
+        const auto freshAck = std::find_if(replayAcks.begin(), replayAcks.end(), [&](const auto& ev) {
+            return ev->Sender != delayedAckSender;
+        });
+        UNIT_ASSERT(freshAck != replayAcks.end());
+        std::iter_swap(replayAcks.begin(), freshAck);
+        replayAcks.Unblock(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!completed.contains(oldCookie),
+            "ACKs accumulated for the old path must not substitute for fresh replay ACKs");
+        replayAcks.Stop().Unblock();
+        runtime.WaitFor("both publications completed", [&] { return completed.size() == 2; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(completed.at(oldCookie), 1);
+        UNIT_ASSERT_VALUES_EQUAL(completed.at(oldCookie + 1), 2);
+        runtime.Send(new IEventHandle(populator, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+        auto response = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetPopulatorResponse().UpdateAcksSize(), 0);
+    }
+
+    Y_UNIT_TEST(ReplayUsesCurrentDescriptionPath) {
+        TestReplayUsesCurrentDescriptionPath(false);
+    }
+
+    Y_UNIT_TEST(ReplaySurvivesPathAndReplicaReplacement) {
+        TestReplayUsesCurrentDescriptionPath(true);
     }
 
     Y_UNIT_TEST(PathAndPathIdSelectionsRequireSeparateQuorums) {
@@ -566,20 +660,17 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         const auto idSelection = select(GetSchemeBoardSelectionKey(pathId));
         TString path;
         THashSet<TActorId> pathSelection;
+        size_t pathOnly = 0;
         for (size_t i = 0; i != 1000; ++i) {
             path = TStringBuilder() << "/Root/TestPath" << i;
             pathSelection = select(GetSchemeBoardSelectionKey(path));
-            size_t pathOnly = 0;
+            pathOnly = 0;
             for (const auto& replica : pathSelection) {
                 pathOnly += !idSelection.contains(replica);
             }
             if (pathOnly >= 2) {
                 break;
             }
-        }
-        size_t pathOnly = 0;
-        for (const auto& replica : pathSelection) {
-            pathOnly += !idSelection.contains(replica);
         }
         UNIT_ASSERT_C(pathOnly >= 2, "test path must select a sufficiently different replica set");
 
@@ -590,11 +681,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
         desc->Record = CreateSamplePathDescription(owner, pathId, path);
         runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
-        size_t overlap = 0;
-        for (const auto& replica : pathSelection) {
-            overlap += idSelection.contains(replica);
-        }
-        const size_t expectedAcks = pathSelection.size() + idSelection.size() - overlap;
+        const size_t expectedAcks = idSelection.size() + pathOnly;
         runtime.WaitFor("ACKs from both selections", [&] { return ackBlocker.size() == expectedAcks; }, TDuration::Seconds(10));
 
         TVector<TUpdateAck::TPtr> pathOnlyAcks;

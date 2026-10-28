@@ -543,8 +543,22 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         Y_ABORT_UNLESS(desc || isDeletion);
 
         // Replay sends the latest description, so use its current path too.
-        // The saved publication path is needed only after deletion.
-        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc ? TStringBuf(desc->Path) : path);
+        // Keep quorum routing in sync with the description actually sent.
+        // The saved publication route is needed after deletion.
+        auto& info = UpdateAcks.at(cookie);
+        auto& route = info.Paths.at(pathId);
+        const TStringBuf currentPath = desc ? TStringBuf(desc->Path) : path;
+        if (route.Path != currentPath) {
+            route.Path = currentPath;
+            route.MinAckVersion = Max(route.MinAckVersion, isDeletion ? Max<ui64>() : desc->PathVersion);
+            // Earlier ACKs describe the previous path, including those still
+            // in flight. Require fresh ACKs of the description sent below.
+            auto it = info.PathAcks.lower_bound({pathId, 0});
+            for (; it != info.PathAcks.end() && it->first.first == pathId; ++it) {
+                it->second.clear();
+            }
+        }
+        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, route.Path);
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
@@ -749,11 +763,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         it->second.AckTo = ev->Sender;
         it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
-        auto& path = it->second.Paths[pathId];
-        path = isDeletion && !Descriptions.contains(pathId)
-            ? record.GetPath()
-            : Descriptions.at(pathId).Path;
-        Update(pathId, isDeletion, ev->Cookie, path);
+        it->second.Paths.try_emplace(pathId);
+        Update(pathId, isDeletion, ev->Cookie, record.GetPath());
 
         if (isDeletion) {
             Descriptions.erase(pathId);
@@ -813,13 +824,17 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
         const TPathId pathId = ev->Get()->GetPathId();
         const ui64 version = record.GetVersion();
+        const auto* route = it->second.Paths.FindPtr(pathId);
+        if (!route || version < route->MinAckVersion) {
+            return;
+        }
 
         auto pathIt = it->second.PathAcks.lower_bound({pathId, 0});
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             pathIt->second.insert(ev->Sender);
-            if (CheckQuorum(pathId, it->second.Paths.at(pathId), pathIt->second)) {
+            if (CheckQuorum(pathId, route->Path, pathIt->second)) {
                 YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},
@@ -903,7 +918,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             for (const auto& [pathVersion, _] : info.PathAcks) {
                 const auto& pathId = pathVersion.first;
                 if (pathId != previousPath) {
-                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId));
+                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId).Path);
                     previousPath = pathId;
                 }
             }
@@ -1086,8 +1101,13 @@ private:
         TActorId AckTo;
         // ReplicaPopulator actor IDs identify the replica incarnations that acknowledged each publication.
         TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
+        struct TPublicationRoute {
+            TString Path;
+            // ACKs of an older path must not satisfy the current route's quorum.
+            ui64 MinAckVersion = 0;
+        };
         // Keep routing information until completion, even for deleted paths.
-        THashMap<TPathId, TString> Paths;
+        THashMap<TPathId, TPublicationRoute> Paths;
     };
 
     THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie

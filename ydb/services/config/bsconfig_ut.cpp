@@ -1313,6 +1313,46 @@ config:
         UNIT_ASSERT_C(mainAfterReconnect.Contains("main-after-reconnect"), mainAfterReconnect);
     }
 
+    // The new YAML puts into the box a host that is in its node list, but not in the node list BSC has now. BSC checks
+    // the box against the node list of the new YAML, and then applies it against its own list. It must not go down
+    // there; the YAML with the known host only is the control and applies.
+    Y_UNIT_TEST(BoxHostUnknownToControllerIsNotApplied) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        auto makeYaml = [&](ui32 version, const char *extraHost) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+%s)", version, pdiskPath.c_str(), extraHost);
+        };
+        ReplaceConfig(server.GetChannel(), makeYaml(1, R"(  - host: ::1
+    port: 12099
+    host_config_id: 1
+)"), std::nullopt, std::nullopt, false, false, [](const auto& resp) {
+            UNIT_ASSERT_C(resp.operation().status() != Ydb::StatusIds::SUCCESS, resp.operation().DebugString());
+        });
+
+        // nothing was persisted: the same version applies with the known host only
+        ReplaceConfig(server.GetChannel(), makeYaml(1, ""), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+    }
+
 }
 
 } // NKikimr::NGRpcService

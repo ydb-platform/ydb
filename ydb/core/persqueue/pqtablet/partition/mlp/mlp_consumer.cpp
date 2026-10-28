@@ -1191,8 +1191,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = NormalizeDlqTopicPath(Config.GetDeadLetterQueue(), Database,
-                AppData()->FeatureFlags.GetEnableRelativePaths()),
+            .DestinationTopic = NormalizeDlqTopicPath(Config.GetDeadLetterQueue(), Database),
             .Messages = std::move(messages)
         }));
     }

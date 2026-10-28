@@ -350,7 +350,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         operations->SetTrackProducerId(Opts.TrackProducerId);
         auto* topics = operations->AddTopics();
         topics->set_path(AppData()->FeatureFlags.GetEnableRelativePaths()
-            ? ResolvePathToDatabase(Opts.Database, Opts.TopicPath) : Opts.TopicPath);
+            ? PrependDomainIfNeeded(Opts.Database, Opts.TopicPath) : Opts.TopicPath);
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
 

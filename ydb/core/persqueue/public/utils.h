@@ -35,7 +35,7 @@ TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
 
-TString NormalizeDlqTopicPath(const TString& dlq, const TString& database, bool enableRelativePaths = false);
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database);
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);

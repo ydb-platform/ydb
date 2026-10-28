@@ -298,7 +298,7 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
 
 inline TString NormalizePath(const TString& database, const TString& path) {
     return NKikimr::HasAppData() && NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths()
-        ? NKikimr::CanonizePath(NKikimr::ResolvePathToDatabase(database, path)) : NKikimr::NormalizePath(database, path);
+        ? NKikimr::CanonizePath(NKikimr::PrependDomainIfNeeded(database, path)) : NKikimr::NormalizePath(database, path);
 }
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {

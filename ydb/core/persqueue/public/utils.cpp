@@ -133,12 +133,9 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
     }
 }
 
-TString NormalizeDlqTopicPath(const TString& dlq, const TString& database, bool enableRelativePaths) {
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
     if (dlq.empty() || dlq.StartsWith("sqs://")) {
         return dlq;
-    }
-    if (enableRelativePaths) {
-        return CanonizePath(ResolvePathToDatabase(database, dlq));
     }
     return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }

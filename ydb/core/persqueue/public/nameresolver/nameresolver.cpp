@@ -340,7 +340,7 @@ std::expected<TResolvedName, TString> ResolveName(
         // Only paths starting with '/' are absolute.
         TString path = name.empty()
             ? JoinWithDatabase(database, databaseNorm, name)
-            : CanonizePath(ResolvePathToDatabase(database, name));
+            : CanonizePath(PrependDomainIfNeeded(database, name));
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, false);
     }
 

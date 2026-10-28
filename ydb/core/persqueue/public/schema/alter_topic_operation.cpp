@@ -205,7 +205,6 @@ private:
                 oldConfig,
                 TCheckDlqTopicsSettings{
                     .UserToken = Settings.UserToken,
-                    .EnableRelativePaths = Settings.EnableRelativePaths,
                 }))
         {
             Become(&TAlterTopicOperationActor::CheckDlqState);

@@ -1161,6 +1161,8 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         bool IsInternal = false;
+        // Local read checks can report CORRUPTED without starting recovery. Not serialized.
+        bool SuppressCorruptedBlobRestoration = false;
 
         TEvVGet() = default;
 

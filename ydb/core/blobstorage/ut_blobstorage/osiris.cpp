@@ -562,7 +562,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
 
 Y_UNIT_TEST_SUITE(Osiris) {
 
-    Y_UNIT_TEST(Mirror3dcRepeatsRecoveryOnNormalStateUpgrade) {
+    Y_UNIT_TEST(Mirror3dcRepeatsRecoveryOnDurabilityChange) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
         NKikimrBlobStorage::TGroupInfo originalGroup;
@@ -655,10 +655,11 @@ Y_UNIT_TEST_SUITE(Osiris) {
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        // N1->N2 changes E, but keeps D=2+2: no new pass is needed.
         states[0] = states[1] = TFailRealm::N2;
         applyStates();
-        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 12);
-        UNIT_ASSERT_VALUES_EQUAL(replDone, 12);
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         std::array<ui32, 3> copies{};
         for (ui32 idx = 0; idx < subgroup.size(); ++idx) {
             TVDiskID disk = info->GetVDiskId(subgroup[idx]);
@@ -683,17 +684,20 @@ Y_UNIT_TEST_SUITE(Osiris) {
             }
         }
         UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the normal-state upgrades");
-        // Queue another policy upgrade while the first Osiris completion is still in flight.
+        // A downgrade also changes D (2+2 -> 1+1) and starts a new pass.
         osirisDone = replDone = 0;
         states[0] = states[1] = TFailRealm::N0;
         applyStates();
-        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 0);
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        // Queue a second D change while the first Osiris completion is still in flight.
+        osirisDone = replDone = 0;
         holdOsirisDone = true;
         states[0] = states[1] = TFailRealm::N1;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
-        states[0] = states[1] = TFailRealm::N2;
+        states[0] = states[1] = TFailRealm::N0;
         applyStates();
         holdOsirisDone = false;
         for (std::unique_ptr<IEventHandle>& event : heldOsirisDone) {

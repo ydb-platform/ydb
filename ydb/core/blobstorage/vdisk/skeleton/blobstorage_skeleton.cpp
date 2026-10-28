@@ -21,6 +21,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -2235,7 +2236,7 @@ namespace NKikimr {
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !ReplDone
-                    || Config->BaseInfo.ReadOnly) {
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
@@ -3190,18 +3191,26 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // OTHER MESSAGES SECTOR
         ////////////////////////////////////////////////////////////////////////
+        static std::optional<EMirror3dcLayout> GetDurabilityLayout(const TBlobStorageGroupInfo& info) {
+            if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                return std::nullopt;
+            }
+            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
+                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
+            if (!state) {
+                return std::nullopt;
+            }
+            return GetMirror3dcGroupLayouts(*state)->Durability;
+        }
+
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
 
-            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-            if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration
-                    && GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
-                for (ui32 realm = 0; realm < GInfo->GetTopology().GetTotalFailRealmsNum(); ++realm) {
-                    const TFailRealm::EState previous = GInfo->GetFailRealmState(realm);
-                    const TFailRealm::EState next = msg->NewInfo->GetFailRealmState(realm);
-                    RepeatRecoveryPending |= (previous == TFailRealm::N0 && next == TFailRealm::N1)
-                        || (previous == TFailRealm::N1 && next == TFailRealm::N2);
-                }
+            if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+                const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
+                const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
+                RepeatRecoveryPending |= previousDurability && nextDurability
+                    && previousDurability != nextDurability;
             }
 
             // Save locally

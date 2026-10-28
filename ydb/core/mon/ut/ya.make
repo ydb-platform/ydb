@@ -10,6 +10,7 @@ IF (SANITIZER_TYPE == "thread")
 ENDIF()
 
 PEERDIR(
+    ydb/core/client/server
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default

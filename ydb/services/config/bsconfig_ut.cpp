@@ -845,6 +845,62 @@ hosts:
 
 }
 
+// requests naming the domain database, which mean the cluster configuration
+Y_UNIT_TEST_SUITE(ConfigGRPCServiceDomainDatabase) {
+    using namespace NTestSuiteConfigGRPCService;
+
+    // With the dedicated storage YAML, the fetch naming the domain database brings the storage YAML, as the one
+    // naming no database does
+    Y_UNIT_TEST(FetchWithDomainDatabaseGoesClusterWay) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString storageYaml = R"(
+metadata:
+  kind: StorageConfig
+  cluster: ""
+  version: 0
+config:
+)" + HostsYaml(*server.GetRuntime());
+        auto makeMainYaml = [&](ui32 version) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: domain-database
+)", version) + HostsYaml(*server.GetRuntime());
+        };
+        auto success = [](const auto& resp) {
+            UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        // BSC turns configuration v2 on with the first replacement, which can't switch the dedicated storage mode too
+        ReplaceConfig(server.GetChannel(), makeMainYaml(1), std::nullopt, std::nullopt, false, false, success);
+        ReplaceConfig(server.GetChannel(), makeMainYaml(2), storageYaml, /*switchDedicatedStorageSection=*/ true,
+            false, false, success);
+
+        auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+        Ydb::Config::FetchConfigRequest request;
+        request.mutable_all();
+        Ydb::Config::FetchConfigResponse response;
+        grpc::ClientContext ctx;
+        AdjustCtxForDB(ctx);
+        ctx.AddMetadata(NYdb::YDB_DATABASE_HEADER, "/Root");
+        stub->FetchConfig(&ctx, request, &response);
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        Ydb::Config::FetchConfigResult result;
+        response.operation().result().UnpackTo(&result);
+        bool hasStorage = false;
+        for (const auto& entry : result.config()) {
+            hasStorage |= entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kStorage;
+        }
+        UNIT_ASSERT_C(hasStorage, "no storage YAML in the fetch naming the domain database: " << result.DebugString());
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
 
     using TServerWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;

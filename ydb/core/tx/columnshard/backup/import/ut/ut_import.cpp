@@ -596,6 +596,8 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            // S3 uses real HTTP threads; allow replies to arrive before simulated timers exhaust the event limit.
+            runtime.SetFastSimulatedTime(false);
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);
             ui64 txId = 111;
@@ -616,6 +618,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            runtime.SetFastSimulatedTime(false);
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
             ui64 txId = 111;

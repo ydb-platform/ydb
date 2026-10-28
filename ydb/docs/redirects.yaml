@@ -546,6 +546,8 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
+  - from: /reference/observability/tracing/query-spans.md
+    to: /reference/observability/tracing/query-tracing.md
   - from: /db/terraform.md
     to: /dev/terraform.md
   - from: /maintenance/manual/replacing_nodes.md

@@ -6,32 +6,37 @@
 
 {% else %}
 
-Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} Позволяет определить вторичные индексы на создаваемой таблице.
+Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.
 
 {% endif %}
 
 {% endif %}
 
-```yql
-CREATE TABLE [IF NOT EXISTS] <table_name> (
-  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
-  [, ...],
-    INDEX <index_name>
-      GLOBAL
-      [SYNC|ASYNC]
-      [USING <index_type>]
-      ON ( <index_columns> )
-      [COVER ( <cover_columns> )]
-      [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...]
-  PRIMARY KEY ( <column>[, ...]),
-  [FAMILY <column_family> ( family_options[, ...])]
-)
-[PARTITION BY HASH ( <column>[, ...])]
-[WITH (<setting_name> = <setting_value>[, ...])]
-
-[AS SELECT ...]
-```
+    CREATE [TEMP | TEMPORARY] TABLE table_name (
+        column1 type1,
+{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
+        ...
+        columnN typeN,
+{% if feature_secondary_index == true %}
+        INDEX `<index_name>`
+          GLOBAL
+          [SYNC|ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        ...
+{% endif %}
+{% if feature_map_tables %}
+        PRIMARY KEY ( column, ... ),
+        FAMILY column_family ( family_options, ... )
+{% else %}
+        ...
+{% endif %}
+    )
+{% if feature_map_tables %}
+    WITH ( key = value, ... )
+{% endif %}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -211,7 +216,7 @@ WITH (
   );
   ```
 
-  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [Таблицы](../../../../concepts/datamodel/table.md).
 
 - Создание колоночной таблицы
 
@@ -308,12 +313,12 @@ CREATE TABLE <table_name> (
 * [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
-* [Запрос для заполнения таблицы данными](as_select.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
-* [Запрос для заполнения таблицы данными](as_select.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 {% endif %}

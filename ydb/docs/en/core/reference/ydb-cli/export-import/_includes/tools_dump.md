@@ -77,7 +77,7 @@ To a specific directory:
 {{ ydb-cli }} -e <endpoint> admin cluster dump -o ~/backup_cluster
 ```
 
-### Exporting a database
+### Exporting a database {#db}
 
 To an automatically created `backup_...` directory in the current directory:
 

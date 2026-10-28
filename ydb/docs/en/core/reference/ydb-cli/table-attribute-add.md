@@ -1,6 +1,6 @@
 # table attribute add
 
-With the `table attribute add` command, you can add a [custom attribute](../../concepts/datamodel/table.md#users-attr) to your table.
+With the `table attribute add` command, you can add a [custom attribute](../../concepts/datamodel/table.md) to your table.
 
 General format of the command:
 

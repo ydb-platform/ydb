@@ -119,7 +119,7 @@ When set to "auto", it enables a new compute engine. Computing is made, whenever
 
 When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
-It can be also used with a [JOIN](select/join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is applied to the key columns.
+It can be also used with a [JOIN](select/join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -207,7 +207,7 @@ Output the [column order](select/order_by.md) in SELECT/JOIN/UNION ALL and prese
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](select/union.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](select/union.md#union-all). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -228,7 +228,7 @@ In the classical version, the result of integer division remains integer (by def
 If disabled, the result is always Double.
 ClassicDivision is a [scoped](pragma.md#pragmascope) setting.
 
-### UnicodeLiterals
+### UnicodeLiterals {#UnicodeLiterals}
 
 `UnicodeLiterals`/`DisableUnicodeLiterals`
 
@@ -282,7 +282,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
@@ -293,7 +293,7 @@ Use this option with care, because the computational complexity of the query gro
 
 Managing the default behavior of Yson UDF, for more information, see the [documentation](../udf/list/yson.md) and, in particular, [Yson::Options](../udf/list/yson.md#ysonoptions).
 
-### `yson.AutoConvert`
+### `yson.AutoConvert` {#yson.autoconvert}
 
 | Value type | Default |
 | --- | --- |
@@ -301,7 +301,7 @@ Managing the default behavior of Yson UDF, for more information, see the [docume
 
 Automatic conversion of values to the required data type in all Yson UDF calls, including implicit calls.
 
-### `yson.Strict`
+### `yson.Strict` {#yson.strict}
 
 | Value type | Default |
 | --- | --- |
@@ -447,7 +447,7 @@ SELECT $foo;
 | ----- | ------------------------ |
 | 0     | Cost-based optimizer is disabled. |
 | 1     | Cost-based optimizer is disabled, but estimates are computed and available. |
-| 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table-column-oriented-table) {% else %} column-oriented tables.{% endif %} |
+| 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table) {% else %} column-oriented tables.{% endif %} |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
 

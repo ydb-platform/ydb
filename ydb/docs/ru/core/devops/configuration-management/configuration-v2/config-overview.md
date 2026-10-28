@@ -95,4 +95,4 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 ## Смотрите также
 
 * [Справка по параметрам конфигурации](config-settings.md)
-* [{#T}](../compare-configs.md)
+* [Сравнение конфигураций кластера {{ ydb-short-name }}: V1 и V2](../compare-configs.md)

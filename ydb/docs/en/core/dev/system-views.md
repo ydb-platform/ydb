@@ -1,6 +1,16 @@
 # Database system views
 
-To obtain service information about the state of the database, you can access system views. They are accessible from the root of the database tree and use the system path prefix `.sys`.
+You can make queries to special service tables (system views) to monitor the DB status. These tables are accessible from the root of the database tree and use the `.sys` system path prefix.
+
+You can find the corresponding table's primary key field index in the descriptions of available fields below.
+
+DB system views contain:
+
+* [Details of individual DB table partitions](#partitions).
+* [Top queries by certain characteristics](#top-queries).
+* [Query details](#query-metrics).
+* [History of overloaded partitions](#top-overload-partitions).
+* [Information about users, groups, and access rights](#auth).
 
 {% note info %}
 
@@ -10,7 +20,7 @@ Frequent access to system views leads to additional load on the database, especi
 
 ## Partitions {#partitions}
 
-The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning) of DB tables:
+The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning_row_table) of DB tables:
 
 * `partition_stats`: Contains information about instant metrics and cumulative operation counters. Instant metrics are, for example, CPU load or count of in-flight [transactions](../concepts/transactions.md). Cumulative counters, for example, count the total number of rows read.
 
@@ -118,7 +128,7 @@ Each time interval (minute or hour) contains the TOP 5 queries completed in that
 
 Fields that provide information about the used CPU time (...`CPUTime`) are expressed in microseconds.
 
-Query text limit is 10 KB.
+Query text limit is 4 KB.
 
 All tables have the same structure:
 
@@ -196,7 +206,7 @@ Each table row contains information about a set of queries with identical text t
 
 Restrictions:
 
-* Query text limit is 10 KB.
+* Query text limit is 4 KB.
 * Statistics may be incomplete if the database is under heavy load.
 
 Table structure:
@@ -206,6 +216,8 @@ Table structure:
 | `IntervalEnd` | The end of the minute interval for which statistics are collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Query rank within an interval (by the `SumCPUTime` field).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
+| `Count` | Number of query runs.<br/>Type: `Uint64`. |
+| `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
 | `Count` | Number of query runs.<br/>Type: `Uint64`. |
 | `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
 | `MinDuration` | Minimum query duration.<br/>Type: `Interval`. |
@@ -324,6 +336,18 @@ AND IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-12
 ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
+* `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
+
+## Detailed information about session queries {#query-sessions}
+
+The following system view contains detailed information about current sessions and the queries being executed in them.
+
+* `.sys/query_sessions` — contains information about sessions and the queries being executed in them.
+
+## Users, groups, and access rights {#auth}
+
+The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
+
 ## History of partitions with broken locks {#top-tli-partitions}
 
 The following system views contain a history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of DB tables:
@@ -372,13 +396,11 @@ WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-
 ORDER BY IntervalEnd desc, LocksBroken desc
 ```
 
-## Users, groups, and access rights {#auth}
-
-The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
+## Auth users, groups, permissions {#auth}
 
 ### Auth users {#users}
 
-The `auth_users` view lists local {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
+The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 
 This view can be fully accessed by administrators, while regular users can only view their own details.
 
@@ -386,9 +408,9 @@ Table structure:
 
 | Column | Description |
 |--------|-------------|
-| `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Indicates that the user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
 | `LastSuccessfulAttemptAt` | Timestamp of the last successful authentication attempt.<br />Type: `Timestamp`. |
 | `LastFailedAttemptAt` | Timestamp of the last failed authentication attempt.<br />Type: `Timestamp`. |
@@ -405,7 +427,7 @@ Table structure:
 
 | Column | Description |
 |--------|-------------|
-| `Sid` | [SID](../concepts/glossary.md#sid) of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) of the group.<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Auth group members
 
@@ -441,7 +463,7 @@ Table structure:
 
 #### Example queries {#auth-permissions-examples}
 
-Retrieving explicitly granted permissions on the access object, a table named `my_table`:
+Retrieving explicitly granted permissions on the access object - table `my_table`:
 
 ```yql
 SELECT *
@@ -449,7 +471,7 @@ FROM `.sys/auth_permissions`
 WHERE Path = "my_table"
 ```
 
-Retrieving effective permissions on the access object, a table named `my_table`:
+Retrieving effective permissions on the access object - table `my_table`:
 
 ```yql
 SELECT *

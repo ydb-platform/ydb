@@ -32,6 +32,17 @@ grpc_config:
    ca: "/opt/ydb/certs/ca.crt"
 ```
 
+### PostgreSQL Wire Protocol
+
+{{ ydb-short-name }} exposes a separate network port for the [PostgreSQL wire protocol](../../postgresql/intro.md). This protocol is used for external communication with client applications initially designed to work with [PostgreSQL](https://www.postgresql.org/).
+
+Example of enabling TLS for the PostgreSQL wire protocol:
+
+```yaml
+local_pg_wire_config:
+    ssl_certificate: "/opt/ydb/certs/node.crt"
+```
+
 ### Kafka Wire Protocol
 
 {{ ydb-short-name }} exposes a separate network port for the [Kafka wire protocol](../../reference/kafka-api/index.md). This protocol is used for external communication with client applications initially designed to work with [Apache Kafka](https://kafka.apache.org/).
@@ -66,7 +77,7 @@ monitoring_config:
 
 ### LDAP
 
-{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap) for user authentication. The LDAP protocol has two options for enabling TLS.
+{{ ydb-short-name }} supports [LDAP](../../security/authentication.md#ldap-auth-provider) for user authentication. The LDAP protocol has two options for enabling TLS.
 
 Example of enabling TLS for LDAP via the `StartTls` protocol extension:
 

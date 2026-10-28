@@ -118,6 +118,10 @@ Logical "connections" to the database that maintains the context needed to execu
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
+### Streaming queries {#streaming-query}
+
+**Streaming queries** are a query type for continuous processing of data streams: unlike regular queries, they are designed for long-running execution and periodic checkpointing for fault tolerance.
+
 ### Topology {#topology}
 
 {{ ydb-short-name }} supports several [cluster](#cluster) topologies, described in more detail in a separate article [{#T}](topology.md). A few related terms are explained below.
@@ -131,6 +135,10 @@ A **region** is a large geographic area containing multiple availability zones. 
 #### Rack {#rack}
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
+
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disabled at the same time while other parts of the cluster (other piles) keep running. Piles are used in [bridge mode](bridge.md) to split the cluster into several parts with synchronous replication between them. A pile may consist of nodes in one or several regions.
 
 ### Table {#table}
 
@@ -298,7 +306,7 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 ### Scheme root {#scheme-root}
 
-A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](#scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 

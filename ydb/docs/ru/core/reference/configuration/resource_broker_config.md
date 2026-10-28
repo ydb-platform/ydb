@@ -1,5 +1,7 @@
 # resource_broker_config
 
+## Overview {#resource-broker-config}
+
 Секция `resource_broker_config` настраивает брокер ресурсов — [акторный сервис](../../concepts/glossary.md#actor-service), контролирующий потребление ресурсов [узла](../../concepts/glossary.md#node) {{ ydb-short-name }}, таких как:
 
 - `CPU` — количество потоков;
@@ -11,7 +13,7 @@
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | Операции удаления данных по [TTL](../../concepts/ttl.md).                |
 | `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery.md#s3).                |
-| `queue_restore`           | 10 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery.md#s3).     |
+| `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery.md#s3).     |
 | `queue_build_index`       | 10 | — | Операции [онлайн-создания вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add).   |
 | `queue_cdc_initial_scan` | 2 | — | [Первоначальное сканирование таблицы](../../concepts/cdc.md#initial-scan).             |
 

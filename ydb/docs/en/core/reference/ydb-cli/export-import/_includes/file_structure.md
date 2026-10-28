@@ -77,6 +77,13 @@ For each table in the database, there's a same-name directory in the file struct
 
 For each topic in the database, there's a same-name directory in the file structure's directory hierarchy that includes the `create_topic.pb` file. This file provides information about the topic parameters, partitioning settings, and consumers in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
 
+## Views {#views}
+
+For each view in the database, there's a same-name directory in the file structure's directory hierarchy that includes:
+
+- The `create_view.sql` file with the YQL statement that creates the view
+- The `permissions.pb` file describing the view ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+
 ## Files with data {#datafiles}
 
 The format of data files is `.csv`, where each row corresponds to a record in the table (except the row with column headings). The urlencoded format is used for rows. For example, the file row for the table with the uint64 and utf8 columns that includes the number 1 and the Russian string "Привет" (translates to English as "Hi"), would look like this:

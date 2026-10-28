@@ -1,4 +1,4 @@
-# auth_config
+# auth_config {#auth-config}
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
@@ -36,7 +36,7 @@ Default value: `12h`
     ||
 |#
 
-### Configuring User Lockout
+### Configuring User Lockout {#account-lockout}
 
 You can configure {{ ydb-short-name }} to lock a user account out after a specified number of failed attempts to enter the correct password. To configure user lockout, define the `account_lockout` subsection inside the `auth_config` section.
 

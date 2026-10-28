@@ -272,6 +272,30 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
             "the delete reached one replica of three in the second ring group");
     }
 
+    // One ring group of three replicas. The first replica deletes the record, the second one answers with a newer
+    // cluster state, so the replicas the delete went to may be outdated. Two replies of three are a majority, but the
+    // delete must not report success.
+    Y_UNIT_TEST(DeleteFailsOnConfigMismatch) {
+        TTestBasicRuntime runtime(3);
+        SetupCustomStateStorage(runtime, 3, 3, 1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        ui32 replies = 0;
+        auto rewrite = runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() == tabletId && ++replies == 2) {
+                ev->Get()->Record.SetClusterStateGeneration(Max<ui64>());
+            }
+        });
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
+        auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_GE(replies, 2u);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK,
+            "the delete succeeded after a replica showed a newer configuration");
+    }
+
     // A replica is gone from the start. Its child must report it missing only after three seconds of failures, not
     // at the first one.
     Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {

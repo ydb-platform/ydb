@@ -747,6 +747,9 @@ namespace NKikimr {
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
         // requests waiting for the cluster state not older than the one the group state was made for
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForClusterState;
+        // requests no pile could take, or the pile of the authority part couldn't; a newer group state or cluster state
+        // (the pile getting back into data quorum without the group generation changing) may let them go
+        std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForPileState;
 
     public:
         TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId)
@@ -766,7 +769,7 @@ namespace NKikimr {
 
         void HandleWakeup() {
             TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
-            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState, &PendingForPileState}) {
                 while (!queue->empty()) {
                     if (auto& [timestamp, ev] = queue->front(); timestamp < dropBefore) {
                         ReplyWithError(*ev, "bridge request timed out");
@@ -793,8 +796,10 @@ namespace NKikimr {
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
-            for (auto& [timestamp, ev] : std::exchange(PendingForClusterState, {})) {
-                TActivationContext::Send(ev.release());
+            for (auto *queue : {&PendingForClusterState, &PendingForPileState}) {
+                for (auto& [timestamp, ev] : std::exchange(*queue, {})) {
+                    TActivationContext::Send(ev.release());
+                }
             }
         }
 
@@ -840,7 +845,7 @@ namespace NKikimr {
                 }
             }
             RequestsInFlight.clear();
-            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState, &PendingForPileState}) {
                 for (auto& [timestamp, ev] : std::exchange(*queue, {})) {
                     ReplyWithError(*ev, errorReason);
                 }
@@ -947,7 +952,7 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                PendingForPileState.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }
             if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
@@ -956,7 +961,7 @@ namespace NKikimr {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
                     (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                PendingForPileState.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }
 
@@ -1247,8 +1252,10 @@ namespace NKikimr {
             Y_ABORT_UNLESS(prevInfo);
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
-                for (auto& [timestamp, ev] : std::exchange(PendingForNextGeneration, {})) {
-                    TActivationContext::Send(ev.release());
+                for (auto *queue : {&PendingForNextGeneration, &PendingForPileState}) {
+                    for (auto& [timestamp, ev] : std::exchange(*queue, {})) {
+                        TActivationContext::Send(ev.release());
+                    }
                 }
             }
         }

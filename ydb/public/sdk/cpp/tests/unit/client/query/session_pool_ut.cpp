@@ -26,7 +26,7 @@ namespace {
 constexpr TDuration kShortDeadline = TDuration::MilliSeconds(50);
 constexpr TDuration kSlowAttach = TDuration::MilliSeconds(300);
 
-class TDelayedMockQueryService : public Ydb::Query::V1::QueryService::Service {
+class TMockQueryService : public Ydb::Query::V1::QueryService::Service {
 public:
     TDuration AttachDelay = TDuration::Zero();
     std::atomic_uint CreateSessionRequests = 0;
@@ -122,7 +122,7 @@ Y_UNIT_TEST(TimeoutThenPoolWarmup) {
     const auto port = NTesting::GetFreePort();
     const auto endpoint = TStringBuilder() << "127.0.0.1:" << port;
 
-    TDelayedMockQueryService service;
+    TMockQueryService service;
     service.AttachDelay = kSlowAttach;
     auto server = StartGrpcServer(endpoint, service);
 
@@ -155,7 +155,7 @@ Y_UNIT_TEST(DisabledWaitsForAttach) {
     const auto port = NTesting::GetFreePort();
     const auto endpoint = TStringBuilder() << "127.0.0.1:" << port;
 
-    TDelayedMockQueryService service;
+    TMockQueryService service;
     service.AttachDelay = kSlowAttach;
     auto server = StartGrpcServer(endpoint, service);
 
@@ -177,13 +177,17 @@ Y_UNIT_TEST(DisabledWaitsForAttach) {
     driver.Stop(true);
 }
 
+}
+
+Y_UNIT_TEST_SUITE(QuerySessionPool) {
+
 Y_UNIT_TEST(TransactionSessionStatus) {
     NTesting::InitPortManagerFromEnv();
     for (bool commit : {false, true}) {
         for (EStatus status : {EStatus::SUCCESS, EStatus::ABORTED, EStatus::BAD_SESSION, EStatus::CLIENT_DEADLINE_EXCEEDED}) {
             const auto port = NTesting::GetFreePort();
             const auto endpoint = TStringBuilder() << "127.0.0.1:" << port;
-            TDelayedMockQueryService service;
+            TMockQueryService service;
             if (status == EStatus::CLIENT_DEADLINE_EXCEEDED) {
                 service.TxRpcStatus = grpc::StatusCode::DEADLINE_EXCEEDED;
             } else {
@@ -267,7 +271,7 @@ void TestSessionShutdown(EShutdownOrder order, bool closeStream = false) {
             const auto endpoint = TStringBuilder() << "127.0.0.1:" << NTesting::GetFreePort();
             std::atomic_uint completions = 0;
             TManualEvent shutdown;
-            TDelayedMockQueryService service;
+            TMockQueryService service;
             service.AttachStatus = grpc::Status(event.Status, "test attach status");
             service.OnAttach = [&](auto* writer) {
                 if (shutdown.WaitT(TDuration::Seconds(10)) && event.Status == grpc::StatusCode::OK) {

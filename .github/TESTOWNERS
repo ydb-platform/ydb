@@ -116,15 +116,10 @@
 /ydb/tests/functional/restarts @ydb-platform/engineering
 /ydb/tests/functional/tpcc @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
-/ydb/tests/supp @ydb-platform/engineering
-/ydb/tests/tools/canondata_sync @ydb-platform/engineering
-/ydb/tests/tools/local_cluster @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
-/ydb/tests/tools/ydb_serializable @ydb-platform/engineering
 /ydb/tools/cfg @ydb-platform/engineering
 /ydb/tools/include_sanitizer @ydb-platform/engineering
 /ydb/tools/tli_analysis/tests @ydb-platform/engineering
-/ydb/tools/tstool @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
 /ydb/tools/ydbd_slice @ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering
@@ -255,8 +250,6 @@
 #YDB Analytics TEAM:???
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
-/ydb/public/tools/federation_discovery_recipe @ydb-platform/fq
-/ydb/public/tools/federation_recipe @ydb-platform/fq
 /ydb/tests/functional/script_execution @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
 /ydb/tests/solomon @ydb-platform/fq

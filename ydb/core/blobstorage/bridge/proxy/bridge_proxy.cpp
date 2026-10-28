@@ -115,6 +115,8 @@ namespace NKikimr {
             // request, so it is admitted the same way that request would be.
             NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
+            // the deadline of the read, which bounds the restoration made on its behalf as well
+            TInstant Deadline = TInstant::Max();
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -141,6 +143,7 @@ namespace NKikimr {
 
                     MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
+                    Deadline = request->Deadline;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
                     State = TRangeState{
@@ -149,10 +152,12 @@ namespace NKikimr {
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst;
+                    Deadline = request->Deadline;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
                     };
+                    Deadline = request->Deadline;
 
                     RestoreQueue.resize(1);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
@@ -428,6 +433,27 @@ namespace NKikimr {
                 return IssueNextRestoreGet(self);
             }
 
+            std::unique_ptr<IEventBase> MakeRestoreDeadlineResponse(TThis& self) {
+                const TString reason = "deadline exceeded while restoring blobs across bridge";
+                return std::visit(TOverloaded{
+                    [&](TGetState&) -> std::unique_ptr<IEventBase> {
+                        return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                            NKikimrProto::DEADLINE, reason, self.GroupId);
+                    },
+                    [&](TRangeState&) -> std::unique_ptr<IEventBase> {
+                        return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(
+                            NKikimrProto::DEADLINE, reason, self.GroupId);
+                    },
+                    [&](TDiscoverState&) -> std::unique_ptr<IEventBase> {
+                        return static_cast<TEvBlobStorage::TEvDiscover&>(*OriginalRequest).MakeErrorResponse(
+                            NKikimrProto::DEADLINE, reason, self.GroupId);
+                    },
+                    [&](auto&) -> std::unique_ptr<IEventBase> {
+                        Y_ABORT();
+                    }
+                }, State);
+            }
+
             std::unique_ptr<IEventBase> IssueNextRestoreGet(TThis& self) {
                 if (ResponsesPending) {
                     return nullptr; // wait for all puts to complete
@@ -441,13 +467,16 @@ namespace NKikimr {
                         continue;
                     }
 
+                    if (Deadline <= TActivationContext::Now()) {
+                        return MakeRestoreDeadlineResponse(self);
+                    }
+
                     Y_ABORT_UNLESS(item.Id);
 
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
                     } else {
-                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, TInstant::Max(),
-                            GetHandleClass);
+                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, Deadline, GetHandleClass);
                         get->DataKind = DataKind;
                         self.SendQuery(shared_from_this(), item.ReadFrom, std::move(get), {.Index = RestoreIndex});
                         IsRestoring = true;
@@ -496,7 +525,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = item.Id,
                             .Buffer = TRope(TRcBuf(item.Buffer)),
-                            .Deadline = TInstant::Max(),
+                            .Deadline = Deadline,
                             .HandleClass = handleClass,
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,

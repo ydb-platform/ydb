@@ -795,12 +795,14 @@ namespace NActors {
         return new TCompositeLogBackend(std::move(underlyingBackends));
     }
 
-    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
         NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
         YDB_LOG_UPDATE_MESSAGE(structuredMessage,
             {"condition", condition},
             {"file", filename},
-            {"line", lineNum});
+            {"line", lineNum},
+            addMessage);
 
         TStringBuilder textMessage;
         textMessage << "Verify failed ";
@@ -808,11 +810,13 @@ namespace NActors {
         Y_ABORT("%s", textMessage.data());
     }
 
-    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage) {
         // Construct structured message
         NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
         YDB_LOG_UPDATE_MESSAGE(structuredMessage,
-            {"condition", condition});
+            {"condition", condition},
+            addMessage);
 
         // Construct text message
         TStringBuilder textMessage;

@@ -495,23 +495,29 @@ namespace NActors {
             std::move(structuredMessage));
     }
 
-    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum);
+    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
 
-    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum);
+    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 
-#define AFL_VERIFY(condition)                                                                                                   \
+#define AFL_VERIFY(condition, ...)                                                                                              \
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
-        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
     }
 
-#define AFL_ENSURE(condition)                                                                                                   \
+#define AFL_ENSURE(condition, ...)                                                                                              \
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
-        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
     }
 
 #ifndef NDEBUG

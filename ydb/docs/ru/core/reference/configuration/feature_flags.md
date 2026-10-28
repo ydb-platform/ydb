@@ -85,13 +85,7 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
-<<<<<<< HEAD
-
-=======
-| `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
-| `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |
 | `switch_to_config_v2`                                    | Переход с конфигурации V1 на [конфигурацию V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries`                               | Включение [потоковых запросов](../../concepts/streaming-query/streaming-query.md) |
 | `enable_stable_node_names`                               | Включение [стабильных имен динамических узлов](node_broker_config.md) |
 | `enable_alter_database_create_hive_first`                | Создание отдельного Hive для системных таблеток базы при создании базы данных |
->>>>>>> ce647aaa590 ([docs] Document feature flags and experimental functionality (#55293))

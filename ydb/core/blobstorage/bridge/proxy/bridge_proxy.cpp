@@ -710,6 +710,10 @@ namespace NKikimr {
         bool NotCapableReported = false;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingQ;
+        // the proxy has been waiting for the first storage config for too long, as the DS proxy waiting for its
+        // configuration does, and it answers requests with error until it gets the config
+        TMonotonic WaitBridgeInfoSince;
+        bool WaitBridgeInfoTimedOut = false;
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
         // requests waiting for the cluster state not older than the one the group state was made for
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForClusterState;
@@ -726,6 +730,7 @@ namespace NKikimr {
         void Bootstrap() {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
+            WaitBridgeInfoSince = TActivationContext::Monotonic();
             HandleWakeup();
         }
 
@@ -1262,6 +1267,36 @@ namespace NKikimr {
 #undef HANDLE_RESULT
 #undef HANDLE_REQUEST
 
+        static bool IsRequest(ui32 type) {
+            switch (type) {
+#define REQUEST_TYPE(TYPE) case TYPE::EventType:
+                DSPROXY_ENUM_EVENTS(REQUEST_TYPE)
+#undef REQUEST_TYPE
+                case TEvBlobStorage::EvBunchOfEvents:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        // the config comes from distconf, which may take forever to get it on a dynamic node unable to bind to a static
+        // one; no event tells of that, so the wait is limited the same way the DS proxy limits its wait for configuration
+        void CheckWaitBridgeInfoTimeout() {
+            if (WaitBridgeInfoTimedOut ||
+                    TActivationContext::Monotonic() < WaitBridgeInfoSince + ProxyConfigurationTimeout) {
+                return;
+            }
+            WaitBridgeInfoTimedOut = true;
+            for (auto& ev : std::exchange(PendingQ, {})) {
+                if (IsRequest(ev->GetTypeRewrite())) {
+                    ReplyWithError(*ev, "bridge proxy has no storage config");
+                } else {
+                    PendingQ.push_back(std::move(ev));
+                }
+            }
+        }
+
         STATEFN(StateWaitBridgeInfo) {
             if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                 StateFunc(ev);
@@ -1271,6 +1306,11 @@ namespace NKikimr {
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
                 StateFunc(ev); // pending requests are answered with error
+            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
+                HandleWakeup();
+                CheckWaitBridgeInfoTimeout();
+            } else if (WaitBridgeInfoTimedOut && IsRequest(ev->GetTypeRewrite())) {
+                ReplyWithError(*ev, "bridge proxy has no storage config");
             } else {
                 PendingQ.emplace_back(ev.Release());
             }

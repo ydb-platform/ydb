@@ -395,7 +395,6 @@ template <typename Source> class TInMemoryHashJoin {
     size_t BuildCursor_ = 0;
 };
 
-constexpr size_t PrefetchMinTablesBytes = 4 << 20;
 constexpr size_t PrefetchBatchRows = 32;
 
 template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class THybridHashJoin {
@@ -901,21 +900,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     }
                     batchEnd = first + count;
                 };
-                size_t tablesBytes = 0;
-                if constexpr (!IsGrid) {
-                    for (auto& bucket : state.Spiller.GetState().Buckets) {
-                        if (const TTable* table = std::get_if<TTable>(&bucket)) {
-                            tablesBytes += table->SizeBytes();
-                        }
-                    }
-                }
-                const bool prefetchEnabled = tablesBytes > PrefetchMinTablesBytes;
                 for (TSingleTuple tuple : fetchedPack) {
                     if (idx++ < state.ResumeIndex) {
                         continue;
                     }
                     if constexpr (!IsGrid) {
-                        if (prefetchEnabled && idx > batchEnd) {
+                        if (idx > batchEnd) {
                             prefetchBatch(idx - 1);
                         }
                     }

@@ -447,10 +447,6 @@ class TNeumannHashTable {
 
         return iters;
     }
-    size_t SizeBytes() const {
-        return Buffer_.size() + Directories_.size() * sizeof(TDirectory);
-    }
-
     void PrefetchDirectory(const ui8 *const row) const {
         const THash thash = ReadUnaligned<THash>(row);
         NYql::PrefetchForRead(&Directories_[getDirectorySlot(thash)]);

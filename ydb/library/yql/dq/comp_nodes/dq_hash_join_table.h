@@ -118,10 +118,6 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    size_t SizeBytes() const {
-        return BuildData_.PackedTuples.size() + Table_.SizeBytes();
-    }
-
     void PrefetchDirectory(const ui8* packed) const {
         if (!Empty()) {
             Table_.PrefetchDirectory(packed);

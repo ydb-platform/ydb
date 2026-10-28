@@ -542,6 +542,40 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         }
     }
 
+    // Ring groups the state storage info can't be built of are rejected, not decoded: the decoder aborts on them
+    Y_UNIT_TEST(BrokenRingGroupsRejected) {
+        NKikimrConfig::TStateStorageConfig noRings;
+        noRings.AddRingGroups()->SetNToSelect(1);
+        NKikimrConfig::TStateStorageConfig singleNodeActorOfTwoNodes;
+        auto *ring = singleNodeActorOfTwoNodes.AddRingGroups();
+        ring->SetNToSelect(1);
+        auto *r = ring->AddRing();
+        r->SetUseSingleNodeActorId(true);
+        r->AddNode(1);
+        r->AddNode(2);
+        NKikimrConfig::TStateStorageConfig legacyEmpty;
+        legacyEmpty.MutableRing()->SetNToSelect(1);
+        // each of these is right by itself, but not the whole configuration
+        NKikimrConfig::TStateStorageConfig ringAndRingGroups;
+        FillRing(ringAndRingGroups.MutableRing());
+        FillRing(ringAndRingGroups.AddRingGroups());
+        NKikimrConfig::TStateStorageConfig otherSSId;
+        FillRing(otherSSId.MutableRing());
+        otherSSId.SetSSId(2);
+        NKikimrConfig::TStateStorageConfig tooManyNodes;
+        tooManyNodes.MutableRing()->SetNToSelect(5);
+        for (ui32 nodeId = 1; nodeId <= 1024; ++nodeId) {
+            tooManyNodes.MutableRing()->AddNode(nodeId);
+        }
+        for (const auto *config : {&noRings, &singleNodeActorOfTwoNodes, &legacyEmpty, &ringAndRingGroups, &otherSSId,
+                &tooManyNodes}) {
+            UNIT_ASSERT_C(!ValidateStateStorageConfig("StateStorage", {}, *config).empty(), config->ShortDebugString());
+            NKikimrConfig::TStateStorageConfig cur;
+            FillRing(cur.MutableRing());
+            UNIT_ASSERT_C(!ValidateStateStorageConfig("StateStorage", cur, *config).empty(), config->ShortDebugString());
+        }
+    }
+
     Y_UNIT_TEST(CanChangeDisabled) {
         NKikimrConfig::TStateStorageConfig cur;
         FillRing(cur.MutableRing());

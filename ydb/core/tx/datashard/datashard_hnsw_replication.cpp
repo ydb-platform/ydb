@@ -5,6 +5,18 @@
 namespace NKikimr::NDataShard {
 
 void TDataShard::OnLeaderUserAuxUpdate(TString update) {
+    if (IsFollower() && TStringBuf(update).StartsWith(HnswReadinessAuxPrefix)) {
+        auto request = MakeHolder<TEvDataShard::TEvGetTableStats>();
+        const auto payload = TStringBuf(update).SubStr(HnswReadinessAuxPrefix.size());
+        if (request->Record.ParseFromArray(payload.data(), payload.size())
+                && request->Record.HasHnswIndexBuildId() && request->Record.HasHnswReplyTo()) {
+            // Auxiliary redo runs inside an executor transaction. Queue a new
+            // transaction instead of recursively entering the executor here.
+            const auto replyTo = ActorIdFromProto(request->Record.GetHnswReplyTo());
+            TActivationContext::Send(new IEventHandle(SelfId(), replyTo, request.Release()));
+        }
+        return;
+    }
     if (!IsFollower() || !AppData()->FeatureFlags.GetEnableHnswIndex()
             || !TStringBuf(update).StartsWith(HnswGraphAuxPrefix)) {
         return;

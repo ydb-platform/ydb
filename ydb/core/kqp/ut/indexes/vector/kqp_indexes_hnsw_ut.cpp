@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
@@ -9,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <format>
+#include <optional>
 
 namespace NKikimr::NKqp {
 using namespace NYdb;
@@ -410,6 +412,317 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(HnswBuildReadinessTimeoutSurvivesRestart, DisableFeature) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableSchemeShardConfig()->SetHnswIndexBuildWaitTimeoutSeconds(30);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto create = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswTimeout` (pk Int64 NOT NULL, emb String, PRIMARY KEY(pk));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswTimeout` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        ui64 probes = 0;
+        ui64 schemeShardId = 0;
+        ui64 buildId = 0;
+        TActorId postingActor;
+        const auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvGetTableStatsResult::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvGetTableStatsResult>()->Record;
+                if (record.GetHnswIndexBuildId()) {
+                    buildId = record.GetHnswIndexBuildId();
+                    schemeShardId = record.GetTableOwnerId();
+                    if (!record.GetFollowerId()
+                            && dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ev->Sender))) {
+                        postingActor = ev->Sender;
+                    }
+                    ++probes;
+                    record.SetHnswBuildInProgress(true);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        auto build = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswTimeout` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (similarity=cosine, vector_type=float, vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )");
+        runtime.WaitFor("readiness probe", [&] { return probes != 0; });
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        UNIT_ASSERT(!build.HasValue());
+        const auto sender = runtime.AllocateEdgeActor();
+        if (DisableFeature) {
+            runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(false);
+        }
+        RebootTablet(runtime, schemeShardId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+        runtime.SendToPipe(schemeShardId, sender,
+            new NSchemeShard::TEvIndexBuilder::TEvGetRequest("/Root", buildId));
+        const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvGetResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        runtime.WaitFuture(build);
+        auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(postingActor));
+        UNIT_ASSERT(shard);
+        UNIT_ASSERT_VALUES_EQUAL(shard->GetUserTables().begin()->second->HnswInitialBuildId, 0);
+    }
+
+    Y_UNIT_TEST_QUAD(HnswBuildWaitsForPostingShards, Split, Followers) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_NOTICE);
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto buildSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto create = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswBuildWait` (pk Int64 NOT NULL, emb String, PRIMARY KEY(pk));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswBuildWait` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 5.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+
+        bool holdStatus = true;
+        bool holdBuildResults = Split;
+        ui64 probes = 0;
+        ui64 followerProbes = 0;
+        ui64 schemeShardId = 0;
+        ui64 buildId = 0;
+        bool sawDisabledStats = false;
+        ui64 forceSplitTablet = 0;
+        ui64 forceSplitParent = 0;
+        bool holdChildStatistics = Split;
+        THashSet<ui64> childProbes;
+        ui64 lastProbeRound = 0;
+        ui32 staleFinishedReplies = 0;
+        NKikimrTxDataShard::TEvGetTableStatsResult staleReply;
+        TVector<TAutoPtr<IEventHandle>> buildResults;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        const auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                auto& record = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                for (auto& tx : *record.MutableTransaction()) {
+                    if (tx.HasInitiateIndexBuild() && tx.GetInitiateIndexBuild().GetIndex().GetName() == "idx") {
+                        auto* index = tx.MutableInitiateIndexBuild()->MutableIndex();
+                        index->ClearIndexImplTableDescriptions();
+                        index->AddIndexImplTableDescriptions(); // level table
+                        auto* config = index->AddIndexImplTableDescriptions()->MutablePartitionConfig();
+                        if (Followers) {
+                            auto* group = config->AddFollowerGroups();
+                            group->SetFollowerCount(1);
+                        }
+                        if (!Split) {
+                            config->SetDisableStatisticsCalculation(true);
+                        } else {
+                            // The fake 3 GB parent below has only three rows.
+                            // Keep its split children from auto-merging while
+                            // the test holds their statistics and graph results.
+                            auto* policy = config->MutablePartitioningPolicy();
+                            policy->SetSizeToSplit(2_GB);
+                            policy->SetMinPartitionsCount(0);
+                        }
+                    }
+                }
+            } else if (!Split && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetVectorIndexHnsw()) {
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetDisableStatisticsCalculation(true);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvGetTableStatsResult::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvGetTableStatsResult>()->Record;
+                if (record.HasHnswIndexBuildId()) {
+                    ++probes;
+                    if (!staleReply.HasHnswIndexBuildId() && !record.GetFollowerId()) {
+                        staleReply = record;
+                    }
+                    lastProbeRound = Max(lastProbeRound, record.GetHnswProbeRound());
+                    schemeShardId = record.GetTableOwnerId();
+                    buildId = record.GetHnswIndexBuildId();
+                    sawDisabledStats |= !record.GetFollowerId() && record.GetHnswStatisticsDisabled();
+                    followerProbes += bool(record.GetFollowerId());
+                    if (Split && holdStatus && !forceSplitTablet && !record.GetFollowerId()) {
+                        // Hold partition planning before graph authorization.
+                        // Lazy reads and tablet restarts must honor this gate too.
+                        record.SetHnswStatsFresh(false);
+                    }
+                    if (holdChildStatistics && forceSplitTablet && record.GetDatashardId() != forceSplitTablet
+                            && !record.GetFollowerId()) {
+                        childProbes.insert(record.GetDatashardId());
+                        record.SetHnswStatsFresh(false);
+                    }
+                    if (Split && !holdBuildResults && record.GetHnswBuildFinished() && !record.GetFollowerId()) {
+                        // Ongoing writes need not leave a globally quiet stats
+                        // snapshot after the planned graphs are installed.
+                        record.SetHnswStatsFresh(false);
+                        ++staleFinishedReplies;
+                    }
+                    if ((holdStatus && (!Followers || record.GetFollowerId())) || (Followers && !followerProbes)) {
+                        record.SetHnswBuildInProgress(true);
+                    }
+                    if (forceSplitTablet && record.GetDatashardId() == forceSplitTablet && !record.GetFollowerId()
+                            && record.GetFullStatsReady() && record.GetHnswStatsFresh()) {
+                        // Model the large posting shard from the regression:
+                        // its data is published, but a size split is pending.
+                        record.SetHnswBuildInProgress(false);
+                        auto* stats = record.MutableTableStats();
+                        stats->SetDataSize(3_GB);
+                        stats->SetSplitProtocolVersion(3);
+                        stats->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(
+                            TVector<TCell>{TCell::Make(forceSplitParent)}));
+                        holdStatus = false;
+                    }
+                }
+            } else if (holdBuildResults && ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                buildResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        auto build = kikimr.RunInThreadPool([&] { return buildSession.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswBuildWait` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )").ExtractValueSync(); });
+        runtime.WaitFor("HNSW readiness probe", [&] { return probes > 0 && (!Followers || followerProbes > 0); }, TDuration::Seconds(60));
+        if (!Split) {
+            UNIT_ASSERT_C(sawDisabledStats, "Fixture did not disable posting-table statistics");
+        }
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_C(!build.HasValue(), "Index build completed before its posting shards were ready");
+
+        const TString posting = "/Root/HnswBuildWait/idx/indexImplPostingTable";
+        const auto sender = runtime.AllocateEdgeActor();
+        auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        if (Split) {
+            runtime.SimulateSleep(TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+            UNIT_ASSERT_C(buildResults.empty(), "Oversized parent constructed a graph before partition planning finished");
+            RebootTablet(runtime, shards.front(), sender);
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            const auto read = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery("SELECT pk FROM `" + posting + "` "
+                    "ORDER BY Knn::InnerProductSimilarity(emb, Knn::ToBinaryStringFloat([1.0f, 0.0f])) DESC LIMIT 1;",
+                    TTxControl::BeginTx(TTxSettings::OnlineRO(TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            const auto parents = kikimr.RunCall([&] { return ExecuteDataQuery(session,
+                "SELECT DISTINCT __ydb_parent FROM `" + posting + "` ORDER BY __ydb_parent;"); });
+            UNIT_ASSERT_C(parents.IsSuccess(), parents.GetIssues().ToString());
+            TResultSetParser parser(parents.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_C(buildResults.empty(), "Restart/read bypassed deferred initial graph construction");
+            forceSplitTablet = shards.front();
+            forceSplitParent = parser.ColumnParser(0).GetUint64();
+            runtime.WaitFor("split children waiting for statistics", [&] { return childProbes.size() == 2; },
+                TDuration::Seconds(60));
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            UNIT_ASSERT_C(buildResults.empty(), "Split children constructed graphs before their size statistics were ready");
+            holdChildStatistics = false;
+            runtime.WaitFor("split-child HNSW builders", [&] { return buildResults.size() == 2; }, TDuration::Seconds(60));
+            shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+            holdStatus = false;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_C(!build.HasValue(), "Index build ignored unfinished replacement-shard builders before restart");
+        auto getState = [&] {
+            runtime.SendToPipe(schemeShardId, sender, new NSchemeShard::TEvIndexBuilder::TEvGetRequest("/Root", buildId));
+            const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvGetResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            return response->Get()->Record.GetIndexBuild().GetState();
+        };
+        {
+            const auto previousProbes = probes;
+            const auto previousRound = lastProbeRound;
+            RebootTablet(runtime, schemeShardId, sender);
+            runtime.WaitFor("HNSW readiness after SchemeShard restart", [&] {
+                return probes > previousProbes && lastProbeRound > previousRound;
+            },
+                TDuration::Seconds(60));
+        }
+        // A delayed, completed reply from before restart cannot authorize
+        // construction or release the durable operation in a later round.
+        staleReply.SetHnswBuildInProgress(false);
+        staleReply.SetHnswBuildFinished(true);
+        staleReply.SetHnswBuildReleased(true);
+        auto stale = MakeHolder<TEvDataShard::TEvGetTableStatsResult>(
+            staleReply.GetDatashardId(), staleReply.GetTableOwnerId(), staleReply.GetTableLocalId());
+        stale->Record = staleReply;
+        runtime.SendToPipe(schemeShardId, sender, stale.Release());
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        // Restart can terminate the waiting SQL RPC. The durable operation
+        // must nevertheless remain pending until the shard work completes.
+        UNIT_ASSERT_VALUES_EQUAL(getState(), Ydb::Table::IndexBuildState::STATE_APPLYING);
+        if (Split) {
+            const auto writeDuringBuild = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+                UPSERT INTO `/Root/HnswBuildWait` (pk, emb) VALUES
+                    (4, Untag(Knn::ToBinaryStringFloat([0.0f, 10.0f]), "FloatVector"));
+            )"); });
+            UNIT_ASSERT_C(writeDuringBuild.IsSuccess(), writeDuringBuild.GetIssues().ToString());
+        }
+        holdStatus = false;
+        holdBuildResults = false;
+        for (auto& event : buildResults) {
+            runtime.Send(event.Release());
+        }
+        for (ui32 attempt = 0; attempt < 30 && getState() != Ydb::Table::IndexBuildState::STATE_DONE; ++attempt) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(getState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        if (Split) {
+            UNIT_ASSERT_C(staleFinishedReplies, "Fixture did not exercise changing statistics after graph construction");
+        }
+        runtime.WaitFuture(build);
+        // Size-based merges may change the layout again while graphs build.
+        shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        const auto query = kikimr.RunCall([&] { return session.ExecuteDataQuery(R"(
+            $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswBuildWait` VIEW idx
+            ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(),
+            TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync(); });
+        UNIT_ASSERT_C(query.IsSuccess(), query.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(query.GetResultSet(0)), "[[3]]");
+        AssertTableReads(query, posting, shards.size());
+        if (Split) {
+            const auto recent = kikimr.RunCall([&] { return session.ExecuteDataQuery(R"(
+                $q = Knn::ToBinaryStringFloat([0.0f, 1.0f]);
+                SELECT pk FROM `/Root/HnswBuildWait` VIEW idx
+                ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_C(recent.IsSuccess(), recent.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(recent.GetResultSet(0)), "[[4]]");
+        }
+    }
+
     Y_UNIT_TEST(HnswEfSearchPragmaValidation) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto db = kikimr.GetTableClient();
@@ -647,6 +960,9 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
 
     void TestHnswFallback(ui64 cacheBytes, ui64 minRows) {
         NKikimrConfig::TAppConfig appConfig;
+        // This fixture deliberately denies graph construction. Its purpose is
+        // to check generic reads, independently of the production build wait.
+        appConfig.MutableSchemeShardConfig()->SetHnswIndexBuildWaitTimeoutSeconds(1);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(cacheBytes);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(cacheBytes);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
@@ -822,11 +1138,17 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
         TVector<TAutoPtr<IEventHandle>> held;
         ui64 owner = 0, buildId = 0;
         ui64 round = 0;
+        std::optional<TInstant> constructionStartedAt;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvIndexBuilder::TEvCreateRequest::EventType) {
                 auto* index = event->Get<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>()->Record.MutableSettings()->mutable_index();
                 index->mutable_global_hnsw_index()->mutable_posting_table_settings()
                     ->mutable_read_replicas_settings()->set_per_az_read_replicas_count(1);
+            } else if (event->GetTypeRewrite() == TEvDataShard::TEvGetTableStats::EventType
+                    && event->Get<TEvDataShard::TEvGetTableStats>()->Record.HasHnswIndexBuildId()) {
+                if (!constructionStartedAt) {
+                    constructionStartedAt = runtime.GetCurrentTime();
+                }
             } else if (event->GetTypeRewrite() == NDataShard::TEvHnswCache::TEvSnapshotRequest::EventType) {
                 owner = event->Get<NDataShard::TEvHnswCache::TEvSnapshotRequest>()->Record.GetTableOwnerId();
             } else if (event->GetTypeRewrite() == NSchemeShard::TEvPrivate::TEvHnswReplicaStatus::EventType) {
@@ -852,7 +1174,17 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
                   levels=1, clusters=2, min_rows=1);
         )");
         runtime.WaitFor("initial build replica readiness barrier", [&] { return owner && buildId && round && !held.empty(); });
-        runtime.SimulateSleep(TDuration::Seconds(expire ? 20 : 2));
+        if (expire) {
+            UNIT_ASSERT(constructionStartedAt);
+            // Construction and replica bootstrap share one persisted deadline.
+            // Account for the construction phases already spent before this barrier.
+            const auto beforeDeadline = *constructionStartedAt + TDuration::Seconds(25);
+            if (runtime.GetCurrentTime() < beforeDeadline) {
+                runtime.SimulateSleep(beforeDeadline - runtime.GetCurrentTime());
+            }
+        } else {
+            runtime.SimulateSleep(TDuration::Seconds(2));
+        }
         UNIT_ASSERT_C(!build.HasValue(), "Build completed before a configured follower installed its graph");
         if (disable) {
             for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
@@ -869,7 +1201,10 @@ Y_UNIT_TEST_SUITE(KqpHnswReplicaReadiness) {
             RebootTablet(runtime, owner, sender);
         }
         if (expire) {
-            runtime.SimulateSleep(TDuration::Seconds(15));
+            const auto afterDeadline = *constructionStartedAt + TDuration::Seconds(35);
+            if (runtime.GetCurrentTime() < afterDeadline) {
+                runtime.SimulateSleep(afterDeadline - runtime.GetCurrentTime());
+            }
             UNIT_ASSERT_VALUES_EQUAL(state(), Ydb::Table::IndexBuildState::STATE_DONE);
         } else {
             runtime.SimulateSleep(TDuration::Seconds(2));

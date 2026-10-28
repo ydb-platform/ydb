@@ -75,6 +75,39 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     virtual ~TIndexBuildInfo() = default;
 
+    struct THnswBuildStatus {
+        bool LeaderReported = false;
+        ui32 Followers = 0;
+        THashMap<ui32, bool> FollowerBuilds;
+
+        bool HasAllReplies() const {
+            return LeaderReported && FollowerBuilds.size() >= Followers;
+        }
+        bool HasActiveBuilds() const {
+            if (Building) {
+                return true;
+            }
+            for (const auto& [_, building] : FollowerBuilds) {
+                if (building) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        bool StatisticsReady = false;
+        bool StatisticsDisabled = false;
+        bool Building = false;
+        bool Finished = false;
+        bool Released = false;
+        TString FallbackReason;
+        ui32 ShardState = 0;
+        ui64 DataSize = 0;
+        bool CanSplit = false;
+    };
+    THashMap<ui64, THnswBuildStatus> HnswBuildStatuses;
+    TInstant HnswProbeSentAt;
+    enum class EHnswPhase : ui32 { Partitioning = 0, Building = 1, Releasing = 2 };
+    EHnswPhase HnswPhase = EHnswPhase::Partitioning;
     TInstant HnswWaitStartedAt;
     ui64 HnswProbeRound = 0;
     bool HnswProbeInFlight = false;
@@ -656,6 +689,7 @@ public:
         indexInfo->HnswWaitStartedAt = TInstant::MicroSeconds(
             row.template GetValueOrDefault<Schema::IndexBuild::HnswWaitStartedAt>(0));
         indexInfo->HnswProbeRound = row.template GetValueOrDefault<Schema::IndexBuild::HnswProbeRound>(0);
+        indexInfo->HnswPhase = EHnswPhase(row.template GetValueOrDefault<Schema::IndexBuild::HnswPhase>());
         indexInfo->ApplyTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxDone>(
                 indexInfo->ApplyTxDone);

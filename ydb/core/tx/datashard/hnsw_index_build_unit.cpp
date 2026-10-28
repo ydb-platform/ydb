@@ -109,6 +109,9 @@ protected:
             return false;
         }
         const auto& alter = schemeTx.GetAlterTable();
+        if (alter.GetHnswInitialBuildId()) {
+            return false; // SchemeShard starts this build after partitioning settles.
+        }
         return alter.GetVectorIndexHnsw()
             && alter.HasVectorIndexKmeansTreeDescription()
             && alter.HasVectorIndexEmbeddingColumnId();

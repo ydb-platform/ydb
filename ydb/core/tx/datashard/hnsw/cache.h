@@ -12,6 +12,7 @@ namespace NKikimr::NDataShard {
 
 constexpr ui32 HnswSnapshotFormatVersion = 1;
 constexpr TStringBuf HnswGraphAuxPrefix = "HnswGraphGeneration/v1:";
+constexpr TStringBuf HnswReadinessAuxPrefix = "HnswBuildReadiness/v1:";
 
 struct THnswJournalSnapshot {
     struct TChange {

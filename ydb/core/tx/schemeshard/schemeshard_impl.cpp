@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "index/index_build_info.h"
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
@@ -8450,6 +8451,19 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
             alterData->TableDescriptionFull->GetVectorIndexKmeansTreeDescription());
         proto->SetVectorIndexHnsw(alterData->TableDescriptionFull->GetVectorIndexHnsw());
+        if (alterData->TableDescriptionFull->HasHnswInitialBuildId()) {
+            const auto build = IndexBuilds.find(TIndexBuildId(alterData->TableDescriptionFull->GetHnswInitialBuildId()));
+            if (build != IndexBuilds.end() && build->second->State == TIndexBuildInfo::EState::Applying
+                    && build->second->HnswPhase != TIndexBuildInfo::EHnswPhase::Releasing) {
+                proto->SetHnswInitialBuildId(alterData->TableDescriptionFull->GetHnswInitialBuildId());
+                proto->SetHnswInitialBuildDeadlineUs(alterData->TableDescriptionFull->GetHnswInitialBuildDeadlineUs());
+            } else {
+                // A pending schema operation may hold a pre-release copy.
+                // Explicit zero clears that obsolete gate on the DataShard.
+                proto->SetHnswInitialBuildId(0);
+                proto->SetHnswInitialBuildDeadlineUs(0);
+            }
+        }
         proto->SetVectorIndexEmbeddingColumn(
             alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumn());
         if (alterData->TableDescriptionFull->HasVectorIndexEmbeddingColumnId()) {
@@ -8552,6 +8566,8 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     // Creation, copying and splitting use SchemeShard metadata rather than
     // a source tablet's schema. Recover posting-table settings from the owning
     // index; new tables need the pending index version before publication.
+    tableDescr->ClearHnswInitialBuildId();
+    tableDescr->ClearHnswInitialBuildDeadlineUs();
     if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
         const auto indexIt = Indexes.find(pinfo->ParentPathId);
         const auto indexInfo = indexIt != Indexes.end()
@@ -8571,6 +8587,30 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 tableDescr->SetVectorIndexHnsw(true);
                 tableDescr->SetVectorIndexEmbeddingColumn(embedding);
                 tableDescr->SetVectorIndexEmbeddingColumnId(columnId);
+                const auto indexPath = PathsById.at(pinfo->ParentPathId);
+                // Modern split destinations use this schema rather than the
+                // source shard's. Keep them deferred until the active build
+                // has finished planning their own size splits.
+                for (const auto& [buildId, build] : IndexBuilds) {
+                    if (build->IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                            || build->TablePathId != indexPath->ParentPathId
+                            || build->State != TIndexBuildInfo::EState::Applying
+                            || !AppData()->FeatureFlags.GetEnableHnswIndex()
+                            || tableDescr->GetVectorIndexKmeansTreeDescription().GetSettings().settings().vector_type()
+                                != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+                        continue;
+                    }
+                    const bool replacing = build->SubState == TIndexBuildInfo::ESubState::RebuildReplacing
+                        && build->ApplyTxDone && build->IndexName == indexPath->Name;
+                    if (build->GetBuildIndexName() != indexPath->Name && !replacing) {
+                        continue;
+                    }
+                    const auto started = build->HnswWaitStartedAt
+                        ? build->HnswWaitStartedAt : AppData()->TimeProvider->Now();
+                    tableDescr->SetHnswInitialBuildId(ui64(buildId));
+                    tableDescr->SetHnswInitialBuildDeadlineUs((started + HnswIndexBuildWaitTimeout).MicroSeconds());
+                    break;
+                }
                 break;
             }
         }

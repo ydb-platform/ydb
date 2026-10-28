@@ -348,6 +348,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     ParseHnswSettings(*this, descr);
+    HnswInitialBuildId = descr.GetHnswInitialBuildId();
+    HnswInitialBuildDeadline = TInstant::MicroSeconds(descr.GetHnswInitialBuildDeadlineUs());
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -767,6 +769,12 @@ void TUserTable::ApplyAlter(
     // Ordinary schema deltas omit the index annotation. Restore it from the
     // merged description, while honoring explicit parameter/marker changes.
     ParseHnswSettings(*this, schema);
+    if (delta.HasHnswInitialBuildId()) {
+        schema.SetHnswInitialBuildId(delta.GetHnswInitialBuildId());
+        schema.SetHnswInitialBuildDeadlineUs(delta.GetHnswInitialBuildDeadlineUs());
+        HnswInitialBuildId = delta.GetHnswInitialBuildId();
+        HnswInitialBuildDeadline = TInstant::MicroSeconds(delta.GetHnswInitialBuildDeadlineUs());
+    }
     SetSchema(schema);
 }
 

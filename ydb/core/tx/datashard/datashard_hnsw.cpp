@@ -15,7 +15,7 @@ namespace NKikimr::NDataShard {
         NKikimrSchemeOp::TTableDescription before, after;
         previous.GetSchema(before);
         next.GetSchema(after);
-        // Only replica placement may change while retaining this generation.
+        // Replica placement and construction coordination retain this generation.
         // Other schema/storage changes still invalidate it as before.
         for (auto* schema : {&before, &after}) {
             auto* config = schema->MutablePartitionConfig();
@@ -25,6 +25,8 @@ namespace NKikimr::NDataShard {
             config->ClearFollowerGroups();
             schema->ClearTableSchemaVersion();
             schema->ClearCoordinatedSchemaVersion();
+            schema->ClearHnswInitialBuildId();
+            schema->ClearHnswInitialBuildDeadlineUs();
         }
         return before.SerializeAsString() == after.SerializeAsString();
     }
@@ -276,7 +278,7 @@ namespace NKikimr::NDataShard {
                     break;
                 }
             }
-            if (!table) {
+            if (!table || Self->IsHnswInitialBuildDeferred(*table)) {
                 return true;
             }
             if (InitialBuild) {
@@ -284,8 +286,12 @@ namespace NKikimr::NDataShard {
                     return true;
                 }
                 if (!Self->GetHnswCacheMemoryLimit()) {
-                    // Registration is asynchronous. An explicit zero grant disables caching.
-                    Retry = !Self->IsHnswCacheMemoryLimitKnown();
+                    // Registration is asynchronous; an absent controller must not
+                    // leave a coordinated build pending forever.
+                    auto& entry = Self->HnswIndexCache[LocalTid];
+                    if (!Self->IsHnswCacheMemoryLimitKnown() && entry.InitialBuildAttemptsLeft) {
+                        Retry = --entry.InitialBuildAttemptsLeft != 0;
+                    }
                     return true;
                 }
                 Self->HnswIndexCache.try_emplace(LocalTid);
@@ -317,9 +323,10 @@ namespace NKikimr::NDataShard {
                 if (Self->IsHnswBuildCurrent(LocalTid, Self->GetHnswBuildToken(LocalTid))) {
                     Self->StartHnswSnapshotScan(LocalTid, table, base, txc);
                 } else {
-                    // Tracking open transactions also needs a memory reservation.
-                    // No scan/result will be created when that reservation fails.
-                    Retry = true;
+                    // No scan/result clears Building after tracking admission
+                    // fails. Release the marker and keep initial retries bounded.
+                    Self->SetHnswIndexBuilding(LocalTid, false);
+                    Retry = !InitialBuild || entry.InitialBuildAttemptsLeft != 0;
                 }
             }
             return true;
@@ -371,6 +378,11 @@ namespace NKikimr::NDataShard {
                                             const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion) {
         if (IsFollower() || !AppData()->FeatureFlags.GetEnableHnswIndex()) {
             return false;
+        }
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid && IsHnswInitialBuildDeferred(*table)) {
+                return false;
+            }
         }
         auto& entry = HnswIndexCache[localTid];
         if (entry.Building) {
@@ -729,6 +741,14 @@ namespace NKikimr::NDataShard {
         });
     }
 
+    bool TDataShard::IsHnswInitialBuildDeferred(const TUserTable& table) const {
+        if (!table.HnswInitialBuildId || AppData()->TimeProvider->Now() >= table.HnswInitialBuildDeadline) {
+            return false;
+        }
+        const auto it = HnswIndexCache.find(table.LocalTid);
+        return it == HnswIndexCache.end() || it->second.CoordinatedBuildId != table.HnswInitialBuildId;
+    }
+
     void TDataShard::ScheduleHnswInitialBuilds() {
         if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower() || State != TShardState::Ready) {
             return;
@@ -736,7 +756,7 @@ namespace NKikimr::NDataShard {
         // Graphs are local to a tablet incarnation: snapshots transfer rows and
         // schema, but not the in-memory graph. Reconstruct it without a first read.
         for (const auto& [_, table] : TableInfos) {
-            if (table->HnswSettings && table->HnswVectorColumnTag) {
+            if (table->HnswSettings && table->HnswVectorColumnTag && !IsHnswInitialBuildDeferred(*table)) {
                 auto& entry = HnswIndexCache[table->LocalTid];
                 // As with eager finalization, give the controller time to respond
                 // to scan demand, but do not loop forever on an insufficient budget.
@@ -748,8 +768,16 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid && IsHnswInitialBuildDeferred(*table)) {
+                return;
+            }
+        }
         if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower()) {
             return;
+        }
+        if (!GetHnswCacheMemoryLimit() && IsHnswCacheMemoryLimitKnown()) {
+            return; // A later memory grant can retry; do not claim a running job.
         }
         auto& entry = HnswIndexCache.at(localTid);
         const bool initialBuild = !entry.Index && entry.InitialBuildAttemptsLeft;

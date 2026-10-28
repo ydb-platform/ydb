@@ -16,7 +16,7 @@ namespace NSchemeShard {
 namespace {
 
 ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard,
-        const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription* vectorDescription, const TString& embeddingColumn) {
+        const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription* vectorDescription, const TString& embeddingColumn, ui64 buildId) {
     TPath implTable = index.Child(name);
     {
         // To safely fill the TransactionTemplate below, we need to check if the table is valid.
@@ -58,6 +58,12 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
         if (NKikimr::NKMeans::ValidateSettings(vectorDescription->GetSettings().settings(), unused)) {
             *operation->MutableVectorIndexKmeansTreeDescription() = *vectorDescription;
             operation->SetVectorIndexHnsw(true);
+            if (buildId && context.SS->EnableHnswIndex
+                    && vectorDescription->GetSettings().settings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+                operation->SetHnswInitialBuildId(buildId);
+                operation->SetHnswInitialBuildDeadlineUs(
+                    (context.Ctx.Now() + context.SS->HnswIndexBuildWaitTimeout).MicroSeconds());
+            }
             operation->SetVectorIndexEmbeddingColumn(embeddingColumn);
             for (const auto& [columnId, column] : table->Columns) {
                 if (column.Name == embeddingColumn && !column.IsDropped()) {
@@ -243,7 +249,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(),
                     isPostingTable && isHnsw && config.HasVectorIndexKmeansTreeDescription()
                         ? &config.GetVectorIndexKmeansTreeDescription() : nullptr,
-                    isPostingTable ? embeddingColumn : TString{}));
+                    isPostingTable ? embeddingColumn : TString{}, config.GetBuildIndexId()));
             }
         }
     }

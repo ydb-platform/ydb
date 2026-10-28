@@ -7145,8 +7145,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TActorId Cache = MakeHnswCacheId();
         std::shared_ptr<THnswCacheMemoryTracker> Tracker;
 
-        explicit THnswLocalCacheFixture(ui32 nodes = 0)
-            : THnswLifecycleFixture(false, false, nodes)
+        explicit THnswLocalCacheFixture(ui32 nodes = 0, bool annotate = false)
+            : THnswLifecycleFixture(false, annotate, nodes)
         {
             auto& runtime = *Helper.Server->GetRuntime();
             Client = runtime.AllocateEdgeActor();
@@ -7990,6 +7990,123 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(registrations, 0u);
         auto result = fixture.Acquire("generation", fixture.Client);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "EnableHnswIndex");
+    }
+
+    Y_UNIT_TEST(HnswCoordinatedLowMemoryBuildFinishesWithFallback) {
+        THnswLocalCacheFixture fixture(0, true);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        const auto cacheActor = runtime.GetLocalServiceId(MakeHnswCacheId(runtime.GetNodeId(0)));
+        UNIT_ASSERT(cacheActor);
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && (ev->Recipient == fixture.Cache || ev->Recipient == cacheActor)) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = 1;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        fixture.Tracker = fixture.RegisterClient(fixture.Client);
+        runtime.Send(new IEventHandle(fixture.Cache, fixture.Client, new NMemory::TEvConsumerLimit(1)));
+        runtime.WaitFor("tiny HNSW cache grant", [&] { return fixture.Tracker->GetLimit() == 1; });
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto tablet = fixture.Helper.Tables.at("hnsw-lifecycle").TabletId;
+        const auto localId = fixture.Shard()->GetUserTables().begin()->first;
+        auto probe = [&] {
+            auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(localId);
+            request->Record.SetHnswIndexBuildId(71);
+            request->Record.SetHnswProbeRound(1);
+            request->Record.SetHnswStartBuild(true);
+            runtime.SendToPipe(tablet, sender, request.Release());
+            return runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(sender);
+        };
+        bool finished = false;
+        // Include the normal scan-failure backoff; no coordinator deadline
+        // completes this request on behalf of the shard.
+        for (ui32 attempt = 0; attempt < 200; ++attempt) {
+            const auto result = probe();
+            if (result->Get()->Record.GetHnswBuildFinished()) {
+                UNIT_ASSERT(!result->Get()->Record.GetHnswBuildInProgress());
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetHnswFallbackReason(), "build retries exhausted");
+                finished = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(finished, "A denied memory reservation left initial construction pending");
+        UNIT_ASSERT(!fixture.Index());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswCoordinatedBuildAuthorizationAndRelease, Expire) {
+        THnswLifecycleFixture fixture(false, false);
+        auto& runtime = *fixture.Helper.Server->GetRuntime();
+        constexpr ui64 buildId = 71;
+        const auto deadline = runtime.GetCurrentTime() + TDuration::Minutes(5);
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
+                        auto* alter = tx.MutableAlterTable();
+                        alter->SetVectorIndexHnsw(true);
+                        alter->SetVectorIndexEmbeddingColumn("emb");
+                        alter->SetVectorIndexEmbeddingColumnId(3);
+                        *alter->MutableVectorIndexKmeansTreeDescription()->MutableSettings()->mutable_settings() = fixture.Settings();
+                        alter->SetHnswInitialBuildId(buildId);
+                        alter->SetHnswInitialBuildDeadlineUs(deadline.MicroSeconds());
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.SetObserverFunc(observer);
+        const auto tabletId = fixture.Helper.Tables.at("hnsw-lifecycle").TabletId;
+        const auto sender = runtime.AllocateEdgeActor();
+        auto probe = [&](ui64 id, bool start, bool release) {
+            const auto localId = fixture.Shard()->GetUserTables().begin()->first;
+            auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(localId);
+            request->Record.SetHnswIndexBuildId(id);
+            request->Record.SetHnswProbeRound(1);
+            request->Record.SetHnswStartBuild(start);
+            request->Record.SetHnswReleaseBuild(release);
+            runtime.SendToPipe(tabletId, sender, request.Release());
+            return runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(sender);
+        };
+        UNIT_ASSERT(!fixture.Index());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT(!fixture.Index());
+        RebootTablet(runtime, tabletId, fixture.Helper.Sender);
+        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswInitialBuildId, buildId);
+        UNIT_ASSERT(!probe(buildId + 1, true, true)->Get()->Record.GetHnswBuildReleased());
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT(!fixture.Index());
+        if (Expire) {
+            runtime.SimulateSleep(TDuration::Minutes(5));
+        } else {
+            probe(buildId, true, false);
+        }
+        fixture.Warm();
+        const auto graph = fixture.Index();
+        UNIT_ASSERT(graph);
+        UNIT_ASSERT(probe(buildId, false, true)->Get()->Record.GetHnswBuildReleased());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswInitialBuildId, 0u);
+        UNIT_ASSERT(fixture.Index() == graph);
+        NKikimrSchemeOp::TTableDescription schema;
+        fixture.Shard()->GetUserTables().begin()->second->GetSchema(schema);
+        UNIT_ASSERT(!schema.HasHnswInitialBuildId());
+        UNIT_ASSERT(!schema.HasHnswInitialBuildDeadlineUs());
+        RebootTablet(runtime, tabletId, fixture.Helper.Sender);
+        fixture.Helper.Tables.at("hnsw-lifecycle").ClientId = {};
+        fixture.Warm();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Shard()->GetUserTables().begin()->second->HnswInitialBuildId, 0u);
     }
 
     Y_UNIT_TEST(HnswExplicitMetadataDisableSurvivesRestart) {

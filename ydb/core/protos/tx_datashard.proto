@@ -1042,6 +1042,13 @@ message TEvGetTableStats {
     optional uint64 RowCountResolution = 3;
     optional bool CollectKeySample = 4;
     optional uint32 HistogramBucketsCount = 5;
+    // Correlates index-build readiness probes independently of split statistics.
+    optional uint64 HnswIndexBuildId = 6;
+    optional uint64 HnswProbeRound = 7;
+    optional NActorsProto.TActorId HnswReplyTo = 8;
+    optional uint64 HnswTableOwnerId = 9;
+    optional bool HnswStartBuild = 10;
+    optional bool HnswReleaseBuild = 11;
 }
 
 message TEvGetTableStatsResult {
@@ -1055,6 +1062,16 @@ message TEvGetTableStatsResult {
     optional bool FullStatsReady = 8;
     optional uint64 TableOwnerId = 9;
     optional uint32 FollowerId = 10;
+    optional uint64 HnswIndexBuildId = 11;
+    optional uint64 HnswProbeRound = 12;
+    optional bool HnswBuildInProgress = 13;
+    optional bool HnswStatsFresh = 14;
+    optional uint32 HnswFollowersCount = 15;
+    optional bool HnswStatisticsDisabled = 16;
+    // Absence means a legacy shard: retain the old in-progress-only protocol.
+    optional bool HnswBuildFinished = 17;
+    optional string HnswFallbackReason = 18;
+    optional bool HnswBuildReleased = 19;
 }
 
 message TEvPeriodicTableStats {

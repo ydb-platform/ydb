@@ -501,7 +501,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
 
     using namespace NTableIndex::NKMeans;
     addCreateTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), {}));
-    addCreateTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}));
+    auto posting = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {});
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !buildInfo.IsBuildPrefixedVectorIndex()) {
+        const auto domain = TPath::Init(buildInfo.TablePathId, ss).DomainInfo();
+        const auto& limits = domain->GetSchemeLimits();
+        const ui64 used = domain->GetShardsInside() - domain->GetBackupShards();
+        const ui64 available = used + 1 < limits.MaxShards ? limits.MaxShards - used - 1 : 1;
+        ConfigureHnswPostingPartitions(tableInfo, indexDesc.GetVectorIndexKmeansTreeDescription().GetSettings(),
+            Min<ui64>(limits.MaxShardsInPath, available), posting);
+    }
+    addCreateTable(std::move(posting));
     if (buildInfo.IsBuildPrefixedVectorIndex()) {
         const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
         auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
@@ -1157,9 +1166,171 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    bool CloseHnswPipes = false;
     bool StartHnswProbe = false;
     bool ScheduleHnswProgress = false;
     TVector<std::pair<ui64, ui64>> HnswTabletsAndHives;
+
+    bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, TTransactionContext& txc, const TActorContext& ctx) {
+        const auto* vector = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            &buildInfo.SpecializedIndexDescription);
+        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !vector
+                || vector->GetSettings().settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+            return false;
+        }
+        // The apply transaction has released the impl-table schema operation,
+        // so its size splits may proceed. Keep the main-table build lock until
+        // the current posting partitions have finished their graph work.
+        const auto posting = TPath::Init(buildInfo.TablePathId, Self)
+            .Child(buildInfo.IndexName).Child(NTableIndex::NKMeans::PostingTable);
+        if (!posting.IsResolved() || posting.IsDeleted() || !Self->Tables.contains(posting->PathId)) {
+            // Schema locks normally prevent this, but recovery must not crash
+            // on a path that has disappeared. The published index is optional
+            // cache work's only owner, so there is nothing left to wait for.
+            CloseHnswPipes = true;
+            return false;
+        }
+        if (!buildInfo.HnswWaitStartedAt) {
+            buildInfo.HnswWaitStartedAt = ctx.Now();
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswWaitStartedAt>(buildInfo.HnswWaitStartedAt.MicroSeconds()));
+        }
+        const auto timeout = Self->HnswIndexBuildWaitTimeout;
+        const bool finishWithFallback = !AppData()->FeatureFlags.GetEnableHnswIndex() || ctx.Now() >= buildInfo.HnswWaitStartedAt + timeout;
+        const auto table = Self->Tables.at(posting->PathId);
+        THashSet<ui64> tablets;
+        for (const auto* partition : table->GetPartitions()) {
+            tablets.insert(ui64(Self->ShardInfos.at(partition->ShardIdx).TabletID));
+        }
+        const bool samePartitions = buildInfo.HnswPostingPathId == posting->PathId
+            && buildInfo.HnswProbeTablets == tablets;
+        if (!samePartitions) {
+            // Construction and replica probes share a monotonic persisted
+            // round. A changed layout invalidates the later bootstrap barrier
+            // too, including any helper still replying for the previous layout.
+            buildInfo.HnswProbeInFlight = false;
+            buildInfo.HnswReplicasReady = false;
+            buildInfo.HnswProbeActor = {};
+            buildInfo.HnswSchemaVersion = 0;
+            buildInfo.HnswCheckpoints.clear();
+        }
+        bool allReplied = samePartitions && !tablets.empty()
+            && buildInfo.HnswBuildStatuses.size() == tablets.size();
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            allReplied &= status.HasAllReplies();
+        }
+        bool topologyReady = allReplied && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation();
+        bool partitionsReady = topologyReady;
+        bool sizeSplitPending = false;
+        const auto domain = posting.DomainInfo();
+        const auto& limits = domain->GetSchemeLimits();
+        const bool splitFitsQuota = posting->GetShardsInside() + 2 <= limits.MaxShardsInPath
+            && domain->GetShardsInside() - domain->GetBackupShards() + 2 <= limits.MaxShards;
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            TString reason;
+            if (status.ShardState != NKikimrTxDataShard::Ready) {
+                topologyReady = false;
+                partitionsReady = false;
+            }
+            if (!status.StatisticsReady) {
+                partitionsReady = false;
+            } else if (!status.StatisticsDisabled && splitFitsQuota && status.CanSplit
+                    && table->ShouldSplitBySize(status.DataSize, Self->SplitSettings.GetForceShardSplitSettings(), reason)) {
+                sizeSplitPending = true;
+                partitionsReady = false;
+            }
+        }
+        using EPhase = TIndexBuildInfo::EHnswPhase;
+        bool phaseChanged = false;
+        auto changePhase = [&](EPhase phase) {
+            buildInfo.HnswPhase = phase;
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswPhase>(ui32(phase)));
+            YDB_LOG_NOTICE("HNSW build phase changed", {"buildId", buildInfo.Id},
+                {"phase", ui32(phase)}, {"partitions", tablets.size()},
+                {"elapsed", ctx.Now() - buildInfo.HnswWaitStartedAt});
+            buildInfo.HnswBuildStatuses.clear();
+            phaseChanged = true;
+        };
+        // Once planned partitions are authorized, writes may keep statistics
+        // changing. Wait for graphs and known topology work, not a quiet table.
+        bool finished = topologyReady && !sizeSplitPending;
+        bool released = topologyReady && !sizeSplitPending;
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            finished &= status.Finished && !status.HasActiveBuilds();
+            released &= status.Released;
+        }
+        if ((finishWithFallback || (buildInfo.HnswPhase == EPhase::Releasing && released && finished))
+                && table->TableDescription.GetHnswInitialBuildId() == ui64(BuildId)) {
+            // Clear the description cache so future ALTERs and splits cannot
+            // resurrect a completed gate. Recovery annotates active builds.
+            // Active replacement shards are annotated from IndexBuilds below.
+            table->TableDescription.ClearHnswInitialBuildId();
+            table->TableDescription.ClearHnswInitialBuildDeadlineUs();
+        }
+        if (finishWithFallback) {
+            YDB_LOG_NOTICE((AppData()->FeatureFlags.GetEnableHnswIndex()
+                ? "HNSW readiness wait expired; completing with scan fallback"
+                : "HNSW disabled; completing with scan fallback"), {"buildId", buildInfo.Id});
+            // Best-effort release; the persisted shard deadline also releases
+            // an unavailable tablet when it eventually recovers.
+        } else if (buildInfo.HnswPhase == EPhase::Releasing && released && finished) {
+            CloseHnswPipes = true;
+            return false;
+        } else if (!samePartitions && buildInfo.HnswPhase != EPhase::Partitioning) {
+            changePhase(EPhase::Partitioning);
+        } else if (buildInfo.HnswPhase == EPhase::Partitioning && partitionsReady) {
+            changePhase(EPhase::Building);
+        } else if (buildInfo.HnswPhase == EPhase::Building && finished) {
+            for (const auto& [tabletId, status] : buildInfo.HnswBuildStatuses) {
+                if (!status.FallbackReason.empty()) {
+                    YDB_LOG_NOTICE("HNSW shard completed with scan fallback", {"buildId", buildInfo.Id},
+                        {"tabletId", tabletId}, {"reason", status.FallbackReason});
+                }
+            }
+            changePhase(EPhase::Releasing);
+        } else if (buildInfo.HnswPhase != EPhase::Partitioning && allReplied && (!topologyReady || sizeSplitPending)) {
+            // New topology work needs another planning pass. Split children
+            // inherit the deferred schema, not the parent's authorization.
+            changePhase(EPhase::Partitioning);
+        }
+
+        // Re-probe after every partitioning change, and retry missing replies.
+        // Rounds prevent a delayed response from a preceding probe from making
+        // a replacement shard look ready. Only the round is persisted.
+        if (finishWithFallback || phaseChanged || !samePartitions || allReplied || !buildInfo.HnswProbeRound
+                || ctx.Now() >= buildInfo.HnswProbeSentAt + TDuration::Seconds(10)) {
+            CloseHnswPipes = !samePartitions;
+            buildInfo.HnswPostingPathId = posting->PathId;
+            buildInfo.HnswProbeTablets = std::move(tablets);
+            buildInfo.HnswBuildStatuses.clear();
+            ++buildInfo.HnswProbeRound;
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswProbeRound>(buildInfo.HnswProbeRound));
+            buildInfo.HnswProbeSentAt = ctx.Now();
+            for (ui64 tabletId : buildInfo.HnswProbeTablets) {
+                auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(ui64(posting->PathId.LocalPathId));
+                request->Record.SetHnswIndexBuildId(ui64(BuildId));
+                request->Record.SetHnswProbeRound(buildInfo.HnswProbeRound);
+                request->Record.SetHnswStartBuild(!finishWithFallback && buildInfo.HnswPhase == EPhase::Building
+                    && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation());
+                request->Record.SetHnswReleaseBuild(finishWithFallback || buildInfo.HnswPhase == EPhase::Releasing);
+                ToTabletSend.emplace(TTabletId(tabletId), std::move(request));
+            }
+        }
+        if (finishWithFallback) {
+            CloseHnswPipes = true;
+            return false;
+        }
+        if (!buildInfo.HnswProgressScheduled) {
+            buildInfo.HnswProgressScheduled = true;
+            ScheduleHnswProgress = true;
+        }
+        return true;
+    }
 
     bool WaitForHnswReplicas(TIndexBuildInfo& build, TTransactionContext& txc, const TActorContext& ctx) {
         if (build.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
@@ -1187,8 +1358,8 @@ private:
         for (const auto& group : config.GetFollowerGroups()) {
             hasFollowers |= group.GetFollowerCount() != 0;
         }
-        // Step 5 already waits for the eager leader build. Only configured
-        // followers need an additional bootstrap barrier here.
+        // Leader construction/release has finished. Configured followers still
+        // need the checkpoint-validated bootstrap barrier from step 9.
         if (!hasFollowers) {
             return false;
         }
@@ -3787,7 +3958,7 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
-                    if (WaitForHnswReplicas(buildInfo, txc, ctx)) {
+                    if (WaitForHnswBuilds(buildInfo, txc, ctx) || WaitForHnswReplicas(buildInfo, txc, ctx)) {
                         break;
                     }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
@@ -4007,6 +4178,9 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
+        if (CloseHnswPipes) {
+            Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+        }
         if (StartHnswProbe) {
             auto& build = *Self->IndexBuilds.at(BuildId);
             const auto table = Self->Tables.at(build.HnswPostingPathId);
@@ -4125,19 +4299,34 @@ public:
     {}
 
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
-        const auto& shardIdx = Self->GetShardIdx(ShardId);
-
-        YDB_LOG_NOTICE(LogPrefix << "TTxReply : PipeRetry",
-            {"buildId", BuildId},
-            {"shardId", ShardId},
-            {"shardIdx", shardIdx},
-        );
-
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
             return true;
         }
         auto& buildInfo = *buildInfoPtr->get();
+        if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone
+                && buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            // Readiness probes use posting shards, which are not the source
+            // shards in buildInfo.Shards and may disappear after a split.
+            // Replace the dead pipe before sending another probe round.
+            Self->IndexBuildPipes.Close(BuildId, ShardId, ctx);
+            buildInfo.HnswBuildStatuses.erase(ui64(ShardId));
+            buildInfo.HnswProbeSentAt = TInstant::Zero();
+            Progress(BuildId);
+            return true;
+        }
+        if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
+            YDB_LOG_INFO(LogPrefix << "TTxReply : PipeRetry superfluous event",
+                {"buildId", BuildId},
+            );
+            return true;
+        }
+        const auto& shardIdx = Self->GetShardIdx(ShardId);
+        YDB_LOG_NOTICE(LogPrefix << "TTxReply : PipeRetry",
+            {"buildId", BuildId},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx},
+        );
         YDB_LOG_DEBUG(LogPrefix << "TTxReply : PipeRetry",
             {"buildInfo", buildInfo},
             {"shardId", ShardId},
@@ -4145,13 +4334,6 @@ public:
         );
 
         if (!buildInfo.Shards.contains(shardIdx)) {
-            return true;
-        }
-
-        if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            YDB_LOG_INFO(LogPrefix << "TTxReply : PipeRetry superfluous event",
-                {"buildId", BuildId},
-            );
             return true;
         }
 

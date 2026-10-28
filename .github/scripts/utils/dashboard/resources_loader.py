@@ -163,6 +163,26 @@ def align_series(xs_out: list[float], xs_src: list[float], ys_src: list[float]) 
     return out
 
 
+def align_optional_series(
+    xs_out: list[float], xs_src: list[float], ys_src: list[float | None]
+) -> list[float | None]:
+    """Step-hold optional values while preserving unavailable intervals as gaps."""
+    if not xs_out or not xs_src or not ys_src:
+        return [None] * len(xs_out)
+    out: list[float | None] = []
+    j = 0
+    for raw in xs_out:
+        t = float(raw)
+        if t < float(xs_src[0]) or t > float(xs_src[-1]):
+            out.append(None)
+            continue
+        while j + 1 < len(xs_src) and float(xs_src[j + 1]) <= t:
+            j += 1
+        value = ys_src[j]
+        out.append(float(value) if value is not None else None)
+    return out
+
+
 def build_measured_layers(
     grouped: dict[str, dict[str, Any]],
     max_points: int = 400,
@@ -174,6 +194,16 @@ def build_measured_layers(
     ram_tracks: dict[str, list[float]] = {}
     write_tracks: dict[str, list[float]] = {}
     read_tracks: dict[str, list[float]] = {}
+    pressure_tracks: dict[str, list[float]] = {}
+    pressure_names = {
+        "cpu_throttled_pct": "CPU throttled",
+        "cpu_psi_some_pct": "CPU PSI some",
+        "cpu_psi_full_pct": "CPU PSI full",
+        "memory_psi_some_pct": "Memory PSI some",
+        "memory_psi_full_pct": "Memory PSI full",
+        "io_psi_some_pct": "I/O PSI some",
+        "io_psi_full_pct": "I/O PSI full",
+    }
     by_label: dict[str, dict[str, Any]] = {}
     for key, bucket in grouped.items():
         label = str(bucket.get("label") or key)
@@ -182,6 +212,11 @@ def build_measured_layers(
         ram_tracks[label] = align_series(xs, src_xs, bucket.get("ram_gb") or [])
         write_tracks[label] = align_series(xs, src_xs, bucket.get("disk_write_mbps") or [])
         read_tracks[label] = align_series(xs, src_xs, bucket.get("disk_read_mbps") or [])
+        for field, display_name in pressure_names.items():
+            values = (bucket.get("cgroup_signals") or {}).get(field)
+            if values is None or not any(value is not None for value in values):
+                continue
+            pressure_tracks[f"{label} · {display_name}"] = align_optional_series(xs, src_xs, values)
         by_label[label] = {
             "key": key,
             "suite": bucket.get("suite"),
@@ -194,6 +229,7 @@ def build_measured_layers(
         "ram_tracks": ram_tracks,
         "write_tracks": write_tracks,
         "read_tracks": read_tracks,
+        "pressure_tracks": pressure_tracks,
         "by_label": by_label,
     }
 

@@ -1102,6 +1102,20 @@ def _build_resources_overlay(
     ram_gb: list[float] = []
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
+    host_signal_keys = (
+        "cpu_iowait_pct",
+        "pressure_cpu_some_pct",
+        "pressure_cpu_full_pct",
+        "pressure_memory_some_pct",
+        "pressure_memory_full_pct",
+        "pressure_io_some_pct",
+        "pressure_io_full_pct",
+        "disk_io_in_progress",
+        "disk_busy_pct",
+        "disk_weighted_io_time_ms_delta",
+    )
+    host_signals: dict[str, list[float | None]] = {key: [] for key in host_signal_keys}
+    host_signal_seen: set[str] = set()
     for r in records:
         if not is_host_record(r):
             continue
@@ -1115,6 +1129,11 @@ def _build_resources_overlay(
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
         disk_write_mb.append(float(r.get("disk_write_mbps", r.get("disk_write_mb_delta", 0)) or 0))
+        for key in host_signal_keys:
+            value = r.get(key)
+            host_signals[key].append(float(value) if value is not None else None)
+            if value is not None:
+                host_signal_seen.add(key)
     def _first_positive(key: str) -> Optional[float]:
         for rec in records:
             raw = rec.get(key)
@@ -1131,7 +1150,7 @@ def _build_resources_overlay(
     ram_total_gb = _first_positive("ram_total_gb")
     if not xs_evlog:
         return None
-    return {
+    result = {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
         "ram_gb": ram_gb,
@@ -1143,9 +1162,14 @@ def _build_resources_overlay(
         "ref_start_ev": ref_start_ev,
         "ref_report_ts": ref_report_ts,
     }
+    if host_signal_seen:
+        result["host_resource_signals"] = {
+            key: values for key, values in host_signals.items() if key in host_signal_seen
+        }
+    return result
 
 
-def _downsample_series(xs: list[float], series: list[list[float]], max_points: int = 400) -> tuple[list[float], list[list[float]]]:
+def _downsample_series(xs: list[float], series: list[list[Any]], max_points: int = 400) -> tuple[list[float], list[list[Any]]]:
     n = len(xs)
     if n <= max_points or max_points <= 0:
         return xs, series
@@ -1209,6 +1233,7 @@ def _build_measured_tests(
                 "ram_gb": [],
                 "disk_read_mbps": [],
                 "disk_write_mbps": [],
+                "cgroup_signals": {},
             },
         )
         bucket["xs"].append(round(evlog_sec, 3))
@@ -1216,6 +1241,29 @@ def _build_measured_tests(
         bucket["ram_gb"].append(float(rec.get("ram_kb", 0) or 0) / (1024 * 1024))
         bucket["disk_read_mbps"].append(float(rec.get("disk_read_mbps", rec.get("disk_read_mb_delta", 0)) or 0))
         bucket["disk_write_mbps"].append(float(rec.get("disk_write_mbps", rec.get("disk_write_mb_delta", 0)) or 0))
+        signal_fields = (
+            "cpu_throttled_pct",
+            "cpu_nr_throttled_delta",
+            "cpu_throttled_usec_delta",
+            "cpu_psi_some_pct",
+            "cpu_psi_full_pct",
+            "memory_psi_some_pct",
+            "memory_psi_full_pct",
+            "io_psi_some_pct",
+            "io_psi_full_pct",
+            "memory_high_events_delta",
+            "memory_max_events_delta",
+            "memory_oom_events_delta",
+            "memory_oom_kill_events_delta",
+        )
+        for field in signal_fields:
+            values = bucket["cgroup_signals"].get(field)
+            if values is None and field not in rec:
+                continue
+            if values is None:
+                values = [None] * (len(bucket["xs"]) - 1)
+                bucket["cgroup_signals"][field] = values
+            values.append(float(rec[field]) if rec.get(field) is not None else None)
     match_measured_to_runs(grouped, runs or [])
     overlay["measured_layers"] = build_measured_layers(grouped)
     overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
@@ -1240,8 +1288,18 @@ def _build_measured_tests(
             "disk_read_mbps": dread,
             "disk_write_mbps": dwrite,
         }
-        summary.append(
-            {
+        for field, values in bucket["cgroup_signals"].items():
+            _signal_xs, signal_cols = _downsample_series(bucket["xs"], [values])
+            series_out[key][field] = signal_cols[0]
+        def _signal_max(name: str) -> float | None:
+            vals = [float(v) for v in bucket["cgroup_signals"].get(name, []) if v is not None]
+            return max(vals) if vals else None
+
+        def _signal_sum(name: str) -> int | None:
+            vals = bucket["cgroup_signals"].get(name)
+            return sum(int(v or 0) for v in vals) if vals else None
+
+        summary_row = {
                 "key": key,
                 "label": bucket["label"],
                 "suite": bucket["suite"],
@@ -1253,7 +1311,20 @@ def _build_measured_tests(
                 "max_read_mbps": round(max(bucket["disk_read_mbps"]) if bucket["disk_read_mbps"] else 0.0, 2),
                 "max_write_mbps": round(max(bucket["disk_write_mbps"]) if bucket["disk_write_mbps"] else 0.0, 2),
             }
-        )
+        optional_summary_fields = {
+            "max_cpu_throttled_pct": _signal_max("cpu_throttled_pct"),
+            "max_cpu_psi_pct": _signal_max("cpu_psi_some_pct"),
+            "max_memory_psi_pct": _signal_max("memory_psi_some_pct"),
+            "max_io_psi_pct": _signal_max("io_psi_some_pct"),
+            "cpu_nr_throttled_delta": _signal_sum("cpu_nr_throttled_delta"),
+            "cpu_throttled_usec_delta": _signal_sum("cpu_throttled_usec_delta"),
+            "memory_high_events_delta": _signal_sum("memory_high_events_delta"),
+            "memory_max_events_delta": _signal_sum("memory_max_events_delta"),
+            "memory_oom_events_delta": _signal_sum("memory_oom_events_delta"),
+            "memory_oom_kill_events_delta": _signal_sum("memory_oom_kill_events_delta"),
+        }
+        summary_row.update({name: round(value, 3) if name.startswith("max_") else value for name, value in optional_summary_fields.items() if value is not None})
+        summary.append(summary_row)
     summary.sort(key=lambda row: (-float(row["max_cpu"]), str(row["label"])))
     if out_json is not None:
         out_json.write_text(json.dumps(series_out, ensure_ascii=False), encoding="utf-8")

@@ -56,6 +56,24 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertNotIn("cpu_host", stats)
         self.assertNotIn("disk_read_host", stats)
 
+    def test_optional_host_contention_signals_are_summarized(self):
+        stats = _build_headline_stats(
+            cpu_tracks_suite={},
+            ram_tracks_suite={},
+            ys_active=[],
+            tests_tracks_suite={},
+            runs=[],
+            tests_per_suite=None,
+            issues_summary=None,
+            suite_chunk_issues_summary=None,
+            resources_overlay={"host_resource_signals": {
+                "cpu_iowait_pct": [None, 5.0, 10.0],
+                "disk_io_in_progress": [0.0, 2.0, 1.0],
+            }},
+        )
+        self.assertEqual(stats["cpu_iowait_pct"]["max"], 10.0)
+        self.assertEqual(stats["disk_io_in_progress"]["max"], 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

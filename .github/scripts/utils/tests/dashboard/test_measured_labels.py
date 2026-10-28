@@ -7,18 +7,20 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _paths import DASHBOARD, add_product_paths
+from _paths import DASHBOARD, TEST_METRICS, add_product_paths
 
-add_product_paths(DASHBOARD)
+add_product_paths(DASHBOARD, TEST_METRICS)
 
 from resources_loader import (
     align_series,
+    align_optional_series,
     build_measured_layers,
     match_measured_to_runs,
     measured_test_label,
     normalize_report_links,
     place_chunk_tests,
 )
+from tests_resource_dashboard import _build_measured_tests
 
 
 class MeasuredLabelTest(unittest.TestCase):
@@ -89,6 +91,51 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(layers["xs_evlog_sec"], [1.0, 2.0, 3.0])
         self.assertEqual(layers["cpu_tracks"]["s [0]"], [1.0, 1.0, 0.0])
         self.assertEqual(layers["write_tracks"]["s [1]"], [0.0, 8.0, 8.0])
+
+    def test_pressure_tracks_preserve_missing_samples(self):
+        self.assertEqual(align_optional_series([1, 2, 3, 4], [2, 3], [12.0, None]), [None, 12.0, None, None])
+        grouped = {
+            "chunk": {
+                "label": "s [0]",
+                "xs": [1.0, 2.0],
+                "cpu_cores": [1.0, 1.0],
+                "ram_gb": [0.2, 0.2],
+                "disk_write_mbps": [0.0, 0.0],
+                "disk_read_mbps": [0.0, 0.0],
+                "cgroup_signals": {"cpu_throttled_pct": [None, 25.0], "cpu_psi_some_pct": [5.0, 10.0]},
+            }
+        }
+        layers = build_measured_layers(grouped)
+        self.assertEqual(layers["pressure_tracks"]["s [0] · CPU throttled"], [None, 25.0])
+        self.assertEqual(layers["pressure_tracks"]["s [0] · CPU PSI some"], [5.0, 10.0])
+
+    def test_measured_summary_projects_chunk_contention_and_memory_events(self):
+        overlay = {
+            "ref_start_ev": 100.0,
+            "ref_report_ts": 100.0,
+            "evlog_range_sec": [90.0, 120.0],
+        }
+        records = [
+            {
+                "kind": "test", "ts": 101.0, "cgroup": "ya-test-1", "suite": "ydb/core/foo", "chunk": 2,
+                "cpu_used_cores": 1.0, "ram_kb": 1024, "disk_read_mbps": 0, "disk_write_mbps": 0,
+                "cpu_throttled_pct": 25.0, "cpu_nr_throttled_delta": 3, "cpu_throttled_usec_delta": 250000,
+                "cpu_psi_some_pct": 10.0, "memory_psi_some_pct": 2.0, "io_psi_some_pct": 5.0,
+                "memory_high_events_delta": 1, "memory_max_events_delta": 0,
+                "memory_oom_events_delta": 0, "memory_oom_kill_events_delta": 0,
+            }
+        ]
+        rows = _build_measured_tests(records, overlay, runs=[], chunk_tests={}, chunks={})
+        self.assertEqual(rows[0]["max_cpu_throttled_pct"], 25.0)
+        self.assertEqual(rows[0]["max_cpu_psi_pct"], 10.0)
+        self.assertEqual(rows[0]["max_memory_psi_pct"], 2.0)
+        self.assertEqual(rows[0]["max_io_psi_pct"], 5.0)
+        self.assertEqual(rows[0]["cpu_nr_throttled_delta"], 3)
+        self.assertEqual(rows[0]["memory_high_events_delta"], 1)
+        self.assertEqual(
+            overlay["measured_layers"]["pressure_tracks"]["ydb/core/foo [2] · CPU throttled"],
+            [25.0],
+        )
 
     def test_places_named_tests_end_to_end(self):
         placed = place_chunk_tests(

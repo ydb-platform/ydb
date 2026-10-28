@@ -422,7 +422,7 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-        <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s). The tree picks a suite (all its chunks) or one chunk. Each chart stacks its own top consumers, so RAM/disk are not hidden behind a CPU sort. Ticks: <code>resources_monitor.jsonl</code> (<code>kind=test</code>).</li>
+        <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s), plus cgroup CPU throttling, CPU/memory/I/O PSI, and memory events. Select a chunk to align these signals with its run. The host chart shows iowait, PSI, disk busy time, and in-flight I/O. These fields are interval deltas; older logs omit unavailable signals.</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -483,11 +483,14 @@ def build_html_dashboard(
         <div id="measuredWriteHover" class="hoverbox">Hover write layers to see sorted contributors</div>
         <div id="measuredRead" class="wide" style="height:280px;"></div>
         <div id="measuredReadHover" class="hoverbox">Hover read layers to see sorted contributors</div>
+        <div id="measuredPressure" class="wide" style="height:320px;display:none;"></div>
+        <div id="measuredPressureHover" class="hoverbox">Hover to inspect per-chunk throttling and PSI</div>
       </div>
     </div>
   </div>
   <div id="activeChunks" class="wide"></div>
   <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
+  <div id="hostContentionChart" class="wide" style="display:none;height:320px;"></div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
@@ -575,7 +578,7 @@ def build_html_dashboard(
     function formatHeadlineNumber(metric, value) {{
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
-      if (metric === 'cpu' || metric === 'ram' || metric === 'disk') return n.toFixed(1);
+      if (metric === 'cpu' || metric === 'ram' || metric === 'disk' || metric === 'pct' || metric === 'queue') return n.toFixed(1);
       return String(Math.round(n));
     }}
     function formatHeadlineValue(metric, value) {{
@@ -693,14 +696,26 @@ def build_html_dashboard(
       if (cpuHost || ramHost || diskRead || diskWrite) {{
         const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
         const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
+        const hostRows = [
+          ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
+          ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
+          ['Disk read, MB/s', 'disk', diskRead, null],
+          ['Disk write, MB/s', 'disk', diskWrite, null],
+        ];
+        [
+          ['CPU iowait, %', 'pct', hs.cpu_iowait_pct],
+          ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct],
+          ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct],
+          ['Memory PSI some, %', 'pct', hs.pressure_memory_some_pct],
+          ['Memory PSI full, %', 'pct', hs.pressure_memory_full_pct],
+          ['I/O PSI some, %', 'pct', hs.pressure_io_some_pct],
+          ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct],
+          ['Disk busy, %', 'pct', hs.disk_busy_pct],
+          ['Disk queue, requests', 'queue', hs.disk_io_in_progress],
+        ].forEach(row => {{ if (row[2]) hostRows.push(row.concat([null])); }});
         hostBlock =
           '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
-          statTable([
-            ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
-            ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
-            ['Disk read, MB/s', 'disk', diskRead, null],
-            ['Disk write, MB/s', 'disk', diskWrite, null],
-          ], true) +
+          statTable(hostRows, true) +
           '</div>';
       }}
       grid.innerHTML =
@@ -2253,6 +2268,46 @@ def build_html_dashboard(
           hoverlabel: {{ namelength: -1 }},
         }}, {{ responsive: true }});
       }}
+      const hostSignals = ro.host_resource_signals || {{}};
+      const hostChart = document.getElementById('hostContentionChart');
+      if (hostChart && Object.keys(hostSignals).length) {{
+        const signalNames = {{
+          cpu_iowait_pct: 'CPU iowait',
+          pressure_cpu_some_pct: 'CPU PSI some',
+          pressure_cpu_full_pct: 'CPU PSI full',
+          pressure_memory_some_pct: 'Memory PSI some',
+          pressure_memory_full_pct: 'Memory PSI full',
+          pressure_io_some_pct: 'I/O PSI some',
+          pressure_io_full_pct: 'I/O PSI full',
+          disk_busy_pct: 'Disk busy',
+          disk_io_in_progress: 'Disk I/O in progress',
+        }};
+        const traces = Object.keys(signalNames).filter(name => hostSignals[name]).map((name, index) => {{
+          const isQueue = name === 'disk_io_in_progress';
+          return {{
+            x: xDisp,
+            y: hostSignals[name],
+            type: 'scatter',
+            mode: 'lines',
+            name: signalNames[name],
+            yaxis: isQueue ? 'y2' : 'y',
+            connectgaps: false,
+            line: {{ width: 2, color: ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309'][index % 9] }},
+            hovertemplate: '%{{fullData.name}}: %{{y:.2f}}' + (isQueue ? ' requests<extra></extra>' : '%<extra></extra>'),
+          }};
+        }});
+        if (traces.length) {{
+          hostChart.style.display = '';
+          Plotly.newPlot(hostChart, traces, {{
+            title: 'Host contention signals (iowait, PSI, disk queue)',
+            xaxis: axisLayout(xDisp),
+            yaxis: {{ title: 'Stall / busy time (%)', rangemode: 'tozero' }},
+            yaxis2: {{ title: 'Requests in progress', overlaying: 'y', side: 'right', rangemode: 'tozero' }},
+            hovermode: 'x unified',
+            hoverlabel: {{ namelength: -1 }},
+          }}, {{ responsive: true }});
+        }}
+      }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
@@ -2400,8 +2455,11 @@ def build_html_dashboard(
     }}
     function filterMeasuredTracks(allTracks, labels) {{
       const out = {{}};
-      (labels || []).forEach(lb => {{
-        if (allTracks && allTracks[lb]) out[lb] = allTracks[lb];
+      const selected = new Set(labels || []);
+      Object.keys(allTracks || {{}}).forEach(name => {{
+        const separator = name.lastIndexOf(' · ');
+        const label = separator >= 0 ? name.slice(0, separator) : name;
+        if (selected.has(label)) out[name] = allTracks[name];
       }});
       return out;
     }}
@@ -2438,6 +2496,45 @@ def build_html_dashboard(
       attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
       attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
       attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
+    }}
+    function plotMeasuredPressure(labels, titleSuffix) {{
+      const el = document.getElementById('measuredPressure');
+      const panel = document.getElementById('measuredPressureHover');
+      if (!el || !window.Plotly) return;
+      const allTracks = measuredLayers.pressure_tracks || {{}};
+      const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+      const names = Object.keys(tracks);
+      if (!names.length) {{
+        el.style.display = 'none';
+        if (panel) panel.style.display = 'none';
+        return;
+      }}
+      el.style.display = '';
+      if (panel) panel.style.display = '';
+      const xs = (measuredLayers.xs_evlog_sec || []).map(xToDisplay);
+      const traces = names.map((name, i) => ({{
+        x: xs,
+        y: tracks[name],
+        type: 'scatter',
+        mode: 'lines',
+        name: name,
+        connectgaps: false,
+        line: {{ width: 2, color: name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
+        hovertemplate: '%{{fullData.name}}: %{{y:.2f}}%<extra></extra>',
+      }}));
+      Plotly.newPlot(el, traces, {{
+        title: 'Cgroup throttling and pressure' + titleSuffix,
+        xaxis: axisLayout(xs),
+        yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
+        hovermode: 'x unified',
+        hoverlabel: {{ namelength: -1 }},
+        margin: {{ t: 48, r: 20, b: 30, l: 52 }},
+      }}, {{ responsive: true }});
+      el.on('plotly_hover', (ev) => {{
+        if (!panel || !ev || !ev.points || !ev.points.length) return;
+        panel.textContent = ev.points.map(p => `${{p.data.name}}: ${{Number(p.y).toFixed(2)}}%`).join(' · ');
+      }});
+      el.on('plotly_unhover', () => {{ if (panel) panel.textContent = 'Hover to inspect per-chunk throttling and PSI'; }});
     }}
     let _measuredActiveTests = [];
     function testAtSec(tSec) {{
@@ -2696,7 +2793,7 @@ def build_html_dashboard(
           layer: 'below',
         }};
       }});
-      ['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead'].forEach(id => {{
+      ['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead', 'measuredPressure'].forEach(id => {{
         const plot = document.getElementById(id);
         if (plot && window.Plotly) Plotly.relayout(plot, {{ shapes: shapes, annotations: [] }});
       }});
@@ -2710,6 +2807,31 @@ def build_html_dashboard(
         read += Number(row.max_read_mbps) || 0;
       }});
       return {{ n: (rows || []).length, cpu: cpu, ram_gb: ram, write_mbps: write, read_mbps: read }};
+    }}
+    function measuredSignalsText(rows) {{
+      const src = rows || [];
+      const max = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? Math.max(...vals) : null;
+      }};
+      const sum = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+      }};
+      const fmt = value => value == null ? '—' : Number(value).toFixed(1) + '%';
+      const fields = ['max_cpu_throttled_pct','max_cpu_psi_pct','max_memory_psi_pct','max_io_psi_pct'];
+      const present = src.some(r => fields.some(k => r[k] != null));
+      if (!present) return 'cgroup pressure: n/a';
+      const events = ['memory_high_events_delta','memory_max_events_delta','memory_oom_events_delta','memory_oom_kill_events_delta'].map(sum);
+      const throttledPeriods = sum('cpu_nr_throttled_delta');
+      const throttledUsec = sum('cpu_throttled_usec_delta');
+      const throttleCounts = throttledPeriods != null || throttledUsec != null
+        ? ' (' + (throttledPeriods == null ? '—' : Math.round(throttledPeriods)) + ' periods, ' + (throttledUsec == null ? '—' : (throttledUsec / 1000000).toFixed(2) + 's') + ')'
+        : '';
+      const text = 'throttle ' + fmt(max('max_cpu_throttled_pct')) + throttleCounts + ' · PSI CPU/mem/I/O ' +
+        fmt(max('max_cpu_psi_pct')) + '/' + fmt(max('max_memory_psi_pct')) + '/' + fmt(max('max_io_psi_pct'));
+      const haveEvents = events.some(v => v != null);
+      return text + (haveEvents ? ' · mem high/max/oom/kill ' + events.map(v => v == null ? '—' : String(Math.round(v))).join('/') : '');
     }}
     function measuredStatsText(agg, hideCount) {{
       const body = agg.cpu.toFixed(2) + 'c · ' + agg.ram_gb.toFixed(2) + 'G · w' +
@@ -2810,10 +2932,12 @@ def build_html_dashboard(
       const outcomes = outcomesForRows(rows);
       if (meta) {{
         meta.innerHTML = escapeHtml(title + ': ' + measuredStatsText(agg)) +
-          ' · ' + measuredOutcomesHtml(outcomes);
+          ' · ' + measuredOutcomesHtml(outcomes) +
+          '<div class="muted" style="margin-top:3px">' + escapeHtml(measuredSignalsText(rows)) + '</div>';
       }}
       const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
       plotMeasuredLayers(labels, suffix);
+      plotMeasuredPressure(labels, suffix);
       const chunkTests = testsForMeasuredSelection(sel);
       plotMeasuredTestLane(chunkTests);
       applyMeasuredTestBands(chunkTests);
@@ -2838,7 +2962,8 @@ def build_html_dashboard(
       html += '<button type="button" class="mt-pick' + (selected ? ' on' : '') + '" data-kind="prefix" data-path="' + escapeHtml(node.path) + '">' +
         '<span class="mt-name">' + escapeHtml(node.name) + '</span>' +
         '<span class="stats">' + measuredStatsHtml(measuredAgg(node.rows), siblingExtremes, siblingCount) + '</span>' +
-        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(node.rows)) + '</span></button></div>';
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(node.rows)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(node.rows)) + '</span></button></div>';
       if (open && hasKids) {{
         const kids = childNames.map(name => node.children[name]);
         const kidExt = measuredAggExtremes(kids.map(k => measuredAgg(k.rows)));
@@ -2851,7 +2976,8 @@ def build_html_dashboard(
             '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
             '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
             '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span>' +
-            '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows([row])) + '</span></button></div>';
+            '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows([row])) + '</span>' +
+            '<span class="stats">' + escapeHtml(measuredSignalsText([row])) + '</span></button></div>';
         }});
       }}
       return html;
@@ -2864,7 +2990,8 @@ def build_html_dashboard(
       let html = '<div class="mt-row"><span class="mt-spacer"></span>' +
         '<button type="button" class="mt-pick' + (allOn ? ' on' : '') + '" data-kind="all">' +
         '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span>' +
-        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(measuredList)) + '</span></button></div>';
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(measuredList)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(measuredList)) + '</span></button></div>';
       const topKids = childNames.map(name => measuredForest.children[name]);
       const topExt = measuredAggExtremes(topKids.map(k => measuredAgg(k.rows)));
       topKids.forEach(child => {{ html += renderMeasuredNode(child, 1, sel, topExt, topKids.length); }});

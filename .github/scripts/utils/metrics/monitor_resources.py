@@ -12,17 +12,68 @@ import time
 from pathlib import Path
 
 
-def read_proc_stat() -> tuple[float, float]:
-    """Read /proc/stat, return (total_jiffies, idle_jiffies including iowait)."""
-    with open("/proc/stat") as f:
-        line = f.readline()
+def _parse_proc_stat(line: str) -> tuple[float, float, float]:
+    """Parse the aggregate /proc/stat line into total, idle, and iowait jiffies."""
     parts = line.split()
     # user nice system idle iowait irq softirq steal. guest and guest_nice are already inside user and nice.
     total = sum(int(x) for x in parts[1:9])
     idle = int(parts[4]) if len(parts) > 4 else 0
     iowait = int(parts[5]) if len(parts) > 5 else 0
-    idle += iowait
-    return float(total), float(idle)
+    return float(total), float(idle + iowait), float(iowait)
+
+
+def read_proc_stat() -> tuple[float, float, float]:
+    """Read /proc/stat, return (total_jiffies, idle_jiffies, iowait_jiffies)."""
+    with open("/proc/stat") as f:
+        return _parse_proc_stat(f.readline())
+
+
+def _parse_pressure(text: str) -> dict[str, int]:
+    """Read cumulative PSI stall time in microseconds by some/full class."""
+    totals: dict[str, int] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if not parts or parts[0] not in ("some", "full"):
+            continue
+        for item in parts[1:]:
+            if item.startswith("total="):
+                try:
+                    totals[parts[0]] = int(item.split("=", 1)[1])
+                except ValueError:
+                    pass
+                break
+    return totals
+
+
+def read_host_pressure() -> dict[str, dict[str, int]]:
+    """Read host CPU, memory, and I/O PSI counters when the kernel exposes them."""
+    pressure: dict[str, dict[str, int]] = {}
+    for resource in ("cpu", "memory", "io"):
+        try:
+            pressure[resource] = _parse_pressure(Path("/proc/pressure", resource).read_text())
+        except OSError:
+            pressure[resource] = {}
+    return pressure
+
+
+def pressure_interval_pct(
+    current: dict[str, dict[str, int]],
+    previous: dict[str, dict[str, int]],
+    dt_sec: float,
+) -> dict[str, float]:
+    """Convert available PSI cumulative totals to per-interval stall percentages."""
+    if dt_sec <= 0:
+        return {}
+    result: dict[str, float] = {}
+    for resource in ("cpu", "memory", "io"):
+        for scope in ("some", "full"):
+            current_total = current.get(resource, {}).get(scope)
+            previous_total = previous.get(resource, {}).get(scope)
+            if current_total is None or previous_total is None:
+                continue
+            delta_usec = max(0, current_total - previous_total)
+            result[f"pressure_{resource}_{scope}_pct"] = round(delta_usec / (dt_sec * 10_000), 2)
+    return result
 
 
 def _read_cmdline(pid: int) -> str:
@@ -334,6 +385,48 @@ def read_cpu_usage_usec(cgroup: Path) -> int | None:
     return None
 
 
+def _read_key_value_file(path: Path) -> dict[str, int] | None:
+    """Read cgroup v2 key/value counters. Missing or malformed files are unavailable."""
+    try:
+        rows: dict[str, int] = {}
+        for line in path.read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                rows[parts[0]] = int(parts[1])
+        return rows
+    except (OSError, ValueError):
+        return None
+
+
+def read_cpu_stat(cgroup: Path) -> dict[str, int] | None:
+    return _read_key_value_file(cgroup / "cpu.stat")
+
+
+def read_memory_events(cgroup: Path) -> dict[str, int] | None:
+    return _read_key_value_file(cgroup / "memory.events")
+
+
+def read_psi_total_usec(cgroup: Path, resource: str) -> dict[str, int] | None:
+    """Return cumulative PSI total_usec counters by pressure class (some/full)."""
+    try:
+        text = (cgroup / f"{resource}.pressure").read_text()
+    except OSError:
+        return None
+    totals: dict[str, int] = {}
+    try:
+        for line in text.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            for field in parts[1:]:
+                if field.startswith("total="):
+                    totals[parts[0]] = int(field.split("=", 1)[1])
+                    break
+    except ValueError:
+        return None
+    return totals
+
+
 def read_memory_current_bytes(cgroup: Path) -> int | None:
     try:
         return int((cgroup / "memory.current").read_text().strip())
@@ -436,6 +529,7 @@ class TestCgroupSampler:
         self.prev_cpu_usec: dict[str, int] = {}
         self.prev_io: dict[str, tuple[int, int]] = {}
         self.prev_pid_io: dict[tuple[str, tuple[int, int]], tuple[int, int] | None] = {}
+        self.prev_counters: dict[str, dict[str, int]] = {}
         self.identity: dict[str, dict] = {}
 
     def sample(
@@ -498,6 +592,17 @@ class TestCgroupSampler:
             mem_b = rss_kb * 1024
 
         io_curr = read_io_bytes(cgroup)
+        counter_curr: dict[str, int] = {}
+        cpu_stat = read_cpu_stat(cgroup)
+        if cpu_stat is not None:
+            counter_curr.update({f"cpu_stat_{name}": value for name, value in cpu_stat.items()})
+        memory_events = read_memory_events(cgroup)
+        if memory_events is not None:
+            counter_curr.update({f"memory_events_{name}": value for name, value in memory_events.items()})
+        for resource in ("cpu", "memory", "io"):
+            psi = read_psi_total_usec(cgroup, resource)
+            if psi is not None:
+                counter_curr.update({f"{resource}_psi_{kind}_total_usec": value for kind, value in psi.items()})
         if io_curr is None:
             read_b = 0
             write_b = 0
@@ -531,6 +636,8 @@ class TestCgroupSampler:
 
         prev_cpu = self.prev_cpu_usec.get(key)
         self.prev_cpu_usec[key] = cpu_usec
+        prev_counters = self.prev_counters.get(key)
+        self.prev_counters[key] = counter_curr
         if prev_cpu is None:
             return None
         if dt <= 0:
@@ -540,7 +647,7 @@ class TestCgroupSampler:
             io_delta = (0, 0)
         read_mb = io_delta[0] / (1024 * 1024)
         write_mb = io_delta[1] / (1024 * 1024)
-        return {
+        record = {
             "kind": "test",
             "ts": round(ts, 3),
             "ts_us": ts_us,
@@ -557,6 +664,35 @@ class TestCgroupSampler:
             "disk_read_mbps": round(read_mb / dt, 2),
             "disk_write_mbps": round(write_mb / dt, 2),
         }
+        if prev_counters is not None:
+            dt_usec = dt * 1_000_000.0
+
+            def counter_delta(name: str) -> int | None:
+                if name not in counter_curr or name not in prev_counters:
+                    return None
+                return max(counter_curr[name] - prev_counters[name], 0)
+
+            throttled_usec = counter_delta("cpu_stat_throttled_usec")
+            nr_throttled = counter_delta("cpu_stat_nr_throttled")
+            if throttled_usec is not None:
+                record["cpu_throttled_usec_delta"] = throttled_usec
+                record["cpu_throttled_pct"] = round(100.0 * throttled_usec / dt_usec, 3) if dt_usec > 0 else 0.0
+            if nr_throttled is not None:
+                record["cpu_nr_throttled_delta"] = nr_throttled
+
+            for resource in ("cpu", "memory", "io"):
+                for pressure_class in ("some", "full"):
+                    delta = counter_delta(f"{resource}_psi_{pressure_class}_total_usec")
+                    if delta is not None:
+                        record[f"{resource}_psi_{pressure_class}_pct"] = (
+                            round(100.0 * delta / dt_usec, 3) if dt_usec > 0 else 0.0
+                        )
+
+            for event in ("high", "max", "oom", "oom_kill"):
+                delta = counter_delta(f"memory_events_{event}")
+                if delta is not None:
+                    record[f"memory_{event}_events_delta"] = delta
+        return record
 
 
 def _meminfo_kb() -> dict[str, int]:
@@ -589,34 +725,47 @@ def get_ram_total_gb() -> float:
     return _meminfo_kb().get("MemTotal", 0) / (1024 * 1024)
 
 
-def read_diskstats() -> tuple[int, int]:
-    """Read /proc/diskstats. Return (total_read_sectors, total_write_sectors) for root block devices."""
+def _parse_diskstats(text: str, root_block_devices: set[str]) -> tuple[int, int, int, int, int, int]:
+    """Aggregate read/write sectors and queue/busy counters for root block devices."""
     read_sectors = 0
     write_sectors = 0
+    io_in_progress = 0
+    io_time_ms = 0
+    weighted_io_time_ms = 0
+    device_count = 0
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 14:
+            continue
+        try:
+            name = parts[2]
+            # Keep only root block devices to avoid double-counting partitions.
+            if root_block_devices and name not in root_block_devices:
+                continue
+            # Skip virtual devices that distort the host-level picture.
+            if name.startswith(("dm-", "loop", "ram")):
+                continue
+            device_count += 1
+            # /proc/diskstats fields 6/10 are sectors read/written, 12 is
+            # in-flight I/O, 13/14 are device busy and weighted busy ms.
+            read_sectors += int(parts[5])
+            write_sectors += int(parts[9])
+            io_in_progress += int(parts[11])
+            io_time_ms += int(parts[12])
+            weighted_io_time_ms += int(parts[13])
+        except (ValueError, IndexError):
+            continue
+    return read_sectors, write_sectors, io_in_progress, io_time_ms, weighted_io_time_ms, device_count
+
+
+def read_diskstats() -> tuple[int, int, int, int, int, int]:
+    """Read cumulative disk counters for root block devices from /proc/diskstats."""
     try:
         root_block_devices = {p.name for p in Path("/sys/block").iterdir() if p.is_dir()}
     except OSError:
         root_block_devices = set()
     with open("/proc/diskstats") as f:
-        for line in f:
-            parts = line.split()
-            if len(parts) < 14:
-                continue
-            try:
-                name = parts[2]
-                # Keep only root block devices from /sys/block.
-                # This avoids double-counting partitions (e.g. nvme0n1 + nvme0n1p1).
-                if root_block_devices and name not in root_block_devices:
-                    continue
-                # Skip virtual devices that distort host-level picture.
-                if name.startswith("dm-") or name.startswith("loop") or name.startswith("ram"):
-                    continue
-                # columns 4-5: read sectors, 8-9: write sectors (0-indexed)
-                read_sectors += int(parts[5])
-                write_sectors += int(parts[9])
-            except (ValueError, IndexError):
-                continue
-    return read_sectors, write_sectors
+        return _parse_diskstats(f.read(), root_block_devices)
 
 
 def run_monitor(
@@ -628,6 +777,7 @@ def run_monitor(
     """Main monitoring loop."""
     prev_stat = read_proc_stat()
     prev_disk = read_diskstats()
+    prev_pressure = read_host_pressure()
     seed_snapshot = read_process_snapshot()
     prev_pid_cpu, prev_pid_io = seed_ya_counters(seed_snapshot, find_ya_process_tree(seed_snapshot))
     test_sampler = TestCgroupSampler()
@@ -653,8 +803,13 @@ def run_monitor(
             curr_stat = read_proc_stat()
             total_delta = curr_stat[0] - prev_stat[0]
             idle_delta = curr_stat[1] - prev_stat[1]
+            iowait_delta = curr_stat[2] - prev_stat[2]
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
+            cpu_iowait_pct = 100.0 * max(0.0, iowait_delta) / total_delta if total_delta > 0 else 0.0
             prev_stat = curr_stat
+            curr_pressure = read_host_pressure()
+            pressure_pct = pressure_interval_pct(curr_pressure, prev_pressure, dt)
+            prev_pressure = curr_pressure
 
             # ya make process tree
             process_snapshot = read_process_snapshot()
@@ -697,17 +852,27 @@ def run_monitor(
             curr_disk = read_diskstats()
             disk_read_delta = curr_disk[0] - prev_disk[0]
             disk_write_delta = curr_disk[1] - prev_disk[1]
-            prev_disk = curr_disk
             disk_read_mb = disk_read_delta * 512 / (1024 * 1024)
             disk_write_mb = disk_write_delta * 512 / (1024 * 1024)
             disk_read_mbps = disk_read_mb / dt
             disk_write_mbps = disk_write_mb / dt
+            disk_io_time_ms_delta = max(0, curr_disk[3] - prev_disk[3])
+            disk_weighted_io_time_ms_delta = max(0, curr_disk[4] - prev_disk[4])
+            prev_disk = curr_disk
+            disk_devices_count = curr_disk[5]
+            disk_busy_pct = (
+                100.0 * disk_io_time_ms_delta / (dt * 1000.0 * disk_devices_count)
+                if dt > 0 and disk_devices_count > 0
+                else 0.0
+            )
 
             record = {
                 "ts": round(ts, 3),
                 "ts_us": ts_us,
                 "dt_sec": round(dt, 6),
                 "cpu_total_pct": round(cpu_total_pct, 2),
+                "cpu_iowait_pct": round(cpu_iowait_pct, 2),
+                **pressure_pct,
                 "cpu_ya_pct": round(cpu_ya_pct, 2),
                 "ram_used_kb": ram_used_kb,
                 "ram_ya_kb": ram_ya_kb,
@@ -717,6 +882,11 @@ def run_monitor(
                 "disk_write_mb_delta": round(disk_write_mb, 2),
                 "disk_read_mbps": round(disk_read_mbps, 2),
                 "disk_write_mbps": round(disk_write_mbps, 2),
+                "disk_io_in_progress": curr_disk[2],
+                "disk_io_time_ms_delta": disk_io_time_ms_delta,
+                "disk_weighted_io_time_ms_delta": disk_weighted_io_time_ms_delta,
+                "disk_devices_count": disk_devices_count,
+                "disk_busy_pct": round(disk_busy_pct, 2),
                 "disk_ya_read_mb_delta": round(disk_ya_read_mb, 2),
                 "disk_ya_write_mb_delta": round(disk_ya_write_mb, 2),
                 "disk_ya_read_mbps": round(disk_ya_read_mbps, 2),

@@ -1,6 +1,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "backup_restore_traits.h"
+#include "datashard_common_upload.h"
 #include "datashard_impl.h"
 #include "extstorage_usage_config.h"
 #include "import_common.h"
@@ -95,17 +96,26 @@ public:
     bool IsComplete() const { return State_ == EState::Complete; }
     bool IsPaused() const { return State_ == EState::Paused; }
     TString Error() const { return Writer ? Writer->Error() : TString(); }
-    ui32 Step() const { return Step_; }
 
     // True while a GC barrier is held on the shard that we still own: it must be
     // released with TEvS3DirectWriteAbort if the write will not be committed.
     bool NeedsAbort() const { return Step_ != Max<ui32>() && State_ != EState::HandedOff; }
 
+    THolder<TEvDataShard::TEvS3DirectWriteAbort> MakeAbort(ui64 txId) const {
+        Y_ENSURE(NeedsAbort() && Writer);
+        auto abort = MakeHolder<TEvDataShard::TEvS3DirectWriteAbort>(txId, Step_);
+        abort->YellowMoveChannels = Writer->GetYellowMoveChannels();
+        abort->YellowStopChannels = Writer->GetYellowStopChannels();
+        return abort;
+    }
+
     // Hand over the reserved writer (received in TEvS3DirectWriteBeginResult).
-    void SetWriter(THolder<TDirectPartWriter> writer, ui32 step) {
+    void SetWriter(THolder<TDirectPartWriter> writer, ui32 step, TRowVersion rowVersion) {
         Y_ENSURE(State_ == EState::Pending);
+        Y_ENSURE(rowVersion > TRowVersion::Min());
         Writer = std::move(writer);
         Step_ = step;
+        RowVersion = rowVersion;
         State_ = EState::Writing;
     }
 
@@ -115,10 +125,9 @@ public:
 
     // Feed one parsed row. Returns false if the writer rejected it (keys not
     // strictly ascending); the whole import then fails (backup dumps are sorted).
-    bool FeedRow(const TVector<TCell>& keys, const TVector<TCell>& values,
-                 TRowVersion version, const TActorContext& ctx) {
+    bool FeedRow(const TVector<TCell>& keys, const TVector<TCell>& values, const TActorContext& ctx) {
         Y_ENSURE(Writer, "FeedRow before the writer is set");
-        return Writer->AddRow(keys, values, ValueColumnIds, version, ctx);
+        return Writer->AddRow(keys, values, ValueColumnIds, RowVersion, ctx);
     }
 
     // Signal that all rows have been fed. May reach Complete immediately if there
@@ -157,6 +166,7 @@ public:
 private:
     THolder<TDirectPartWriter> Writer;
     ui32 Step_ = Max<ui32>();
+    TRowVersion RowVersion = TRowVersion::Min();
     EState State_ = EState::Pending;
     TVector<ui32> ValueColumnIds;
 };
@@ -599,6 +609,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return Finish();
         }
 
+        if (DirectPartImportEnabled && DirectImport->State() == TDirectImportWriter::EState::Pending
+            && (info.ProcessedBytes || info.WrittenRows))
+        {
+            // Direct imports only checkpoint after attachment. A partial
+            // checkpoint belongs to the legacy upload path, even if the flag changed.
+            DirectPartImportEnabled = false;
+            DirectImport.Reset();
+        }
+
         if (DirectPartImportEnabled && DirectImport->State() == TDirectImportWriter::EState::Pending) {
             return BeginDirectImport();
         }
@@ -725,8 +744,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             }
 
             if (DirectPartImportEnabled) {
+                if (auto error = CheckUploadKeySizeLimit(keys)) {
+                    return std::unexpected(std::move(error));
+                }
+                if (auto error = CheckUploadValueSizeLimit(values)) {
+                    return std::unexpected(std::move(error));
+                }
                 auto ctx = TActivationContext::AsActorContext();
-                if (!DirectImport->FeedRow(keys, values, TRowVersion::Min(), ctx)) {
+                if (!DirectImport->FeedRow(keys, values, ctx)) {
                     TString error = DirectImport->Error();
                     return std::unexpected(error.empty()
                         ? TString("failed to add row to direct import writer")
@@ -842,7 +867,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 << ": cannot begin direct part write: " << msg->Error);
         }
 
-        DirectImport->SetWriter(std::move(msg->Writer), msg->Step);
+        DirectImport->SetWriter(std::move(msg->Writer), msg->Step, msg->RowVersion);
         Process();
     }
 
@@ -913,13 +938,23 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         auto* msg = ev->Get();
         if (!msg->Success) {
             return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": cannot attach direct part: " << msg->Error);
+                << ": direct part write failed: " << msg->Error);
         }
 
         Finish(true);
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
+        HandlePutResult(ev, true);
+    }
+
+    void HandleChecksum(TEvBlobStorage::TEvPutResult::TPtr& ev) {
+        // A retry preserves the live writer. Account its outstanding puts, but
+        // let checksum download finish before resuming the data read loop.
+        HandlePutResult(ev, false);
+    }
+
+    void HandlePutResult(TEvBlobStorage::TEvPutResult::TPtr& ev, bool resume) {
         if (!DirectImport) {
             YDB_LOG_ERROR("[Import] Unexpected EvPutResult without DirectImport",
                 {"logPrefix", LogPrefix()},
@@ -935,18 +970,20 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 << ": " << DirectImport->Error());
         }
 
-        if (DirectImport->IsComplete()) {
-            CompleteDirectImport();
-        } else if (DirectImport->IsPaused() && DirectImport->CanFeed()) {
-            DirectImport->Resume();
-            Process();
+        if (resume) {
+            if (DirectImport->IsComplete()) {
+                CompleteDirectImport();
+            } else if (DirectImport->IsPaused() && DirectImport->CanFeed()) {
+                DirectImport->Resume();
+                Process();
+            }
         }
     }
 
     // Release the reserved write's GC barrier if we own it and never handed it off.
     void AbortDirectImportIfNeeded() {
         if (DirectImport && DirectImport->NeedsAbort()) {
-            this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteAbort(TxId, DirectImport->Step()));
+            this->Send(DataShard, DirectImport->MakeAbort(TxId).Release());
         }
         DirectImport.Reset();
     }
@@ -1216,7 +1253,7 @@ public:
         return GetSettings(task).GetLimits().GetReadBatchSize();
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
+    explicit TS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo, bool directPartImportAllowed)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
         , TabletId(tabletId)
@@ -1232,7 +1269,7 @@ public:
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
-        , DirectPartImportEnabled(AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
+        , DirectPartImportEnabled(directPartImportAllowed && AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
     {
     }
 
@@ -1282,6 +1319,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
+            hFunc(TEvBlobStorage::TEvPutResult, HandleChecksum);
+            hFunc(TEvDataShard::TEvS3DirectWriteFinishResult, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleChecksum);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
@@ -1399,21 +1438,22 @@ IActor* CreateDownloaderBySettingsType(
     ui64 tabletId,
     ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& task,
-    const TTableInfo& tableInfo)
+    const TTableInfo& tableInfo,
+    bool directPartImportAllowed)
 {
     if (task.HasS3Settings()) {
         return new TS3Downloader<NKikimrSchemeOp::TS3Settings>(
-            dataShard, tabletId, txId, task, tableInfo);
+            dataShard, tabletId, txId, task, tableInfo, directPartImportAllowed);
     } else if (task.HasFSSettings()) {
         return new TS3Downloader<NKikimrSchemeOp::TFSSettings>(
-            dataShard, tabletId, txId, task, tableInfo);
+            dataShard, tabletId, txId, task, tableInfo, directPartImportAllowed);
     }
 
     Y_ABORT("Unsupported storage type in restore task");
 }
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
-    return CreateDownloaderBySettingsType(dataShard, tabletId, txId, task, info);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info, bool directPartImportAllowed) {
+    return CreateDownloaderBySettingsType(dataShard, tabletId, txId, task, info, directPartImportAllowed);
 }
 
 } // NDataShard

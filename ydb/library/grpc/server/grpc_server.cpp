@@ -30,6 +30,7 @@ static void PullEvents(grpc::ServerCompletionQueue* cq, TIntrusivePtr<::NMonitor
     auto cpuTime = counters->GetCounter("ThreadCPU", true);
 
     NMonotonic::TMonotonic lastCpuTimeTs = {};
+    ui64 lastCpuTime = 0;
     while (true) {
         void* tag; // uniquely identifies a request.
         bool ok;
@@ -37,7 +38,10 @@ static void PullEvents(grpc::ServerCompletionQueue* cq, TIntrusivePtr<::NMonitor
         auto now = NMonotonic::TMonotonic::Now();
         if (now - lastCpuTimeTs >= TDuration::Seconds(1)) {
             lastCpuTimeTs = now;
-            *cpuTime = ThreadCPUTime();
+            // Add the delta: workers of a retired server share this counter with workers of its replacement
+            const ui64 threadCpuTime = ThreadCPUTime();
+            cpuTime->Add(threadCpuTime - lastCpuTime);
+            lastCpuTime = threadCpuTime;
         }
 
         if (cq->Next(&tag, &ok)) {
@@ -142,6 +146,7 @@ void TGRpcServer::AddService(IGRpcServicePtr service) {
 
 void TGRpcServer::Start() {
     Stopped_.store(false, std::memory_order_release);
+    CompletionQueuesStopped_.store(false, std::memory_order_release);
 
     TString server_address(Join(":", Options_.Host, Options_.Port)); // https://st.yandex-team.ru/DTCC-695
     using grpc::ServerBuilder;
@@ -278,11 +283,10 @@ void TGRpcServer::Start() {
     }
 }
 
-void TGRpcServer::Stop() {
-    // Stop() may be called more than once on the same instance (e.g. by
+void TGRpcServer::StopAcceptingRequests() {
+    // StopAcceptingRequests() may be called more than once on the same instance (e.g. by
     // TGRpcServersManager::Stop() and then again by KikimrStop()). Make it
-    // idempotent so the second pass does not re-shutdown the server and its
-    // completion queues.
+    // idempotent so the second pass does not re-shutdown the server.
     if (Stopped_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
@@ -326,6 +330,14 @@ void TGRpcServer::Stop() {
         }
         Sleep(TDuration::MilliSeconds(10));
     }
+}
+
+void TGRpcServer::Stop() {
+    StopAcceptingRequests();
+
+    if (CompletionQueuesStopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
 
     // Always shutdown the completion queue after the server.
     for (auto& cq : CQS_) {
@@ -353,6 +365,14 @@ TString TGRpcServer::GetHost() const {
 
 const TVector<TGRpcServer::IGRpcServicePtr>& TGRpcServer::GetServices() const {
     return Services_;
+}
+
+size_t TGRpcServer::RequestsInProgress() const {
+    size_t infly = 0;
+    for (const auto& service : Services_) {
+        infly += service->RequestsInProgress();
+    }
+    return infly;
 }
 
 } // namespace NYdbGrpc

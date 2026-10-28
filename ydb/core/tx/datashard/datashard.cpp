@@ -4175,6 +4175,9 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
+    // Unrelated executor commits may update yellow-stop flags without notifying
+    // the shard. Stop active direct imports on the next periodic check as well.
+    AbortDirectImportsForSpace();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
@@ -4773,12 +4776,25 @@ void TDataShard::ScanComplete(NTable::EStatus status,
                     {"cookie", cookie},
                     {"tabletId", TabletID()});
 
+                const auto& streamPathId = CdcStreamScanManager.GetStreamPathId(cookie);
+                const auto* info = CdcStreamScanManager.Get(streamPathId);
+                const auto replyTo = info->ReplyTo;
+                auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
+                response->Record.SetTabletId(TabletID());
+                info->TablePathId.ToProto(response->Record.MutableTablePathId());
+                streamPathId.ToProto(response->Record.MutableStreamPathId());
+                info->Stats.Serialize(*response->Record.MutableStats());
+
                 if (status == NTable::EStatus::Done) {
+                    response->Record.SetStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
                     CdcStreamScanManager.Complete(cookie);
                 } else {
+                    response->Record.SetStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
                     // keep the progress, so the retry resumes from the last key
                     CdcStreamScanManager.Fail(cookie);
                 }
+
+                ctx.Send(replyTo, std::move(response));
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
                     {"tabletId", TabletID()},

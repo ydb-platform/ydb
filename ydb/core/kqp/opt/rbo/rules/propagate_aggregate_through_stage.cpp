@@ -116,15 +116,7 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
             connection = MakeIntrusive<TMapConnection>(outputIndex);
         } else if (!aggregate->GetKeyColumns().Items().empty()) {
-            TOrderedIUs<> shuffleByKeys;
-            if (aggregate->IsDistinctAll()) {
-                for (const auto output : aggregate->GetAggregationTraits().Keys()) {
-                    shuffleByKeys.Append(output);
-                }
-            } else {
-                shuffleByKeys = aggregate->GetKeyColumns();
-            }
-            connection = MakeIntrusive<TShuffleConnection>(shuffleByKeys, outputIndex);
+            connection = MakeIntrusive<TShuffleConnection>(GetAggregateOutputShuffle(*aggregate), outputIndex);
         } else {
             connection = MakeIntrusive<TUnionAllConnection>(outputIndex);
         }

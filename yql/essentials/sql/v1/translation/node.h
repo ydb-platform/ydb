@@ -1478,14 +1478,6 @@ public:
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
-struct TStreamingQuerySettings {
-    inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
-    inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
-    inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
-
-    TObjectFeatureNodePtr Features;
-};
-
 TString IdContent(TContext& ctx, const TString& str);
 TString IdContentFromString(TContext& ctx, const TString& str);
 TTableHints GetContextHints(TContext& ctx);

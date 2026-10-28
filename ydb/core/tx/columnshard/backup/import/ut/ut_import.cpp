@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -446,6 +447,135 @@ Y_UNIT_TEST_SUITE(Restore) {
         UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Import/SaveProgress/DurationMs/Histogram"), saveSamples);
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Received", true)->Val(), received);
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Written", true)->Val(), written);
+    }
+
+    Y_UNIT_TEST(RestoreWithInflightWriteOverload) {
+        const TString bucket = "restore-write-overload";
+        NTestUtils::CreateBucketWithObject(bucket, "data_00.csv", "1,2,\"value\"\n");
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        // The first write is accepted and exhausts the byte limit. Subsequent writes
+        // are rejected until it finishes, regardless of their own payload size.
+        runtime.GetAppData().ColumnShardConfig.SetWritingInFlightRequestBytesLimit(1);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        const auto schema = MakeRestoreSchema();
+        constexpr ui64 tableId = 1;
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
+        auto sender = runtime.AllocateEdgeActor();
+
+        TAutoPtr<IEventHandle> heldWriteResult;
+        ui32 overloadCount = 0;
+        TActorId importActorId;
+        std::vector<TDuration> retryDelays;
+        auto previousScheduledFilter =
+            runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&, TDuration, TInstant&) {
+                return true;
+            });
+        runtime.SetScheduledEventFilter(
+            [&, previousScheduledFilter](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                if (ev->GetRecipientRewrite() == importActorId && ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                    retryDelays.push_back(delay);
+                }
+                return previousScheduledFilter(r, ev, delay, deadline);
+            });
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (overloadCount < 2) {
+                if (auto* result = TryGetPrivateEvent<NPrivateEvents::NWrite::TEvWritePortionResult>(ev)) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->GetWriteStatus(), NKikimrProto::OK);
+                    UNIT_ASSERT(!heldWriteResult);
+                    heldWriteResult = ev.Release();
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Keep a real foreground write in flight while the import tries to write
+        // its first batch. No synthetic TEvWriteResult is injected.
+        UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, MakeTestBlob({ 10, 11 }, schema), schema, /*waitResult=*/false, /*writeIds=*/nullptr,
+            NEvWrite::EModificationType::Upsert, /*lockId=*/0));
+        TestWaitCondition(runtime, "foreground write held in flight", [&]() {
+            return !!heldWriteResult;
+        });
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                const auto* result = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                if (result->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetOrigin(), TTestTxConfig::TxTablet0);
+                    UNIT_ASSERT_C(result->GetError().Contains("The limit on the total size of in-flight write requests"), result->GetError());
+                    ++overloadCount;
+                    UNIT_ASSERT(heldWriteResult);
+                    importActorId = ev->GetRecipientRewrite();
+                    runtime.EnableScheduleForActor(importActorId);
+                    // Reject two attempts before freeing resources. Each response
+                    // reaches the import actor unchanged, and the next retry succeeds.
+                    if (overloadCount == 2) {
+                        runtime.Send(heldWriteResult.Release());
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 txId = 111;
+        RunCountedTx(
+            runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucket).SerializeAsString(), txId, [&]() {
+                return csControllerGuard->GetFinishedImportsCount();
+            });
+        UNIT_ASSERT_VALUES_EQUAL(overloadCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(retryDelays.size(), 2);
+        UNIT_ASSERT_GE(retryDelays[0], TDuration::MilliSeconds(500));
+        UNIT_ASSERT_LT(retryDelays[0], TDuration::Seconds(1));
+        UNIT_ASSERT_GE(retryDelays[1], TDuration::Seconds(1));
+        UNIT_ASSERT_LT(retryDelays[1], TDuration::Seconds(2));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+        const auto counters =
+            GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "ImportActor");
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Value/Import/Write/Inflight", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Written", true)->Val(), 1);
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
+        reader.SetReplyColumnIds(TTestSchema::ExtractIds(schema));
+        const auto batch = reader.ReadAll();
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+        const auto field = std::static_pointer_cast<arrow::StringArray>(batch->GetColumnByName("field"));
+        UNIT_ASSERT(field);
+        UNIT_ASSERT_VALUES_EQUAL(field->GetString(0), "value");
+    }
+
+    Y_UNIT_TEST(RestoreWriteError) {
+        const TString bucket = "restore-write-error";
+        NTestUtils::CreateBucketWithObject(bucket, "data_00.csv", "1,2,\"value\"\n");
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetWritingEnabled(false);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        Y_UNUSED(PrepareTablet(runtime, 1, MakeRestoreSchema(), 2));
+        auto sender = runtime.AllocateEdgeActor();
+        constexpr ui64 txId = 112;
+        const auto planStep =
+            ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(1, bucket).SerializeAsString(), txId);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(txId));
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
+        const auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+        UNIT_ASSERT(!result->Get()->Record.GetOpResult().GetSuccess());
+        UNIT_ASSERT_C(result->Get()->Record.GetOpResult().GetExplain().Contains("writing disabled"), result->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetFinishedImportsCount(), 1);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+
+        const auto counters =
+            GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "ImportActor");
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Value/Import/Write/Inflight", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Written", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Errors/Count", true)->Val(), 1);
     }
 
     Y_UNIT_TEST(RestoreOversizedBatch) {

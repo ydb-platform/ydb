@@ -361,6 +361,8 @@ message PDiskFilter {
     optional bool shared_with_os = 2;
     optional bool read_centric = 3;
     optional uint64 kind = 4;
+    // Exact match on supplied string fields; omitted fields are unconstrained.
+    Ydb.Discovery.NodeLocation location = 5;
 }
 
 enum EncryptionMode {

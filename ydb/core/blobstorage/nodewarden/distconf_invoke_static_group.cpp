@@ -20,18 +20,32 @@ namespace NKikimr::NStorage {
             }
             Y_ABORT_UNLESS(generation);
 
+            THashMap<TGroupId, ui32> bumpedInlineGroups;
             for (auto& group : *ss->MutableGroups()) {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
+                bool updated = false;
                 NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
                         NKikimrBridge::TGroupState::TPile& pile) {
                     if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
                         pile.SetGroupGeneration(*generation);
-                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                        updated = true;
                     }
                 });
+                if (updated) {
+                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                    // The proxy may still contain the original pile's VDisks. Reassigning another pile bumps
+                    // this physical group's generation too, including its self-reference and live VDisks.
+                    const auto proxyId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                    if (auto *inlinePile = NBridge::FindGroupPileByGroupId(group.MutableBridgeGroupState(), proxyId);
+                            inlinePile && proxyId != groupId) {
+                        inlinePile->SetGroupGeneration(group.GetGroupGeneration());
+                        bumpedInlineGroups.emplace(proxyId, group.GetGroupGeneration());
+                    }
+                }
             }
+            UpdateStaticVDiskGenerations(ss, bumpedInlineGroups);
         }
 
     }
@@ -310,6 +324,8 @@ namespace NKikimr::NStorage {
 
         for (const auto& group : ss.GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
+                CheckBridgedPartDataRestorable(config, group, vdiskId);
+
                 TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
                 try {
                     Self->AllocateStaticGroup(BuildStaticGroupReassignParams(&config, &BaseConfig.value(), cmd, group, ss,
@@ -339,6 +355,76 @@ namespace NKikimr::NStorage {
         }
 
         throw TExError() << "Group not found";
+    }
+
+    void TInvokeRequestHandlerActor::CheckBridgedPartDataRestorable(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TGroupInfo& group, TVDiskID vdiskId) {
+        if (!config.HasClusterState()) {
+            return;
+        }
+        const auto& clusterState = config.GetClusterState();
+        const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+        std::optional<TBridgePileId> bridgePileId;
+        const NKikimrBridge::TGroupState *proxyState = nullptr;
+        for (const auto& proxyGroup : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (proxyGroup.HasBridgeGroupState()) {
+                NBridge::FindGroupPile(proxyGroup.GetBridgeGroupState(), [&](TBridgePileId id,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        bridgePileId.emplace(id);
+                        proxyState = &proxyGroup.GetBridgeGroupState();
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        }
+        if (!bridgePileId) {
+            return; // not a part of the bridged group
+        }
+        // the part of the pile taking part in data quorum keeps its sync stage, and the pile its state, whatever
+        // happens to its VDisks, so it is trusted with the data it has lost then; the part of the pile out of data
+        // quorum gets reset and resynced when the pile gets back
+        const auto state = NBridge::GetPileState(clusterState, *bridgePileId);
+        if (!NBridge::PileStateTraits(state).RequiresDataQuorum) {
+            return;
+        }
+        // the data lost by the part is lost by the group when there is no other part to resync it from, like in the
+        // cluster of a single pile; the usual checks of the request decide then
+        if (!NBridge::FindGroupPile(*proxyState, [&](TBridgePileId id, const NKikimrBridge::TGroupState::TPile& part) {
+                    return id != *bridgePileId &&
+                        NBridge::GetPileState(clusterState, id) == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                        part.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                })) {
+            return;
+        }
+
+        TStringStream err;
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
+        if (!info) {
+            throw TExError() << "Failed to parse group info: " << err.Str();
+        }
+        const auto& topology = info->GetTopology();
+        // the replacing VDisk has no data of its own, even with the donor: the one being replaced may be unreadable;
+        // the VDisks not ready may miss data too
+        TBlobStorageGroupInfo::TGroupVDisks dataless(&topology, vdiskId);
+        Y_ABORT_UNLESS(BaseConfig);
+        for (const auto& vslot : BaseConfig->GetVSlot()) {
+            if (vslot.GetGroupId() == vdiskId.GroupID.GetRawId() && vslot.GetGroupGeneration() == vdiskId.GroupGeneration &&
+                    !vslot.GetReady()) {
+                dataless |= {&topology, TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(),
+                    vslot.GetVDiskIdx())};
+            }
+        }
+        if (!info->GetQuorumChecker().CheckFailModelForGroup(dataless)) {
+            const TString pileName = Self->BridgeInfo && bridgePileId->GetPileIndex() < Self->BridgeInfo->Piles.size()
+                ? Self->BridgeInfo->Piles[bridgePileId->GetPileIndex()].Name
+                : TString();
+            throw TExError() << "GroupId# " << groupId << " is the part of the bridged group in the '" << pileName
+                << "' pile being " << NKikimrBridge::TClusterState::EPileState_Name(state)
+                << ", the reassignment would leave it unable to restore its data from its pile."
+                " Take the pile out and rejoin it to resync the part from another pile";
+        }
     }
 
     void TInvokeRequestHandlerActor::StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd) {
@@ -378,7 +464,12 @@ namespace NKikimr::NStorage {
         if (groupRemoved && isDropDonor) {
             throw TExError() << "Group not found";
         }
-        Y_ABORT_UNLESS(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration);
+        if (!groupRemoved && vdiskId.GroupGeneration >= actualGroupGeneration) {
+            // A node may have applied the replacement config before the newly elected root has recovered it.
+            // Keep the slot intact and let the sender retry after the root catches up.
+            throw TExRace() << "Static VDisk report is ahead of current group configuration VDiskId# " << vdiskId
+                << " ActualGroupGeneration# " << actualGroupGeneration;
+        }
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {

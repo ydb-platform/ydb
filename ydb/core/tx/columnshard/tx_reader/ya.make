@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
+    ydb/core/tx/columnshard/tracing
 )
 
 END()

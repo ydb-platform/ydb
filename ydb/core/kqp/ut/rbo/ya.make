@@ -7,6 +7,12 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_effects_ut.cpp
+    kqp_immediate_effects_ut.cpp
+    kqp_inplace_update_ut.cpp
+    kqp_overload_ut.cpp
+    kqp_reattach_ut.cpp
+    kqp_write_ut.cpp
     kqp_rbo_compatibility_ut.cpp
     kqp_rbo_copy_ut.cpp
     kqp_rbo_decorrelation_ut.cpp
@@ -14,6 +20,7 @@ SRCS(
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_ut.cpp
     kqp_rbo_lookup_join_ut.cpp
+    kqp_rbo_olap_distinct_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 

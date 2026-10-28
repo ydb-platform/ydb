@@ -29,6 +29,7 @@ class TestBase(Query):
         cls.database = "/Root"
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                    extra_feature_flags=cls.get_extra_feature_flags(),
+                                                   disabled_feature_flags=cls.get_disabled_feature_flags(),
                                                    datashard_config=cls.get_datashard_config(),
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
@@ -70,6 +71,10 @@ class TestBase(Query):
     @classmethod
     def get_datashard_config(cls):
         return {}
+
+    @classmethod
+    def get_disabled_feature_flags(cls):
+        return []
 
     @classmethod
     def get_extra_feature_flags(cls):

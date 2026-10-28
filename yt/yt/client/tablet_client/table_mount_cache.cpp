@@ -201,6 +201,12 @@ void TTableMountInfo::ValidateReplicationLog() const
     }
 }
 
+bool TTableMountInfo::IsUsingHunkStorage() const
+{
+    // Hunk storage is currently supported only for logically ordered tables.
+    return HunkStorageId && IsOrdered();
+}
+
 TTableMountInfoPtr TTableMountInfo::Clone() const
 {
     return New<TTableMountInfo>(*this);

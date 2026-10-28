@@ -104,6 +104,7 @@ public:
     const NLogging::TLoggingTagList& GetLoggingTags() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
+    void ResetInvoker() override;
 
     // IBus implementation.
     const std::string& GetEndpointDescription() const override;
@@ -229,6 +230,7 @@ private:
     std::atomic<EMultiplexingBand> MultiplexingBand_ = EMultiplexingBand::Default;
 
     EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
+    std::atomic<bool> NeedResetInvoker_ = false;
 
     TError Error_;
 

@@ -151,6 +151,7 @@ SRCS(
     misc/id_generator.cpp
     misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
+    misc/jitter.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp

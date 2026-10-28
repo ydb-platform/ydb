@@ -33,11 +33,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
-    library/cpp/threading/future/subscription
     library/cpp/yt/threading
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
-    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/impl/internal/make_request

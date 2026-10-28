@@ -211,11 +211,11 @@ class TestImpex(BaseCliTestWithDatabase):
         self.write_data_to_tmp_file(path, add_bom, data)
         self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + additional_args)
 
-    def run_import_from_stdin(self, ftype, data, additional_args=[], add_bom=False):
+    def run_import_from_stdin(self, ftype, data, additional_args=[], add_bom=False, env=None):
         path = self.tmp_path / "tempinput.{}".format(ftype)
         self.write_data_to_tmp_file(path, add_bom, data)
         with (path).open("r") as f:
-            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f)
+            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f, env=env)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
         args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
@@ -273,6 +273,32 @@ class TestImpex(BaseCliTestWithDatabase):
         self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_from_stdin(ftype, DATA[ftype], additional_args)
         return self.run_export(ftype)
+
+    @pytest.mark.parametrize("ftype", ["csv", "tsv"])
+    @pytest.mark.parametrize("existing_progress", [False, True])
+    def test_stdin_does_not_persist_progress(self, tmp_path, request, table_type, ftype, existing_progress):
+        self.init_test(tmp_path, table_type, request.node.name)
+        cli_home = tmp_path / "home"
+        cli_home.mkdir()
+        progress_dir = cli_home / ".config" / "ydb" / "import_progress"
+        progress_file = progress_dir / "std_input"
+        saved_progress = "completed: true\nlast_imported_row: 3\n"
+        if existing_progress:
+            progress_dir.mkdir(parents=True)
+            progress_file.write_text(saved_progress)
+
+        env = os.environ.copy()
+        env["HOME"] = str(cli_home)
+        self.run_import_from_stdin(ftype, DATA[ftype], env=env)
+
+        if existing_progress:
+            # Another process may own an old stdin progress file. Do not
+            # overwrite or delete it, even after a successful import.
+            assert progress_file.read_text() == saved_progress
+        else:
+            # Checking the directory also catches a file created and then
+            # removed during import, without relying on concurrent timing.
+            assert not progress_dir.exists()
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_multiple_files(self, tmp_path, request, table_type, ftype, additional_args):

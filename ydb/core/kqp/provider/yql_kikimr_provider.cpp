@@ -106,6 +106,7 @@ struct TKikimrData {
         SupportedEffects.insert(TKiWriteTable::CallableName());
         SupportedEffects.insert(TKiUpdateTable::CallableName());
         SupportedEffects.insert(TKiDeleteTable::CallableName());
+        SupportedEffects.insert(TKiTruncateTable::CallableName());
 
         ModifyOps =
             TYdbOperation::Upsert |

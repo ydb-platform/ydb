@@ -176,6 +176,69 @@ Y_UNIT_TEST(SerializeConstrainSet) {
     UNIT_ASSERT_EQUAL(s, s3);
 }
 
+Y_UNIT_TEST(StreamingAliasesSerialization) {
+    using TPath = TPartOfConstraintBase::TPathType;
+    using TPaths = TPartOfConstraintBase::TSetType;
+    TExprContext ctx;
+    TConstraintSet constraints;
+    const auto streaming = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}, TPaths{TPath{"t"}, TPath{"event_time"}});
+    constraints.AddConstraint(streaming);
+    const auto serialized = constraints.ToYson();
+    UNIT_ASSERT_EQUAL(ctx.MakeConstraintSet(serialized), constraints);
+
+    TExprContext otherCtx;
+    const auto restored = otherCtx.MakeConstraintSet(serialized).GetConstraint<TStreamingConstraintNode>();
+    UNIT_ASSERT(restored);
+    UNIT_ASSERT(restored->Equals(*streaming));
+    UNIT_ASSERT(restored->IsEventTimePath(TPath{"t"}));
+    UNIT_ASSERT(restored->IsEventTimePath(TPath{"event_time"}));
+    UNIT_ASSERT(!restored->IsEventTimePath(TPath{"other"}));
+    UNIT_ASSERT(restored->GetEventTime() == streaming->GetEventTime());
+
+    for (const TStringBuf yson : {"#", "\"t\"", R"(["nested";"t"])", "[]"}) {
+        const auto node = NYT::NodeFromYsonString(yson);
+        const auto legacy = ctx.MakeConstraint<TStreamingConstraintNode>(node);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(legacy->ToYson()), NYT::NodeToCanonicalYsonString(node));
+    }
+}
+
+Y_UNIT_TEST(StreamingAliasesFilterRenameCommon) {
+    using TPath = TPartOfConstraintBase::TPathType;
+    using TPaths = TPartOfConstraintBase::TSetType;
+    TExprContext ctx;
+    const auto streaming = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}, TPaths{TPath{"t"}, TPath{"event_time"}});
+    const auto single = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"event_time"});
+    UNIT_ASSERT(streaming->Includes(*single));
+    UNIT_ASSERT(!single->Includes(*streaming));
+    UNIT_ASSERT(streaming != ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}));
+    UNIT_ASSERT_EQUAL(streaming->MakeCommon(single, ctx), single);
+    UNIT_ASSERT_EQUAL(single->MakeCommon(streaming, ctx), single);
+    UNIT_ASSERT_EQUAL(streaming->FilterFields(ctx, [](const TPath& path) { return path == TPath{"event_time"}; }), single);
+    const auto renamed = streaming->RenameFields(ctx, [](const TPath& path) {
+        return std::vector<TPath>{path == TPath{"t"} ? TPath{"renamed"} : path};
+    });
+    UNIT_ASSERT(renamed->GetEventTime() == TMaybe<TPath>(TPath{"renamed"}));
+    UNIT_ASSERT(renamed->IsEventTimePath(TPath{"event_time"}));
+    UNIT_ASSERT(!renamed->IsEventTimePath(TPath{"t"}));
+
+    TPaths references{TPath{"event_time"}, TPath{"other"}};
+    streaming->FilterUncompleteReferences(references);
+    UNIT_ASSERT_EQUAL(references, TPaths{TPath{"event_time"}});
+    const auto unrelated = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"other"});
+    UNIT_ASSERT_EQUAL(streaming->MakeCommon(unrelated, ctx), ctx.MakeConstraint<TStreamingConstraintNode>());
+}
+
+Y_UNIT_TEST(StreamingAliasesRejectBadSerialization) {
+    TExprContext ctx;
+    for (const TStringBuf yson : {
+             R"({"event_time"="t";"aliases"=["other"]})",
+             R"({"event_time"="t";"aliases"=#})",
+             R"({"event_time"="t"})",
+         }) {
+        UNIT_ASSERT_EXCEPTION(ctx.MakeConstraint<TStreamingConstraintNode>(NYT::NodeFromYsonString(yson)), NYql::TYqlPanic);
+    }
+}
+
 Y_UNIT_TEST(DeserializeBadConstrainSet) {
     TExprContext ctx;
     UNIT_ASSERT_EXCEPTION(

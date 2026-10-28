@@ -60,6 +60,7 @@ public:
 
     virtual ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, const TPartitionSettings& settings) = 0;
     virtual bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues = false) = 0;
+    virtual bool AllowExecuteInDq(const TExprNode& node, TExprContext& ctx) = 0;
     virtual bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0;
     virtual TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) = 0;
 

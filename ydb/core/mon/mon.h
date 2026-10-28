@@ -23,7 +23,13 @@ namespace NKikimr {
     struct TAppData;
 }
 
+namespace NKikimr::NPathAliasing {
+    class TPathNormalizer;
+}
+
 namespace NActors {
+
+TString GetRelativeRoot(TStringBuf path);
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYql::TIssues& issues, NYdb::EStatus status);
@@ -79,6 +85,7 @@ public:
 
     std::future<void> Start(TActorSystem* actorSystem); // signals when monitoring is ready
     void Stop();
+    void UpdatePathNormalizer(std::shared_ptr<const NKikimr::NPathAliasing::TPathNormalizer> normalizer);
 
     void Register(NMonitoring::IMonPage* page);
     NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
@@ -143,6 +150,7 @@ protected:
     };
 
     TMutex Mutex;
+    std::optional<std::shared_ptr<const std::function<TString(TStringBuf)>>> PathNormalizer;
     std::vector<TActorMonPageInfo> ActorMonPages;
     THashMap<TString, TActorId> ActorServices;
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;

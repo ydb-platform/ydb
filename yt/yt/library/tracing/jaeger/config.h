@@ -68,6 +68,9 @@ struct TJaegerTracerConfig
 {
     NRpc::NGrpc::TChannelConfigPtr CollectorChannelConfig;
 
+    //! Custom gRPC metadata sent with each request to the collector.
+    THashMap<std::string, std::string> CollectorHeaders;
+
     TDuration FlushPeriod;
 
     TDuration StopTimeout;

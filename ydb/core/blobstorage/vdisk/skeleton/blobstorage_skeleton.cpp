@@ -2221,7 +2221,7 @@ namespace NKikimr {
             // and confirmed.
             const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, std::move(fullSnap), confirmedLsn,
+            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, GInfo, std::move(fullSnap), confirmedLsn,
                     Config->AnubisOsirisMaxInFly);
             auto aid = ctx.Register(actor);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -2499,7 +2499,7 @@ namespace NKikimr {
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
                                                           MinHugeBlobInBytes,
-                                                          Db->GetVDiskIncarnationGuid());
+                                                          Db->GetVDiskIncarnationGuid(true));
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
             UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
@@ -3228,6 +3228,13 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
+            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                // An excluded realm must answer requests, but must not start recovery or background work.
+                SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
+                    NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                UpdateWhiteboard(ctx);
+                return;
+            }
             // generation independent self VDisk Id
             auto genIndSelfVDiskId = SelfVDiskId;
             genIndSelfVDiskId.GroupGeneration = -1;

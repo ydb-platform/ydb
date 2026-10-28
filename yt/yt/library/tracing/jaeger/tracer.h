@@ -72,6 +72,7 @@ public:
 private:
     const NAuth::ITvmServicePtr TvmService_;
     const std::string Endpoint_;
+    const THashMap<std::string, std::string> CollectorHeaders_;
 
     const TInstant ReopenTime_;
     const TDuration RpcTimeout_;

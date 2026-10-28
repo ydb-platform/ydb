@@ -498,7 +498,7 @@ public:
 
                 TSmallVec<TRawTypeValue> key;
 
-                bool needsMvccRead =
+                const bool operationNeedsRead =
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
@@ -506,15 +506,13 @@ public:
                     (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
                         && validatedOperation.GetDefaultFilledColumnCount() != 0) ||
                     (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        && (userDb.GetCollectAffectedRows()
-                            || userDb.GetLockMode() == TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation));
+                        && userDb.GetCollectAffectedRows());
 
-                const auto* collector = userDb.GetChangeCollector(fullTableId);
-                needsMvccRead = needsMvccRead || (collector && collector->NeedToReadKeys());
-
-                if (needsMvccRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+                if (operationNeedsRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+                    const auto* collector = userDb.GetChangeCollector(fullTableId);
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
+                        const bool needsMvccRead = collector && collector->NeedHistoricalPrecharge(fullTableId, key);
                         userDb.PrechargeRow(fullTableId, key, needsMvccRead);
                     }
                 }

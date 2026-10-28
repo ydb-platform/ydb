@@ -1361,7 +1361,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
                         std::move(combineKeyExpr), udf, std::move(args), settings);
 }
 
-bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {
+TSQLStatus TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {
     return SortSpecificationList(node.GetRule_sort_specification_list3(), orderBy);
 }
 

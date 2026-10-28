@@ -24,6 +24,21 @@ namespace NKikimr {
 
         using TClusterState = NKikimrBridge::TClusterState;
 
+        // is the part of the group in the pile sure to hold everything written to the group
+        static bool PartHoldsEverything(const NKikimrBridge::TGroupState& state, const TBridgeInfo::TPile& pile) {
+            const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId);
+            if (!part || part->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                return false;
+            } else if (const auto authorityPileId = NBridge::GetAuthorityPileId(state)) {
+                // nothing is written to the group without this part, so it holds everything even when its pile has
+                // been out, while the other parts may lack something
+                return pile.BridgePileId == authorityPileId;
+            }
+            // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of its
+            // previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
+            return pile.State == TClusterState::SYNCHRONIZED;
+        }
+
         struct TRequestPayload {
             size_t Index;
         };
@@ -262,13 +277,7 @@ namespace NKikimr {
             }
 
             bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
-                // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of
-                // its previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
-                if (pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                    return false;
-                }
-                const auto *gp = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
-                return gp && gp->GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                return PartHoldsEverything(Info->Group->GetBridgeGroupState(), pile);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
@@ -382,17 +391,19 @@ namespace NKikimr {
 
                 for (size_t i = 0; i < state.NumResponses; ++i) {
                     auto& current = ev->Responses[i];
+                    auto& merged = state.Responses[i];
                     auto& item = RestoreQueue[i];
 
                     if (current.Status == NKikimrProto::OK) {
                         item.Id = current.Id;
                         item.Buffer = TRcBuf(current.Buffer);
                         item.ReadFrom = pile.BridgePileId;
-                        item.IssueKeepFlag = current.DoNotKeep < current.Keep;
                     } else if (current.Status == NKikimrProto::NODATA) {
                         item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                         RestoreIndex = Min(RestoreIndex, i); // we gonna restore this
                     }
+                    // the flag seen by any pile goes with the restored copy, as the pile we read from may not know it
+                    item.IssueKeepFlag = merged.DoNotKeep < merged.Keep;
                 }
 
                 state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
@@ -512,8 +523,9 @@ namespace NKikimr {
                     state.Buffer = std::move(ev->Buffer);
                     state.Winner = pile.BridgePileId;
 
+                    // the body is not taken for restoration, as discovery doesn't tell the Keep flag; the read of the
+                    // blob before restoring it does
                     item.Id = state.Id;
-                    item.Buffer = TRcBuf(state.Buffer);
                     item.ReadFrom = state.Winner;
                     item.WriteTo |= Processed;
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
@@ -586,6 +598,10 @@ namespace NKikimr {
                         } else { // items in both ranges, so both present
                             targetIt->Keep |= sourceIt->Keep;
                             targetIt->DoNotKeep |= sourceIt->DoNotKeep;
+                            // the flag seen by any pile goes with the restored copy, as the pile we read from may not
+                            // know it
+                            RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].IssueKeepFlag =
+                                targetIt->DoNotKeep < targetIt->Keep;
                             Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
                             if (targetIt->Buffer && sourceIt->Buffer) {
                                 Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);
@@ -848,6 +864,7 @@ namespace NKikimr {
             }
 
             // decide which piles get the request with the group state and the cluster state we have now
+            const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
@@ -858,6 +875,14 @@ namespace NKikimr {
                     return;
                 } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
                     return; // skip this pile, no data quorum needed
+                }
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> ||
+                        std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
+                    // only the answer of the pile holding the whole content of the group is taken, while an error from
+                    // another one (e.g. degraded while being synced) would fail the request
+                    if (!PartHoldsEverything(state, *pile)) {
+                        return;
+                    }
                 }
 
                 // check the sync state for this group
@@ -870,6 +895,15 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                return;
+            }
+            if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
+                    return std::get<0>(item) == authorityPileId;
+                })) {
+                // the group relies on its part in the single pile, and writes reaching other parts only would be lost
+                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
+                    (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
                 PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }

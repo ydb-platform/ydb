@@ -212,7 +212,17 @@ private:
     TKeepAliveHttpClient CreateClient() const;
 
     virtual void PrepareClient(TKeepAliveHttpClient& cl) const;
-    virtual void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const;
+    virtual void ProcessResponse(
+        const TStringBuf relativeUrl,
+        THttpInput& input,
+        IOutputStream* output,
+        const unsigned statusCode) const;
+    virtual void ProcessResponseWithHeaders(
+        const TStringBuf relativeUrl,
+        THttpInput& input,
+        IOutputStream* output,
+        const unsigned statusCode,
+        const THeaders& headers) const;
 };
 
 class TRedirectableHttpClient: public TSimpleHttpClient {
@@ -226,7 +236,12 @@ public:
 
 private:
     void PrepareClient(TKeepAliveHttpClient& cl) const override;
-    void ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const override;
+    void ProcessResponseWithHeaders(
+        const TStringBuf relativeUrl,
+        THttpInput& input,
+        IOutputStream* output,
+        const unsigned statusCode,
+        const THeaders& headers) const override;
 
 private:
     TOptions Opts;

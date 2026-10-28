@@ -1,6 +1,5 @@
 #include "dq_transport.h"
 
-#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>

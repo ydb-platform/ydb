@@ -193,6 +193,7 @@ jobs:
           sparse-checkout: |
             .github/scripts/codecov/codecov_suites.py
             .github/scripts/codecov/detect_codecov_matrix.py
+            .github/scripts/codecov/check_patch_coverage.py
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -288,6 +289,12 @@ jobs:
           echo "Changed files:"
           head -100 "$changed_file"
 
+          # Preserve the real PR diff, not Codecov's adjusted project baseline.
+          # Only line ranges and pinned SHAs are transferred, never PR code.
+          python3 .github/scripts/codecov/check_patch_coverage.py collect \
+            --base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA" \
+            --output "$RUNNER_TEMP/codecov-patch.json"
+
       - name: Decide matrix
         id: decide
         if: >-
@@ -349,6 +356,19 @@ jobs:
             echo "storage_prefix=$storage_prefix"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Save pinned PR patch
+        if: >-
+          github.event_name == 'pull_request_target' &&
+          steps.decide.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          # A failed-jobs-only rerun can reuse detect from an earlier attempt.
+          name: codecov-patch-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-patch.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
   coverage:
     name: Coverage (${{ matrix.suite }})
     needs: detect
@@ -367,7 +387,9 @@ jobs:
         with:
           repository: ${{ needs.detect.outputs.checkout_repository }}
           ref: ${{ needs.detect.outputs.checkout_sha }}
-          fetch-depth: 0
+          # Build/upload needs only the pinned tree; merge-base history is used
+          # separately in detect. Avoid fetching every branch and tag per suite.
+          fetch-depth: 1
           allow-unsafe-pr-checkout: true
           persist-credentials: false
 
@@ -379,6 +401,7 @@ jobs:
           sparse-checkout: |
             .github/actions/run_clang_codecov
             .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/config
             .github/scripts/codecov
           path: _trusted_coverage_ci
           persist-credentials: false
@@ -397,6 +420,7 @@ jobs:
         uses: ./.github/actions/run_clang_codecov
         with:
           suite: ${{ matrix.suite }}
+          muted_tests_file: ${{ github.event_name == 'pull_request_target' && '_trusted_coverage_ci/.github/config/muted_ya.txt' || '.github/config/muted_ya.txt' }}
           codecov_token: ${{ secrets.CODECOV_TOKEN }}
           github_token: ${{ github.token }}
           aws_access_key_id: ${{ secrets.YDB_TECH_AWS_ACCESS_KEY_ID }}
@@ -412,6 +436,75 @@ jobs:
       - name: Remove YDB credentials
         if: always()
         run: rm -f -- /tmp/ydb_service_account.json
+
+  patch:
+    name: Patch coverage (80%)
+    needs: [detect, coverage]
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.should_run == 'true' &&
+      needs.coverage.result == 'success'
+    # Deliberately non-required: this workflow does not change merge rules or
+    # checks_integrated. The upload/HTML jobs remain successful below 80%.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted patch checker
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: .github/scripts/codecov
+          persist-credentials: false
+
+      - name: Download pinned PR patch
+        uses: actions/download-artifact@v4
+        with:
+          name: codecov-patch-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-patch
+
+      - name: Download Codecov uploads and receipts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: codecov-upload-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/codecov-uploads
+          merge-multiple: true
+
+      - name: Check every affected component
+        env:
+          MATRIX: ${{ needs.detect.outputs.matrix }}
+          REPOSITORY: ${{ github.repository }}
+          PR_BASE_SHA: ${{ needs.detect.outputs.base_sha }}
+          PR_HEAD_SHA: ${{ needs.detect.outputs.report_sha }}
+        run: |
+          set -euo pipefail
+          # Do not wait for Codecov notification statuses: they wait for CI.
+          # Wait for the exact upload, then evaluate its preserved LCOV, not
+          # commit/flag annotations merged with other uploads at the same SHA.
+          mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
+          if [ "${#suites[@]}" -eq 0 ]; then
+            echo "Expected at least one coverage component" >&2
+            exit 1
+          fi
+          failed=0
+          for suite in "${suites[@]}"; do
+            case "$suite" in
+              cpp_sdk|cli|cli_workload) ;;
+              *) echo "Unexpected coverage component: $suite" >&2; exit 1 ;;
+            esac
+            if ! python3 .github/scripts/codecov/check_patch_coverage.py check \
+              --repository "$REPOSITORY" \
+              --base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA" \
+              --flag "$suite" --run-id "$GITHUB_RUN_ID" \
+              --upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json" \
+              --coverage-report "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.lcov" \
+              --changed-lines-file "$RUNNER_TEMP/codecov-patch/codecov-patch.json" \
+              --threshold 80 --timeout 300; then
+              failed=1
+            fi
+          done
+          exit "$failed"
 
   landing:
     name: Publish HTML landing page

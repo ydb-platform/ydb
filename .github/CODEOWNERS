@@ -232,6 +232,7 @@
 /ydb/core/tx/tiering @ydb-platform/cs
 /ydb/core/keyvalue @ydb-platform/cs
 /ydb/services/keyvalue @ydb-platform/cs
+/ydb/tests/olap @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage

@@ -9,12 +9,15 @@ USE_RECIPE(
 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/large.inc)
 
+DEFAULT(DOCKER_COMPOSE_TEST_CPU all)
+DEFAULT(DOCKER_COMPOSE_TEST_CONTAINER 4467981730)
+
 REQUIREMENTS(
     # docker tests usually cannot work simultaneously: cpu:all does not allow other tests to work in parallel
-    cpu:all
+    cpu:${DOCKER_COMPOSE_TEST_CPU}
     # docker compose works well only with dns64
     dns:dns64
     # use default bionic lxc container with docker and allowed fuse
     # for more info see https://docs.yandex-team.ru/devtools/test/environment#docker-compose
-    container:4467981730
+    container:${DOCKER_COMPOSE_TEST_CONTAINER}
 )

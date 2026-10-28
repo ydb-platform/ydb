@@ -17,13 +17,6 @@ using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
 
-// Resolve root page location from meta, supporting both V1 and V2 formats.
-NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta, TGroupId groupId) {
-    return GetBTreeRootLocation(meta,
-        part->GetPageCollection(0),          // btree index pages are always in room 0
-        part->GetPageCollection(groupId.Index)); // data pages are in the group's room
-}
-
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
 
@@ -34,11 +27,11 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         return meta.GetDataSize();
     }
 
-    auto location = RootLocation(part, meta, groupId);
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
 
     for (ui32 height = 0; height < meta.LevelCount(); height++) {
-        auto page = env->TryGetPage(part, location, {});
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
@@ -70,7 +63,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         return meta.GetDataSize();
     }
 
-    auto location = RootLocation(part, meta, groupId);
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
     historicRowId = 0;
 
@@ -85,7 +78,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     TCells key1{ key1Cells, 3 };
 
     for (ui32 height = 0; height < meta.LevelCount(); height++) {
-        auto page = env->TryGetPage(part, location, {});
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
@@ -133,7 +126,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     if (part->GroupsCount) { // main group
         TGroupId groupId{};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
         
         for (const auto& slice : *part.Slices) {
@@ -162,7 +155,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     for (ui32 groupIndex : xrange<ui32>(1, part->GroupsCount)) {
         TGroupId groupId{groupIndex};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
@@ -182,7 +175,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     if (part->HistoricGroupsCount) { // main historic group
         TGroupId groupId{0, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
@@ -206,7 +199,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     for (ui32 groupIndex : xrange<ui32>(1, part->HistoricGroupsCount)) {
         TGroupId groupId{groupIndex, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : historicSlices) {

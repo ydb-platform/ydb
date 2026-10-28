@@ -2,7 +2,7 @@
 
 Allows you to test {{ ydb-short-name }} [vector search](../../concepts/query_execution/vector_search.md) performance and recall using exact and approximate search. Supports both global and [filtered vector indexes](../../yql/reference/syntax/create_table/vector_index.md).
 
-The workload supports importing vectors from a real dataset (e.g., [Wikipedia embeddings](https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings)) or generating synthetic random vectors. After loading data, you can build a vector index, run search queries to measure recall and performance, and clean up the workload tables.
+The workload supports importing vectors from a real dataset (e.g., [Wikipedia embeddings](https://huggingface.co/datasets/timescale/wikipedia-22-12-simple-embeddings)) or generating synthetic random vectors. After loading data, you can build a vector index, run search queries to measure recall and performance, and clean up the workload tables.
 
 ## Command structure {#structure}
 
@@ -194,7 +194,7 @@ Executes vector search queries against the indexed table. Optionally measures re
 | `--query-table <name>` | Name of the table with predefined search vectors. If not specified, random rows from the main table are used. | |
 | `--targets <value>` | Number of vectors to use as test targets. | `100` |
 | `--limit <value>` | Maximum number of nearest vectors to return per query. | `5` |
-| `--kmeans-tree-clusters <value>` | Maximum number of clusters to inspect during search ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize)). | `1` |
+| `--kmeans-tree-clusters <value>` | Maximum number of clusters to inspect during search ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize)). | `1` |
 | `--recall` | Measure [recall](https://en.wikipedia.org/wiki/Precision_and_recall) of the approximate search compared to exact search. | |
 | `--recall-threads <value>` | Number of concurrent queries during recall measurement. | `10` |
 | `--non-indexed` | Take vector settings from the index, but search without the index (full scan). | |

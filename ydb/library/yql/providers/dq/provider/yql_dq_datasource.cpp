@@ -11,7 +11,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>

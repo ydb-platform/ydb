@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard {
@@ -59,16 +60,15 @@ public:
     class TLoadTimer: public TNonCopyable {
     private:
         const TLoadTimeSignals& Signals;
-        TInstant Start;
-        TString Name;
+        TDuration* const Total;
+        const TMonotonic Start = TMonotonic::Now();
         bool Failed = false;
 
     public:
-        TLoadTimer(const TLoadTimeSignals& signals, const TString& name)
+        TLoadTimer(const TLoadTimeSignals& signals, TDuration* total)
             : Signals(signals)
-            , Name(name)
+            , Total(total)
         {
-            Start = TInstant::Now();
         }
 
         void AddLoadingFail();
@@ -117,8 +117,8 @@ private:
     }
 
 public:
-    TLoadTimer StartGuard() const {
-        return TLoadTimer(*this, Type + "LoadingTime");
+    TLoadTimer StartGuard(TDuration* total = nullptr) const {
+        return TLoadTimer(*this, total);
     }
 
 private:
@@ -135,21 +135,26 @@ private:
     }
 };
 
+struct TTablesLoadDurations {
+    TDuration Tables;
+    TDuration SchemaPresets;
+    TDuration TableVersions;
+    TDuration SchemaPresetVersions;
+};
+
 class TTableLoadTimeCounters {
 public:
     NColumnShard::TLoadTimeSignals TableLoadTimeCounters;
     NColumnShard::TLoadTimeSignals SchemaPresetLoadTimeCounters;
     NColumnShard::TLoadTimeSignals TableVersionsLoadTimeCounters;
     NColumnShard::TLoadTimeSignals SchemaPresetVersionsLoadTimeCounters;
-    NColumnShard::TLoadTimeSignals PrechargeTimeCounters;
 
 public:
     TTableLoadTimeCounters()
         : TableLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Tables"))
         , SchemaPresetLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPreset"))
-        , TableVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("TableVersionss"))
+        , TableVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("TableVersions"))
         , SchemaPresetVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPresetVersions"))
-        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge"))
     {
     }
 };

@@ -4,6 +4,7 @@
 #include "sql_ddl_identity.h"
 #include "sql_ddl_resource_pool.h"
 #include "sql_ddl_session.h"
+#include "sql_ddl_streaming_query.h"
 #include "sql_ddl_symlink.h"
 #include "sql_ddl_topic.h"
 #include "sql_ddl_transfer.h"
@@ -1452,107 +1453,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore63: {
-            // create_streaming_query_stmt: CREATE (OR REPLACE)? STREAMING QUERY (IF NOT EXISTS)? object_ref
-            //     (WITH streaming_query_settings)?
-            //     streaming_query_definition;
-
-            const auto& node = core.GetAlt_sql_stmt_core63().GetRule_create_streaming_query_stmt1();
-            Ctx_.Token(node.GetToken1());
-
-            // object_ref
-            TObjectOperatorContext context(Ctx_.Scoped);
-            const auto& objectPath = ParseObjectPath(node.GetRule_object_ref6(), context);
-            if (!objectPath) {
+            auto node = TStreamingQueryTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core63().GetRule_create_streaming_query_stmt1());
+            if (!node) {
                 return false;
             }
-
-            // OR REPLACE
-            const bool replaceIfExists = node.HasBlock2();
-            if (replaceIfExists) {
-                Y_DEBUG_ABORT_UNLESS(
-                    IS_TOKEN(node.GetBlock2().GetToken1().GetId(), OR) &&
-                    IS_TOKEN(node.GetBlock2().GetToken2().GetId(), REPLACE));
-            }
-
-            // IF NOT EXISTS
-            const bool existingOk = node.HasBlock5();
-            if (existingOk) {
-                Y_DEBUG_ABORT_UNLESS(
-                    IS_TOKEN(node.GetBlock5().GetToken1().GetId(), IF) &&
-                    IS_TOKEN(node.GetBlock5().GetToken2().GetId(), NOT) &&
-                    IS_TOKEN(node.GetBlock5().GetToken3().GetId(), EXISTS));
-            }
-
-            // WITH streaming_query_settings
-            TStreamingQuerySettings settings;
-            if (node.HasBlock7()) {
-                const auto& features = node.GetBlock7().GetRule_create_streaming_query_features1();
-                Ctx_.Token(features.GetToken1());
-
-                if (!ParseStreamingQuerySettings(features.GetRule_streaming_query_settings2(), settings)) {
-                    return false;
-                }
-            }
-
-            // streaming_query_definition
-            if (!ParseStreamingQueryDefinition(node.GetRule_streaming_query_definition8(), settings)) {
-                return false;
-            }
-
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectPath, "STREAMING_QUERY", existingOk, replaceIfExists, std::move(settings.Features), context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore64: {
-            // alter_streaming_query_stmt: ALTER STREAMING QUERY (IF EXISTS)? object_ref
-            //     alter_streaming_query_action;
-
-            const auto& node = core.GetAlt_sql_stmt_core64().GetRule_alter_streaming_query_stmt1();
-
-            // object_ref
-            TObjectOperatorContext context(Ctx_.Scoped);
-            const auto& objectPath = ParseObjectPath(node.GetRule_object_ref5(), context);
-            if (!objectPath) {
+            auto node = TStreamingQueryTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core64().GetRule_alter_streaming_query_stmt1());
+            if (!node) {
                 return false;
             }
-
-            // IF EXISTS
-            const bool missingOk = node.HasBlock4();
-            if (missingOk) {
-                Y_DEBUG_ABORT_UNLESS(
-                    IS_TOKEN(node.GetBlock4().GetToken1().GetId(), IF) &&
-                    IS_TOKEN(node.GetBlock4().GetToken2().GetId(), EXISTS));
-            }
-
-            // alter_streaming_query_action
-            TStreamingQuerySettings settings;
-            if (!ParseAlterStreamingQueryAction(node.GetRule_alter_streaming_query_action6(), settings)) {
-                return false;
-            }
-
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectPath, "STREAMING_QUERY", missingOk, std::move(settings.Features), {}, context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore65: {
-            // drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
-
-            const auto& node = core.GetAlt_sql_stmt_core65().GetRule_drop_streaming_query_stmt1();
-
-            // object_ref
-            TObjectOperatorContext context(Ctx_.Scoped);
-            const auto& objectPath = ParseObjectPath(node.GetRule_object_ref5(), context);
-            if (!objectPath) {
+            auto node = TStreamingQueryTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core65().GetRule_drop_streaming_query_stmt1());
+            if (!node) {
                 return false;
             }
-
-            // IF EXISTS
-            const bool missingOk = node.HasBlock4();
-            if (missingOk) {
-                Y_DEBUG_ABORT_UNLESS(
-                    IS_TOKEN(node.GetBlock4().GetToken1().GetId(), IF) &&
-                    IS_TOKEN(node.GetBlock4().GetToken2().GetId(), EXISTS));
-            }
-
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectPath, "STREAMING_QUERY", missingOk, {}, context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore66: {

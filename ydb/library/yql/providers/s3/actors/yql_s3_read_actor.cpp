@@ -6,7 +6,6 @@
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_queue.h"
 
-#include <ydb/core/base/events.h>
 #include <ydb/core/util/exceptions.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

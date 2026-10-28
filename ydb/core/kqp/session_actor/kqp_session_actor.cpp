@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/gateway.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -329,6 +330,7 @@ public:
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
+        YQL_ENSURE(!QueryClassifier);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
@@ -606,6 +608,8 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
+        QueryClassifier = TryCreateQueryClassifier();
+
         if (WmPreCompileClassify()) {
             return;
         }
@@ -616,12 +620,30 @@ public:
     void NotifyWmClassification(const TString& poolId,
                                 const NWorkloadManager::TResolver& resolver = NWorkloadManager::TResolver::Default()) {
         if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
-            updater->SetPoolContext(poolId, resolver.ToSysViewString());
+            updater->SetPoolContext({poolId, resolver.ToSysViewString()});
         }
     }
 
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> TryCreateQueryClassifier() const {
+        const auto& request = *QueryState->RequestEv;
+        if (request.IsInternalCall() || request.GetIsWarmupCompilation()) {
+            return nullptr;
+        }
+
+        const auto& gateway = AppData()->WorkloadManagerGateway;
+        if (!gateway) {
+            return nullptr;
+        }
+
+        return gateway->TryCreateQueryClassifier(request.GetDatabaseId(), NWorkloadManager::TClassifyContext{
+            .PoolId = request.GetPoolId(),
+            .AppName = Settings.ApplicationName.GetOrElse(""),
+            .UserToken = QueryState->UserToken,
+        });
+    }
+
     bool WmPreCompileClassify() {
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
 
         if (!classifier) {
             QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
@@ -785,9 +807,9 @@ public:
     // PassRequestToResourcePool(), which requires a classifier — null here is a
     // caller-side invariant violation, not a runtime edge case to handle.
     void ContinueAfterWmAdmission() {
-        Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
+        Y_VALIDATE(QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
 
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
         auto state = classifier->GetState();
 
         if (state == NWorkloadManager::IQueryClassifier::EState::PreCompileDone) {
@@ -804,7 +826,7 @@ public:
             OnSuccessCompileRequest();
         } else {
             Y_VALIDATE(false, TStringBuilder()
-                << "WmQueryClassifier with invalid state after admission: "
+                << "QueryClassifier with invalid state after admission: "
                 << static_cast<int>(state));
         }
     }
@@ -1098,7 +1120,7 @@ public:
     }
 
     bool WmPostCompileClassify() {
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
 
         if (!classifier || classifier->GetState() != NWorkloadManager::IQueryClassifier::EState::WaitCompile) {
             return false;
@@ -1168,6 +1190,11 @@ public:
             for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
                 for (const auto& secretName : tx->GetSecretNames()) {
                     secureParams.emplace(secretName, "");
+                }
+
+                // Unsafe truncate is executed outside the tasks graph.
+                if (tx->HasUnsafeTruncate()) {
+                    continue;
                 }
 
                 txs.emplace_back(tx, QueryState->QueryData);
@@ -1287,6 +1314,8 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
+        AFL_ENSURE(QueryState->UserRequestContext);
+        AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",
@@ -1389,6 +1418,15 @@ public:
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
+
+        AFL_ENSURE(QueryState->UserRequestContext);
+        if (QueryState->UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned for
+            // their whole lifetime. Reads at the acquired step stay valid via the
+            // datashard KeepSnapshotTimeout grace window and are executed right away;
+            // per-event lookups use inconsistent reads instead of a stale snapshot.
+            QueryState->TxCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
@@ -1591,6 +1629,14 @@ public:
                     std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                         "Client data writes are disabled")};
                     ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+
+            // Unsafe truncate is represented by a sink and has no entry in TableOps.
+            for (const auto& tx : phyQuery.GetTransactions()) {
+                if (FindTableTruncateSink(tx)) {
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Client data writes are disabled");
                     return false;
                 }
             }
@@ -1887,35 +1933,27 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+        if ((txCtx.TxHasEffects() && broken) || txCtx.TxManager->BrokenLocks()) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+
+            if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else if (txCtx.TxHasEffects() && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else {
+                AFL_ENSURE(txCtx.TxManager->BrokenLocks());
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            }
             return false;
         }
 
-        if (tx && tx->GetHasEffects() && broken) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
-
-        if (txCtx.TxManager->BrokenLocks()) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
+        AFL_ENSURE(!tx || !tx->GetHasEffects() || !broken);
 
         return true;
     }
@@ -2026,6 +2064,11 @@ public:
             return false;
         }
 
+        if (tx->HasUnsafeTruncate()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for unsafe truncate");
+            return false;
+        }
+
         if (const auto txType = tx->GetType(); !IsIn({NKqpProto::TKqpPhyTx::TYPE_DATA, NKqpProto::TKqpPhyTx::TYPE_GENERIC, NKqpProto::TKqpPhyTx::TYPE_COMPUTE}, txType)) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query is not supported for this tx type: " << NKqpProto::TKqpPhyTx::EType_Name(txType));
             return false;
@@ -2079,6 +2122,8 @@ public:
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
+        } else if (tx && tx->HasUnsafeTruncate()) {
+            ExecuteUnsafeTruncate(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
@@ -2124,6 +2169,17 @@ public:
 
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(request));
         QueryState->CurrentTx += 1;
+    }
+
+    void ExecuteUnsafeTruncate(const TKqpPhyTxHolder::TConstPtr& tx) {
+        // Unsafe truncate runs in its own distributed transaction, applied
+        // immediately and never rolled back with the surrounding user transaction.
+        if (QueryState->TxCtx->Readonly) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
+        }
+
+        SendToUnsafeTruncateExecuter(tx);
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
@@ -2365,6 +2421,22 @@ public:
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
             KqpTempTablesAgentActor, QueryState->KqpSessionSpan.GetTraceId(), QueryState->QueryDeadlines.TimeoutAt);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
+
+        ++QueryState->CurrentTx;
+    }
+
+    void SendToUnsafeTruncateExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
+        YQL_ENSURE(QueryState);
+
+        // The lock id of the user transaction, so the shards spare its locks while breaking
+        // everyone else's. Zero when the truncate is the first statement and no lock exists yet.
+        const ui64 userLockTxId = QueryState->TxCtx->LockHandle.GetLockId();
+
+        auto executerActor = CreateKqpUnsafeTruncateExecuter(
+            tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,
+            QueryState->UserRequestContext->TraceId, QueryState->QueryData->GetAllocState());
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -4072,6 +4144,7 @@ public:
             ExecuterId = TActorId{};
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
+            QueryClassifier.reset();
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
                 CleanupAndPassAway();
@@ -4508,6 +4581,7 @@ private:
     TActorId ExecuterId;
 
     std::shared_ptr<TKqpQueryState> QueryState;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     ui64 LastAcceptedWmAdmissionQueryId = 0;

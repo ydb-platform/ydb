@@ -25,6 +25,51 @@ bool HasRelevantTransferConfigChanges(
             != nextSpecific.GetBatching().GetFlushIntervalMilliSeconds();
 }
 
+bool RetryPausedBootstrap(
+        TReplication& replication,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx)
+{
+    if (replication.GetConfig().GetInitialScan()
+        || replication.GetDesiredState() != TReplication::EState::Paused
+        || replication.GetState() != TReplication::EState::Error)
+    {
+        return false;
+    }
+
+    // Restrict config-only recovery to source preparation. An ordinary PAUSE
+    // can retain attached destinations and unrelated errors that must survive.
+    for (const auto* target : replication.GetTargets()) {
+        if (target->GetDstState() != TReplication::EDstState::Creating
+            || target->GetDstPathId()
+            || target->GetPendingDstPathId()
+            || !target->GetWorkers().empty())
+        {
+            return false;
+        }
+    }
+
+    // A public config ALTER is an explicit retry even if the credential
+    // reference is unchanged (its secret or source ACL may be fixed).
+    // Persist the reset before Progress can start a replacement creator.
+    replication.SetState(TReplication::EState::Paused);
+    for (auto* target : replication.GetTargets()) {
+        if (target->GetStreamState() != TReplication::EStreamState::Error) {
+            continue;
+        }
+
+        target->Shutdown(ctx);
+        target->SetStreamState(TReplication::EStreamState::Creating);
+        target->SetIssue({});
+        db.Table<TControllerSchema::SrcStreams>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::SrcStreams::State>(target->GetStreamState()));
+        db.Table<TControllerSchema::Targets>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::Issue>(target->GetIssue()));
+    }
+
+    return true;
+}
+
 } // anonymous namespace
 
 class TController::TTxAlterReplication: public TTxBase {
@@ -249,6 +294,9 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
+            issue.clear();
+        }
         if (ResetFailedSchemaBarriers) {
             RecoverFailedSchemaBarriers(db);
         }
@@ -311,12 +359,15 @@ public:
             }
 
             // An attachment may already be submitted to SchemeShard; let it finish before DONE.
+            // Progress notifies its creator to stop source revalidation and reconcile locally.
             if (target->GetDstState() != TReplication::EDstState::Attaching) {
                 target->Shutdown(ctx);
                 target->SetDstState(TReplication::EDstState::Alter);
             }
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
+                db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
             }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
@@ -426,6 +477,8 @@ public:
                 && Replication->GetDesiredState() == TReplication::EState::Ready)
             {
                 target->SetStreamState(TReplication::EStreamState::Creating);
+                db.Table<Schema::SrcStreams>().Key(replicationId, tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
             }
             db.Table<Schema::Targets>().Key(replicationId, tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));

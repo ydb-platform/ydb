@@ -19,14 +19,12 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
-    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/impl/internal/make_request
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic/impl
-    ydb/public/sdk/cpp/src/client/proto
 )
 
 END()

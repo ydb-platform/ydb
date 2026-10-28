@@ -24,7 +24,6 @@ from github_actions.export_github_job_metrics import (
     completed_since,
     metrics_from_workflow_run,
     open_runs_to_save,
-    pull_refs_from_commit_pulls,
     pull_requests_have_target,
     selected_workflows,
 )
@@ -52,17 +51,6 @@ class WorkflowNamesTest(unittest.TestCase):
 
 
 class PullRefsTest(unittest.TestCase):
-    def test_keeps_target_branch(self):
-        self.assertEqual(
-            pull_refs_from_commit_pulls(
-                [{"number": 42, "base": {"ref": "main"}, "head": {"ref": "feature"}}]
-            ),
-            [{"number": 42, "base": {"ref": "main"}}],
-        )
-
-    def test_skips_non_dicts(self):
-        self.assertEqual(pull_refs_from_commit_pulls("nope"), [])
-
     def test_attach_keeps_existing_pulls(self):
         run = {
             "event": "pull_request_target",
@@ -79,6 +67,113 @@ class PullRefsTest(unittest.TestCase):
     def test_push_is_not_enriched(self):
         run = {"event": "push", "head_sha": "abc", "head_branch": "main"}
         self.assertIs(attach_pull_requests("ydb-platform", "ydb", run), run)
+
+    def test_fork_head_when_commit_lookup_is_empty(self):
+        run = {
+            "event": "pull_request_target",
+            "head_sha": "deadbeef",
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [],
+            "head_repository": {"owner": {"login": "fork-user"}},
+        }
+
+        def fetcher(url, params=None):
+            if "/commits/" in url:
+                return []
+            self.assertEqual(params["head"], "fork-user:feature")
+            return [{
+                "number": 42,
+                "title": "fix it",
+                "state": "open",
+                "base": {"ref": "main"},
+            }]
+
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
+        self.assertEqual(out["pull_requests"][0]["number"], 42)
+        self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")
+        self.assertEqual(out["pull_requests"][0]["title"], "fix it")
+
+    def test_refetches_when_number_exists_without_base(self):
+        run = {
+            "event": "pull_request",
+            "head_sha": "abc123",
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [{"number": 10, "title": "fix it"}],
+        }
+
+        def fetcher(url, params=None):
+            if params and params.get("head"):
+                return []
+            self.assertIn("/commits/abc123/pulls", url)
+            return [{"number": 10, "title": "fix it", "state": "open", "base": {"ref": "stable-26"}}]
+
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
+        self.assertEqual(out["pull_requests"][0]["base"]["ref"], "stable-26")
+
+    def test_keeps_payload_number_when_head_has_newer_pr(self):
+        run = {
+            "event": "pull_request",
+            "head_sha": "abc123",
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [{"number": 10, "title": "fix it"}],
+        }
+
+        def fetcher(url, params=None):
+            if params and params.get("head"):
+                return [{
+                    "number": 99,
+                    "title": "other",
+                    "base": {"ref": "main"},
+                    "head": {"sha": "ffff"},
+                }]
+            self.assertIn("/commits/abc123/pulls", url)
+            return [{"number": 10, "title": "fix it", "state": "open", "base": {"ref": "stable-26"}}]
+
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
+        self.assertEqual(out["pull_requests"][0]["number"], 10)
+        self.assertEqual(out["pull_requests"][0]["base"]["ref"], "stable-26")
+
+    def test_skips_head_pr_with_other_sha(self):
+        run = {
+            "event": "pull_request_target",
+            "head_sha": "deadbeef",
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [],
+            "head_repository": {"owner": {"login": "fork-user"}},
+        }
+
+        def fetcher(url, params=None):
+            if params and params.get("head"):
+                return [{
+                    "number": 99,
+                    "title": "other",
+                    "base": {"ref": "main"},
+                    "head": {"sha": "other"},
+                }]
+            return [{"number": 42, "title": "fix it", "base": {"ref": "stable-26"}}]
+
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
+        self.assertEqual(out["pull_requests"][0]["number"], 42)
+        self.assertEqual(out["pull_requests"][0]["base"]["ref"], "stable-26")
+
+    def test_rate_limit_is_not_swallowed(self):
+        run = {
+            "event": "pull_request_target",
+            "head_sha": "deadbeef",
+            "head_branch": "feature",
+            "pull_requests": [],
+            "head_repository": {"owner": {"login": "fork-user"}},
+        }
+
+        def fetcher(url, params=None):
+            raise RateLimitExhausted(0, None)
+
+        with self.assertRaises(RateLimitExhausted):
+            attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
 
 
 class CreatedUntilTest(unittest.TestCase):

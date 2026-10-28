@@ -1430,6 +1430,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
+    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    TString CheckDirectImportSpace();
+    void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1613,6 +1616,7 @@ public:
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
     ~TDataShard();
 
+    void CancelS3DirectWrite(ui64 txId);
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
@@ -2973,6 +2977,14 @@ private:
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
+
+    // The shard owns the reservation even while the begin reply is in flight.
+    struct TDirectImportSession {
+        TActorId Actor;
+        ui64 TableId;
+        ui32 Step;
+    };
+    THashMap<ui64, TDirectImportSession> DirectImports;
 
     // Initial state
     struct TInitialState {

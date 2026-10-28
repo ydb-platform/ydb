@@ -14,6 +14,8 @@ public:
     void SetCookie(TCookiePtr cookie) override;
     void* GetCookie() const override;
 
+    void ResetInvoker() override;
+
 private:
     TCookiePtr Cookie_;
 };

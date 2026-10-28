@@ -1,6 +1,7 @@
 #pragma once
 
 #include "progress_bar.h"
+#include "recursive_list.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -24,6 +25,7 @@ struct TRemoveDirectoryRecursiveSettings : public NScheme::TRemoveDirectorySetti
     FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
     FLUENT_SETTING_DEFAULT(bool, RemoveSelf, true);
     FLUENT_SETTING_DEFAULT(bool, CreateProgressBar, false);
+    FLUENT_SETTING_DEFAULT(ERecursiveListSkipMode, SkipMode, ERecursiveListSkipMode::Internal);
     FLUENT_SETTING_DEFAULT(ERecursiveRemovePrompt, Prompt, ERecursiveRemovePrompt::Never);
 };
 

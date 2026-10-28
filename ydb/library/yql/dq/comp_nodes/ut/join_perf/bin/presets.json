@@ -96,4 +96,31 @@
         [64, 64],
         [128, 128]
     ]
+    ,"TpchLineitemSupplier": [
+        [1048576, 16384]
+    ]
+    ,"TpchLineitemOrdersFiltered": [
+        [1048576, 262144]
+    ]
+    ,"TpchOrdersLineitem": [
+        [262144, 1048576]
+    ]
+    ,"TpchPartsuppSupplier": [
+        [524288, 128]
+    ]
+    ,"TpcdsFactItem": [
+        [1048576, 16384]
+    ]
+    ,"TpcdsFactDateFiltered": [
+        [1048576, 2048]
+    ]
+    ,"TpcdsFactCustomer": [
+        [1048576, 131072]
+    ]
+    ,"TpcdsSalesReturns": [
+        [1048576, 98304]
+    ]
+    ,"TpcdsCustomerAddress": [
+        [262144, 131072]
+    ]
 }

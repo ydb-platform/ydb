@@ -1,6 +1,8 @@
 #include "distconf.h"
 #include "distconf_statestorage_config_generator.h"
 
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -232,7 +234,21 @@ namespace NKikimr::NStorage {
 
         auto& config = *params.Config;
         const auto& replacedDisks = params.ReplacedDisks;
-        const auto& selfManagementConfig = config.GetSelfManagementConfig();
+        auto selfManagementConfig = config.GetSelfManagementConfig();
+        const auto pileRegistry = GetConfigPileRegistry(config);
+        if (params.BridgePileId && pileRegistry && params.BridgePileId.GetPileIndex() < pileRegistry->PilesSize()) {
+            const auto& pileName = pileRegistry->GetPiles(params.BridgePileId.GetPileIndex()).GetName();
+            if (const auto *rule = FindStoragePoolPileOverride(config.GetBlobStorageConfig(), pileName, std::nullopt)) {
+                ApplyStoragePoolPileOverride(selfManagementConfig, *rule);
+                if (rule->HasErasureSpecies()) {
+                    TBlobStorageGroupType::EErasureSpecies species;
+                    if (!TBlobStorageGroupType::ParseErasureName(species, rule->GetErasureSpecies())) {
+                        throw TExConfigError() << "invalid static group pile override ErasureSpecies";
+                    }
+                    params.GroupType = TBlobStorageGroupType(species);
+                }
+            }
+        }
         const auto& selfHealAllowedNodes = selfManagementConfig.GetStaticGroupSelfHealAllowedNodes();
         NKikimrConfig::TBlobStorageConfig *bsConfig = config.MutableBlobStorageConfig();
         if (params.Reassignments) {
@@ -287,7 +303,7 @@ namespace NKikimr::NStorage {
             }
         };
 
-        auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
+        auto checkMatch = [&](ui32 nodeId, NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (selfManagementConfig.HasPDiskType() && type == selfManagementConfig.GetPDiskType()) {
                 return true;
             }
@@ -308,6 +324,14 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation: {
+                            if (!IsValidPDiskFilterLocation(p.GetLocation())) {
+                                throw TExConfigError() << "Location requires current string fields";
+                            }
+                            const auto it = nodeLocations.find(nodeId);
+                            pMatch = it != nodeLocations.end() && MatchPDiskLocation(it->second, TNodeLocation(p.GetLocation()));
+                            break;
+                        }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }
@@ -353,7 +377,7 @@ namespace NKikimr::NStorage {
                 auto& maxId = maxPDiskId[pdiskId.NodeId];
                 maxId = Max(maxId, pdiskId.PDiskId);
 
-                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                if (!checkMatch(pdiskId.NodeId, pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
                     continue;
                 }
 
@@ -425,6 +449,9 @@ namespace NKikimr::NStorage {
 
             for (const auto& group : ss.GetGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == params.GroupId) {
+                    if (group.GetErasureSpecies() != params.GroupType.GetErasure()) {
+                        throw TExConfigError() << "can't change erasure of existing static group";
+                    }
                     existingGroup = true;
                     groupGeneration = group.GetGroupGeneration();
                     generation.emplace(group.GetGroupGeneration());
@@ -553,7 +580,7 @@ namespace NKikimr::NStorage {
             if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
                 return;
             }
-            if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
+            if (checkMatch(nodeId, drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                     TPDiskInfo& pdiskInfo = it->second;
@@ -580,7 +607,6 @@ namespace NKikimr::NStorage {
         };
         EnumerateConfigDrives(config, 0, processDrive, nullptr, true);
 
-        const auto pileRegistry = GetConfigPileRegistry(config);
         for (const auto& [pdiskId, item] : pdisks) {
             const auto it = nodeLocations.find(pdiskId.NodeId);
             if (it == nodeLocations.end()) {
@@ -627,7 +653,7 @@ namespace NKikimr::NStorage {
         request.ExistingGroup = existingGroup;
         request.TryToRelocateLocallyFirst = params.TryToRelocateBrokenDisksLocallyFirst;
         request.IgnoreGroupLayoutChecks = params.LayoutPolicy.AllowsRelaxedPlacement();
-        request.BridgePileId = NBridge::GetPlacementPileId(params.BridgePileId, BridgeInfo.get());
+        request.PileScope = NBridge::GetPlacementPileId(params.BridgePileId, BridgeInfo.get());
 
         NBsController::TGroupGeometryInfo geometry(params.GroupType.GetErasure(), selfManagementConfig.GetGeometry());
         const NBsController::TGroupMapper::TOptions options{

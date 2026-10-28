@@ -27,7 +27,7 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
 
     OnBeforeChangePortion(nullptr);
     Portions.emplace(info->GetPortionId(), info);
-    OnAfterChangePortion(info, nullptr);
+    OnAfterChangePortion(info);
 
     if (IntervalTree) {
         IntervalTree->AddRange(
@@ -61,23 +61,19 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     DataAccessorsManager->RemovePortion(it->second);
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
-    OnAfterChangePortion(nullptr, nullptr);
+    OnAfterChangePortion(nullptr);
     return true;
 }
 
-void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
-    NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad) {
+void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad) {
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             PortionsIndex.AddPortion(portionAfter);
-            if (modificationGuard) {
-                modificationGuard->AddPortion(portionAfter);
-            } else {
-                OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
-            }
-            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+            // on load, the optimizer gets all portions at once in AddLoadedPortionsToOptimizer
             if (!onLoad) {
+                OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
+                NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
                 ActualizationIndex->AddPortion(portionAfter, context);
             }
         }
@@ -268,13 +264,16 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     auto portionsLoader = std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", &vIndex, this, dsGroupSelector);
     auto metadataLoader = MetadataMemoryManager->BuildLoader(vIndex, this, dsGroupSelector);
     auto commonFinish = std::make_shared<NLoading::TGranuleFinishCommonLoading>("granule_finished_common", this);
+    auto optimizerLoader = std::make_shared<NLoading::TGranuleOptimizerLoading>("optimizer", this);
 
     auto result = std::make_shared<TTxCompositeReader>("granule");
+    result->AddNameSuffix(":" + ::ToString(GetPathId()));
     result->AddChildren(portionsLoader);
     if (metadataLoader) {
         result->AddChildren(metadataLoader);
     }
     result->AddChildren(commonFinish);
+    result->AddChildren(optimizerLoader);
     return result;
 }
 

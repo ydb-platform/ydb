@@ -61,44 +61,7 @@ namespace NKikimr::NBsController {
         storagePool.RandomizeGroupMapping = false;
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = boxId;
-            filter.StoragePoolId = storagePoolId;
-
-            bool hasTypeProperty = false;
-
-            for (const auto &property : item.GetProperty()) {
-                switch (property.GetPropertyCase()) {
-#define PROPERTY(NAME, PTR) \
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
-                        if (filter.NAME) { \
-                            throw TExError() << #NAME << " already set"; \
-                        } else { \
-                            filter.NAME = property.Get ## NAME(); \
-                            if (bool *p = (PTR)) { \
-                                *p = true; \
-                            } \
-                            continue; \
-                        } \
-                    }
-
-                    PROPERTY(Type, &hasTypeProperty)
-                    PROPERTY(SharedWithOs, nullptr)
-                    PROPERTY(ReadCentric, nullptr)
-                    PROPERTY(Kind, nullptr)
-
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
-                }
-
-                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
-            }
-
-            if (!hasTypeProperty) {
-                throw TExError() << "TPDiskFilter did not specify Type property";
-            }
-
-            storagePool.PDiskFilters.insert(std::move(filter));
+            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
         }
 
         //if (cmd.HasScopeId()) {

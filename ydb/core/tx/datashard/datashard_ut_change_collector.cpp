@@ -861,19 +861,28 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(InitialScanCompletedPrefix) {
         WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
-                auto&, auto& db, auto& sink, auto collect) {
+                auto& collector, auto& db, auto& sink, auto collect) {
+            const auto& keyTypes = shard.GetUserTables().at(tableId.PathId.LocalPathId)->KeyColumnTypes;
             const TVector<TCell> lastKey{TCell::Make(ui32(7)), TCell::Make(ui32(256))};
+            const auto lastRawKey = NStreamScan::MakeKey(lastKey, keyTypes);
+            UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, lastRawKey));
             shard.GetCdcStreamScanManager().Get(streamId)->LastKey = TSerializedCellVec(lastKey);
 
             // A snapshot read would fault. Typed ordering must also handle 255 < 256.
             db.PageFault = true;
             for (auto [a, b] : {std::pair{6u, 1000u}, {7u, 255u}, {7u, 256u}}) {
+                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+                UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
                 UNIT_ASSERT(collect(a, b));
                 UNIT_ASSERT(collect(a, b, NTable::ERowOp::Erase));
                 UNIT_ASSERT(collect(a, b, NTable::ERowOp::Reset));
             }
             UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 0);
             UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
+            for (auto [a, b] : {std::pair{7u, 257u}, {8u, 0u}}) {
+                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+                UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
+            }
             UNIT_ASSERT(!collect(7, 257));
             UNIT_ASSERT(!collect(8, 0));
             UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
@@ -883,6 +892,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             TUserTable::TPtr images = new TUserTable(*shard.GetUserTables().at(tableId.PathId.LocalPathId));
             images->CdcStreams.at(streamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
             shard.SetUserTable(tableId.PathId, images);
+            UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, lastRawKey));
             UNIT_ASSERT(!collect(7, 256));
             UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
             UNIT_ASSERT_VALUES_EQUAL(db.CurrentReads, 1);

@@ -1078,9 +1078,15 @@
             3,
             4,
             5,
-            6
+            6,
+            7
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "Location",
+                "ColumnType": "String"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
@@ -1116,6 +1122,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

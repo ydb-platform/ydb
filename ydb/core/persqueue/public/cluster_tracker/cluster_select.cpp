@@ -134,14 +134,6 @@ TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
             )", TString(clusterTablePath).c_str());
 }
 
-TString MakeAlterAddFnxQuery(TStringBuf clusterTablePath) {
-    return Sprintf(
-        R"(
-               --!syntax_v1
-               ALTER TABLE `%s` ADD COLUMN fnx Bool;
-            )", TString(clusterTablePath).c_str());
-}
-
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath) {
     return Sprintf(
         R"(
@@ -164,14 +156,6 @@ TString MakeCreateVersionsQuery(TStringBuf versionTablePath) {
                    PRIMARY KEY (name)
                );
             )", TString(versionTablePath).c_str());
-}
-
-TString MakeBackfillFnxQuery(TStringBuf clusterTablePath) {
-    return Sprintf(
-        R"(
-               --!syntax_v1
-               UPDATE `%s` SET fnx = false WHERE fnx IS NULL;
-            )", TString(clusterTablePath).c_str());
 }
 
 bool IssuesLookLikeAlreadyExists(TStringBuf issues) {

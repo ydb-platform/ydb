@@ -55,10 +55,10 @@ struct TSimpleSkiffParser
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-class TTzSkiffParser
+class TTzTupleSkiffParser
 {
 public:
-    TTzSkiffParser();
+    TTzTupleSkiffParser();
     Y_FORCE_INLINE TStringBuf operator()(NSkiff::TCheckedInDebugSkiffParser* parser);
 
 private:
@@ -68,7 +68,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-struct TTzSkiffWriter
+struct TTzTupleSkiffWriter
 {
     Y_FORCE_INLINE void operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const;
 };
@@ -122,9 +122,11 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ValidateMatchesSimpleType(
+    const NSkiff::TSkiffSchemaPtr& skiffSchema,
+    NTableClient::ESimpleLogicalValueType simpleType);
 void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType);
 void ValidateWireTypeIsOneOf(NSkiff::EWireType wireType, const std::initializer_list<NSkiff::EWireType>& expected);
-void CheckTzType(const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema, NTableClient::ESimpleLogicalValueType columnType);
 
 template <NSkiff::EWireType wireType, typename TValueType>
 Y_FORCE_INLINE void CheckIntSize(TValueType value);

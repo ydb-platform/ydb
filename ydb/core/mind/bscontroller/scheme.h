@@ -372,8 +372,11 @@ struct Schema : NIceDb::Schema {
         struct ReadCentric : Column<5, HostConfigDrive::ReadCentric::ColumnType> {};
         struct Kind : Column<6, HostConfigDrive::Kind::ColumnType> {};
 
-        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
-        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
+        // Serialized TNodeLocation; null preserves filters written before location support.
+        struct Location : Column<7, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
     };
 
     struct GroupStoragePool : Table<123> {

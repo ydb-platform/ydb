@@ -7,6 +7,10 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+namespace NKikimrKqp {
+    class TKqpAlterTableRequest;
+}
+
 namespace NKikimr {
 
 void MEWarning(const TString& settingName, TList<TString>& warnings);
@@ -20,6 +24,9 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& out,
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed);
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const NKikimrKqp::TKqpAlterTableRequest& in,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed);
 
 

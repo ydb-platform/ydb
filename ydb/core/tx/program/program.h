@@ -22,6 +22,8 @@ private:
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
+    // Unit tests turn hints on without AppData feature flags. Production uses EnableCsPatternIndexHints.
+    bool PatternIndexHintsEnabled = false;
 
 public:
     bool IsGenerated(const ui32 columnId) const {
@@ -95,6 +97,10 @@ public:
         THashSet<ui32> columnsSet(data.begin(), data.end());
         OverrideProcessingColumnsVector = std::move(columnsVector);
         OverrideProcessingColumnsSet = std::move(columnsSet);
+    }
+
+    void SetPatternIndexHintsEnabled(const bool value) {
+        PatternIndexHintsEnabled = value;
     }
 
     [[nodiscard]] TConclusionStatus Init(

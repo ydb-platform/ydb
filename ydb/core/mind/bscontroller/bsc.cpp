@@ -1338,6 +1338,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDataCenterStates:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineFailRealmStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kTestResetDataCenterStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineFailRealmStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:

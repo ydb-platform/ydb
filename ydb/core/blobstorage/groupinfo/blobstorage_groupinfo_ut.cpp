@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         for (ui32 offset = 0; offset < 5; ++offset) {
             group.SetGroupGeneration(offset + 2);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                group.MutableRings(realm)->SetState(states[(realm + offset) % 5]);
+                group.MutableRings(realm)->SetRealmState(states[(realm + offset) % 5]);
             }
             // Exercise the wire representation before NodeWarden's Parse entry point.
             NKikimrBlobStorage::TGroupInfo received;
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetFailRealmState(realm)), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().FailRealmStates[realm]), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(localVDisk->GetFailRealmState(realm)), static_cast<ui32>(expected));
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->Group->GetRings(realm).GetState()), static_cast<ui32>(expected));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->Group->GetRings(realm).GetRealmState()), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(current->IsFailedFailRealm(realm), expected == R::F);
                 UNIT_ASSERT_VALUES_EQUAL(current->IsRecoveringFailRealm(realm), expected == R::R);
                 UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailedFailRealm(realm), expected == R::F);

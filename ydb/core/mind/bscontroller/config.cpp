@@ -3,6 +3,7 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -393,8 +394,8 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (const auto error = state.ApplyDataCenterStates()) {
-                *errorDescription = *error;
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+                *errorDescription = result.error();
                 return false;
             }
 
@@ -686,11 +687,14 @@ namespace NKikimr::NBsController {
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
 
+            if (state.DataCenterStates.Changed()) {
+                db.Table<Schema::State>().Key(true).Update<Schema::State::DataCenterStates>(
+                    SerializeDataCenterStates(state.DataCenterStates.Get()));
+            }
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (overlay->second) {
                     NKikimrBlobStorage::TFailRealmStates states;
-                    if (overlay->second->HasExplicitFailRealmStates) {
-                        Y_ABORT_UNLESS(overlay->second->FailRealmStates);
+                    if (overlay->second->FailRealmStates) {
                         for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
                             states.AddState(value);
                         }
@@ -1630,7 +1634,7 @@ namespace NKikimr::NBsController {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
                         if (groupInfo.FailRealmStates) {
-                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                            realm->SetRealmState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
                         }
                         domain = nullptr;
                     }

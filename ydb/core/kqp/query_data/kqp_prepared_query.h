@@ -52,6 +52,8 @@ struct TQueryTable {
     TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
 };
 
+const NKqpProto::TKqpInternalSink* FindTableTruncateSink(const NKqpProto::TKqpPhyTx& tx);
+
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     const NKqpProto::TKqpPhyTx* Proto;
@@ -119,6 +121,12 @@ public:
     const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& GetTables() const {
         return Proto->GetTables();
     }
+
+    bool HasUnsafeTruncate() const {
+        return FindTableTruncateSink(*Proto) != nullptr;
+    }
+
+    NKikimrKqp::TKqpTableTruncateSettings GetUnsafeTruncate() const;
 
     const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
         return Proto->GetSchemeOperation();

@@ -21,6 +21,7 @@
 {% if backend_name == "YDB" %}
 
 * [ANALYZE](analyze.md)
+* [KILL SESSION](kill-session.md)
 
 {% endif %}
 

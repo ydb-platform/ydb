@@ -629,12 +629,7 @@ protected:
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-<<<<<<< HEAD
-            {"SID", Context->UserToken->GetUserSID()});
-=======
             {"SID", GetUsernameOrAnonymous(Context)});
-        ScheduleTokenRecheck(ctx);
->>>>>>> 86c2a48d516 ([INC] Fix empty token dereference in anon mode with error for Kafka proxy (#56793))
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {

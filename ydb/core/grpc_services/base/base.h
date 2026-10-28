@@ -1852,10 +1852,10 @@ using TGrpcRequestOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, true
 template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
 using TGrpcRequestNoOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off, bool TNonModifying = false>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off, bool NonModifying = false>
 class TGRpcRequestWrapper
     : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-        TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, TNonModifying>>
+        TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, NonModifying>>
 {
 public:
     static constexpr bool IsOp = IsOperation;
@@ -1863,7 +1863,7 @@ public:
 
     TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, TNonModifying>>(ctx)
+            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, NonModifying>>(ctx)
     { }
 
     TRateLimiterMode GetRlMode() const override {
@@ -1871,7 +1871,7 @@ public:
     }
 
     TAuditMode GetAuditMode() const override {
-        if constexpr (TNonModifying) {
+        if constexpr (NonModifying) {
             return TAuditMode::NonModifying();
         }
         return {};

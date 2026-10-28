@@ -20,6 +20,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <cctype>
 #include <map>
 #include <set>
 
@@ -276,13 +277,8 @@ bool IsGrpcMethodName(TStringBuf method) {
         if (i == slash) {
             continue;
         }
-        const char c = method[i];
-        const bool ok = (c >= 'A' && c <= 'Z')
-            || (c >= 'a' && c <= 'z')
-            || (c >= '0' && c <= '9')
-            || c == '.'
-            || c == '_';
-        if (!ok) {
+        const unsigned char c = method[i];
+        if (!isalnum(c) && c != '.' && c != '_') {
             return false;
         }
     }
@@ -370,11 +366,8 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             return EValidationResult::Error;
         }
     }
-    {
-        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateUnauthenticatedGrpcMethods(config, msg);
-        if (result == NKikimr::NConfig::EValidationResult::Error) {
-            return EValidationResult::Error;
-        }
+    if (ValidateUnauthenticatedGrpcMethods(config, msg) == EValidationResult::Error) {
+        return EValidationResult::Error;
     }
     if (config.HasColumnShardConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateColumnShardConfig(config.GetColumnShardConfig(), msg);

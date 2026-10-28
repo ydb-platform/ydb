@@ -14,21 +14,25 @@ bool TController::TracksSourceOffsets(const TWorkerId& id) const {
         && target->GetKind() != TReplication::ETargetKind::Transfer;
 }
 
-bool TController::HasSourceOffsetMismatchError(const TReplication& replication) const {
-    return replication.GetState() == TReplication::EState::Error
-        && ReplicationsWithSourceOffsetMismatch.contains(replication.GetId());
+void TController::SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const {
+    if (replication.GetState() == TReplication::EState::Error
+        && ReplicationsWithSourceOffsetMismatch.contains(replication.GetId()))
+    {
+        return;
+    }
+    replication.SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target.GetId()
+        << ": " << target.GetIssue());
 }
 
 void TController::DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db) {
-    for (auto it = ProcessedSourceOffsets.begin(); it != ProcessedSourceOffsets.end();) {
-        const auto& id = it->first;
-        if (id.ReplicationId() == replicationId && id.TargetId() == targetId) {
-            db.Table<Schema::ProcessedSourceOffsets>().Key(replicationId, targetId, id.WorkerId()).Delete();
-            ProcessedSourceOffsets.erase(it++);
-        } else {
-            ++it;
+    EraseNodesIf(ProcessedSourceOffsets, [&](const auto& item) {
+        const auto& id = item.first;
+        if (id.ReplicationId() != replicationId || id.TargetId() != targetId) {
+            return false;
         }
-    }
+        db.Table<Schema::ProcessedSourceOffsets>().Key(replicationId, targetId, id.WorkerId()).Delete();
+        return true;
+    });
 }
 
 class TController::TTxSourceOffsetReport: public TTxBase {
@@ -71,10 +75,8 @@ public:
         if (!Accepted) {
             return;
         }
-        if (PersistedNextOffset) {
-            if (auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(Id)) {
-                savedOffset->PersistedNextOffset = Max(savedOffset->PersistedNextOffset.GetOrElse(0), *PersistedNextOffset);
-            }
+        if (auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(Id); PersistedNextOffset && savedOffset) {
+            savedOffset->PersistedNextOffset = Max(savedOffset->PersistedNextOffset.GetOrElse(0), *PersistedNextOffset);
         }
         if (Self->HasWorkerSession(Id, Event->Sender.NodeId())
             && !Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId()))
@@ -85,14 +87,14 @@ public:
 };
 
 void TController::StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx) {
-    for (auto it = IndexReadyActors.begin(); it != IndexReadyActors.end();) {
-        if (it->first.first == replicationId) {
-            ctx.Send(it->second, new TEvents::TEvPoison());
-            IndexReadyActors.erase(it++);
-        } else {
-            ++it;
+    EraseNodesIf(IndexReadyActors, [&](const auto& item) {
+        const auto& [key, actorId] = item;
+        if (key.first != replicationId) {
+            return false;
         }
-    }
+        ctx.Send(actorId, new TEvents::TEvPoison());
+        return true;
+    });
     for (const auto& [key, _] : SchemaBarriers) {
         if (key.first == replicationId) {
             StopSchemaChangeDstAlter(key, ctx);

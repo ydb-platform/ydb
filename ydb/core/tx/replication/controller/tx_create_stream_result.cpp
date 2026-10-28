@@ -97,10 +97,7 @@ public:
                 << ": " << status.GetStatus()
                 << ", " << status.GetIssues().ToOneLineString());
 
-            if (!Self->HasSourceOffsetMismatchError(*Replication)) {
-                Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                    << ": " << target->GetIssue());
-            }
+            Self->SetReplicationError(*Replication, *target);
 
             YDB_LOG_ERROR_CTX(ctx, "Create stream error",
                 {"rid", rid},

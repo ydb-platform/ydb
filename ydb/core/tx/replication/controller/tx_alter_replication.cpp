@@ -252,7 +252,7 @@ public:
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
         auto desiredState = Replication->GetDesiredState();
-        if (record.HasSwitchState()) {
+        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
@@ -296,14 +296,6 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
-        }
-        if (record.HasSwitchState() && record.GetSwitchState().HasStandBy()
-            && Self->ReplicationsWithSourceOffsetMismatch.erase(Replication->GetId()))
-        {
-            // Resume revalidates the same saved offsets.
-            YDB_LOG_NOTICE_CTX(ctx, "Retry source offset validation", {"replicationId", Replication->GetId()});
-            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-                NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(false));
         }
         if (ResetFailedSchemaBarriers) {
             RecoverFailedSchemaBarriers(db);

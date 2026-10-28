@@ -317,8 +317,8 @@ message TEvStatus {
 }
 
 message TEvSourceOffsetReport {
-    optional TWorkerIdentity Worker = 2;
-    optional uint64 NextOffset = 3;
+    optional TWorkerIdentity Worker = 1;
+    optional uint64 NextOffset = 2;
 }
 
 message TEvSourceOffsetResult {}

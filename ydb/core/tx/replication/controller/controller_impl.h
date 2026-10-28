@@ -183,7 +183,7 @@ private:
     bool IsValidWorker(const TWorkerId& id) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
     bool TracksSourceOffsets(const TWorkerId& id) const;
-    bool HasSourceOffsetMismatchError(const TReplication& replication) const;
+    void SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const;
     void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
     void StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx);
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);

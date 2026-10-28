@@ -254,10 +254,11 @@ def test_destination_disk_rollback_stops_replication():
         assert destination.rows() == actual
         assert source.consumer(topic)[0] == stopped_offset
 
-        # A manual retry must revalidate, not erase the rollback evidence.
-        destination.query('ALTER ASYNC REPLICATION r SET (STATE="Paused");')
-        wait_for("pause after rollback error", lambda: destination.replication().WhichOneof("state") == "paused")
-        destination.query('ALTER ASYNC REPLICATION r SET (STATE="StandBy");')
-        wait_for("rollback detected again after explicit resume", stopped)
+        # State changes must preserve the rollback error.
+        for state in ("Paused", "StandBy"):
+            destination.query(f'ALTER ASYNC REPLICATION r SET (STATE="{state}");')
+            result = wait_for(f"replication after {state}", destination.replication)
+            assert result.WhichOneof("state") == "error", result
+            assert "Source consumer committed next offset" in str(result), result
         assert destination.rows() == actual
         assert source.consumer(topic)[0] == stopped_offset

@@ -238,30 +238,22 @@ class TWorker: public TActorBootstrapped<TWorker> {
         return ReaderSessionStarted && SourceOffsetMismatch.empty();
     }
 
-    void ProcessSourceActions() {
-        if (TrackSourceOffsets && (!Reader || !IsReaderValidated() || SourceOffsetReport)) {
+    void ProcessSourceCommits() {
+        if (!Reader || !IsReaderValidated() || SourceOffsetReport) {
             return;
         }
-        while (!SourceActions.empty()) {
-            auto& action = SourceActions.front();
-            if (TrackSourceOffsets && action.Offset && (!AuthorizedSourceOffset || *AuthorizedSourceOffset < *action.Offset)) {
+        while (!PendingSourceCommits.empty()) {
+            const auto offset = PendingSourceCommits.front();
+            if (!PersistedSourceOffset || *PersistedSourceOffset < offset) {
                 SourceOffsetReport = MakeHolder<NKikimrReplication::TEvSourceOffsetReport>();
                 ++SourceOffsetReportId;
-                SourceOffsetReport->SetNextOffset(*action.Offset);
+                SourceOffsetReport->SetNextOffset(offset);
                 SendSourceOffsetReport(*SourceOffsetReport);
                 return;
             }
-            if (action.Event->Type() == TEvWorker::EvPoll) {
-                ReadRequested = true;
-            }
-            Send(Reader, action.Event.Release());
-            SourceActions.pop_front();
+            Send(Reader, new TEvWorker::TEvCommit(offset));
+            PendingSourceCommits.pop_front();
         }
-    }
-
-    void AuthorizeSource(TMaybe<ui64> offset, THolder<IEventBase> event) {
-        SourceActions.push_back({offset, std::move(event)});
-        ProcessSourceActions();
     }
 
     void PollSource(bool skipCommit = false) {
@@ -272,11 +264,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
             if (PendingWriterCheckpoint && TlsActivationContext->Now() - SourceOffsetCommitStarted >= SourceOffsetCommitInterval) {
                 return;
             }
-            ReadRequested = true;
-            Send(Reader, new TEvWorker::TEvPoll(true));
-            return;
+            skipCommit = true;
         }
-        AuthorizeSource(skipCommit ? Nothing() : BatchEnd, MakeHolder<TEvWorker::TEvPoll>(skipCommit));
+        ReadRequested = true;
+        Send(Reader, new TEvWorker::TEvPoll(skipCommit));
     }
 
     void AdvanceCompletedSourceOffset(ui64 offset) {
@@ -286,8 +277,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void CommitSource(ui64 offset) {
+        if (!TrackSourceOffsets) {
+            Send(Reader, new TEvWorker::TEvCommit(offset));
+            return;
+        }
         AdvanceCompletedSourceOffset(offset);
-        AuthorizeSource(offset, MakeHolder<TEvWorker::TEvCommit>(offset));
+        PendingSourceCommits.push_back(offset);
+        ProcessSourceCommits();
     }
 
     bool CommitPendingSourceOffset() {
@@ -316,7 +312,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             ReportRecoveredCompletion();
         }
         CommitPendingSourceOffset();
-        ProcessSourceActions();
+        ProcessSourceCommits();
         PollSource();
     }
 
@@ -324,9 +320,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (!SourceOffsetReport || ev->Cookie != SourceOffsetReportId) {
             return;
         }
-        AuthorizedSourceOffset = SourceOffsetReport->GetNextOffset();
+        PersistedSourceOffset = SourceOffsetReport->GetNextOffset();
         SourceOffsetReport.Reset();
-        ProcessSourceActions();
+        ProcessSourceCommits();
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
@@ -832,10 +828,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
         ReaderSessionStarted = true;
         ReaderCommittedOffset = ev->Get()->CommittedOffset;
         if (TrackSourceOffsets) {
-            if (AuthorizedSourceOffset && *ReaderCommittedOffset > *AuthorizedSourceOffset) {
+            if (PersistedSourceOffset && *ReaderCommittedOffset > *PersistedSourceOffset) {
                 SourceOffsetMismatch = TStringBuilder()
                     << "Source consumer committed next offset " << *ReaderCommittedOffset
-                    << " is ahead of destination processed source offset " << *AuthorizedSourceOffset
+                    << " is ahead of destination processed source offset " << *PersistedSourceOffset
                     << ". Destination history is inconsistent; replication stopped.";
                 ReportSourceOffsetMismatch();
                 return;
@@ -1055,7 +1051,7 @@ public:
         , Reader(std::move(createReaderFn))
         , Writer(std::move(createWriterFn))
         , TrackSourceOffsets(trackSourceOffsets)
-        , AuthorizedSourceOffset(processedSourceOffset)
+        , PersistedSourceOffset(processedSourceOffset)
         , Lag(TDuration::Zero())
     {
     }
@@ -1110,10 +1106,6 @@ private:
     static constexpr ui64 LagReportWakeupTag = 0;
     static constexpr ui64 SourceOffsetCommitWakeupTag = 1;
 
-    struct TSourceAction {
-        TMaybe<ui64> Offset;
-        THolder<IEventBase> Event;
-    };
     const TActorId Parent;
     TActorInfo Reader;
     TActorInfo Writer;
@@ -1143,12 +1135,12 @@ private:
     const bool TrackSourceOffsets;
     bool ReadRequested = false;
     ui64 SourceOffsetReportId = 0;
-    TMaybe<ui64> AuthorizedSourceOffset;
+    TMaybe<ui64> PersistedSourceOffset;
     TMaybe<ui64> BatchEnd;
     TMaybe<ui64> CompletedSourceOffset;
     TDuration SourceOffsetCommitInterval;
     TInstant SourceOffsetCommitStarted;
-    TDeque<TSourceAction> SourceActions;
+    TDeque<ui64> PendingSourceCommits;
     TString SourceOffsetMismatch;
     THolder<NKikimrReplication::TEvSourceOffsetReport> SourceOffsetReport;
     TDuration Lag;

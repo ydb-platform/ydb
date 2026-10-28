@@ -349,6 +349,152 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
 
 Y_UNIT_TEST_SUITE(Osiris) {
 
+    Y_UNIT_TEST(Mirror3dcRepeatsRecoveryOnNormalStateUpgrade) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+        NKikimrBlobStorage::TGroupInfo originalGroup;
+        ui32 revision = 0;
+        ui32 osirisDone = 0;
+        ui32 replDone = 0;
+        ui32 osirisWrites = 0;
+        bool holdOsirisDone = false;
+        std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        });
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            switch (event->GetTypeRewrite()) {
+                case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
+                    NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& record =
+                        event->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                    for (NKikimrBlobStorage::TGroupInfo& group : *record.MutableServiceSet()->MutableGroups()) {
+                        if (!revision) {
+                            originalGroup = group;
+                        } else if (group.GetGroupID() == originalGroup.GetGroupID()) {
+                            group.SetGroupGeneration(originalGroup.GetGroupGeneration() + revision);
+                            for (ui32 realm = 0; realm < 3; ++realm) {
+                                group.MutableRings(realm)->SetState(states[realm]);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvOsirisDone:
+                    ++osirisDone;
+                    if (holdOsirisDone) {
+                        heldOsirisDone.push_back(std::move(event));
+                        return false;
+                    }
+                    break;
+                case TEvBlobStorage::EvReplDone:
+                    replDone += !event->Cookie;
+                    break;
+                case TEvBlobStorage::EvAnubisOsirisPut:
+                    osirisWrites += event->Get<TEvAnubisOsirisPut>()->IsOsiris();
+                    break;
+            }
+            return true;
+        };
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(env.GetGroups().front());
+        const std::function<void()> applyStates = [&] {
+            revision += 100;
+            for (ui32 node = 1; node <= 9; ++node) {
+                std::unique_ptr<TEvBlobStorage::TEvControllerNodeServiceSetUpdate> update =
+                    std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, node);
+                *update->Record.MutableServiceSet()->AddGroups() = originalGroup;
+                env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), {}, update.release()), node);
+            }
+            env.Sim(TDuration::Seconds(30));
+        };
+        states[2] = TFailRealm::F;
+        applyStates();
+        const TString data(4096, 'U');
+        const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        info->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        // One copy in each normal realm satisfies D=1+1, but not the later D=2+2.
+        for (ui32 part = 0; part < 3; ++part) {
+            TVDiskID disk = info->GetVDiskId(subgroup[part]);
+            if (disk.FailRealm == 2) {
+                continue;
+            }
+            disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+            const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
+            env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
+                TLogoBlobID(blobId, part + 1), TRope(data), disk, false, nullptr, TInstant::Max(),
+                NKikimrBlobStorage::TabletLog, false)), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVPutResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        }
+        env.Sim(TDuration::Seconds(30));
+        osirisDone = replDone = osirisWrites = 0;
+        states[0] = states[1] = TFailRealm::N1;
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        UNIT_ASSERT_C(osirisWrites, "N0->N1 must resurrect additional copies for D=2+2");
+        // A generation-only update must not start another pass.
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        states[0] = states[1] = TFailRealm::N2;
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 12);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 12);
+        std::array<ui32, 3> copies{};
+        for (ui32 idx = 0; idx < subgroup.size(); ++idx) {
+            TVDiskID disk = info->GetVDiskId(subgroup[idx]);
+            if (disk.FailRealm == 2) {
+                continue;
+            }
+            disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+            const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::GetFastRead, 0);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
+            std::unique_ptr<TEvBlobStorage::TEvVGet> query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
+                disk, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            query->AddExtremeQuery(TLogoBlobID(blobId, idx % 3 + 1), 0, 0);
+            env.Runtime->Send(new IEventHandle(queue, edge, query.release()), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVGetResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            for (const NKikimrBlobStorage::TQueryResult& blob : result->Get()->Record.GetResult()) {
+                if (blob.GetStatus() == NKikimrProto::OK) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(blob).ConvertToString(), data);
+                    ++copies[disk.FailRealm];
+                }
+            }
+        }
+        UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the normal-state upgrades");
+        // Queue another policy upgrade while the first Osiris completion is still in flight.
+        osirisDone = replDone = 0;
+        states[0] = states[1] = TFailRealm::N0;
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 0);
+        holdOsirisDone = true;
+        states[0] = states[1] = TFailRealm::N1;
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
+        states[0] = states[1] = TFailRealm::N2;
+        applyStates();
+        holdOsirisDone = false;
+        for (std::unique_ptr<IEventHandle>& event : heldOsirisDone) {
+            const ui32 node = event->Sender.NodeId();
+            env.Runtime->Send(event.release(), node);
+        }
+        heldOsirisDone.clear();
+        env.Sim(TDuration::Seconds(30));
+        // Held completions are observed by the filter twice, then the newer pass finishes.
+        UNIT_ASSERT_VALUES_EQUAL(osirisDone, 18);
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(Mirror3dcCircularRealmDisconnection) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};

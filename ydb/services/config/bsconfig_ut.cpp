@@ -1058,6 +1058,118 @@ config:
         UNIT_ASSERT_CHECK_STATUS(checked.operation(), Ydb::StatusIds::SUCCESS);
     }
 
+    // Replacement A is validated and done; the timer of its validation stays scheduled. Replacement B comes a minute
+    // later, and the reply of Console validating it is held. The timer of A fires in between; B must still get its
+    // validation timeout instead of waiting forever and keeping later replacements out.
+    Y_UNIT_TEST(ValidationTimeoutSurvivesTimerOfFinishedReplacement) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        auto makeYaml = [&](ui32 version) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s-%u
+)", version, "timer", version) + HostsYaml(runtime);
+        };
+        const auto first = Replace(runtime, server, makeYaml(1));
+        UNIT_ASSERT_CHECK_STATUS(first.operation(), Ydb::StatusIds::SUCCESS);
+        runtime.SimulateSleep(TDuration::Minutes(1));
+
+        bool holdReplies = true;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            return holdReplies && ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse
+                ? TTestActorRuntime::EEventAction::DROP
+                : TTestActorRuntime::EEventAction::PROCESS;
+        });
+        grpc::Status status;
+        Ydb::Config::ReplaceConfigResponse response;
+        Dispatched(runtime, [&] {
+            std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub = Ydb::Config::V1::ConfigService::NewStub(
+                server.GetChannel());
+            Ydb::Config::ReplaceConfigRequest request;
+            request.set_replace(makeYaml(2));
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::minutes(4));
+            status = stub->ReplaceConfig(&ctx, request, &response);
+        });
+        holdReplies = false;
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(status.ok(), "no reply to the replacement whose validation is held: " << status.error_message());
+        UNIT_ASSERT_C(response.operation().status() != Ydb::StatusIds::SUCCESS, response.operation().DebugString());
+    }
+
+    // Replacement A is done, and replacement B comes right after it, while the timer of A is still scheduled; the reply
+    // of Console validating B is held. The timer of A comes late, after the deadline of B has passed: B must get its
+    // validation timeout then instead of waiting forever.
+    Y_UNIT_TEST(ValidationTimeoutAfterLateTimerOfFinishedReplacement) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        auto makeYaml = [&](ui32 version) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s-%u
+)", version, "late-timer", version) + HostsYaml(runtime);
+        };
+
+        // BSC gets the validation of A from Console; its timer of the validation is the private event 0 without a
+        // body coming to it
+        TActorId controller;
+        bool holdReplies = false;
+        bool holdTimer = false;
+        TAutoPtr<IEventHandle> heldTimer;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse) {
+                controller = ev->GetRecipientRewrite();
+                if (holdReplies) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            if (holdTimer && !heldTimer && controller && ev->GetRecipientRewrite() == controller
+                    && ev->GetTypeRewrite() == 0 && !ev->HasEvent() && !ev->HasBuffer()) {
+                heldTimer = ev;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto first = Replace(runtime, server, makeYaml(1));
+        UNIT_ASSERT_CHECK_STATUS(first.operation(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(controller);
+
+        holdReplies = true;
+        holdTimer = true;
+        grpc::Status status;
+        Ydb::Config::ReplaceConfigResponse response;
+        TAsyncCall replace([&] {
+            std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub = Ydb::Config::V1::ConfigService::NewStub(
+                server.GetChannel());
+            Ydb::Config::ReplaceConfigRequest request;
+            request.set_replace(makeYaml(2));
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::minutes(5));
+            status = stub->ReplaceConfig(&ctx, request, &response);
+        });
+        // the timer of A fires two minutes after A, and B, started right after A, has about the same deadline
+        WaitFor(runtime, [&] { return bool(heldTimer); });
+        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.Send(heldTimer.Release());
+        replace.Wait(runtime);
+        holdReplies = false;
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(status.ok(), "no reply to the replacement whose validation is held: " << status.error_message());
+        UNIT_ASSERT_C(response.operation().status() != Ydb::StatusIds::SUCCESS, response.operation().DebugString());
+    }
+
 }
 
 } // NKikimr::NGRpcService

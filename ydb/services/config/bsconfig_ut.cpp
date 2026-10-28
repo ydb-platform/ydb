@@ -1910,6 +1910,55 @@ config:
         UNIT_ASSERT_C(storageConfig->Contains("host_config_id: 1"), *storageConfig);
     }
 
+    // BSC restarts, and Console has a newer YAML, which asks to leave configuration v2. BSC adopts it; the check of
+    // the migration made once after the start must read the adopted YAML, not the old one, and switch v2 off.
+    Y_UNIT_TEST(MigrationCheckReadsAdoptedYaml) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        auto makeYaml = [&](ui32 version, bool switchToV2) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  feature_flags:
+    switch_to_config_v2: %s
+)", version, switchToV2 ? "true" : "false") + HostsYaml(runtime);
+        };
+        const auto first = Replace(runtime, server, makeYaml(1, true));
+        UNIT_ASSERT_CHECK_STATUS(first.operation(), Ydb::StatusIds::SUCCESS);
+
+        // the restarted BSC learns from Console that it has a newer YAML, as if it was replaced while an older
+        // version of the server was running
+        bool rewritten = false;
+        const TString adoptedYaml = makeYaml(3, false);
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerProposeConfigResponse && !std::exchange(rewritten, true)) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerProposeConfigResponse>()->Record;
+                record.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig);
+                record.SetProposedConfigVersion(1);
+                record.SetConsoleConfigVersion(4);
+                record.SetYAML(adoptedYaml);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        RebootTablet(runtime, MakeBSControllerID(), runtime.AllocateEdgeActor());
+
+        // configuration v2 is off then, and BSC refuses to fetch it
+        Ydb::Config::FetchConfigResponse response;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            response = Fetch(runtime, server);
+            if (rewritten && response.operation().status() == Ydb::StatusIds::UNSUPPORTED) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(rewritten && response.operation().status() == Ydb::StatusIds::UNSUPPORTED,
+            "configuration v2 stays on after BSC adopted the YAML leaving it: " << response.operation().DebugString());
+    }
+
 }
 
 } // NKikimr::NGRpcService

@@ -2,6 +2,8 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
+#include <util/system/type_name.h>
+
 using namespace NBridgeTest;
 
 namespace {
@@ -40,6 +42,12 @@ namespace {
                 }
             }
         }
+    }
+
+    // the event goes to NodeWarden, as the reply to the put it made for an interpile request
+    bool IsToNodeWarden(TEnvironmentSetup& env, const IEventHandle& ev) {
+        IActor *actor = env.Runtime->GetActor(ev.GetRecipientRewrite());
+        return actor && TypeName(*actor).Contains("TNodeWarden");
     }
 
     TEnvironmentSetup::TSettings MakeSettings(bool interpileTrafficOptimization) {
@@ -109,6 +117,59 @@ Y_UNIT_TEST_SUITE(BridgePutResult) {
     // only the VDisks of a remote pile do, and the write reaches them the interpile way
     Y_UNIT_TEST(WrittenBeyondBarrierReportedInterpile) {
         CheckWrittenBeyondBarrierReported(true, [](ui32 pile) { return pile != 0; });
+    }
+
+    // The put made the interpile way races with a newer generation of the group in the remote pile. The bridge
+    // proxy has to learn that generation to wait for the configuration having it, instead of retrying at once.
+    Y_UNIT_TEST(InterpileRaceKeepsRacingGeneration) {
+        TEnvironmentSetup env(MakeSettings(true));
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        const TString data = "blob racing with the newer group";
+        Put(env, groupId, TLogoBlobID(100500, 1, 1, 0, data.size(), 0), data);
+        env.Sim(TDuration::Seconds(5));
+
+        const TLogoBlobID id(100500, 1, 2, 0, data.size(), 0);
+        const ui32 newerGeneration = 1000;
+        ui32 numRaced = 0;
+        std::vector<ui32> racingGenerations; // of the RACE replies to the bridge proxy
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvPutResult || !ev->HasEvent()) {
+                return true;
+            }
+            auto *msg = ev->Get<TEvBlobStorage::TEvPutResult>();
+            if (msg->Id != id) {
+                return true;
+            }
+            if (IsToNodeWarden(env, *ev)) {
+                // the reply of the remote pile to the NodeWarden which made the put there for the interpile request
+                msg->Status = NKikimrProto::RACE;
+                msg->ErrorReason = "the group has a newer generation, set by the test";
+                msg->RacingGeneration = newerGeneration;
+                ++numRaced;
+            } else if (msg->Status == NKikimrProto::RACE && std::find(pileGroups.begin(), pileGroups.end(),
+                    msg->GroupId) != pileGroups.end()) {
+                racingGenerations.push_back(msg->RacingGeneration);
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        // the put ends anyway, with the newer configuration never coming its wait times out
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(res, "no reply to the put");
+        UNIT_ASSERT(numRaced);
+        UNIT_ASSERT_C(!racingGenerations.empty(), "no RACE reply from the remote pile");
+        for (const ui32 generation : racingGenerations) {
+            UNIT_ASSERT_VALUES_EQUAL(generation, newerGeneration);
+        }
     }
 
 }

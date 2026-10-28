@@ -167,6 +167,50 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         runtime.WaitFor("the replica reported present", [&] { return reports == 2; }, TDuration::Seconds(10));
     }
 
+    // A follower registers at the replica and unregisters then. The replica must tell the guardian of the leader,
+    // which keeps the list of followers, not the guardian of the follower going away.
+    Y_UNIT_TEST(FollowerUnregisterNotifiesLeaderGuardian) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const TActorId replica = resolved->Get()->GetPlainReplicas().front();
+
+        // the guardian of the leader registers at the replica
+        const TActorId leaderGuardian = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(replica, leaderGuardian, new TEvStateStorage::TEvReplicaLookup(tabletId, 1, 0, 0)));
+        auto info = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(leaderGuardian);
+        auto update = MakeHolder<TEvStateStorage::TEvReplicaUpdate>();
+        update->Record.SetTabletID(tabletId);
+        update->Record.SetCookie(2);
+        ActorIdToProto(runtime.AllocateEdgeActor(), update->Record.MutableProposedLeader());
+        ActorIdToProto(runtime.AllocateEdgeActor(), update->Record.MutableProposedLeaderTablet());
+        update->Record.SetProposedGeneration(1);
+        update->Record.SetSignature(info->Get()->Record.GetSignature());
+        update->Record.SetIsGuardian(true);
+        runtime.Send(new IEventHandle(replica, leaderGuardian, update.Release()));
+        runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(leaderGuardian);
+
+        // a follower registers, and the guardian of the leader learns of it
+        const TActorId followerGuardian = runtime.AllocateEdgeActor();
+        const TActorId follower = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(replica, followerGuardian, new TEvStateStorage::TEvReplicaRegFollower(tabletId, 1,
+            follower, runtime.AllocateEdgeActor(), false, 0, 0)));
+        auto registered = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(leaderGuardian);
+        UNIT_ASSERT_VALUES_EQUAL(registered->Get()->Record.FollowerInfoSize(), 1);
+
+        // the follower unregisters; the guardian of the leader must learn the list without it
+        runtime.Send(new IEventHandle(replica, followerGuardian, new TEvStateStorage::TEvReplicaUnregFollower(tabletId, 1,
+            follower, 0, 0)));
+        auto unregistered = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(leaderGuardian, TDuration::Seconds(5));
+        UNIT_ASSERT_C(unregistered, "the guardian of the leader didn't learn the follower is gone");
+        UNIT_ASSERT_VALUES_EQUAL(unregistered->Get()->Record.FollowerInfoSize(), 0);
+    }
+
     // A replica is gone from the start. Its child must report it missing only after three seconds of failures, not
     // at the first one.
     Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {

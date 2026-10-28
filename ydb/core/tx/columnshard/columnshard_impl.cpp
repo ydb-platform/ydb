@@ -1162,6 +1162,12 @@ void TColumnShard::SetupCleanupSchemas() {
             {"skipReason", "in_progress"});
         return;
     }
+    if (!TablesManager.GetPrimaryIndexSafe().AreAllPortionsLoaded(std::nullopt)) {
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
+            {"background", "cleanup_schemas"},
+            {"skipReason", "portions_not_loaded"});
+        return;
+    }
 
     std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
     if (chainsToClean.empty()) {

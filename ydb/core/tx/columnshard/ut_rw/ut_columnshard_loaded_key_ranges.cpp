@@ -110,6 +110,14 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         return !csControllerGuard->GetTheOnlyShard()->GetOperationsManager().GetLockOptional(LockId);
     }
 
+    void AddSchemaVersion(TTestBasicRuntime & runtime, TActorId & sender, const ui32 version) {
+        const TestTableDescription table;
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(TableId, true, version, table.Schema, table.Pk, {})));
+        tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+        Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), 200 + version));
+    }
+
     bool IsWriteAnswered(TTestBasicRuntime & runtime) {
         TAutoPtr<IEventHandle> handle;
         return runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle, NoAnswerWait);
@@ -414,6 +422,28 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         reader.Ack();
         Y_UNUSED(reader.ContinueReadAll());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
+    }
+
+    // an unloaded portion may still use a version that no loaded portion uses
+    Y_UNIT_TEST(SchemaCleanupWaitsUntilEverythingIsLoaded) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        Y_UNUSED(StartShardWithRows(runtime, sender));
+        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        AddSchemaVersion(runtime, sender, 2);
+        AddSchemaVersion(runtime, sender, 3);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.SimulateSleep(NoAnswerWait);
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCleanupSchemasFinishedCounter().Val(), 0);
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.WaitFor("schemas cleaned", [&] {
+            return csControllerGuard->GetCleanupSchemasFinishedCounter().Val() > 0;
+        }, TDuration::Seconds(30));
     }
 }
 

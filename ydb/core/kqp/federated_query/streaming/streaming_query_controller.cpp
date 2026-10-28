@@ -244,7 +244,7 @@ private:
         const auto& physicalQuery = graph.GetPreparedQuery().GetPhysicalQuery();
         const auto& userToken = Settings.UserToken;
 
-        // Task stage IDs are graph-wide, while physical stages are indexed within each transaction.
+        // Persisted task and physical stage IDs are transaction-local, while checkpoint stage IDs must be graph-wide.
         TVector<ui64> stageIdBases;
         stageIdBases.reserve(physicalQuery.TransactionsSize());
         ui64 stageIdBase = 0;
@@ -264,11 +264,13 @@ private:
             requestContext["UserSID"] = userToken ? userToken->GetUserSID() : TString();
             requestContext["UserGroupSIDs"] = SequenceToJsonString(userToken ? userToken->GetGroupSIDs() : TVector<NACLib::TSID>{});
 
-            const auto& tx = physicalQuery.GetTransactions(task.GetTxId());
-            const auto stageIdBase = stageIdBases.at(task.GetTxId());
+            const auto txId = task.GetTxId();
+            Y_VALIDATE(txId < static_cast<ui64>(physicalQuery.TransactionsSize()), "Missing task transaction");
+            const auto& tx = physicalQuery.GetTransactions(txId);
             const auto stageId = checkpointTask.GetStageId();
-            Y_VALIDATE(stageId >= stageIdBase && stageId - stageIdBase < static_cast<ui64>(tx.StagesSize()), "Missing task stage");
-            const auto& stage = tx.GetStages(stageId - stageIdBase);
+            Y_VALIDATE(stageId < static_cast<ui64>(tx.StagesSize()), "Missing task stage");
+            const auto& stage = tx.GetStages(stageId);
+            checkpointTask.SetStageId(stageIdBases.at(txId) + stageId);
             const auto& program = stage.GetProgram();
             graphParams.MutableStageProgram()->try_emplace(checkpointTask.GetStageId(), program.GetRaw());
             checkpointTask.MutableProgram()->SetRuntimeVersion(program.GetRuntimeVersion());

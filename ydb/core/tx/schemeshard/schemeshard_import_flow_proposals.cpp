@@ -143,7 +143,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;
-        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
+        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error,
+                item.Metadata.GetSourceDatabase(), CanonizePath(ss->RootPathElements))) {
             return nullptr;
         }
     } else {

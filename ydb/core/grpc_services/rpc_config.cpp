@@ -534,9 +534,10 @@ public:
             return;
         }
 
-        if (const auto& databaseName = self->Request_->GetDatabaseName()) {
+        if (const auto& databaseName = self->Request_->GetDatabaseName(); !IsDomainDatabaseOrEmpty(databaseName)) {
             // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
-            // is requested directly from Console (like legacy API)
+            // is requested directly from Console (like legacy API); the domain database means the cluster config,
+            // which goes the cluster way below
             CheckDatabaseAuthorization(*databaseName);
             return;
         }

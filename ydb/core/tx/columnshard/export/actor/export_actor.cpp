@@ -34,7 +34,14 @@ void TActor::ScheduleTimeoutCheck() {
 }
 
 void TActor::HandleWakeup() {
-    if (Stage == EStage::Finished || Stage == EStage::WaitSaveCursor) {
+    if (Stage == EStage::Finished) {
+        return;
+    }
+    if (AllowScanPings && ScanActorId) {
+        TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanPing());
+    }
+    if (Stage == EStage::WaitSaveCursor) {
+        ScheduleTimeoutCheck();
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
@@ -74,6 +81,13 @@ void TActor::AbortExport(const TString& errorMessage) {
         return;
     }
     if (Stage == EStage::WaitSaveCursor) {
+        if (!ExportSession->GetCursor().IsFinished()) {
+            // Preserve an uploader error until the in-flight cursor transaction
+            // completes. Otherwise a failed uploader would leave the export stuck.
+            PendingAbortReason = errorMessage;
+            KillExporter();
+            AbortScanIfKnown(errorMessage);
+        }
         YDB_LOG_WARN("",
             {"event", "abort_during_save_cursor"},
             {"message", errorMessage});
@@ -122,6 +136,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     AFL_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
+    AllowScanPings = msg.GetAllowPings();
     Counters.OnReadStarted();
     Counters.OnAckSent();
     ReadStartTime = TInstant::Now();
@@ -160,6 +175,9 @@ void TActor::OnSessionProgressSaved() {
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
+    } else if (PendingAbortReason) {
+        SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
+        AbortExport(*std::exchange(PendingAbortReason, std::nullopt));
     } else if (ExportSession->GetCursor().IsFinished()) {
         if (ExportSession->IsStarted()) {
             ExportSession->Finish();

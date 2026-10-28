@@ -314,7 +314,15 @@ def target_branch(run: Dict[str, Any]) -> str:
         ref = ((pull.get("base") or {}).get("ref") if isinstance(pull.get("base"), dict) else None)
         if ref:
             return str(ref)
+    if (run or {}).get("event") in PR_EVENTS:
+        return ""
     return str((run or {}).get("head_branch") or "")
+
+
+def display_workflow(run: Dict[str, Any], job: Optional[Dict[str, Any]] = None) -> str:
+    if str((job or {}).get("name") or "").startswith("Postcommit"):
+        return "Postcommit"
+    return str((run or {}).get("name") or "") or "(no workflow)"
 
 
 def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
@@ -331,7 +339,7 @@ def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
         number, title = pull_info(run or {})
         best[runner] = {
             "status": status,
-            "workflow": (run or {}).get("name") or "",
+            "workflow": display_workflow(run or {}, job),
             "job_name": job_name,
             "branch": target_branch(run or {}),
             "run_url": job.get("html_url") or (run or {}).get("html_url") or "",
@@ -395,7 +403,7 @@ def queue_jobs(pairs: List[tuple], now: datetime, specs=None, default=None) -> L
         used.add(name)
         jobs.append({
             "name": name,
-            "workflow": run.get("name") or "(no workflow)",
+            "workflow": display_workflow(run, job),
             "job_name": job_name,
             "branch": target_branch(run) or None,
             "run_url": job.get("html_url") or run.get("html_url") or None,

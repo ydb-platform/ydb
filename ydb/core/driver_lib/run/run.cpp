@@ -221,35 +221,87 @@ void FillGrpcSslDataFromClientCertificateAuthorization(
     sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
 }
 
-void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
+template <typename TFunc>
+void ForEachGRpcServer(TGRpcServersWrapper& wrapper, TFunc&& func) {
+    for (auto* servers : {&wrapper.Servers, &wrapper.RetiredServers}) {
+        for (auto& [_, server] : *servers) {
+            if (server) {
+                func(*server);
+            }
+        }
+    }
+}
+
+// Disables TGRpcServersManager and stops accepting new requests.
+// Completion queues keep polling, so actors can still reply to in-flight requests.
+void StopAcceptingGRpcRequests(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
+    auto wrapper = grpcServersWrapper.lock();
+    if (!wrapper || wrapper->IsDisabled.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    TGuard<TMutex> guard = wrapper->Guard();
+    ForEachGRpcServer(*wrapper, [](NYdbGrpc::TGRpcServer& server) { server.StopAcceptingRequests(); });
+}
+
+void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
     auto wrapper = grpcServersWrapper.lock();
     if (!wrapper) {
         return;
     }
 
-    if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    if (isDisabled) {
-        wrapper->IsDisabled.store(true, std::memory_order_release);
-    }
-
     TGuard<TMutex> guard = wrapper->Guard();
-    for (auto& [_, server] : wrapper->Servers) {
-        if (!server) {
-            continue;
-        }
-        server->Stop();
-    }
+    ForEachGRpcServer(*wrapper, [](NYdbGrpc::TGRpcServer& server) { server.Stop(); });
 
     // Do not destroy TGRpcServer objects here.
-    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
+    // KikimrStop() calls StopGRpcServers() before ActorSystem->Cleanup(), so destroying the
     // servers here would leave dangling TServer* pointers in any
     // TGRpcStreamingRequest objects that are still alive when the actor system
     // destroys their holding actors. The servers are destroyed later when
     // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
     // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
+}
+
+// Destroys retired servers that no request context references anymore.
+// Their completion queues keep polling until then, so stop them first.
+void ReleaseDrainedServers(TGRpcServers& retired) {
+    for (auto it = retired.begin(); it != retired.end();) {
+        if (it->second && it->second->RequestsInProgress()) {
+            ++it;
+            continue;
+        }
+        if (it->second) {
+            it->second->Stop();
+        }
+        it = retired.erase(it);
+    }
+}
+
+// Prepare the wrapper for a new generation of servers created by
+// TGRpcServersManager::Start(). The servers being replaced were stopped (or, on
+// the very first start, never started), but actors may still hold request
+// contexts referencing them, so they must not be destroyed while any request is
+// still registered. Servers without registered requests are destroyed right
+// away; the rest are moved to RetiredServers and stay there until they drain
+// (checked periodically and on the next restart) or the wrapper is destroyed in ~TKikimrRunner().
+void RetireReplacedServers(TGRpcServersWrapper& wrapper) {
+    auto drained = [](const TAutoPtr<NYdbGrpc::TGRpcServer>& server) {
+        return !server || server->RequestsInProgress() == 0;
+    };
+
+    auto& servers = wrapper.Servers;
+    for (auto it = servers.begin(); it != servers.end();) {
+        it = drained(it->second) ? servers.erase(it) : std::next(it);
+    }
+
+    auto& retired = wrapper.RetiredServers;
+    ReleaseDrainedServers(retired);
+
+    for (auto& [name, server] : servers) {
+        // TAutoPtr "copies" transfer ownership, so move the server explicitly
+        retired.emplace_back(name, TAutoPtr<NYdbGrpc::TGRpcServer>(server.Release()));
+    }
+    servers.clear();
 }
 
 } // anonymous namespace
@@ -259,6 +311,7 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
+    bool RetiredServersCheckScheduled = false;
     THashSet<TActorId> DisconnectRequests;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
@@ -354,6 +407,7 @@ public:
             return;
         }
         TGuard<TMutex> guard = wrapper->Guard();
+        RetireReplacedServers(*wrapper);
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
             if (!server) {
@@ -391,7 +445,40 @@ public:
             return;
         }
         Started = false;
-        StopGRpcServers(GRpcServersWrapper);
+        auto wrapper = GRpcServersWrapper.lock();
+        if (!wrapper || wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
+        TGuard<TMutex> guard = wrapper->Guard();
+        for (auto& [name, server] : wrapper->Servers) {
+            if (server) {
+                // Requests still in flight must be able to finish their grpc calls on this server
+                server->StopAcceptingRequests();
+            }
+            wrapper->RetiredServers.emplace_back(name, TAutoPtr<NYdbGrpc::TGRpcServer>(server.Release()));
+        }
+        wrapper->Servers.clear();
+        ScheduleRetiredServersCheck();
+    }
+
+    void ScheduleRetiredServersCheck() {
+        if (!RetiredServersCheckScheduled) {
+            RetiredServersCheckScheduled = true;
+            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        }
+    }
+
+    void HandleRetiredServersCheck() {
+        RetiredServersCheckScheduled = false;
+        auto wrapper = GRpcServersWrapper.lock();
+        if (!wrapper || wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
+        TGuard<TMutex> guard = wrapper->Guard();
+        ReleaseDrainedServers(wrapper->RetiredServers);
+        if (!wrapper->RetiredServers.empty()) {
+            ScheduleRetiredServersCheck();
+        }
     }
 
     void HandleStop(TEvStop::TPtr ev) {
@@ -407,6 +494,7 @@ public:
         hFunc(TEvGRpcServersManager::TEvDisconnectRequestFinished, Handle)
         hFunc(NKqp::TEvKqpWarmupComplete, HandleWarmupComplete)
         cFunc(EvWarmupTimeout, HandleWarmupTimeout)
+        cFunc(TEvents::TSystem::Wakeup, HandleRetiredServersCheck)
         cFunc(TEvents::TSystem::PoisonPill, PassAway)
     )
 };
@@ -2488,7 +2576,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     if (GRpcServersManager) {
-        StopGRpcServers(GRpcServersWrapper, true);
+        StopAcceptingGRpcRequests(GRpcServersWrapper);
     }
 
     if (YqSharedResources) {
@@ -2497,6 +2585,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (ActorSystem) {
         ActorSystem->Stop();
+    }
+
+    // Actors may reply to in-flight requests until the actor system stops;
+    // grpc threads must stop before ActorSystem->Cleanup() destroys mailboxes they send to.
+    if (GRpcServersManager) {
+        StopGRpcServers(GRpcServersWrapper);
     }
 
     if (ModuleFactories) {

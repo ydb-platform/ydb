@@ -37,7 +37,7 @@ public:
 
 public:
     void Bootstrap(const TActorContext& ctx) {
-        BuildRequestContext(&Event->Get()->Request, ContentRequestContext);
+        BuildRequestContext(&Event->Get()->Request, ContentRequestContext, Event->Get()->PathNormalizer.value_or(nullptr));
         if (!Event->Get()->UserToken.empty()) {
             ContentRequestContext.UserToken = Event->Get()->UserToken;
         }
@@ -65,12 +65,13 @@ public:
 private:
     static void BuildRequestContext(
         const NMonitoring::IMonHttpRequest* httpRequest,
-        IViewer::TContentRequestContext& reqCtx) {
+        IViewer::TContentRequestContext& reqCtx,
+        const std::shared_ptr<const std::function<TString(TStringBuf)>>& normalizer) {
         if (!httpRequest) {
             return;
         }
 
-        const auto& params = httpRequest->GetParams();
+        const auto params = NormalizePathParameters(httpRequest->GetParams(), normalizer);
         auto post = httpRequest->GetPostContent();
 
         reqCtx.JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(

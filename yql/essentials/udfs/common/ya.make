@@ -13,7 +13,11 @@ IF (NOT EXPORT_CMAKE)
         hyperloglog
         hyperloglog/impl
         ip_base
+        ip_base/impl
+        ip_base/fat
         json
+        json/impl
+        json/fat
         json2
         json2/impl
         math
@@ -48,6 +52,44 @@ IF (NOT EXPORT_CMAKE)
         yson2
         yson2/impl
     )
+    IF (OS_LINUX AND ARCH_X86_64)
+        IF (SANITIZER_TYPE != "undefined")
+            RECURSE(
+                compress_base/fat
+                datetime2/fat
+                digest/fat
+                file/fat
+                histogram/fat
+                hyperloglog/fat
+                hyperscan/fat
+                json2/fat
+                math/fat
+                pire/fat
+                protobuf/fat
+                re2/fat
+                reservoir_sampling/fat
+                set/fat
+                stat/fat
+                streaming/fat
+                string/fat
+                top/fat
+                topfreq/fat
+                unicode_base/fat
+                url_base/fat
+                vector/fat
+                yson2/fat
+            )
+        ENDIF()
+        IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+            RECURSE(
+                string/static_host
+            )
+        ELSEIF (SANITIZER_TYPE == "undefined")
+            RECURSE(
+                string/static_host
+            )
+        ENDIF()
+    ENDIF()
     IF (ARCH_X86_64)
         RECURSE(
             hyperscan

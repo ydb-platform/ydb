@@ -41,9 +41,13 @@ class TReplication::TImpl: public TLagProvider {
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
         if (SecretResolver) {
-            return;
+            if (SecretResolverRevision == CredentialsRevision) {
+                return;
+            }
+            ctx.Send(std::exchange(SecretResolver, {}), new TEvents::TEvPoison());
         }
 
+        SecretResolverRevision = CredentialsRevision;
         SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie, Database));
     }
 
@@ -55,16 +59,21 @@ class TReplication::TImpl: public TLagProvider {
         TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
-    ui64 GetExpectedSecretResolverCookie() const {
-        return SecretResolverCookie;
+    bool CanApplyResolvedCredentials() const {
+        // DROP still needs source credentials to remove retained streams after DONE.
+        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
     }
 
     template <typename... Args>
     void ResolveResourceId(const TActorContext& ctx, Args&&... args) {
         if (ResourceIdResolver) {
-            return;
+            if (ResourceIdResolverRevision == CredentialsRevision) {
+                return;
+            }
+            ctx.Send(std::exchange(ResourceIdResolver, {}), new TEvents::TEvPoison());
         }
 
+        ResourceIdResolverRevision = CredentialsRevision;
         ResourceIdResolver = ctx.Register(CreateResourceIdResolver(ctx.SelfID, ReplicationId, std::forward<Args>(args)...));
     }
 
@@ -81,7 +90,7 @@ class TReplication::TImpl: public TLagProvider {
     }
 
     void DiscoverTargets(const TActorContext& ctx) {
-        if (TargetDiscoverer) {
+        if (TargetDiscoverer || TargetDiscoveryComplete) {
             return;
         }
 
@@ -91,6 +100,7 @@ class TReplication::TImpl: public TLagProvider {
 
             case NKikimrReplication::TReplicationConfig::kSpecific:
             case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+                TargetDiscovererRevision = CredentialsRevision;
                 TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
                 break;
 
@@ -169,6 +179,19 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
+        if (State == EState::Done) {
+            return;
+        }
+
+        if (DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)) {
+            // Forced DONE only needs local destination cleanup. In particular,
+            // unresolved source credentials must not prevent it after restart.
+            if (!Database) {
+                ResolveDatabase(ctx);
+            }
+            return ProgressTargets(ctx);
+        }
+
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
@@ -241,6 +264,7 @@ public:
     }
 
     void Shutdown(const TActorContext& ctx) {
+        StopTargetDescribers(ctx);
         for (auto& [_, target] : Targets) {
             target->Shutdown(ctx);
         }
@@ -287,10 +311,27 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
+        if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
+            // A deferred ALTER installs the config before ResetCredentials.
+            // Invalidate the old callbacks immediately, including A -> B -> A.
+            ++CredentialsRevision;
+        }
         Config = config;
     }
 
+    void StopTargetDescribers(const TActorContext& ctx) {
+        // Describers use this proxy's source connection. Finish them with the
+        // statistics already collected before destroying that connection.
+        for (const auto& actorId : TargetDescribers) {
+            ctx.Send(actorId, new TEvents::TEvPoison());
+        }
+        TargetDescribers.clear();
+    }
+
     void ResetCredentials(const TActorContext& ctx) {
+        ++CredentialsRevision;
+        TargetDiscoveryComplete = false;
+        StopTargetDescribers(ctx);
         for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
@@ -325,10 +366,16 @@ private:
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
+    ui64 CredentialsRevision = 0;
+    ui64 SecretResolverRevision = 0;
     TActorId ResourceIdResolver;
+    ui64 ResourceIdResolverRevision = 0;
     TActorId YdbProxy;
+    THashSet<TActorId> TargetDescribers;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
+    ui64 TargetDiscovererRevision = 0;
+    bool TargetDiscoveryComplete = false;
 
 }; // TImpl
 
@@ -401,6 +448,25 @@ void TReplication::Progress(const TActorContext& ctx) {
     Impl->Progress(ctx);
 }
 
+bool TReplication::IsExpectedTargetDiscoverer(const TActorId& actorId) const {
+    if (!actorId || actorId != Impl->TargetDiscoverer) {
+        return false;
+    }
+
+    if (Impl->TargetDiscovererRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    return Impl->Targets.empty() && Impl->DesiredState != EState::Done;
+}
+
+void TReplication::FinishTargetDiscovery() {
+    Impl->TargetDiscoverer = {};
+    // An empty successful discovery must also be consumed: Progress must not
+    // immediately launch another discoverer after retiring the replying actor.
+    Impl->TargetDiscoveryComplete = true;
+}
+
 void TReplication::Shutdown(const TActorContext& ctx) {
     Impl->Shutdown(ctx);
 }
@@ -415,6 +481,14 @@ const TPathId& TReplication::GetPathId() const {
 
 const TActorId& TReplication::GetYdbProxy() const {
     return Impl->YdbProxy;
+}
+
+void TReplication::AddTargetDescriber(const TActorId& actorId) {
+    Impl->TargetDescribers.insert(actorId);
+}
+
+void TReplication::RemoveTargetDescriber(const TActorId& actorId) {
+    Impl->TargetDescribers.erase(actorId);
 }
 
 ui64 TReplication::GetSchemeShardId() const {
@@ -463,6 +537,11 @@ TReplication::EState TReplication::GetDesiredState() const {
 }
 
 void TReplication::SetDesiredState(EState state) {
+    if (state == EState::Done && Impl->DesiredState != state) {
+        // Even a deferred DONE retires source lookups immediately. A subsequent
+        // DROP may need fresh lookups before the deferred reset has run.
+        ++Impl->CredentialsRevision;
+    }
     Impl->DesiredState = state;
 }
 
@@ -491,8 +570,51 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     }
 }
 
-ui64 TReplication::GetExpectedSecretResolverCookie() const {
-    return Impl->GetExpectedSecretResolverCookie();
+bool TReplication::IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const {
+    if (!actorId || actorId != Impl->SecretResolver) {
+        return false;
+    }
+
+    if (cookie != Impl->SecretResolverCookie) {
+        return false;
+    }
+
+    if (Impl->SecretResolverRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    if (!Impl->CanApplyResolvedCredentials()) {
+        return false;
+    }
+
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return !params.GetStaticCredentials().HasPassword();
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return !params.GetOAuthToken().HasToken();
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        return !params.GetIamCredentials().HasResourceId() && !params.GetIamCredentials().GetInitialToken().HasToken();
+    default:
+        return false;
+    }
+}
+
+bool TReplication::IsExpectedResourceIdResolver(const TActorId& actorId) const {
+    if (!actorId || actorId != Impl->ResourceIdResolver) {
+        return false;
+    }
+
+    if (Impl->ResourceIdResolverRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    if (!Impl->CanApplyResolvedCredentials()) {
+        return false;
+    }
+
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    return params.HasIamCredentials() && !params.GetIamCredentials().HasResourceId();
 }
 
 void TReplication::UpdateResourceId(const TString& value) {

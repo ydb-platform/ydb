@@ -382,6 +382,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
@@ -489,6 +491,8 @@ public:
     //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>

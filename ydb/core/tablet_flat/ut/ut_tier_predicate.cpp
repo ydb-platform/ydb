@@ -452,10 +452,10 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
     }
 
     Y_UNIT_TEST(EmptyPolicy) {
+        // No tiering is expressed by the absence of a policy, not by a policy without rules
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
-        TTierPredicate predicate(MakePolicy({}), Now, *lay);
-
-        UNIT_ASSERT(EvaluateValue(*lay, predicate, ui64(0)) == Tier(0));
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakePolicy({})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({}), Now, *lay), yexception);
     }
 
     Y_UNIT_TEST(Undecided) {
@@ -757,6 +757,9 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         // Adjacent ranges do not overlap, and ranges of one rule may overlap
         TTierPredicate::Validate(MakeRangePolicy({{{Year(2024)}, 1}, {{Year(2025)}, 2}}));
         TTierPredicate::Validate(MakeRangePolicy({{{Year(2024), TTierRange{ .From = Date(2024, 6, 1), .To = Date(2025) }}, 1}}));
+
+        // A rule cannot target the default tier
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{Year(2025)}, TTierPredicate::DefaultTierId}})), yexception);
 
         // Empty rules, unbounded and empty ranges
         UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{}, 1}})), yexception);

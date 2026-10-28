@@ -393,6 +393,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            if (const auto error = state.ApplyDataCenterStates()) {
+                *errorDescription = *error;
+                return false;
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -663,6 +668,15 @@ namespace NKikimr::NBsController {
                         state.Callbacks.push_back([this] { CheckBridgeConversion(); });
                         break;
                     }
+                }
+            }
+
+            // groups relying on single parts get synced or lose their parts, see if they are done with it
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&
+                        cur->BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                    state.Callbacks.push_back([this] { CheckBridgeGroupModes(); });
+                    break;
                 }
             }
 
@@ -999,6 +1013,39 @@ namespace NKikimr::NBsController {
             return Self.NextConfigTxSeqNo++;
         }
 
+        void TBlobStorageController::TConfigState::CheckBridgedPartDataRestorable(const TGroupInfo& group,
+                const TBlobStorageGroupInfo::TGroupVDisks& dataless) const {
+            if (!group.BridgePileId || !group.BridgeProxyGroupId || !BridgeInfo) {
+                return;
+            }
+            // The part of the pile taking part in data quorum keeps its sync stage, and the pile its state, whatever
+            // happens to its VDisks: the part (the pile being SYNCHRONIZED, or becoming such) is trusted with the data
+            // it has lost then, and the failover to the pile loses it. The part of the pile out of data quorum gets
+            // reset and resynced when the pile gets back.
+            const auto *pile = BridgeInfo->FindPile(group.BridgePileId);
+            if (!pile || !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                return;
+            }
+            // the data lost by the part is lost by the group when there is no other part to resync it from, like in
+            // the cluster of a single pile; the usual checks of the request decide then
+            const TGroupInfo *proxy = Groups.Find(*group.BridgeProxyGroupId);
+            if (!proxy || !proxy->BridgeGroupInfo || !NBridge::FindGroupPile(proxy->BridgeGroupInfo->GetBridgeGroupState(),
+                    [&](TBridgePileId bridgePileId, const NKikimrBridge::TGroupState::TPile& part) {
+                        const auto *source = BridgeInfo->FindPile(bridgePileId);
+                        return bridgePileId != group.BridgePileId && source &&
+                            source->State == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                            part.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                    })) {
+                return;
+            }
+            if (!group.Topology->QuorumChecker->CheckFailModelForGroup(dataless)) {
+                throw TExError() << "GroupId# " << group.ID << " is the part of the bridged group in the '" << pile->Name
+                    << "' pile being " << NKikimrBridge::TClusterState::EPileState_Name(pile->State)
+                    << ", the change would leave it unable to restore its data from its pile."
+                    " Take the pile out and rejoin it to resync the part from another pile";
+            }
+        }
+
         void TBlobStorageController::TConfigState::DestroyVSlot(TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot) {
             // obtain mutable slot pointer
             TVSlotInfo *mutableSlot = VSlots.FindForUpdate(vslotId);
@@ -1305,6 +1352,7 @@ namespace NKikimr::NBsController {
             TPDiskFilter filter;
             filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
+            bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
                 switch (property.GetPropertyCase()) {
@@ -1325,13 +1373,16 @@ namespace NKikimr::NBsController {
 #undef PROPERTY
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
-                        if (filter.Location) {
+                        if (std::exchange(hasLocation, true)) {
                             throw TExError() << "Location already set";
                         }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
                             throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
                         }
-                        filter.Location = TNodeLocation(property.GetLocation()).GetSerializedLocation();
+                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
+                            filter.SetLocation(location.GetSerializedLocation());
+                        }
                         continue;
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
@@ -1564,6 +1615,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

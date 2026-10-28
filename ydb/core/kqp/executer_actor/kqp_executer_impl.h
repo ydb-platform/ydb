@@ -30,6 +30,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -1099,6 +1100,14 @@ protected:
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
+
+        // TODO: not expected - such a query is not in the scheduler, so the memory limit of its pool isn't applied
+        if (databaseId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID && NScheduler::IsMemoryScheduled()) {
+            YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "Query of a resource pool without the database id",
+                {"txId", TxId},
+                {"poolId", poolId});
+            Y_DEBUG_ABORT("TxId: %" PRIu64 ", query of the resource pool %s without the database id", TxId, poolId.c_str());
+        }
 
         if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());

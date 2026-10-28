@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import shlex
 import re
 import os
@@ -310,7 +311,7 @@ def _create_erm_json(unit: ymake.Unit):
 
 
 def _get_source_path(unit: ymake.Unit) -> str:
-    sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
+    sources_path = unit.get("TS_FOR_DIR") if unit.get("TS_FOR") else unit.path()
     return sources_path
 
 
@@ -318,7 +319,7 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
     from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
-    module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
+    module_path = unit.get("TS_FOR_PATH") if unit.get("TS_FOR") else unit.get("MODDIR")
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
@@ -416,9 +417,15 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
-            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
-                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+            if nodejs_version.major >= 25:
+                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
+                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
+                if target_needs_libatomic or host_needs_libatomic:
+                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                if target_needs_libatomic:
+                    unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
+                if host_needs_libatomic:
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -438,6 +445,42 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     if dirs:
         unit.onpeerdir(dirs)
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bool = False) -> None:
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"NODEJS_BINARY_FOR should be for another module but got path '{for_mod}'")
+        return
+
+    if not RELATIVE and for_mod.startswith("."):
+        ymake.report_configure_error(
+            "You are using a relative path for a module. "
+            f"You have to add RELATIVE key, like NODEJS_BINARY_FOR(RELATIVE {for_mod})"
+        )
+        return
+
+    _SET_TS_FOR_VARS(unit, for_mod)
+
+    for_mod_dir = unit.get("TS_FOR_DIR")
+    if not for_mod_dir or not os.path.isfile(os.path.join(unit.resolve(for_mod_dir), "package.json")):
+        ymake.report_configure_error(
+            f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
+        )
+        return
+
+    _PEERDIR_TS_RESOURCE(unit, "nodejs")
+
+    # _PEERDIR_TS_RESOURCE marks the target's libatomic requirement separately from the host environment.
+    # Use this marker to avoid duplicating its Node.js version and platform checks.
+    if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
+        unit.set(
+            [
+                "COPY_LIBATOMIC_CMD",
+                '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+            ]
+        )
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -750,6 +793,9 @@ def _set_resource_vars(
     unit.set(["{}_ROOT".format(resource_name), "${}".format(yamake_resource_var)])
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
 
+    if tool == "nodejs":
+        unit.set(["WITH_NODEJS_ROOT", "$WITH_{}".format(yamake_resource_var)])
+
 
 def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':
     try:
@@ -968,9 +1014,50 @@ def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:
     return arc_path in nm_required_for
 
 
+def _library_for_paths(target: str, source: str) -> tuple[str, str]:
+    source = os.path.normpath(source)
+    target = os.path.normpath(target)
+    if source.startswith(("/", ".")) or not target.startswith(source + "/"):
+        raise ValueError("TS_LIBRARY_FOR expects an Arcadia-relative path to a parent project")
+    suffix = "__" + target[len(source) + 1 :].replace("/", "__")
+    target_hash = hashlib.sha256(target.encode("utf-8")).hexdigest()[:32]
+    return source, source + suffix + "." + target_hash
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
+    source, build = _library_for_paths(unit.get("MODDIR"), source)
+    _SET_TS_FOR_VARS(unit, "$S/" + source)
+    unit.set(["_FOR_MOD_PATH", "${ARCADIA_ROOT}/" + source])
+    unit.set(["_TS_LIBRARY_OUTPUT_FILE", '${output:"$B/' + build + '/output.tar"}'])
+    unit.set(["_TS_LIBRARY_FOR_BUILD_DIR", "${ARCADIA_BUILD_ROOT}/" + build])
+    unit.set(["_TS_LIBRARY_FOR", "yes"])
+    unit.set(["_TS_LIBRARY_MANIFEST_INPUT", '${hide;input:"$S/' + source + '/package.json"}'])
+    unit.set(["_TS_LIBRARY_OUTPUT_META", '${hide;output:"$B/' + build + '/output.tar.uuid"}'])
+    unit.onpeerdir([source])
+    for filename in ("package.json", "pnpm-lock.yaml"):
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + source + "/" + filename)
+    unit.set(["_TS_LIBRARY_FOR_BASE_ARGS", "--moddir " + source + " --build-suffix " + build[len(source) :]])
+    if _use_hermetic_node_modules(unit):
+        _configure_hermetic_node_modules(unit)
+    pj = _create_pm(unit).load_package_json_from_dir(unit.resolve("$S/" + source))
+    if pj.get_use_prebuilder():
+        _setup_prebuilder_resource(unit)
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+        __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS_LATE_OUTS}")
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and _node_modules_bundle_needed(unit, unit.get("MODDIR")):
+        ymake.report_configure_error("TS_LIBRARY_FOR does not support WITH_NODE_MODULES or NODE_MODULES_FOR")
+        return
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and unit.get("VCS_INFO_FILE"):
+        unit.set(["_NOTS_VCS_INFO_FILE", "${BINDIR}/" + unit.get("VCS_INFO_FILE")])
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
@@ -1027,16 +1114,19 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes":
+    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes" and unit.get("_TS_LIBRARY_FOR") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
             f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
         )
 
+    build_command = unit.get("_TS_BUILD_COMMAND")
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
+        build_command = "{} && {}".format(build_command, after_build_command)
+    if build_command:
+        _set_ts_build_command(unit, build_command)
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
@@ -1180,7 +1270,7 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
             )
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-        if not unit.get("TS_TEST_FOR"):
+        if not unit.get("TS_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
         lf = pm.load_lockfile_from_dir(pm.sources_path)
@@ -1275,7 +1365,7 @@ def _TS_TEST_FOR_CONFIGURE(unit: ymake.Unit, test_runner: str, default_config: s
     if deps:
         unit.ondepends(deps)
 
-    flat_args = (test_runner, "TS_TEST_FOR_PATH")
+    flat_args = (test_runner, "TS_FOR_PATH")
     spec_args = {'erm_json': _create_erm_json(unit)}
 
     dart_record = create_dart_record(
@@ -1327,10 +1417,10 @@ def _VALIDATE_TS_TEST_FOR_ARGS(unit: ymake.Unit, for_mod: str, root: str) -> Non
 
 @ymake.macro
 @_with_report_configure_error
-def _SET_TS_TEST_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
-    unit.set(["TS_TEST_FOR", "yes"])
-    unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
-    unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
+def _SET_TS_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
+    unit.set(["TS_FOR", "yes"])
+    unit.set(["TS_FOR_DIR", unit.resolve_arc_path(for_mod)])
+    unit.set(["TS_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
 def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -> None:
@@ -1383,7 +1473,7 @@ def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
 @_with_report_configure_error
 def _DEPENDS_ON_MOD(unit: ymake.Unit) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
-        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        for_mod_path = unit.get("TS_FOR_PATH")
         unit.ondepends([for_mod_path])
 
 
@@ -1409,29 +1499,6 @@ def _RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS(unit: ymake.Unit, js_script: str)
 
 @ymake.macro
 @_with_report_configure_error
-def _TS_NEXT_EXPERIMENTAL_BUILD_MODE(unit: ymake.Unit) -> None:
-    from lib.nots.package_manager import PackageManager
-    from lib.nots.semver import Version
-
-    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
-    erm_json = _create_erm_json(unit)
-    version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
-
-    var_name = "TS_NEXT_COMMAND"
-
-    if version >= Version.from_str("14.1.2"):
-        # For Next >=v14: build --experimental-build-mode=compile
-        # https://github.com/vercel/next.js/commit/47f73cd8ec79d0a6c248139088aa536453b23ae1
-        unit.set([var_name, "build --experimental-build-mode=compile"])
-    elif version >= Version.from_str("13.5.3"):
-        # For Next <v14: experimental-compile
-        unit.set([var_name, "experimental-compile"])
-    else:
-        raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
-
-
-@ymake.macro
-@_with_report_configure_error
 def _ESCAPE_SPACES(unit: ymake.Unit, var_name: str) -> None:
     prefix = "${ARCADIA_ROOT}/"
     files = __strip_prefix(prefix, unit.get(var_name)).split(f" {prefix}")
@@ -1449,7 +1516,7 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
-    test_mod = unit.get("TS_TEST_FOR_PATH")
+    test_mod = unit.get("TS_FOR_PATH")
     unit.onpeerdir([test_mod])
 
 

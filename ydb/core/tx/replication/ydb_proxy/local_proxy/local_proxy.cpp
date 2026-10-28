@@ -80,7 +80,15 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     request->set_path(TStringBuilder() << Database << "/" << path);
 
     for (const auto& consumer : settings.AddConsumers_) {
-        request->add_add_consumers()->set_name(consumer.ConsumerName_);
+        consumer.SerializeTo(*request->add_add_consumers());
+    }
+
+    for (const auto& consumer : settings.AlterConsumers_) {
+        consumer.SerializeTo(*request->add_alter_consumers());
+    }
+
+    if (settings.SetRetentionPeriod_) {
+        request->mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
     }
 
     for (const auto& consumerName : settings.DropConsumers_) {

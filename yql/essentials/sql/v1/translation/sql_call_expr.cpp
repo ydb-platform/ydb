@@ -1,7 +1,7 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 
-#include <yql/essentials/core/sql_types/spark_functions.h>
+#include <yql/essentials/core/spark_meta/functions.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NSQLTranslationV1 {

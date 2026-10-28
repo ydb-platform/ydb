@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -456,5 +457,24 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         positionsBuilder.AddValue(1, 1);
         auto positions = positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0);
         UNIT_ASSERT(!std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls());
+    }
+
+    Y_UNIT_TEST(DistinctValuesChecksNullPositions) {
+        auto dictionary = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(1), 1);
+        auto positions = NKikimr::NKernels::UInt8VecToArray({0, std::nullopt});
+
+        ui32 nullVisits = 0;
+        ui32 valueVisits = 0;
+        TDictionaryArray(dictionary, positions).VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& values) {
+            UNIT_ASSERT_VALUES_EQUAL(values->length(), 1);
+            UNIT_ASSERT(values->type()->Equals(dictionary->type()));
+            if (values->IsNull(0)) {
+                ++nullVisits;
+            } else {
+                ++valueVisits;
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL(nullVisits, 1);
+        UNIT_ASSERT_VALUES_EQUAL(valueVisits, 1);
     }
 };

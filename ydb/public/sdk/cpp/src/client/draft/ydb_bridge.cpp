@@ -95,6 +95,7 @@ public:
 
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
+        request.set_skip_storage_pool_conversion(settings.SkipStoragePoolConversion_);
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
             std::move(request),

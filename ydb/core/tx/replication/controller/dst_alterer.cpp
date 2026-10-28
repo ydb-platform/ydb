@@ -17,6 +17,8 @@ using namespace NSchemeShard;
 
 class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void AllocateTxId() {
+        TxId = 0;
+        WaitingForCompletion = false;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
     }
@@ -67,7 +69,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
@@ -78,11 +79,18 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
+        // A reply from a previous proposal can arrive after its retry started.
+        if (record.GetTxId() != TxId) {
+            return;
+        }
+
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
+            WaitingForCompletion = true;
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
+        case NKikimrScheme::StatusResourceExhausted:
+            // Concurrent DDL and SchemeShard in-flight limits are temporary.
             return Retry();
         case NKikimrScheme::StatusPathDoesNotExist:
             // A deleted destination has nothing left to detach.
@@ -104,7 +112,6 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             {"actorState", "StateCheckDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
@@ -130,6 +137,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
+        if (!WaitingForCompletion || ev->Get()->Record.GetTxId() != TxId) {
+            return;
+        }
+
         Success();
     }
 
@@ -168,7 +179,18 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
+        WaitingForCompletion = false;
         Schedule(RetryInterval, new TEvents::TEvWakeup);
+        Become(&TThis::StateRetry);
+    }
+
+    STATEFN(StateRetry) {
+        // Retired proposals and duplicate delivery failures cannot complete the
+        // operation or schedule additional retries while the backoff is pending.
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 public:
@@ -239,6 +261,7 @@ private:
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
+    bool WaitingForCompletion = false;
     TActorId PipeCache;
     TString AlterError;
     static constexpr auto RetryInterval = TDuration::Seconds(10);

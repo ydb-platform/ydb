@@ -26,10 +26,12 @@ public:
 
 private:
     struct TScanInfo {
+        TPathId TablePathId;
         TRowVersion SnapshotVersion;
         ui64 TxId = 0;
         ui64 ScanId = 0;
         NActors::TActorId ActorId;
+        NActors::TActorId ReplyTo;
         TMaybe<TSerializedCellVec> LastKey;
         TStats Stats;
     };
@@ -40,7 +42,7 @@ public:
     void Add(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId, const TRowVersion& snapshotVersion);
     void Forget(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId);
 
-    void Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId);
+    void Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId, const NActors::TActorId& replyTo);
     void Register(ui64 txId, const NActors::TActorId& actorId);
 
     void Complete(const TPathId& streamPathId);
@@ -51,6 +53,7 @@ public:
 
     TScanInfo* Get(const TPathId& streamPathId);
     const TScanInfo* Get(const TPathId& streamPathId) const;
+    const TPathId& GetStreamPathId(ui64 txId) const;
 
     bool Has(const TPathId& streamPathId) const;
     bool Has(ui64 txId) const;

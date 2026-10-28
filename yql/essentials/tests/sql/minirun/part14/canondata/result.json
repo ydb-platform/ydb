@@ -683,16 +683,16 @@
     ],
     "test.test[optimizers-pushdown_struct_subset_some-default.txt-Debug]": [
         {
-            "checksum": "88f84bf6b1c16e1fa0ba24b249ee7a00",
-            "size": 760,
-            "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_some-default.txt-Debug_/opt.yql"
+            "checksum": "22d84145bb10df73100cb933e07b0109",
+            "size": 3710,
+            "uri": "https://{canondata_backend}/1784826/ac3c7ae8d03953a8775ee4926c15bdaacb1e7097/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_some-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[optimizers-pushdown_struct_subset_some-default.txt-Results]": [
         {
-            "checksum": "5b6a5d1d1ebc43b6006b416bb718057c",
-            "size": 1360,
-            "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_some-default.txt-Results_/results.txt"
+            "checksum": "d0a9254cbe926f8376146d922d35f7b0",
+            "size": 7987,
+            "uri": "https://{canondata_backend}/1784826/ac3c7ae8d03953a8775ee4926c15bdaacb1e7097/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_some-default.txt-Results_/results.txt"
         }
     ],
     "test.test[optimizers-x_not_x-default.txt-Debug]": [
@@ -1256,6 +1256,20 @@
             "checksum": "7bb3fb103287203c3ff375dc53de16e3",
             "size": 1552,
             "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_select_yql-join_implicit_using_case_sensitivity_key-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-select_op_ordered_columns-default.txt-Debug]": [
+        {
+            "checksum": "550a1cb54c5c6950e20101c7c477c237",
+            "size": 720,
+            "uri": "https://{canondata_backend}/1924537/4d85ee00d1e655b670536e78734c1eab386749a7/resource.tar.gz#test.test_select_yql-select_op_ordered_columns-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-select_op_ordered_columns-default.txt-Results]": [
+        {
+            "checksum": "032202ff5eb9e8bda068a08f82ba15ba",
+            "size": 2504,
+            "uri": "https://{canondata_backend}/1924537/4d85ee00d1e655b670536e78734c1eab386749a7/resource.tar.gz#test.test_select_yql-select_op_ordered_columns-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar-default.txt-Debug]": [

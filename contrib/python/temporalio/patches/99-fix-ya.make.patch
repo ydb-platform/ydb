@@ -1,0 +1,32 @@
+--- contrib/python/temporalio/ya.make
++++ contrib/python/temporalio/ya.make
+@@ -13,9 +13,11 @@
+     contrib/python/grpcio
+     contrib/python/nexus-rpc
+     contrib/python/opentelemetry-api
++    contrib/python/opentelemetry-sdk
+     contrib/python/protobuf
+     contrib/python/types-protobuf
+     contrib/python/typing-extensions
++    contrib/python/temporalio/temporalio/bridge
+ )
+ 
+ NO_COMPILER_WARNINGS()
+@@ -30,8 +32,16 @@
+     temporalio.contrib.pydantic
+ )
+ 
++IF (OS_DARWIN)
++    LDFLAGS(
++        -framework CoreFoundation
++        -framework IOKit
++        -framework Security
++    )
++ENDIF()
++
+ SRCS(
+-    temporalio/bridge/py_wrapper.cpp
++    GLOBAL temporalio/bridge/py_wrapper.cpp
+ )
+ 
+ PY_SRCS(

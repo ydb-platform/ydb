@@ -3,6 +3,7 @@
 #include "tree/dynamic.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -10,12 +11,15 @@
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
@@ -99,6 +103,11 @@ public:
             Scheduler->AddOrUpdateDatabase(CanonizePath(tenantName), {});
         }
 
+        if (Scheduler->IsMemoryEnabled()) {
+            YDB_LOG_INFO("Memory of the queries is accounted");
+            Send(NKikimr::NMemory::MakeMemoryControllerId(), new NKikimr::NMemory::TEvConsumerRegister(NKikimr::NMemory::EMemoryConsumerKind::QueryExecution));
+        }
+
         Become(&TComputeSchedulerService::State);
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
@@ -118,6 +127,9 @@ public:
 
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
+            hFunc(NKikimr::NMemory::TEvConsumerRegistered, Handle);
+            hFunc(NKikimr::NMemory::TEvConsumerLimit, Handle);
+
             default:
                 YDB_LOG_ERROR("Unexpected",
                     {"event", ev->GetTypeRewrite()});
@@ -131,7 +143,14 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
-        Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
+        // Only the CPU is toggled at runtime - the memory is scheduled or not since the start, see IsMemoryEnabled().
+        // The memory is never scheduled without the CPU, so the scheduler is not disabled till the restart.
+        const bool enable = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler();
+        if (!enable && Scheduler->IsMemoryEnabled()) {
+            YDB_LOG_WARN("The scheduler stays enabled till the restart: the memory of the queries is scheduled");
+        } else {
+            Scheduler->ToggleEnabled(enable);
+        }
         if (Scheduler->IsEnabled()) {
             YDB_LOG_INFO("Become enabled");
         } else {
@@ -164,9 +183,10 @@ public:
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
-        SetCpuAttributes(ev->Get()->Params, attrs);
-
         Y_ASSERT(!poolId.empty());
+
+        SetCpuAttributes(ev->Get()->Params, attrs);
+        SetMemoryAttributes({databaseId, poolId}, ev->Get()->Params, attrs);
 
         YDB_LOG_DEBUG("Add",
             {"pool", databaseId},
@@ -192,8 +212,16 @@ public:
             Y_ENSURE(poolIt != PoolSubscribtions.end());
             poolIt->second = false;
 
-            NHdrf::TStaticAttributes attrs;
+            // The full config of the pool: the limits not configured in it (e.g. reset) are removed.
+            // The attributes are merged, so the defaults are set explicitly
+            NHdrf::TStaticAttributes attrs{
+                .CpuLimit = NHdrf::Infinity(),
+                .MemoryLimit = NHdrf::Infinity(),
+                .ReadLimit = TDuration::Seconds(1), // see TSchedulableRead
+            };
+            PoolMemoryLimitPercents.erase(poolIt->first);
             SetCpuAttributes(*ev->Get()->Config, attrs);
+            SetMemoryAttributes(poolIt->first, *ev->Get()->Config, attrs);
             ApplyPoolConfig(databaseId, poolId, attrs);
 
             YDB_LOG_DEBUG("Update",
@@ -207,6 +235,7 @@ public:
                 Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             } else {
                 // The second removal - the pool was really removed.
+                PoolMemoryLimitPercents.erase(poolIt->first);
                 PoolSubscribtions.erase(poolIt);
                 // TODO: Scheduler->RemovePool(…);
                 // TODO: Scheduler->UpdatePool(…);
@@ -254,7 +283,45 @@ public:
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
+        if (Scheduler->IsMemoryEnabled()) {
+            ReportMemoryConsumption();
+            PublishMemoryState();
+        }
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+    }
+
+    void Handle(NKikimr::NMemory::TEvConsumerRegistered::TPtr& ev) {
+        MemoryConsumer = std::move(ev->Get()->Consumer);
+        ReportMemoryConsumption();
+
+        YDB_LOG_INFO("Registered as memory consumer");
+    }
+
+    void Handle(NKikimr::NMemory::TEvConsumerLimit::TPtr& ev) {
+        const ui64 limit = ev->Get()->LimitBytes;
+        if (limit == Scheduler->GetTotalMemoryLimit()) {
+            return;
+        }
+
+        YDB_LOG_INFO("Total memory limit",
+            {"limit", limit},
+            {"previous", Scheduler->GetTotalMemoryLimit()});
+
+        Scheduler->SetTotalMemoryLimit(limit);
+
+        // The memory limits of the pools are the shares of the total limit - they follow it.
+        for (const auto& [fullPoolId, memoryLimitPercent] : PoolMemoryLimitPercents) {
+            NHdrf::TStaticAttributes attrs;
+            attrs.MemoryLimit = ToMemoryLimit(memoryLimitPercent);
+            try {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, attrs);
+            } catch (const TCpuGuaranteeError& e) {
+                YDB_LOG_ERROR("Failed to update the memory limit",
+                    {"pool", fullPoolId.DatabaseId},
+                    {"poolId", fullPoolId.PoolId},
+                    {"error", TString(e.what())});
+            }
+        }
     }
 
 private:
@@ -266,11 +333,8 @@ private:
         return Max<ui64>(poolStats.MaxThreadCount, 1);
     }
 
-    // Update limit and guarantee - they are applied together,
-    // since lowering the limit of a pool has to lower its guarantee as well.
-    // A limit percent of -1 means that the setting is not configured, so the previous value is kept.
-    // The guarantee is different: the config always carries the whole pool description, so -1 means
-    // that the pool has no guarantee anymore and the reservation it holds has to be released.
+    // The limit and the guarantee are set together, since a lower limit has to lower the guarantee as well.
+    // A limit of -1 is not set (TEvUpdatePoolInfo removes it beforehand), a guarantee of -1 releases the reservation.
     void SetCpuAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
         const auto totalCpuLimit = Scheduler->GetTotalCpuLimit();
 
@@ -285,6 +349,46 @@ private:
         }
 
         attrs.CpuGuarantee = static_cast<ui64>(std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100);
+    }
+
+    // As SetCpuAttributes. The percent is remembered, since the limit follows the total memory limit.
+    void SetMemoryAttributes(const NHdrf::TFullPoolId& fullPoolId, const NResourcePool::TPoolSettings& config,  NHdrf::TStaticAttributes& attrs) {
+        if (!Scheduler->IsMemoryEnabled()) {
+            return;
+        }
+        if (const auto& memoryLimitPercent = config.TotalMemoryLimitPercentPerNode; memoryLimitPercent >= 0) {
+            PoolMemoryLimitPercents[fullPoolId] = memoryLimitPercent;
+            attrs.MemoryLimit = ToMemoryLimit(memoryLimitPercent);
+        }
+    }
+
+    ui64 ToMemoryLimit(double memoryLimitPercent) const {
+        const auto totalMemoryLimit = Scheduler->GetTotalMemoryLimit();
+        return totalMemoryLimit == NHdrf::Infinity()
+            ? NHdrf::Infinity()
+            : static_cast<ui64>(std::clamp(memoryLimitPercent, 0.0, 100.0) / 100 * totalMemoryLimit);
+    }
+
+    // The demand is the expected memory of the queries - but never less than the one they already use.
+    void ReportMemoryConsumption() {
+        if (MemoryConsumer) {
+            const ui64 usage = Scheduler->GetTotalMemoryUsage();
+            MemoryConsumer->SetReport({
+                .Used = usage,
+                .Demand = Max(usage, Scheduler->GetTotalMemoryDemand()),
+            });
+        }
+    }
+
+    // The resource manager publishes the memory of the queries to the other nodes
+    void PublishMemoryState() {
+        const ui64 limit = Scheduler->GetTotalMemoryLimit();
+        const ui64 usage = Scheduler->GetTotalMemoryUsage();
+        if (limit != PublishedMemoryLimit || usage != PublishedMemoryUsage) {
+            Send(MakeKqpRmServiceID(SelfId().NodeId()), new NRm::TEvQueryMemoryState(limit, usage));
+            PublishedMemoryLimit = limit;
+            PublishedMemoryUsage = usage;
+        }
     }
 
     // TODO: handle invalid configuration on DDL level.
@@ -312,8 +416,12 @@ private:
 
 private:
     TComputeSchedulerPtr Scheduler;
+    TIntrusivePtr<NKikimr::NMemory::IMemoryConsumer> MemoryConsumer;
     const TDuration UpdateFairSharePeriod;
     THashMap<NHdrf::TFullPoolId, bool /* IsFirstRemoval */> PoolSubscribtions;
+    THashMap<NHdrf::TFullPoolId, double> PoolMemoryLimitPercents;
+    ui64 PublishedMemoryLimit = 0;
+    ui64 PublishedMemoryUsage = 0;
 };
 
 } // namespace
@@ -324,6 +432,7 @@ namespace NScheduler {
 
 TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options)
     : Enabled(options.Enabled)
+    , MemoryEnabled(options.Enabled && options.MemoryEnabled)
     , Root(std::make_shared<TRoot>(counters))
     , DelayParams(options.DelayParams)
     , KqpCounters(counters)
@@ -336,17 +445,55 @@ TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters
 //       A guarantee is converted from percents to cores when the configuration arrives and is kept
 //       as an absolute value afterwards, so a changed total limit makes every one of them stale.
 void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
-    Root->TotalLimit = cpu;
+    Root->TotalCpuLimit = cpu;
     Root->CpuGuarantee = cpu;
 }
 
 ui64 TComputeScheduler::GetTotalCpuLimit() const {
-    return Root->TotalLimit.load();
+    return Root->TotalCpuLimit.load();
+}
+
+void TComputeScheduler::SetTotalMemoryLimit(ui64 bytes) {
+    Root->TotalMemoryLimit.store(bytes);
+}
+
+ui64 TComputeScheduler::GetTotalMemoryLimit() const {
+    return Root->TotalMemoryLimit.load();
+}
+
+ui64 TComputeScheduler::GetTotalMemoryUsage() const {
+    return Root->MemoryUsage.load(std::memory_order_relaxed);
+}
+
+ui64 TComputeScheduler::GetTotalMemoryDemand() const {
+    return Root->MemoryDemand.load(std::memory_order_relaxed);
+}
+
+TPoolPtr TComputeScheduler::GetOrCreateMemoryPool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) {
+    const TString memoryPoolId = poolId.empty() ? TString(NResourcePool::DEFAULT_POOL_ID) : poolId;
+
+    {
+        TReadGuard lock(Mutex);
+        if (auto database = Root->GetDatabase(databaseId)) {
+            if (auto existingPool = database->GetPool(memoryPoolId)) {
+                return std::static_pointer_cast<TPool>(existingPool);
+            }
+        }
+    }
+
+    TWriteGuard lock(Mutex);
+    auto database = GetOrCreateDatabase(databaseId);
+    if (auto existingPool = database->GetPool(memoryPoolId)) {
+        return std::static_pointer_cast<TPool>(existingPool);
+    }
+
+    // The limits of the pool come later, with its configuration - see TComputeSchedulerService::ApplyPoolConfig
+    return CreatePool(database, memoryPoolId, {});
 }
 
 void TComputeScheduler::SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const {
     if (!attrs.CpuGuarantee) {
-        attrs.CpuGuarantee = Min<ui64>(Root->TotalLimit, attrs.GetCpuLimit());
+        attrs.CpuGuarantee = Min<ui64>(Root->TotalCpuLimit, attrs.GetCpuLimit());
     }
 }
 
@@ -361,6 +508,17 @@ NHdrf::NDynamic::TDatabasePtr TComputeScheduler::GetOrCreateDatabase(const NHdrf
     auto database = std::make_shared<TDatabase>(databaseId, attrs);
     Root->AddDatabase(database);
     return database;
+}
+
+TPoolPtr TComputeScheduler::CreatePool(const TDatabasePtr& database, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs) {
+    TPoolPtr pool;
+    if (poolId == NResourcePool::DEFAULT_POOL_ID) {
+        pool = std::make_shared<TDefaultPool>(poolId, KqpCounters, attrs);
+    } else {
+        pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
+    }
+    database->AddPool(pool);
+    return pool;
 }
 
 void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs) {
@@ -392,9 +550,11 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     if (pool) {
         pool->Update(attrs);
     } else {
-        pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
-        database->AddPool(pool);
+        pool = CreatePool(database, poolId, attrs);
+    }
 
+    // The pool may already exist without the read query - if it was created only to account the memory.
+    if (!ReadQueries.contains(NHdrf::TFullPoolId{databaseId, poolId})) {
         bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
 
         // Since they are not visible by query id - use the same id for each pool
@@ -431,6 +591,17 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     auto query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
     pool->AddQuery(query);
     Y_ENSURE(Queries.emplace(queryId, TQueryState{1, query}).second);
+
+    // The fair-share of the pool is known from the latest snapshot - unless the pool is new itself.
+    // Without the memory the query waits for its first snapshot, as before.
+    if (const auto snapshot = MemoryEnabled ? Root->GetSnapshot() : nullptr) {
+        if (const auto databaseSnapshot = snapshot->GetDatabase(databaseId)) {
+            if (const auto poolSnapshot = databaseSnapshot->GetPool(poolId)) {
+                query->InitSnapshot(*std::static_pointer_cast<NHdrf::NSnapshot::TPool>(poolSnapshot));
+            }
+        }
+    }
+
     return query;
 }
 
@@ -475,10 +646,16 @@ THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() 
         return result;
     }
 
+    // The pools created only to account the memory (see GetOrCreateMemoryPool) are not scheduled by CPU.
+    TReadGuard lock(Mutex);
+
     auto visitPool = [&](auto self, const NHdrf::TDatabaseId& databaseId, const auto* pool) -> void {
         if (pool->IsLeaf()) {
             NHdrf::TFullPoolId fullPoolId{databaseId, std::get<NHdrf::TPoolId>(pool->GetId())};
-            result[fullPoolId] = double(pool->FairShare) / totalCpu;
+            if (!ReadQueries.contains(fullPoolId)) {
+                return;
+            }
+            result[fullPoolId] = double(pool->CpuFairShare) / totalCpu;
         } else {
             pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
                 self(self, databaseId, child);
@@ -526,14 +703,24 @@ NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TD
             .MinDelay = TDuration::MicroSeconds(schedulerSettings.GetMinTaskDelayUs()),
             .AttemptBonus = TDuration::MicroSeconds(schedulerSettings.GetAttemptTaskBonusUs()),
             .MaxRandomDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskRandomDelayUs()),
-        }
+        },
+        // the resource manager decides the same from the app data, see TComputeScheduler::IsMemoryEnabled
+        .MemoryEnabled = appConfig.GetFeatureFlags().GetEnableComputeSchedulerMemory(),
     };
 
     Y_ENSURE(options.DelayParams.MaxDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MinDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.AttemptBonus > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MaxRandomDelay > TDuration::Zero());
-    return std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
+    auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
+
+    // The initial memory limit - until the one from the memory controller comes.
+    if (options.MemoryEnabled) {
+        const auto& resourceManagerConfig = appConfig.GetTableServiceConfig().GetResourceManager();
+        scheduler->SetTotalMemoryLimit(resourceManagerConfig.GetQueryMemoryLimit());
+    }
+
+    return scheduler;
 }
 
 IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod) {

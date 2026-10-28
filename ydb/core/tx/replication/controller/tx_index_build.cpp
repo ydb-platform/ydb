@@ -418,7 +418,9 @@ public:
             if (build.GetPhase() == TBuild::CANCELLING) {
                 auto replication = Self->Find(key.first);
                 auto* target = replication ? replication->FindTarget(key.second) : nullptr;
-                if (target) {
+                // DROP now owns target shutdown and source cleanup. Retiring its
+                // remover here can strand a queued operation after recovery.
+                if (target && replication->GetState() != TReplication::EState::Removing) {
                     target->Shutdown(ctx);
                     const auto workers = target->GetWorkers();
                     for (const auto wid : workers) {

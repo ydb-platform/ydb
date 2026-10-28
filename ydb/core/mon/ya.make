@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
     ydb/core/mon/audit
+    ydb/core/path_aliasing
     ydb/core/protos
     ydb/library/aclib
     ydb/library/actors/core

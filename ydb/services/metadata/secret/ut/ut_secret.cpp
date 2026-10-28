@@ -153,6 +153,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
@@ -248,6 +249,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
 
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
@@ -317,6 +319,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;

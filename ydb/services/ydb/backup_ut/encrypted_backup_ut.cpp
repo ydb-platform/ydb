@@ -836,6 +836,7 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
         EnableAllExportAndImportInFeatureFlags();
 
         AppConfig().MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        AppConfig().MutableFeatureFlags()->SetDisableOldSecretCreation(false);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {

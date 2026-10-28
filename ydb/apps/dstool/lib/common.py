@@ -1063,10 +1063,8 @@ def pdisk_matches_storage_pool(pdisk, sp, location=None):
                 if prop.Kind != pdisk.Kind:
                     break
             elif prop.HasField('Location'):
-                if location is None or any(
-                    field.name not in ('BridgePileName', 'DataCenter', 'Module', 'Rack', 'Unit')
-                    or not location.HasField(field.name)
-                    or getattr(location, field.name) != value
+                if location is None or not all(
+                    location.HasField(field.name) and getattr(location, field.name) == value
                     for field, value in prop.Location.ListFields()
                 ):
                     break

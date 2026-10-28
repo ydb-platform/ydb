@@ -26,3 +26,5 @@ items:
     path: observability/toc_p.yaml
 - name: Резервное копирование и восстановление
   href: backup-and-recovery/index.md
+- name: Первоначальная синхронизация асинхронной репликации
+  href: async-replication-initial-sync.md

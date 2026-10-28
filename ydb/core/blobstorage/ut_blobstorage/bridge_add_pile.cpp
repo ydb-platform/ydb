@@ -114,7 +114,19 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         checker.Write(groupId);
         checker.CheckAll();
 
+        // the group relies on its original part until the part in the new pile is synced, and the original pile can't
+        // go out meanwhile
+        auto getAuthorityPileId = [&] {
+            const auto info = GetGroupInfo(env, groupId);
+            return TBridgePileId::FromProto(&info.GetBridgeGroupState(),
+                &NKikimrBridge::TGroupState::GetAuthorityPileId);
+        };
+        UNIT_ASSERT(getAuthorityPileId() == TBridgePileId::FromPileIndex(0));
+        ExpectError(TrySwitchPileState(env, 0, NKikimrBridge::TClusterState::DISCONNECTED),
+            "Incorrect primary pile state");
+
         RejoinPile(env, 1);
+        WaitUntil(env, [&] { return !getAuthorityPileId(); }, "group not relying on its original part");
         checker.Write(groupId);
         checker.CheckAll();
         CheckPileData(env, checker, 1, 10);
@@ -126,6 +138,36 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
             env.Sim(TDuration::Seconds(30));
             checker.Write(groupId);
             checker.CheckAll();
+        }
+    }
+
+    // groups of the pools not converted along with the cluster get no parts in the added pile, while static groups do
+    Y_UNIT_TEST(ConvertedOneToTwoSkippingStoragePools) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 1, true);
+        const ui32 staticGroupId = 0;
+        checker.Write(staticGroupId);
+
+        NameConvertedClusterNodes(env, *named, [&] {
+            checker.Write(groupId);
+            checker.CheckAll();
+        });
+        auto res = AddPileToConfig(env, "pile_2", 10, 17);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_2", 10, 17);
+        AddPileAndWait(env, "pile_2");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 1, 10, 17), 0); // no dynamic bridged groups
+        RejoinPile(env, 1);
+
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_C(!info.HasBridgeGroupState(), info.ShortDebugString());
+        for (ui32 nodeId : {1u, 10u}) {
+            checker.Write(groupId, nodeId);
+            checker.Write(staticGroupId, nodeId);
+            checker.CheckAll(nodeId);
         }
     }
 

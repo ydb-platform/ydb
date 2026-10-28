@@ -148,6 +148,7 @@ public:
     }
 
     void CreateSecrets() const {
+        Server.GetRuntime()->GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         StartSchemaRequest(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);

@@ -863,6 +863,7 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/mon
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view/common
@@ -876,6 +877,7 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/protos

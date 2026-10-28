@@ -24,6 +24,21 @@ namespace NKikimr {
 
         using TClusterState = NKikimrBridge::TClusterState;
 
+        // is the part of the group in the pile sure to hold everything written to the group
+        static bool PartHoldsEverything(const NKikimrBridge::TGroupState& state, const TBridgeInfo::TPile& pile) {
+            const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId);
+            if (!part || part->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                return false;
+            } else if (const auto authorityPileId = NBridge::GetAuthorityPileId(state)) {
+                // nothing is written to the group without this part, so it holds everything even when its pile has
+                // been out, while the other parts may lack something
+                return pile.BridgePileId == authorityPileId;
+            }
+            // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of its
+            // previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
+            return pile.State == TClusterState::SYNCHRONIZED;
+        }
+
         struct TRequestPayload {
             size_t Index;
         };
@@ -96,6 +111,7 @@ namespace NKikimr {
             size_t RestoreIndex = Max<size_t>();
             bool IsRestoring = false;
             bool MustRestoreFirst = false;
+            bool TrustedPileResponded = false; // for reads without MustRestoreFirst, which have to get its answer
             // Restoring a blob into a pile which lacks it is a write made on behalf of the original
             // request, so it is admitted the same way that request would be.
             NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
@@ -262,13 +278,7 @@ namespace NKikimr {
             }
 
             bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
-                // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of
-                // its previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
-                if (pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                    return false;
-                }
-                const auto *gp = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
-                return gp && gp->GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                return PartHoldsEverything(Info->Group->GetBridgeGroupState(), pile);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
@@ -339,17 +349,15 @@ namespace NKikimr {
 
                 if (MustRestoreFirst) {
                     // we are going to restore data, so we have to collect answers from all piles
-                } else if (DataIsTrustedInPile(pile)) {
-                    // this is response from synced pile, we can fully trust it
+                } else if (DataIsTrustedInPile(pile) && std::none_of(&ev->Responses[0], &ev->Responses[ev->ResponseSz],
+                        [](const auto& r) { return r.Status == NKikimrProto::NODATA; })) {
+                    // this is response from synced pile having every blob asked for, we can fully trust it
                     return ev;
-                } else if (ResponsesPending) {
-                    // we still have some queries in flight, execute them
-                    return nullptr;
                 } else {
-                    // strange situation: we haven't got response from trusted pile?
-                    Y_DEBUG_ABORT("missing response from trusted pile");
-                    return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
-                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                    // the blob missing in the synced pile may be in other ones: the node knowing newer cluster state,
+                    // where this pile is disconnected, writes to other piles only, while this node doesn't know it yet;
+                    // so the absence is reported only when all piles agree on it
+                    TrustedPileResponded |= DataIsTrustedInPile(pile);
                 }
 
                 if (!state.Responses) {
@@ -363,13 +371,18 @@ namespace NKikimr {
                         auto& current = ev->Responses[i];
                         Y_ABORT_UNLESS(existing.Id == current.Id);
 
-                        if (current.Status == NKikimrProto::ERROR) {
+                        if (existing.Status == current.Status) {
+                            // status did not change, so there is nothing to do
+                            Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
+                        } else if (!MustRestoreFirst && current.Status == NKikimrProto::OK) {
+                            // the blob found in any pile is there, whatever the other piles answer
+                            existing = current;
+                        } else if (!MustRestoreFirst && existing.Status == NKikimrProto::OK) {
+                            // the same
+                        } else if (current.Status == NKikimrProto::ERROR) {
                             existing = current;
                         } else if (existing.Status == NKikimrProto::ERROR) {
                             // we do not process blobs with ERROR, report them as failed ones
-                        } else if (existing.Status == current.Status) {
-                            // status did not change, so there is nothing to do
-                            Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
                         } else if (existing.Status == NKikimrProto::NODATA && current.Status == NKikimrProto::OK) {
                             // we have to restore blob to existing groups
                             existing = current;
@@ -380,22 +393,36 @@ namespace NKikimr {
                     }
                 }
 
+                state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
+
+                if (!MustRestoreFirst) {
+                    if (ResponsesPending) {
+                        return nullptr;
+                    } else if (!TrustedPileResponded) {
+                        // strange situation: we haven't got response from trusted pile?
+                        Y_DEBUG_ABORT("missing response from trusted pile");
+                        return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                            NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                    }
+                    return IssueNextRestoreGet(self); // nothing to restore, it makes the result
+                }
+
                 for (size_t i = 0; i < state.NumResponses; ++i) {
                     auto& current = ev->Responses[i];
+                    auto& merged = state.Responses[i];
                     auto& item = RestoreQueue[i];
 
                     if (current.Status == NKikimrProto::OK) {
                         item.Id = current.Id;
                         item.Buffer = TRcBuf(current.Buffer);
                         item.ReadFrom = pile.BridgePileId;
-                        item.IssueKeepFlag = current.DoNotKeep < current.Keep;
                     } else if (current.Status == NKikimrProto::NODATA) {
                         item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                         RestoreIndex = Min(RestoreIndex, i); // we gonna restore this
                     }
+                    // the flag seen by any pile goes with the restored copy, as the pile we read from may not know it
+                    item.IssueKeepFlag = merged.DoNotKeep < merged.Keep;
                 }
-
-                state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
 
                 return IssueNextRestoreGet(self);
             }
@@ -512,8 +539,9 @@ namespace NKikimr {
                     state.Buffer = std::move(ev->Buffer);
                     state.Winner = pile.BridgePileId;
 
+                    // the body is not taken for restoration, as discovery doesn't tell the Keep flag; the read of the
+                    // blob before restoring it does
                     item.Id = state.Id;
-                    item.Buffer = TRcBuf(state.Buffer);
                     item.ReadFrom = state.Winner;
                     item.WriteTo |= Processed;
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
@@ -546,9 +574,9 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(std::holds_alternative<TRangeState>(State));
                 auto& state = std::get<TRangeState>(State);
 
-                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
-                    return ev;
-                }
+                // even the synced pile may miss blobs written to other piles only by the node knowing newer cluster
+                // state, where this pile is disconnected, so the result is the union of answers of all piles
+                TrustedPileResponded |= DataIsTrustedInPile(pile);
 
                 auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
                     const auto [it, inserted] = RestoreQueueIndex.try_emplace(item.Id, RestoreQueue.size());
@@ -572,20 +600,30 @@ namespace NKikimr {
                     while (sourceIt != sourceEnd || targetIt != targetEnd) {
                         if (sourceIt == sourceEnd || (targetIt != targetEnd && comp(targetIt->Id, sourceIt->Id))) {
                             // restore it unless this is the first response
-                            auto& item = getRestoreItem(*targetIt);
-                            item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
+                            if (MustRestoreFirst) {
+                                auto& item = getRestoreItem(*targetIt);
+                                item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
+                            }
                             ++targetIt;
                         } else if (targetIt == targetEnd || comp(sourceIt->Id, targetIt->Id)) {
                             // item is in new range, no matching item in target range
-                            auto& item = getRestoreItem(*sourceIt);
-                            item.ReadFrom = pile.BridgePileId;
-                            item.WriteTo |= Processed;
-                            item.IssueKeepFlag = sourceIt->DoNotKeep < sourceIt->Keep;
+                            if (MustRestoreFirst) {
+                                auto& item = getRestoreItem(*sourceIt);
+                                item.ReadFrom = pile.BridgePileId;
+                                item.WriteTo |= Processed;
+                                item.IssueKeepFlag = sourceIt->DoNotKeep < sourceIt->Keep;
+                            }
                             itemsToAdd.push_back(std::move(*sourceIt));
                             ++sourceIt;
                         } else { // items in both ranges, so both present
                             targetIt->Keep |= sourceIt->Keep;
                             targetIt->DoNotKeep |= sourceIt->DoNotKeep;
+                            // the flag seen by any pile goes with the restored copy, as the pile we read from may not
+                            // know it
+                            if (MustRestoreFirst) {
+                                RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].IssueKeepFlag =
+                                    targetIt->DoNotKeep < targetIt->Keep;
+                            }
                             Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
                             if (targetIt->Buffer && sourceIt->Buffer) {
                                 Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);
@@ -617,7 +655,15 @@ namespace NKikimr {
                 // mark pile as reponded
                 Processed.Set(pile.BridgePileId.GetPileIndex());
 
-                return ResponsesPending ? nullptr : IssueNextRestoreGet(self);
+                if (ResponsesPending) {
+                    return nullptr;
+                } else if (!MustRestoreFirst && !TrustedPileResponded) {
+                    // strange situation: we haven't got response from trusted pile?
+                    Y_DEBUG_ABORT("missing response from trusted pile");
+                    return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(
+                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                }
+                return IssueNextRestoreGet(self); // it makes the result when there is nothing to restore
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self,
@@ -848,6 +894,7 @@ namespace NKikimr {
             }
 
             // decide which piles get the request with the group state and the cluster state we have now
+            const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
@@ -863,8 +910,7 @@ namespace NKikimr {
                         std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
                     // only the answer of the pile holding the whole content of the group is taken, while an error from
                     // another one (e.g. degraded while being synced) would fail the request
-                    if (pile->State != NKikimrBridge::TClusterState::SYNCHRONIZED ||
-                            groupPileInfo.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                    if (!PartHoldsEverything(state, *pile)) {
                         return;
                     }
                 }
@@ -879,6 +925,15 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                return;
+            }
+            if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
+                    return std::get<0>(item) == authorityPileId;
+                })) {
+                // the group relies on its part in the single pile, and writes reaching other parts only would be lost
+                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
+                    (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
                 PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
                 return;
             }

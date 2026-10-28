@@ -674,7 +674,7 @@ void TClientResponse::TraceResponse()
     }
 }
 
-const IInvokerPtr& TClientResponse::GetInvoker()
+IInvokerPtr TClientResponse::GetInvoker()
 {
     return ClientContext_->GetResponseHeavy()
         ? TDispatcher::Get()->GetHeavyInvoker()

@@ -86,6 +86,15 @@ public:
         }
     }
 
+    void VisitDistinctValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
+        if (GetNotDefaultRecordsCount() < GetRecordsCount()) {
+            visitor(DefaultsArray);
+        }
+        if (GetNotDefaultRecordsCount()) {
+            visitor(ColValue);
+        }
+    }
+
     ui32 GetFinishPosition() const {
         return RecordsCount;
     }
@@ -139,6 +148,10 @@ private:
 
     virtual void DoVisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const override {
         Record.VisitValues(visitor);
+    }
+
+    virtual void DoVisitDistinctValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const override {
+        Record.VisitDistinctValues(visitor);
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {

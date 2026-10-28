@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/core/langver
     yql/essentials/public/issue/protos
+    yql/essentials/core/spark_meta
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues

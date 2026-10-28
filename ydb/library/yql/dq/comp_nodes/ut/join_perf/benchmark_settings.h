@@ -8,12 +8,12 @@
 namespace NKikimr::NMiniKQL {
 
 enum class ETestedJoinAlgo { kScalarGrace, kScalarMap, kBlockMap, kBlockHash, kScalarHash };
-enum class ETestedJoinKeyType { kString, kInteger };
+enum class ETestedJoinKeyType { kString, kInteger, kInt32, kNullableInteger, kNullableInt32, kNullableString };
 enum class ETestedInputFlavour { kSameSizeTable, kLittleRightTable };
 // Number of non-key columns per row. Wide rows shift the cost from hash lookups
 // towards copying tuples around, so the two shapes stress different parts of a
 // join.
-enum class ETestedPayload { kNarrow, kWide };
+enum class ETestedPayload { kNarrow, kWide, kTpc };
 // Hash-join predicates pushed into DqBlockHashJoin / DqScalarHashJoin. Map and
 // grace ignore them.
 enum class ETestedFilter { kNone, kLeft, kRight, kCommon, kAll };

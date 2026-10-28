@@ -432,6 +432,7 @@ private:
             poolCookie = workerPool.Get();
         } else {
             invoker = FairShareThreadPool_->GetInvoker(poolName, Format("%v", pollable.Get()));
+            poolCookie = FairShareThreadPool_.Get();
         }
 
         auto* cookie = TPollableCookie::FromPollable(pollable.Get());

@@ -4,9 +4,10 @@
 codecov:
   # PR code is measured, but it must not be able to weaken coverage policy.
   strict_yaml_branch: default
-  # Delay notifications until CI completes. The trusted PR workflow separately
-  # rejects a coverage-relevant exact base without a successful all-suite run.
-  require_ci_to_pass: true
+  # Wait for CI to finish, but still publish the standard comment when our
+  # non-required patch-coverage job is red. Report processing is independent of
+  # notification delivery; that job waits for its upload, then checks its LCOV.
+  require_ci_to_pass: false
   notify:
     wait_for_ci: true
 
@@ -37,7 +38,8 @@ flag_management:
           flag_coverage_not_uploaded_behavior: exclude
         - type: patch
           target: 80%
-          informational: true
+          threshold: 0%
+          informational: false
           flag_coverage_not_uploaded_behavior: exclude
     - name: cli
       paths:
@@ -50,7 +52,8 @@ flag_management:
           flag_coverage_not_uploaded_behavior: exclude
         - type: patch
           target: 80%
-          informational: true
+          threshold: 0%
+          informational: false
           flag_coverage_not_uploaded_behavior: exclude
     - name: cli_workload
       paths:
@@ -62,7 +65,8 @@ flag_management:
           flag_coverage_not_uploaded_behavior: exclude
         - type: patch
           target: 80%
-          informational: true
+          threshold: 0%
+          informational: false
           flag_coverage_not_uploaded_behavior: exclude
 
 comment:

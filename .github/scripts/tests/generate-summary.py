@@ -456,6 +456,10 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
 
     dashboard_rel = "tests_metrics/dashboard.html"
     dashboard_url = dashboard_rel if os.path.isfile(os.path.join(os.path.dirname(fn), dashboard_rel)) else None
+    test_bloat_rel = "test_bloat/tree_map.html"
+    test_bloat_url = test_bloat_rel if os.path.isfile(os.path.join(os.path.dirname(fn), test_bloat_rel)) else None
+    resource_usage_rel = "test_resources/report.html"
+    resource_usage_url = resource_usage_rel if os.path.isfile(os.path.join(os.path.dirname(fn), resource_usage_rel)) else None
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
@@ -532,6 +536,8 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         workflow_run_id=workflow_run_id,
         workflow_url=workflow_url,
         dashboard_url=dashboard_url,
+        test_bloat_url=test_bloat_url,
+        resource_usage_url=resource_usage_url,
         owner_area_mapping=owner_area_mapping,
         commit_sha=github_sha
     )

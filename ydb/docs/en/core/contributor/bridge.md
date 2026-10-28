@@ -51,6 +51,8 @@ In mode `PRIMARY/SYNCHRONIZED`, writes are performed synchronously to both group
 
 In mode `PRIMARY/DISCONNECTED`, reads and writes are performed only in the `PRIMARY` group.
 
+A node learns that a pile has been disconnected when the new configuration reaches it. Until then, its dsproxy-proxy keeps writing to the disconnected pile and may return its replies to reads, which can miss writes already made by nodes that know about the disconnect. For a planned disconnect, when the pile stays reachable, this window is bounded only by how fast the configuration reaches each node; once a node gets it, its interconnect also tears down the sessions to the disconnected pile. Generation numbers can't close the window, because the disconnected pile never learns the new ones. In an unplanned failover, the disconnected pile is unreachable, so the window doesn't arise.
+
 In mode `PRIMARY/NOT_SYNCHRONIZED`, dsproxy-proxy supports several submodes that determine which kinds of writes are performed in the `NOT_SYNCHRONIZED` group:
 
   - `WRITE_KEEP` — only `KEEP` flags are written;

@@ -1092,6 +1092,21 @@ config:
         UNIT_ASSERT_CHECK_STATUS(replaced.operation(), Ydb::StatusIds::SUCCESS);
     }
 
+    // The fetch is not valid, and the user is not a cluster administrator either: the request must be answered once,
+    // as a bad one, and go no further
+    Y_UNIT_TEST(InvalidFetchIsAnsweredOnce) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+        Ydb::Config::FetchConfigRequest request; // no fetch mode
+        Ydb::Config::FetchConfigResponse response;
+        grpc::ClientContext ctx;
+        ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "user@builtin");
+        const auto status = stub->FetchConfig(&ctx, request, &response);
+        UNIT_ASSERT_C(status.ok(), status.error_message());
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminDisabled) {
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");

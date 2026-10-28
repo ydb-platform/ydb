@@ -45,6 +45,9 @@ public:
     const TEndpointKey& GetEndpointKey() const;
     bool MarkBroken();
     bool MarkAsClosing();
+    // Atomically choose between closing an active session and removing an idle
+    // session through its pool. Returns the state observed under Lock_.
+    EState MarkAsClosingIfNotIdle();
     bool MarkActive();
     bool MarkIdle();
     bool IsOwnedBySessionPool() const;

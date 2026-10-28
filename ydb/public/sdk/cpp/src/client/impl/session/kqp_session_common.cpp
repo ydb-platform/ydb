@@ -77,6 +77,19 @@ bool TKqpSessionCommon::MarkAsClosing() {
     return firstTerminal;
 }
 
+TKqpSessionCommon::EState TKqpSessionCommon::MarkAsClosingIfNotIdle() {
+    std::lock_guard guard(Lock_);
+    const auto previousState = State_;
+    if (previousState == S_IDLE || previousState == S_BROKEN || previousState == S_CLOSING) {
+        return previousState;
+    }
+    if (previousState == S_ACTIVE) {
+        NeedUpdateActiveCounter_ = true;
+    }
+    State_ = S_CLOSING;
+    return previousState;
+}
+
 bool TKqpSessionCommon::MarkActive() {
     std::lock_guard guard(Lock_);
     if (State_ == EState::S_BROKEN || State_ == EState::S_CLOSING) {

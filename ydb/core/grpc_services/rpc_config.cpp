@@ -410,6 +410,8 @@ public:
 
             auto& req = *request->Record.MutableRequest();
             req.set_config(*DatabaseConfig);
+            req.set_dry_run(GetProtoRequest()->dry_run());
+            req.set_allow_unknown_fields(GetProtoRequest()->allow_unknown_fields() || GetProtoRequest()->bypass_checks());
 
             request->Record.SetBypassAuth(true);
             NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());

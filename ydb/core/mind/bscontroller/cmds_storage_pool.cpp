@@ -1162,14 +1162,59 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd,
+            TStatus& /*status*/) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
+        THashSet<TGroupId> seen;
+        for (const TDefinition& definition : cmd.GetGroups()) {
+            const TGroupId groupId = TGroupId::FromValue(definition.GetGroupId());
+            if (!definition.HasGroupId() || !seen.insert(groupId).second) {
+                throw TExError() << "missing or duplicate GroupId# " << groupId;
+            }
+            const TGroupInfo* group = Groups.Find(groupId);
+            if (!group) {
+                throw TExGroupNotFound(definition.GetGroupId());
+            }
+            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
+                    || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()
+                    || group->Topology->GetTotalFailRealmsNum() != 3) {
+                throw TExError() << "GroupId# " << groupId << " is not an ordinary mirror-3-dc group";
+            }
+            if (definition.FailRealmStatesSize() != 3) {
+                throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
+            }
+            std::array<TFailRealm::EState, 3> states;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const TDefinition::EFailRealmState state = definition.GetFailRealmStates(realm);
+                if (!NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::EFailRealmState_IsValid(state)) {
+                    throw TExError() << "unknown state for GroupId# " << groupId << " realm# " << realm;
+                }
+                states[realm] = static_cast<TFailRealm::EState>(state);
+            }
+            TGroupInfo* updated = Groups.FindForUpdate(groupId);
+            updated->FailRealmStates = states;
+            updated->HasExplicitFailRealmStates = true;
+            // Every requested transition, including an idempotent one, publishes a new generation.
+            GroupContentChanged.insert(groupId);
+        }
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates&,
             TStatus& /*status*/) {
         DataCenterStates.Unshare().clear();
+        TVector<TGroupId> groups;
         Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
-                GroupContentChanged.insert(groupId);
+                groups.push_back(groupId);
             }
         });
+        for (TGroupId groupId : groups) {
+            if (Groups.Find(groupId)->HasExplicitFailRealmStates) {
+                Groups.FindForUpdate(groupId)->HasExplicitFailRealmStates = false;
+            }
+            GroupContentChanged.insert(groupId);
+        }
     }
 
     std::optional<TString> TBlobStorageController::TConfigState::ApplyDataCenterStates() {
@@ -1191,7 +1236,7 @@ namespace NKikimr::NBsController {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         for (const auto groupId : groups) {
             const auto* group = Groups.Find(groupId);
-            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
+            if (group->HasExplicitFailRealmStates || group->ErasureSpecies != TErasureType::ErasureMirror3dc
                     || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()) {
                 continue;
             }

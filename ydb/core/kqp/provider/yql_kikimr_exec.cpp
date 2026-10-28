@@ -2059,6 +2059,14 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
+            bool addColumnsOnly = true;
+            for (auto action : maybeAlter.Cast().Actions()) {
+                addColumnsOnly &= action.Name().Value() == "addColumns";
+            }
+            const bool buildAllColumns = addColumnsOnly
+                && table.Metadata->Kind == EKikimrTableKind::Datashard
+                && table.Metadata->SupportsColumnBuildBatch;
+
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
@@ -2110,6 +2118,10 @@ public:
                         }
 
                         ::NKikimrIndexBuilder::TColumnBuildSetting* columnBuild = nullptr;
+                        if (buildAllColumns) {
+                            columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                            columnBuild->SetColumnName(TString(columnName));
+                        }
                         bool hasDefaultValue = false;
                         bool hasNotNull = false;
                         if (columnTuple.Size() > 2) {
@@ -2128,6 +2140,11 @@ public:
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
                                         return SyncError();
+                                    }
+
+                                    if (IsNullDefaultExpr(constraint.Value().Cast())) {
+                                        // NULL behaves as an ordinary nullable column: no backfill source.
+                                        continue;
                                     }
 
                                     if (columnBuild == nullptr) {
@@ -2174,7 +2191,10 @@ public:
                             columnBuild->set_default_from_sequence(
                                 NKikimr::NTableIndex::NFulltext::RowIdSequenceName);
                             columnBuild->set_bit_reverse_sequence_value(true);
-                            columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                            if (!table.Metadata->SupportsColumnBuildBatch) {
+                                // Older SchemeShards read the sequence type from this carrier.
+                                columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                            }
                             hasDefaultValue = true;
                         }
 
@@ -2224,6 +2244,13 @@ public:
                                 }
                             }
                         }
+                        if (columnBuild) {
+                            columnBuild->SetColumnName(TString(columnName));
+                            const auto& declaredType = add_column->type();
+                            *columnBuild->MutableColumnType() = declaredType.has_optional_type() ? declaredType.optional_type().item() : declaredType;
+                            columnBuild->SetNotNull(hasNotNull || notNull);
+                        }
+
                     }
                 } else if (name == "dropColumns") {
                     auto listNode = action.Value().Cast<TCoAtomList>();
@@ -2375,8 +2402,7 @@ public:
                                 defaultExpr = maybeJust.Cast().Input();
                             }
 
-                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
-                            if (isNull) {
+                            if (IsNullDefaultExpr(defaultExpr)) {
                                 alter_columns->set_empty_default(google::protobuf::NullValue());
                             } else {
                                 auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->mutable_from_literal());
@@ -3475,6 +3501,13 @@ public:
                         TStringBuilder() << "Unknown alter table action: " << name));
                     return SyncError();
                 }
+            }
+
+            if (!table.Metadata->SupportsColumnBuildBatch && indexBuildSettings.has_column_build_operation()
+                && indexBuildSettings.column_build_operation().column_size() != alterTableRequest.add_columns_size()) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                    "SchemeShard does not support mixing ordinary and default columns in one ALTER TABLE"));
+                return SyncError();
             }
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;

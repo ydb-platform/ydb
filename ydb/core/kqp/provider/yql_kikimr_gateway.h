@@ -1027,6 +1027,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TKikimrPathId PathId;
     TString SysView;
     ui64 SchemaVersion = 0;
+    bool SupportsColumnBuildBatch = false;
     THashMap<TString, TString> Attributes;
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
@@ -1109,6 +1110,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , PathId(&message->GetPathId())
         , SysView(message->GetSysView())
         , SchemaVersion(message->GetSchemaVersion())
+        , SupportsColumnBuildBatch(message->GetSupportsColumnBuildBatch())
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
@@ -1195,6 +1197,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         message->SetSysView(SysView);
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
+        message->SetSupportsColumnBuildBatch(SupportsColumnBuildBatch);
         message->SetKind(static_cast<ui32>(Kind));
         message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);

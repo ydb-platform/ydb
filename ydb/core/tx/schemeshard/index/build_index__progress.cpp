@@ -920,50 +920,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
     auto* alterTable = modifyScheme.MutableAlterTable();
-    THashMap<TString, NKikimrSchemeOp::TColumnDescription*> columns;
-    if (buildInfo.AlterMainTablePayload) {
-        alterTable->MutableColumns()->CopyFrom(buildInfo.AlterMainTablePayload->GetAlterTable().GetColumns());
-        for (auto& column : *alterTable->MutableColumns()) {
-            columns.emplace(column.GetName(), &column);
-        }
-    }
-
     for (const auto& colInfo : buildInfo.BuildColumns) {
-        auto* col = buildInfo.AlterMainTablePayload ? columns.at(colInfo.ColumnName) : alterTable->AddColumns();
-        if (!buildInfo.AlterMainTablePayload) {
-            NScheme::TTypeInfo typeInfo;
-            TString typeMod;
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
-                // todo gvit fix that
-                Y_ENSURE(false, "failed to extract column type info");
-            }
-
-            col->SetType(NScheme::TypeName(typeInfo, typeMod));
-            col->SetName(colInfo.ColumnName);
-        }
-        if (colInfo.IsFromSequence()) {
-            // Store the sequence as a table-local leaf name (not an absolute path), matching
-            // the create-table convention and how the path describer / KQP key local
-            // sequences by leaf.
-            *col->MutableDefaultFromSequence() = colInfo.DefaultFromSequence;
-        } else {
-            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
-        }
-
-        if (!colInfo.FamilyName.empty()) {
-            col->SetFamilyName(colInfo.FamilyName);
-        }
-
-        if (colInfo.NotNull) {
-            col->SetNotNull(colInfo.NotNull);
-        }
-    }
-
-    // Publish the entire ADD COLUMN operation only after the backfill finishes.
-    for (auto& column : *alterTable->MutableColumns()) {
-        column.SetIsBuildInProgress(true);
+        TString error;
+        AFL_ENSURE(colInfo.FillColumnDescription(*alterTable->AddColumns(), error))
+            ("build", buildInfo.Id)("column", colInfo.ColumnName)("error", error);
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -1110,13 +1070,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
-    if (buildInfo.AlterMainTablePayload) {
-        auto* settings = columnBuild->MutableSettings();
-        settings->clear_column();
-        for (const auto& column : buildInfo.AlterMainTablePayload->GetAlterTable().GetColumns()) {
-            settings->add_column()->SetColumnName(column.GetName());
-        }
-    }
 
     AddDropSequencePropose(ss, buildInfo, *propose);
 
@@ -1667,7 +1620,7 @@ private:
         ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
 
         if (buildInfo.IsBuildColumns()) {
-            buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
+            buildInfo.SerializeBackfillToProto(Self, ev->Record.MutableColumnBuildSettings());
         } else {
             if (buildInfo.TargetName.empty()) {
                 TPath implTable = GetBuildPath(Self, buildInfo,
@@ -3268,7 +3221,7 @@ private:
             return true;
         }
         for (const auto& col : buildInfo.BuildColumns) {
-            if (!col.IsFromSequence()) {
+            if (col.DefaultFromLiteral) {
                 return false;
             }
         }
@@ -3497,7 +3450,10 @@ public:
             bool cancel = buildInfo.IsCancellationRequested();
             bool fillRes = false;
             if (canProgress && !cancel) {
-                fillRes = FillIndex(txc, buildInfo);
+                const bool noBackfill = buildInfo.IsBuildColumns() && AllOf(buildInfo.BuildColumns, [](const auto& column) {
+                    return !column.NeedsBackfill();
+                });
+                fillRes = noBackfill || FillIndex(txc, buildInfo);
             }
             if (!canProgress || cancel || fillRes) {
                 auto nextState = TIndexBuildInfo::EState::Applying;
@@ -3776,6 +3732,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
             Y_ENSURE(buildInfo.IsBuildColumns());
+            ClearAfterFill(ctx, buildInfo);
             if (buildInfo.DropColumnsTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {

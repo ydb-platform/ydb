@@ -352,6 +352,7 @@ Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::s
 Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
+bool IsNullDefaultExpr(NNodes::TExprBase maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);

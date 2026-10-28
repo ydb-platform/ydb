@@ -3,7 +3,6 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 
 
@@ -23,6 +22,8 @@ message TColumnBuildSetting {
     // before it is written into the row. Used for hot-shard mitigation of monotone
     // sequences when the sequence column is part of a range-partitioned PK/index.
     optional bool bit_reverse_sequence_value = 6;
+    // Schema type, independent of the optional source of backfill values.
+    optional Ydb.Type ColumnType = 7;
 }
 
 message TColumnBuildSettings {
@@ -57,8 +58,6 @@ message TIndexBuildSettings {
 
     optional uint32 max_shards_in_flight = 5;
     reserved 6; // max_retries_upload_batch
-
-    optional google.protobuf.Any AlterMainTablePayload = 10;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
 

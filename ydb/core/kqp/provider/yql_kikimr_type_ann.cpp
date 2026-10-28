@@ -525,7 +525,7 @@ namespace {
             return std::nullopt;
         }
 
-        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+        if (defaultType->HasNull() || IsNullDefaultExpr(defaultExpr)) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -540,16 +540,9 @@ namespace {
             }
 
             if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
-                }
-                return IGraphTransformer::TStatus::Error;
+                // Untyped NULL is valid for every nullable column. Typed NULLs
+                // still pass through the type compatibility checks below.
+                return std::nullopt;
             }
         }
 
@@ -603,6 +596,10 @@ namespace {
                 onRepeat(std::move(evaluatedExpr));
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
             }
+        }
+
+        if (IsNullDefaultExpr(TExprBase(defaultExprPtr))) {
+            return std::nullopt;
         }
 
         if (NDq::IsConstantExpr(defaultExprPtr) && !NDq::IsLiteralDataExpr(TExprBase(defaultExprPtr))) {
@@ -853,12 +850,14 @@ namespace {
             YQL_ENSURE(defaultType && constraint.Value().IsValid());
 
             TExprBase constrValue = constraint.Value().Cast();
+            const bool columnNotNull = columnMeta.NotNull ||
+                (type->GetKind() != ETypeAnnotationKind::Optional && type->GetKind() != ETypeAnnotationKind::Pg);
 
             if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
                 columnName, nullptr, ctx, typeCtx, [&](TExprNode::TPtr expr) {
                     constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = std::move(expr);
                     needEval = true;
-                }, columnMeta.NotNull))
+                }, columnNotNull))
             {
                 if (*status == IGraphTransformer::TStatus::Error) {
                     return false;

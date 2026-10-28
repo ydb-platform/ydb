@@ -2194,6 +2194,7 @@ namespace NSchemeShardUT_Private {
 
         auto* col = settings.mutable_column_build_operation()->add_column();
         col->SetColumnName(columnName);
+        *col->MutableColumnType() = literal.type();
         col->mutable_default_from_literal()->CopyFrom(literal);
 
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));

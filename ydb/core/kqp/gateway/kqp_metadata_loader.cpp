@@ -306,6 +306,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     }
 
     tableMeta->IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
+    tableMeta->SupportsColumnBuildBatch = entry.SupportsColumnBuildBatch;
 
     tableMeta->Attributes = entry.Attributes;
 

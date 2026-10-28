@@ -131,57 +131,68 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     struct TColumnBuildInfo {
         TString ColumnName;
-        Ydb::TypedValue DefaultFromLiteral;
+        Ydb::Type ColumnType;
+        TMaybe<Ydb::TypedValue> DefaultFromLiteral;
         bool NotNull = false;
         TString FamilyName;
         TString DefaultFromSequence;
         bool BitReverseSequenceValue = false;
 
-        TColumnBuildInfo(const TString& name, const TString& serializedLiteral, bool notNull, const TString& familyName)
+        TColumnBuildInfo() = default;
+
+        TColumnBuildInfo(const TString& name, const Ydb::Type& type, bool notNull, const TString& familyName)
             : ColumnName(name)
+            , ColumnType(type)
             , NotNull(notNull)
             , FamilyName(familyName)
         {
-            Y_ENSURE(DefaultFromLiteral.ParseFromString(serializedLiteral));
         }
 
         TColumnBuildInfo(const TString& name, const Ydb::TypedValue& defaultFromLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
+            , ColumnType(defaultFromLiteral.type())
             , DefaultFromLiteral(defaultFromLiteral)
             , NotNull(notNull)
             , FamilyName(familyName)
         {
+            NormalizeNullDefault();
         }
 
         struct FromSequenceTag {};
         TColumnBuildInfo(FromSequenceTag, const TString& name, const Ydb::Type& columnType,
                          const TString& sequencePath, bool bitReverse, bool notNull, const TString& familyName)
             : ColumnName(name)
+            , ColumnType(columnType)
             , NotNull(notNull)
             , FamilyName(familyName)
             , DefaultFromSequence(sequencePath)
             , BitReverseSequenceValue(bitReverse)
         {
-            *DefaultFromLiteral.mutable_type() = columnType;
         }
 
         bool IsFromSequence() const {
             return !DefaultFromSequence.empty();
         }
 
-        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const {
-            setting->SetColumnName(ColumnName);
-            if (IsFromSequence()) {
-                setting->set_default_from_sequence(JoinPath({tablePath, DefaultFromSequence}));
-                setting->set_bit_reverse_sequence_value(BitReverseSequenceValue);
-                if (DefaultFromLiteral.has_type()) {
-                    *setting->mutable_default_from_literal()->mutable_type() = DefaultFromLiteral.type();
-                }
-            } else {
-                setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+        bool NeedsBackfill() const {
+            return DefaultFromLiteral.Defined() || IsFromSequence();
+        }
+
+        static bool TryFromProto(const NKikimrIndexBuilder::TColumnBuildSetting& setting,
+                                 TColumnBuildInfo& result, TString& error);
+        static TColumnBuildInfo FromPersistedProto(const NKikimrIndexBuilder::TColumnBuildSetting& setting);
+        bool FillColumnDescription(NKikimrSchemeOp::TColumnDescription& column, TString& error) const;
+        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const;
+        void SerializeBackfillToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const;
+
+    private:
+        void NormalizeNullDefault() {
+            // A nullable NULL default has the same schema and data behavior as no default.
+            // Keep invalid NOT NULL/conflicting sources intact for ingress validation.
+            if (!NotNull && !IsFromSequence() && DefaultFromLiteral &&
+                DefaultFromLiteral->value().has_null_flag_value()) {
+                DefaultFromLiteral.Clear();
             }
-            setting->SetNotNull(NotNull);
-            setting->SetFamily(FamilyName);
         }
     };
 
@@ -225,7 +236,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TVector<TColumnBuildInfo> BuildColumns;
-    TMaybe<NKikimrSchemeOp::TModifyScheme> AlterMainTablePayload;
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
@@ -507,15 +517,26 @@ public:
 
     template<class TRow>
     void AddBuildColumnInfo(const TRow& row) {
-        TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
-        TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
-        bool notNull = row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>();
-        TString familyName = row.template GetValue<Schema::BuildColumnOperationSettings::FamilyName>();
-        TString defaultFromSequence = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::DefaultFromSequence>(TString{});
-        bool bitReverseSequenceValue = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(false);
-        auto& back = BuildColumns.emplace_back(columnName, defaultFromLiteral, notNull, familyName);
-        back.DefaultFromSequence = defaultFromSequence;
-        back.BitReverseSequenceValue = bitReverseSequenceValue;
+        NKikimrIndexBuilder::TColumnBuildSetting setting;
+        setting.SetColumnName(row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>());
+        setting.SetNotNull(row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>());
+        setting.SetFamily(row.template GetValue<Schema::BuildColumnOperationSettings::FamilyName>());
+        setting.set_default_from_sequence(row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::DefaultFromSequence>(TString{}));
+        setting.set_bit_reverse_sequence_value(row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(false));
+        const auto literal = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(TString{});
+        // Old sequence builds stored a type-only literal carrier.
+        if (row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::HasDefaultFromLiteral>(!literal.empty())) {
+            AFL_ENSURE(setting.mutable_default_from_literal()->ParseFromString(literal))("build", Id)("column", setting.GetColumnName());
+        }
+        if (row.template HaveValue<Schema::BuildColumnOperationSettings::ColumnTypeProto>()) {
+            AFL_ENSURE(setting.MutableColumnType()->ParseFromString(row.template GetValue<Schema::BuildColumnOperationSettings::ColumnTypeProto>()))
+                ("build", Id)("column", setting.GetColumnName());
+        }
+        AFL_ENSURE(row.template GetValue<Schema::BuildColumnOperationSettings::ColumnNo>() == BuildColumns.size())("build", Id)("column", setting.GetColumnName());
+        // Persisted operations predate ingress validation. In particular, invalid
+        // historical literals must still restore so rejection or cancellation can
+        // roll back the complete batch.
+        BuildColumns.push_back(TColumnBuildInfo::FromPersistedProto(setting));
     }
 
     template<class TRowSetType>
@@ -594,13 +615,6 @@ public:
         indexInfo->TablePathId =
             TPathId(row.template GetValue<Schema::IndexBuild::TableOwnerId>(),
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
-
-        if (row.template HaveValue<Schema::IndexBuild::AlterMainTablePayload>()) {
-            indexInfo->AlterMainTablePayload = NKikimrSchemeOp::TModifyScheme();
-            Y_ENSURE(indexInfo->AlterMainTablePayload->ParseFromString(
-                row.template GetValue<Schema::IndexBuild::AlterMainTablePayload>()),
-                "Cannot parse column build alter table payload");
-        }
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
@@ -1045,6 +1059,7 @@ public:
     void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
     bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
+    void SerializeBackfillToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
 };

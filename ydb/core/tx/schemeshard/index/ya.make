@@ -16,6 +16,7 @@ SRCS(
     build_index__progress.cpp
     build_index_tx_base.cpp
     build_index_tx_base.h
+    column_build_test_hooks.h
     common.h
     common.cpp
     index_build_info.cpp
@@ -42,11 +43,13 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     ydb/core/base
+    ydb/core/io_formats/cell_maker
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/ydb_convert
 )
 
 END()

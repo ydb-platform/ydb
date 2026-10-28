@@ -1535,6 +1535,7 @@ void TSchemeShard::DescribeTable(
     Y_UNUSED(typeRegistry);
 
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
+    entry->SetSupportsColumnBuildBatch(true);
     FillColumns(tableInfo, *entry->MutableColumns());
     FillKeyColumns(tableInfo, *entry->MutableKeyColumnNames(), *entry->MutableKeyColumnIds());
 

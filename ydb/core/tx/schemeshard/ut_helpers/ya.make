@@ -31,6 +31,7 @@ PEERDIR(
 )
 
 SRCS(
+    column_build.h
     export_reboots_common.cpp
     failing_mtpq.cpp
     helpers.cpp

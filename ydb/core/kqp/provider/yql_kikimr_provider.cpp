@@ -705,10 +705,30 @@ bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
         maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
 }
 
+bool IsNullDefaultExpr(NNodes::TExprBase maybeLiteral) {
+    if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+    return maybeLiteral.Maybe<TCoNull>().IsValid() || maybeLiteral.Maybe<TCoNothing>().IsValid() ||
+        IsPgNullExprNode(maybeLiteral);
+}
+
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
 {
     if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
         maybeLiteral = maybeJust.Cast().Input();
+    }
+
+    if (IsNullDefaultExpr(maybeLiteral)) {
+        if (!valueType) {
+            return "Cannot determine column type for NULL default";
+        }
+        TString error;
+        if (!SetColumnType(valueType, false, *proto.mutable_type(), error)) {
+            return error;
+        }
+        proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        return std::nullopt;
     }
 
     if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
@@ -716,8 +736,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         return std::nullopt;
     }
 
-    const bool isPgNull = IsPgNullExprNode(maybeLiteral);
-    if (maybeLiteral.Maybe<TCoPgConst>() || isPgNull) {
+    if (maybeLiteral.Maybe<TCoPgConst>()) {
         YQL_ENSURE(valueType);
         auto actualPgType = valueType->Cast<TPgExprType>();
         YQL_ENSURE(actualPgType);
@@ -727,20 +746,15 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
             return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
         }
 
-        if (isPgNull) {
-            proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
-        } else {
-            YQL_ENSURE(maybeLiteral.Maybe<TCoPgConst>());
-            auto pgConst = maybeLiteral.Cast<TCoPgConst>();
-            TString content = TString(pgConst.Value().Value());
-            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
-            if (parseResult.Error) {
-                return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
-                    << ", error reason: " << *parseResult.Error;
-            }
-
-            proto.mutable_value()->set_bytes_value(parseResult.Str);
+        auto pgConst = maybeLiteral.Cast<TCoPgConst>();
+        TString content = TString(pgConst.Value().Value());
+        auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+        if (parseResult.Error) {
+            return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                << ", error reason: " << *parseResult.Error;
         }
+
+        proto.mutable_value()->set_bytes_value(parseResult.Str);
 
         auto* pg = proto.mutable_type()->mutable_pg_type();
         pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));

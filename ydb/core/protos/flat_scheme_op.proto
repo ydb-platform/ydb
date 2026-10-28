@@ -427,6 +427,8 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+    // Advertised by SchemeShard after it supports complete column-build batches.
+    optional bool SupportsColumnBuildBatch = 56 [default = false];
 }
 
 message TCompressionOptions {

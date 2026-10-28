@@ -223,6 +223,7 @@ namespace {
             entry.DomainDescription.Drop();
             entry.Columns.clear();
             entry.NotNullColumns.clear();
+            entry.SupportsColumnBuildBatch = false;
             entry.Indexes.clear();
             entry.MultiColumnStatistics.clear();
             entry.Sequences.clear();
@@ -754,6 +755,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
+            SupportsColumnBuildBatch = false;
             SetNotNullInProgressColumns.clear();
             Indexes.clear();
             MultiColumnStatistics.clear();
@@ -789,6 +791,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& tableDesc = pathDesc.GetTable();
+            SupportsColumnBuildBatch = tableDesc.GetSupportsColumnBuildBatch();
 
             for (const auto& columnDesc : tableDesc.GetColumns()) {
                 auto& column = Columns[columnDesc.GetId()];
@@ -1207,6 +1210,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , IsPrivatePath(other.IsPrivatePath)
             , IsVirtual(other.IsVirtual)
             , SchemaVersion(other.SchemaVersion)
+            , SupportsColumnBuildBatch(other.SupportsColumnBuildBatch)
             , Partitioning(std::make_shared<TPartitioning>())
         {
             if (other.Subscriber) {
@@ -2060,6 +2064,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.SysViewInfo = SysViewInfo;
             entry.SecretInfo = SecretInfo;
             entry.TableKind = TableKind;
+            entry.SupportsColumnBuildBatch = SupportsColumnBuildBatch;
             entry.StreamingQueryInfo = StreamingQueryInfo;
             entry.TestShardSetInfo = TestShardSetInfo;
         }
@@ -2316,6 +2321,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
+        bool SupportsColumnBuildBatch = false;
         THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;

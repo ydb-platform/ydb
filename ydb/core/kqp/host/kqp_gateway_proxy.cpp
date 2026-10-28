@@ -362,7 +362,8 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
                 cMeta.DefaultFromSequence);
         }
 
-        if (cMeta.IsDefaultFromLiteral()) {
+        // NULL defaults use the schema representation of an ordinary nullable column.
+        if (cMeta.IsDefaultFromLiteral() && !cMeta.DefaultFromLiteral.value().has_null_flag_value()) {
             columnDesc.MutableDefaultFromLiteral()->CopyFrom(
                 cMeta.DefaultFromLiteral);
         }
@@ -1299,6 +1300,30 @@ public:
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
+        if (buildSettings.has_column_build_operation()) {
+            auto remaining = req;
+            remaining.clear_session_id();
+            remaining.clear_path();
+            remaining.clear_operation_params();
+            remaining.clear_add_columns();
+            const bool additionsOnly = req.add_columns_size() > 0 && remaining.ByteSizeLong() == 0;
+            if (!additionsOnly) {
+                const auto& columns = buildSettings.column_build_operation().column();
+                const bool backfill = std::any_of(columns.begin(), columns.end(), [](const auto& column) {
+                    return (column.has_default_from_literal() && column.default_from_literal().has_value())
+                        || !column.default_from_sequence().empty();
+                });
+                if (backfill) {
+                    TGenericResult result;
+                    result.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                    result.AddIssue(NYql::TIssue("only ADD COLUMN actions can be combined with a column build")
+                        .SetCode(result.Status(), NYql::TSeverityIds::S_ERROR));
+                    promise.SetValue(result);
+                    return promise.GetFuture();
+                }
+                buildSettings.clear_column_build_operation();
+            }
+        }
         const auto ops = GetAlterOperationKinds(&req);
         if (ops.size() != 1) {
             auto code = Ydb::StatusIds::BAD_REQUEST;
@@ -1442,7 +1467,6 @@ public:
                 }
 
                 if (buildSettings.has_column_build_operation()) {
-                    buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
                 } else {
                     phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);

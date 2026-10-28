@@ -2,6 +2,9 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -206,13 +209,167 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     }
 }
 
+TIndexBuildInfo::TColumnBuildInfo TIndexBuildInfo::TColumnBuildInfo::FromPersistedProto(
+    const NKikimrIndexBuilder::TColumnBuildSetting& setting)
+{
+    TColumnBuildInfo column;
+    column.ColumnName = setting.GetColumnName();
+    column.NotNull = setting.GetNotNull();
+    column.FamilyName = setting.GetFamily();
+    column.DefaultFromSequence = setting.default_from_sequence();
+    column.BitReverseSequenceValue = setting.bit_reverse_sequence_value();
+    if (setting.HasColumnType()) {
+        column.ColumnType = setting.GetColumnType();
+    } else if (setting.has_default_from_literal()) {
+        // Legacy literal defaults and the type-only carrier used by sequence builds.
+        column.ColumnType = setting.default_from_literal().type();
+    }
+    if (setting.has_default_from_literal() &&
+        (setting.default_from_literal().has_value() || !column.IsFromSequence())) {
+        column.DefaultFromLiteral = setting.default_from_literal();
+    }
+    column.NormalizeNullDefault();
+    return column;
+}
+
+bool TIndexBuildInfo::TColumnBuildInfo::TryFromProto(
+    const NKikimrIndexBuilder::TColumnBuildSetting& setting, TColumnBuildInfo& result, TString& error)
+{
+    auto column = FromPersistedProto(setting);
+    const bool hasLiteral = setting.has_default_from_literal() && setting.default_from_literal().has_value();
+    if (column.ColumnName.empty() || (hasLiteral && column.IsFromSequence()) ||
+        (column.BitReverseSequenceValue && !column.IsFromSequence())) {
+        error = "Column name or default sources are invalid";
+        return false;
+    }
+    if (setting.has_default_from_literal() && !hasLiteral && !column.IsFromSequence()) {
+        error = "Literal default must contain a value";
+        return false;
+    }
+    NScheme::TTypeInfo type;
+    TString typeMod;
+    Ydb::StatusIds::StatusCode status;
+    if (!ExtractColumnTypeInfo(type, typeMod, column.ColumnType, status, error)) {
+        return false;
+    }
+    if (setting.has_default_from_literal()) {
+        NScheme::TTypeInfo literalType;
+        TString literalTypeMod;
+        if (!ExtractColumnTypeInfo(literalType, literalTypeMod, setting.default_from_literal().type(), status, error)) {
+            return false;
+        }
+        if (type != literalType || typeMod != literalTypeMod) {
+            error = "Column type does not match literal type";
+            return false;
+        }
+        if (hasLiteral) {
+            TMemoryPool pool(256);
+            TCell value;
+            const auto& literal = setting.default_from_literal();
+            const i32 pgTypeMod = literal.type().has_pg_type() ? literal.type().pg_type().typmod() : -1;
+            if (!CellFromProtoVal(type, pgTypeMod, &literal.value(), false, value, error, pool) ||
+                !NFormats::CheckCellValue(value, type)) {
+                if (error.empty()) {
+                    error = "Invalid literal default";
+                }
+                return false;
+            }
+            if (column.NotNull && value.IsNull()) {
+                error = "NULL default for a NOT NULL column";
+                return false;
+            }
+            column.DefaultFromLiteral = literal;
+            column.NormalizeNullDefault();
+        }
+    }
+    if (column.NotNull && !column.NeedsBackfill()) {
+        error = "Not null columns without defaults are not supported";
+        return false;
+    }
+    if (column.IsFromSequence() && type.GetTypeId() != NScheme::NTypeIds::Uint64) {
+        error = "Sequence column builds require Uint64";
+        return false;
+    }
+    result = std::move(column);
+    return true;
+}
+
+bool TIndexBuildInfo::TColumnBuildInfo::FillColumnDescription(
+    NKikimrSchemeOp::TColumnDescription& column, TString& error) const
+{
+    column.Clear();
+    NScheme::TTypeInfo type;
+    TString typeMod;
+    Ydb::StatusIds::StatusCode status;
+    if (!ExtractColumnTypeInfo(type, typeMod, ColumnType, status, error)) {
+        return false;
+    }
+    column.SetName(ColumnName);
+    column.SetType(NScheme::TypeName(type, typeMod));
+    if (NScheme::NTypeIds::IsParametrizedType(type.GetTypeId())) {
+        NScheme::ProtoFromTypeInfo(type, typeMod, *column.MutableTypeInfo());
+    }
+    column.SetNotNull(NotNull);
+    if (!FamilyName.empty()) {
+        column.SetFamilyName(FamilyName);
+    }
+    if (DefaultFromLiteral) {
+        *column.MutableDefaultFromLiteral() = *DefaultFromLiteral;
+    } else if (IsFromSequence()) {
+        column.SetDefaultFromSequence(DefaultFromSequence);
+    }
+    column.SetIsBuildInProgress(true);
+    return true;
+}
+
+void TIndexBuildInfo::TColumnBuildInfo::SerializeToProto(
+    NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const
+{
+    setting->Clear();
+    setting->SetColumnName(ColumnName);
+    *setting->MutableColumnType() = ColumnType;
+    setting->SetNotNull(NotNull);
+    setting->SetFamily(FamilyName);
+    if (DefaultFromLiteral) {
+        *setting->mutable_default_from_literal() = *DefaultFromLiteral;
+    }
+    if (IsFromSequence()) {
+        setting->set_default_from_sequence(DefaultFromSequence.StartsWith('/')
+            ? DefaultFromSequence : JoinPath({tablePath, DefaultFromSequence}));
+        setting->set_bit_reverse_sequence_value(BitReverseSequenceValue);
+    }
+}
+
+void TIndexBuildInfo::TColumnBuildInfo::SerializeBackfillToProto(
+    NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const
+{
+    SerializeToProto(setting, tablePath);
+    setting->ClearColumnType();
+    if (IsFromSequence()) {
+        // DataShard still reads the sequence column type from the legacy carrier.
+        *setting->mutable_default_from_literal()->mutable_type() = ColumnType;
+    }
+}
+
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ENSURE(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
+    result->Clear();
     result->SetTable(TargetName);
     const TString tablePath = TPath::Init(TablePathId, ss).PathString();
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column(), tablePath);
+    }
+}
+
+void TIndexBuildInfo::SerializeBackfillToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+    result->Clear();
+    result->SetTable(TargetName);
+    const TString tablePath = TPath::Init(TablePathId, ss).PathString();
+    for (const auto& column : BuildColumns) {
+        if (column.NeedsBackfill()) {
+            column.SerializeBackfillToProto(result->add_column(), tablePath);
+        }
     }
 }
 

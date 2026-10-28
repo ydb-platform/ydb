@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
+#include <ydb/core/tx/schemeshard/index/column_build_test_hooks.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
@@ -17,6 +18,9 @@ static constexpr ui32 DefaultMaxShardsInFlight = 32;
 
 using namespace NTabletFlatExecutor;
 using NKikimrSchemeOp::EIndexType;
+
+decltype(TColumnBuildTestHooks::OnColumnPrepared) TColumnBuildTestHooks::OnColumnPrepared;
+decltype(TColumnBuildTestHooks::BeforeFillingProgress) TColumnBuildTestHooks::BeforeFillingProgress;
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
@@ -277,52 +281,45 @@ public:
                 }
             }
         } else if (settings.has_column_build_operation()) {
-            bool allFromSequence = settings.column_build_operation().column_size() > 0;
-            for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
-                if (settings.column_build_operation().column(i).default_from_sequence().empty()) {
-                    allFromSequence = false;
-                    break;
-                }
-            }
-            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
-                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
-            }
-
             buildInfo->TargetName = tablePath.PathString();
-            if (settings.HasAlterMainTablePayload()) {
-                NKikimrSchemeOp::TModifyScheme payload;
-                if (!settings.GetAlterMainTablePayload().UnpackTo(&payload)) {
-                    return makeReply("invalid alter table payload for column build");
-                }
-                buildInfo->AlterMainTablePayload = std::move(payload);
-            }
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
-            buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
-            for(int i = 0; i < settings.column_build_operation().column_size(); i++) {
-                const auto& colInfo = settings.column_build_operation().column(i);
-                bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
-                TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
-                if (!colInfo.default_from_sequence().empty()) {
-                    buildInfo->BuildColumns.push_back(
-                        TIndexBuildInfo::TColumnBuildInfo(
-                            TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},
-                            colInfo.GetColumnName(),
-                            colInfo.default_from_literal().type(),
-                            colInfo.default_from_sequence(),
-                            colInfo.bit_reverse_sequence_value(),
-                            notNull,
-                            familyName));
-                } else {
-                    buildInfo->BuildColumns.push_back(
-                        TIndexBuildInfo::TColumnBuildInfo(
-                            colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
-                }
+            const auto& columns = settings.column_build_operation();
+            TString explain;
+            if (columns.column().empty()) {
+                return makeReply("column build settings must not be empty");
             }
-            if (buildInfo->AlterMainTablePayload) {
-                TString explain;
-                if (!ValidateColumnBuildPayload(*buildInfo, tablePath, explain)) {
-                    return makeReply(explain);
+            buildInfo->BuildColumns.reserve(columns.column_size());
+            const auto columnPrepared = [&](size_t count) {
+                if (TColumnBuildTestHooks::OnColumnPrepared) {
+                    TColumnBuildTestHooks::OnColumnPrepared(ctx, BuildId, count);
                 }
+            };
+            columnPrepared(0);
+            for (const auto& setting : columns.column()) {
+                TIndexBuildInfo::TColumnBuildInfo column;
+                if (!TIndexBuildInfo::TColumnBuildInfo::TryFromProto(setting, column, explain)) {
+                    return makeReply(TStringBuilder() << setting.GetColumnName() << ": " << explain);
+                }
+                if (!Self->EnableAddColumsWithDefaults && column.DefaultFromLiteral) {
+                    return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
+                }
+                if (column.IsFromSequence()) {
+                    if (column.DefaultFromSequence.StartsWith('/')) {
+                        const TString prefix = tablePath.PathString() + "/";
+                        if (!column.DefaultFromSequence.StartsWith(prefix)) {
+                            return makeReply("sequence must belong to the altered table");
+                        }
+                        column.DefaultFromSequence = column.DefaultFromSequence.substr(prefix.size());
+                    }
+                    if (column.DefaultFromSequence.empty() || column.DefaultFromSequence.Contains('/')) {
+                        return makeReply("sequence must be a non-empty table-local name");
+                    }
+                }
+                buildInfo->BuildColumns.push_back(std::move(column));
+                columnPrepared(buildInfo->BuildColumns.size());
+            }
+            if (!ValidateBuildColumns(*buildInfo, tablePath, explain)) {
+                return makeReply(explain);
             }
         } else {
             return makeReply("missing index or column to build");
@@ -401,83 +398,49 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
-    bool ValidateColumnBuildPayload(const TIndexBuildInfo& buildInfo, const TPath& tablePath, TString& explain) {
-        const auto& payload = *buildInfo.AlterMainTablePayload;
-        auto fail = [&](TString message) {
-            explain = std::move(message);
-            return false;
-        };
-        if (payload.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable || !payload.HasAlterTable()) {
-            return fail("column build payload must be an ALTER TABLE operation");
-        }
-
-        // Only additions can be rolled back by dropping the newly built columns.
-        auto otherOperations = payload;
-        otherOperations.ClearWorkingDir();
-        otherOperations.ClearOperationType();
-        otherOperations.ClearAlterTable();
-        auto otherChanges = payload.GetAlterTable();
-        otherChanges.ClearName();
-        otherChanges.ClearColumns();
-        // KQP's alter converter materializes an empty partition config even for ADD COLUMN.
-        if (!otherChanges.GetPartitionConfig().ByteSizeLong()) {
-            otherChanges.ClearPartitionConfig();
-        }
-        if (otherOperations.ByteSizeLong() || otherChanges.ByteSizeLong()) {
-            return fail("only ADD COLUMN actions can be combined with a column build");
-        }
-
-        const auto payloadPath = TPath::Resolve(payload.GetWorkingDir(), Self).Dive(payload.GetAlterTable().GetName());
-        if (!payloadPath.IsResolved() || payloadPath.Base()->PathId != tablePath.Base()->PathId) {
-            return fail("column build payload refers to a different table");
-        }
-
-        const auto& tableInfo = Self->Tables.at(buildInfo.TablePathId);
-        THashMap<TString, const NKikimrSchemeOp::TColumnDescription*> columns;
-        for (const auto& column : payload.GetAlterTable().GetColumns()) {
-            if (column.HasSetNotNullInProgress()) {
-                return fail(TStringBuilder() << "column build payload cannot set SetNotNullInProgress: " << column.GetName());
-            }
-            if (column.GetName().empty() || !column.HasType()) {
-                return fail("column build payload must specify names and types for new columns");
-            }
-            if (!columns.emplace(column.GetName(), &column).second) {
-                return fail(TStringBuilder() << "duplicate column in build payload: " << column.GetName());
-            }
-            if (tableInfo->GetColumnIdByNameSlow(column.GetName()) != TTableInfo::InvalidColumnId) {
-                return fail(TStringBuilder() << "column already exists: " << column.GetName());
-            }
-        }
-
-        if (buildInfo.BuildColumns.empty()) {
-            return fail("column build settings must not be empty");
-        }
-        THashSet<TString> buildColumns;
+    bool ValidateBuildColumns(const TIndexBuildInfo& buildInfo, const TPath& tablePath, TString& explain) {
+        const auto& table = Self->Tables.at(buildInfo.TablePathId);
+        THashSet<TString> names;
+        THashSet<TString> sequences;
+        NKikimrSchemeOp::TTableDescription description;
         for (const auto& column : buildInfo.BuildColumns) {
-            if (!buildColumns.insert(column.ColumnName).second) {
-                return fail(TStringBuilder() << "duplicate column to build: " << column.ColumnName);
-            }
-            const auto it = columns.find(column.ColumnName);
-            if (it == columns.end()) {
-                return fail(TStringBuilder() << "column to build is missing from payload: " << column.ColumnName);
-            }
-            NScheme::TTypeInfo typeInfo;
-            TString typeMod;
-            Ydb::StatusIds::StatusCode status;
-            if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.DefaultFromLiteral.type(), status, explain)) {
+            if (!names.insert(column.ColumnName).second) {
+                explain = TStringBuilder() << "duplicate column to build: " << column.ColumnName;
                 return false;
             }
-            if (it->second->GetType() != NScheme::TypeName(typeInfo, typeMod)) {
-                return fail(TStringBuilder() << "column build type does not match payload: " << column.ColumnName);
+            if (table->GetColumnIdByNameSlow(column.ColumnName) != TTableInfo::InvalidColumnId) {
+                explain = TStringBuilder() << "column already exists: " << column.ColumnName;
+                return false;
+            }
+            if (!column.FillColumnDescription(*description.AddColumns(), explain)) {
+                return false;
+            }
+            if (column.IsFromSequence()) {
+                sequences.insert(column.DefaultFromSequence);
             }
         }
-        for (const auto& column : payload.GetAlterTable().GetColumns()) {
-            if ((column.GetDefaultValueCase() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET || column.GetNotNull())
-                && !buildColumns.contains(column.GetName())) {
-                return fail(TStringBuilder() << "column requires build settings: " << column.GetName());
-            }
+        // Use the same family normalization as ALTER TABLE, including an
+        // implicit default family and families introduced by column names.
+        const bool serverless = Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self));
+        if (!TPartitionConfigMerger::ApplyChanges(*description.MutablePartitionConfig(), table->PartitionConfig(), {},
+                description.GetColumns(), AppData(), serverless, explain)
+            || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), description.GetPartitionConfig(),
+                AppData(), true, explain)) {
+            return false;
         }
-        return true;
+        const auto& flags = AppData()->FeatureFlags;
+        const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+            .EnableTablePgTypes = flags.GetEnableTablePgTypes(),
+            .EnableTableDatetime64 = flags.GetEnableTableDatetime64(),
+            .EnableParameterizedDecimal = flags.GetEnableParameterizedDecimal(),
+            .EnableDetailedMetrics = flags.GetEnableDataShardDetailedMetrics(),
+            .EnableColumnStatistics = flags.GetEnableColumnStatistics(),
+            .EnableGeneratedStored = flags.GetEnableGeneratedStored(),
+            .EnableGeneratedVirtual = flags.GetEnableGeneratedVirtual(),
+        };
+        const auto& domain = *tablePath.DomainInfo();
+        return bool(TTableInfo::CreateAlterData(table, description, *AppData()->TypeRegistry,
+            domain.GetSchemeLimits(), domain, featureFlags, explain, sequences));
     }
 
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,

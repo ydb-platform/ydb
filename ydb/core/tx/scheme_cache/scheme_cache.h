@@ -386,6 +386,7 @@ struct TSchemeCacheNavigate {
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         ETableKind TableKind = ETableKind::KindUnknown;
+        bool SupportsColumnBuildBatch = false;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;

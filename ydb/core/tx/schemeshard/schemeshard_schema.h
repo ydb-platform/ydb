@@ -1507,8 +1507,6 @@ struct Schema : NIceDb::Schema {
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
         struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
-        // Serialized NKikimrSchemeOp::TModifyScheme with every column added by a column build.
-        struct AlterMainTablePayload : Column<61, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1571,8 +1569,7 @@ struct Schema : NIceDb::Schema {
             RowIdUniqueBuildId,
             ParentBuildId,
             IsRebuild,
-            RebuildIndexName,
-            AlterMainTablePayload
+            RebuildIndexName
         >;
     };
 
@@ -2089,6 +2086,8 @@ struct Schema : NIceDb::Schema {
         struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
         struct DefaultFromSequence : Column<7, NScheme::NTypeIds::Utf8> {};
         struct BitReverseSequenceValue : Column<8, NScheme::NTypeIds::Bool> {};
+        struct ColumnTypeProto : Column<9, NScheme::NTypeIds::String> {};
+        struct HasDefaultFromLiteral : Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
@@ -2099,7 +2098,9 @@ struct Schema : NIceDb::Schema {
             NotNull,
             FamilyName,
             DefaultFromSequence,
-            BitReverseSequenceValue
+            BitReverseSequenceValue,
+            ColumnTypeProto,
+            HasDefaultFromLiteral
         >;
     };
 

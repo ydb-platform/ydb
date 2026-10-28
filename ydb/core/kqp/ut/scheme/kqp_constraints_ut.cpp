@@ -1,7 +1,12 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
+
+#include <algorithm>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -13,6 +18,18 @@ using namespace NYdb::NQuery;
 using namespace NYdb::NTopic;
 
 namespace {
+
+void AssertNoColumnDefaults(TKikimrRunner& kikimr, const TString& table) {
+    const auto result = kikimr.RunCall([&] {
+        auto session = kikimr.GetTableClient().GetSession().GetValueSync().GetSession();
+        return session.DescribeTable(table).GetValueSync();
+    });
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    const auto& proto = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+    for (const auto& column : proto.columns()) {
+        UNIT_ASSERT_C(column.default_value_case() == Ydb::Table::ColumnMeta::DEFAULT_VALUE_NOT_SET, column.DebugString());
+    }
+}
 
 void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
     NKikimrConfig::TAppConfig appConfig;
@@ -71,6 +88,248 @@ void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpConstraints) {
+    Y_UNIT_TEST(ColumnBuildPgTypeModifierRoundTrip) {
+        using TColumn = NSchemeShard::TIndexBuildInfo::TColumnBuildInfo;
+        // This target links the PG registry; SchemeShard's basic unit target uses pg_dummy.
+        Ydb::Type type;
+        type.mutable_pg_type()->set_type_name("pgvarchar");
+        type.mutable_pg_type()->set_type_modifier("(10)");
+        TColumn column("parameterized", type, false, "cold");
+        NKikimrSchemeOp::TColumnDescription description;
+        TString error;
+        UNIT_ASSERT_C(column.FillColumnDescription(description, error), error);
+        UNIT_ASSERT(description.HasTypeInfo());
+        UNIT_ASSERT_VALUES_EQUAL(description.GetTypeInfo().GetPgTypeMod(), "(10)");
+        UNIT_ASSERT(!description.HasDefaultFromLiteral());
+        UNIT_ASSERT(!description.HasDefaultFromSequence());
+        NKikimrIndexBuilder::TColumnBuildSetting setting;
+        column.SerializeToProto(&setting, "/Root/Table");
+        TColumn restored;
+        UNIT_ASSERT_C(TColumn::TryFromProto(setting, restored, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(restored.ColumnType.SerializeAsString(), type.SerializeAsString());
+        UNIT_ASSERT(!restored.NeedsBackfill());
+    }
+
+    Y_UNIT_TEST_QUAD(AlterColumnBatchMatrix, WithData, MultiShard) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        const TMap<TString, TString> definitions{
+            {"n1", "Int32"}, {"n2", "Utf8 FAMILY cold"}, {"n3", "Decimal(22,9)"},
+            {"d1", "Int64 DEFAULT Int64(\"0\")"},
+            {"d2", "String NOT NULL DEFAULT \"\" FAMILY cold"},
+            {"d3", "Uint64 DEFAULT Uint64(\"17\")"}};
+        TVector<TVector<TString>> orders{{"n1", "n2"}, {"n2", "n1"}, {"n1", "n2", "n3"},
+            {"d1", "d2"}, {"d2", "d1"}, {"d1", "d2", "d3"}};
+        TVector<TString> permutation{"d1", "d2", "n1", "n2"};
+        do {
+            orders.push_back(permutation);
+        } while (std::next_permutation(permutation.begin(), permutation.end()));
+        UNIT_ASSERT_VALUES_EQUAL(orders.size(), 30);
+
+        TVector<TString> current;
+        size_t creates = 0;
+        size_t scans = 0;
+        auto requests = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            const auto& settings = ev->Get()->Record.GetSettings();
+            if (!settings.has_column_build_operation()) {
+                return;
+            }
+            ++creates;
+            const auto& columns = settings.column_build_operation();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), current.size());
+            for (size_t i = 0; i < current.size(); ++i) {
+                const auto& column = columns.column(i);
+                UNIT_ASSERT_VALUES_EQUAL(column.GetColumnName(), current[i]);
+                UNIT_ASSERT(column.HasColumnType());
+                UNIT_ASSERT_VALUES_EQUAL(column.has_default_from_literal(), current[i].StartsWith('d'));
+                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), current[i] == "d2");
+                UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), current[i] == "n2" || current[i] == "d2" ? "cold" : "");
+            }
+        });
+        auto scanRequests = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
+            ++scans;
+            TVector<TString> expected;
+            for (const auto& name : current) {
+                if (name.StartsWith('d')) {
+                    expected.push_back(name);
+                }
+            }
+            const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), expected.size());
+            UNIT_ASSERT(!expected.empty());
+            for (size_t i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(columns.column(i).GetColumnName(), expected[i]);
+                UNIT_ASSERT(!columns.column(i).HasColumnType());
+            }
+        });
+
+        for (const auto& order : orders) {
+            current = order;
+            creates = scans = 0;
+            execute(TStringBuilder() << "CREATE TABLE t (Key Uint32, Value Utf8, PRIMARY KEY (Key), FAMILY cold ()) "
+                << "WITH (UNIFORM_PARTITIONS = " << (MultiShard ? 2 : 1) << ");");
+            if (WithData) {
+                execute("UPSERT INTO t (Key, Value) VALUES (1, Utf8(\"original\")), (3000000001, Utf8(\"original\"));");
+            }
+            TStringBuilder alter;
+            alter << "ALTER TABLE t ";
+            for (size_t i = 0; i < order.size(); ++i) {
+                alter << (i ? ", " : "") << "ADD COLUMN " << order[i] << " " << definitions.at(order[i]);
+            }
+            execute(alter << ";");
+            UNIT_ASSERT_VALUES_EQUAL(creates, 1);
+            const bool defaults = AnyOf(order, [](const TString& name) { return name.StartsWith('d'); });
+            UNIT_ASSERT_VALUES_EQUAL(scans != 0, defaults);
+
+            TVector<TString> selected = order;
+            Sort(selected); // Read by name, independently of the declaration/scan positions.
+            const auto checkRows = [&](TVector<ui32> keys) {
+                const auto query = TStringBuilder() << "SELECT Key, Value, " << JoinSeq(", ", selected) << " FROM t ORDER BY Key;";
+                const auto result = execute(query);
+                TStringBuilder expected;
+                expected << "[";
+                for (size_t i = 0; i < keys.size(); ++i) {
+                    expected << (i ? ";" : "") << "[[" << keys[i] << "u];[\"original\"]";
+                    for (const auto& name : selected) {
+                        expected << ";";
+                        if (name.StartsWith('n')) {
+                            expected << "#";
+                        } else if (name == "d1") {
+                            expected << "[0]";
+                        } else if (name == "d2") {
+                            expected << "\"\"";
+                        } else {
+                            expected << "[17u]";
+                        }
+                    }
+                    expected << "]";
+                }
+                expected << "]";
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            };
+            checkRows(WithData ? TVector<ui32>{1, 3000000001u} : TVector<ui32>{});
+            execute("UPSERT INTO t (Key, Value) VALUES (2, Utf8(\"original\"));");
+            checkRows(WithData ? TVector<ui32>{1, 2, 3000000001u} : TVector<ui32>{2});
+            execute("DROP TABLE t;");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(AlterColumnNullDefaultBatch, WithData, MultiShard) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        TVector<TString> order{"d", "n", "z"};
+        const TMap<TString, TString> definitions{
+            {"n", "String"}, {"z", "Utf8 DEFAULT NULL FAMILY cold"}, {"d", "Int64 DEFAULT Int64(\"0\")"}};
+        size_t builds = 0, scans = 0;
+        auto requests = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            ++builds;
+            const auto& columns = ev->Get()->Record.GetSettings().column_build_operation();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), order.size());
+            for (size_t i = 0; i < order.size(); ++i) {
+                const auto& column = columns.column(i);
+                UNIT_ASSERT_VALUES_EQUAL(column.GetColumnName(), order[i]);
+                UNIT_ASSERT(column.HasColumnType());
+                UNIT_ASSERT_VALUES_EQUAL(column.has_default_from_literal(), order[i] == "d");
+                UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), order[i] == "z" ? "cold" : "");
+            }
+        });
+        auto scanRequests = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
+            ++scans;
+            const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), "d");
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(0).default_from_literal().value().int64_value(), 0);
+        });
+        do {
+            builds = scans = 0;
+            execute(TStringBuilder() << "CREATE TABLE t (Key Uint32, Value String, PRIMARY KEY (Key), FAMILY cold ()) "
+                << "WITH (UNIFORM_PARTITIONS = " << (MultiShard ? 2 : 1) << ");");
+            if (WithData) {
+                execute("UPSERT INTO t (Key, Value) VALUES (1, \"original\"), (3000000001, \"original\");");
+            }
+            TStringBuilder alter;
+            alter << "ALTER TABLE t ";
+            for (size_t i = 0; i < order.size(); ++i) {
+                alter << (i ? ", " : "") << "ADD COLUMN " << order[i] << " " << definitions.at(order[i]);
+            }
+            execute(alter << ";");
+            UNIT_ASSERT_VALUES_EQUAL(builds, 1);
+            UNIT_ASSERT(scans > 0);
+            auto result = execute("SELECT Key, Value, d, n, z FROM t ORDER BY Key;");
+            CompareYson(WithData ? R"([[[1u];["original"];[0];#;#];[[3000000001u];["original"];[0];#;#]])" : "[]",
+                FormatResultSetYson(result.GetResultSet(0)));
+            execute("UPSERT INTO t (Key, Value) VALUES (2, \"original\");");
+            result = execute("SELECT Value, d, n, z FROM t WHERE Key = 2;");
+            CompareYson(R"([[["original"];[0];#;#]])", FormatResultSetYson(result.GetResultSet(0)));
+            execute("DROP TABLE t;");
+        } while (std::next_permutation(order.begin(), order.end()));
+    }
+
+    Y_UNIT_TEST(AlterColumnBatchLegacyBackend) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        auto descriptions = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                entry.SupportsColumnBuildBatch = false;
+            }
+        });
+        size_t builds = 0;
+        auto requests = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            ++builds;
+            const auto& settings = ev->Get()->Record.GetSettings();
+            for (const auto& column : settings.column_build_operation().column()) {
+                UNIT_ASSERT(column.has_default_from_literal() || !column.default_from_sequence().empty());
+            }
+        });
+        const auto execute = [&](const TString& query) {
+            return kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+        };
+        auto result = execute("CREATE TABLE t (Key Int32, PRIMARY KEY (Key));");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = execute("ALTER TABLE t ADD COLUMN n1 Int32, ADD COLUMN n2 Utf8;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(builds, 0);
+        result = execute("ALTER TABLE t ADD COLUMN d1 Int64 DEFAULT Int64(\"0\"), ADD COLUMN n3 String;");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(builds, 0);
+        result = execute("ALTER TABLE t ADD COLUMN d1 Int64 DEFAULT Int64(\"0\"), ADD COLUMN d2 String DEFAULT \"\";");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(builds, 1);
+    }
+
+    Y_UNIT_TEST(AlterOrdinaryColumnsWithOtherActionsAndDefaultsDisabled) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(false);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& query : {
+            "CREATE TABLE t (Key Int32, Value String, PRIMARY KEY (Key));",
+            "ALTER TABLE t ADD COLUMN n1 Int32, ADD COLUMN n2 Utf8;",
+            "ALTER TABLE t ADD COLUMN n3 String, DROP COLUMN Value;",
+            "UPSERT INTO t (Key, n3) VALUES (1, \"kept\");"}) {
+            const auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        const auto result = session.ExecuteQuery("SELECT Key, n1, n2, n3 FROM t;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[1];#;#;["kept"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(SerialTypeNegative1) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetWithSampleTables(false));
@@ -816,28 +1075,30 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableDefaultNullIsNotAllowed) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/CreateTableDefaultNullTest` (
-                    Key Int32,
-                    Value1 String,
-                    Value2 String DEFAULT NULL,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
+    Y_UNIT_TEST_TWIN(CreateTableDefaultNull, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        config.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default expr Value2 is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead.");
-        }
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        execute(R"(
+            CREATE TABLE t (
+                Key Int32, Ordinary String, Plain String DEFAULT NULL,
+                Typed Int32 DEFAULT Nothing(Int32?),
+                Converted Decimal(22,9) DEFAULT CAST(NULL AS Decimal(22,9)),
+                PRIMARY KEY (Key)
+            );
+        )");
+        AssertNoColumnDefaults(kikimr, "/Root/t");
+        execute("UPSERT INTO t (Key) VALUES (1);");
+        execute("INSERT INTO t (Key) VALUES (2);");
+        auto result = execute("SELECT Key, Ordinary, Plain, Typed, Converted FROM t ORDER BY Key;");
+        CompareYson(R"([[[1];#;#;#;#];[[2];#;#;#;#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST_TWIN(IndexedTableAndNotNullColumn, StreamIndex) {
@@ -1925,35 +2186,43 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableAddColumnDefaultNullIsNotAllowed) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/AlterTableAddColumnDefaultNullTest` (
-                    Key Int32,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/AlterTableAddColumnDefaultNullTest` ADD COLUMN Extra Int32 DEFAULT NULL;
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default expr Extra is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead.");
-        }
+    Y_UNIT_TEST_TWIN(AlterTableAddColumnDefaultNull, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        config.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(false);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        size_t builds = 0, scans = 0;
+        auto requests = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            ++builds;
+            const auto& columns = ev->Get()->Record.GetSettings().column_build_operation();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 3);
+            for (const auto& column : columns.column()) {
+                UNIT_ASSERT(column.HasColumnType());
+                UNIT_ASSERT(!column.has_default_from_literal());
+                UNIT_ASSERT(column.default_from_sequence().empty());
+            }
+        });
+        auto scanRequests = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        execute("CREATE TABLE t (Key Int32, Value String, PRIMARY KEY (Key));");
+        execute("UPSERT INTO t (Key, Value) VALUES (1, \"original\");");
+        execute(R"(ALTER TABLE t ADD COLUMN Plain Int32 DEFAULT NULL,
+            ADD COLUMN Typed Utf8 DEFAULT Nothing(Utf8?),
+            ADD COLUMN Converted Uint32 DEFAULT CAST(NULL AS Uint32);)");
+        UNIT_ASSERT_VALUES_EQUAL(builds, 1);
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        AssertNoColumnDefaults(kikimr, "/Root/t");
+        execute("UPSERT INTO t (Key, Value) VALUES (2, \"original\");");
+        execute("INSERT INTO t (Key, Value) VALUES (3, \"original\");");
+        const auto result = execute("SELECT Key, Value, Plain, Typed, Converted FROM t ORDER BY Key;");
+        CompareYson(R"([[[1];["original"];#;#;#];[[2];["original"];#;#;#];[[3];["original"];#;#;#]])",
+            FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(SetNotNull) {
@@ -2238,43 +2507,74 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDefaultNullIsNotAllowed) {
-        NKikimrConfig::TAppConfig appConfig;
-
-        TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SetDefaultNullTest` (
-                    Key Int32,
-                    Value String DEFAULT "original"u,
-                    PRIMARY KEY (Key)
-                );
-            )";
+    Y_UNIT_TEST_TWIN(AlterTableSetDefaultNull, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        for (const auto& expression : {"NULL", "Nothing(String?)", "CAST(NULL AS String)"}) {
+            execute(R"(CREATE TABLE t (Key Int32, Value String DEFAULT "original", PRIMARY KEY (Key));)");
+            execute("UPSERT INTO t (Key) VALUES (1), (4);");
+            execute(TStringBuilder() << "ALTER TABLE t ALTER COLUMN Value SET DEFAULT " << expression << ";");
+            AssertNoColumnDefaults(kikimr, "/Root/t");
+            execute("UPSERT INTO t (Key) VALUES (1), (2);");
+            execute("INSERT INTO t (Key, Value) VALUES (3, NULL);");
+            execute("REPLACE INTO t (Key) VALUES (4);");
+            const auto result = execute("SELECT Key, Value FROM t ORDER BY Key;");
+            CompareYson(R"([[[1];["original"]];[[2];#];[[3];#];[[4];#]])", FormatResultSetYson(result.GetResultSet(0)));
+            execute("DROP TABLE t;");
         }
+    }
 
-        {
-            auto query = R"(
-                UPSERT INTO `/Root/SetDefaultNullTest` (Key) VALUES (1);
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    Y_UNIT_TEST_TWIN(NullDefaultsKeepTypeAndNotNullValidation, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery("CREATE TABLE t (Key Int32, Value Int32, PRIMARY KEY (Key));", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        for (const auto& query : {
+                "CREATE TABLE invalid (Key Int32, Value Int32 DEFAULT Nothing(Utf8?), PRIMARY KEY (Key));",
+                "ALTER TABLE t ADD COLUMN Invalid Int32 DEFAULT Nothing(Utf8?);",
+                "ALTER TABLE t ALTER COLUMN Value SET DEFAULT Nothing(Utf8?);"}) {
+            result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch");
         }
+        for (const auto& expression : {"NULL", "Nothing(Int32?)", "CAST(NULL AS Int32)"}) {
+            result = session.ExecuteQuery(TStringBuilder() << "ALTER TABLE t ADD COLUMN Invalid Int32 NOT NULL DEFAULT " << expression << ";",
+                TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), expression);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "not null constraint");
+        }
+        result = session.ExecuteQuery("SELECT * FROM t;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).ColumnsCount(), 2);
+    }
 
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SetDefaultNullTest` ALTER COLUMN Value SET DEFAULT NULL;
-            )";
+    Y_UNIT_TEST_TWIN(PgNullDefault, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const auto execute = [&](const TString& query) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column: \"Value\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null.");
-        }
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        execute("CREATE TABLE t (Key Int32, Value pgint4 DEFAULT CAST(NULL AS pgint4), PRIMARY KEY (Key));");
+        execute("UPSERT INTO t (Key) VALUES (1);");
+        execute("ALTER TABLE t ADD COLUMN Extra pgtext DEFAULT CAST(NULL AS pgtext);");
+        execute("ALTER TABLE t ALTER COLUMN Value SET DEFAULT CAST(NULL AS pgint4);");
+        AssertNoColumnDefaults(kikimr, "/Root/t");
+        execute("INSERT INTO t (Key) VALUES (2);");
+        const auto result = execute("SELECT Key FROM t WHERE Value IS NULL AND Extra IS NULL ORDER BY Key;");
+        CompareYson(R"([[[1]];[[2]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(AlterTableSetDefaultNullForNotNullColumn) {
@@ -3314,8 +3614,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )";
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: Nothing");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {
@@ -3329,14 +3628,14 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         {
             auto query = R"(
-                SELECT Key, Value, Value2 FROM `/Root/ConstantExpressionTest` ORDER BY Key;
+                SELECT Key, Value, Value2, Value3 FROM `/Root/ConstantExpressionTest` ORDER BY Key;
             )";
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([
-                [[1];#;4u];
-                [[2];[4];4u]
+                [[1];#;4u;#];
+                [[2];[4];4u;#]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

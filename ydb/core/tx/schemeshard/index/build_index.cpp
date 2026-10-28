@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/index/column_build_test_hooks.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
@@ -102,11 +103,6 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
         );
     }
-    if (info.AlterMainTablePayload) {
-        persistedBuildIndex.Update(
-            NIceDb::TUpdate<Schema::IndexBuild::AlterMainTablePayload>(info.AlterMainTablePayload->SerializeAsString())
-        );
-    }
     if (info.IsRebuild) {
         persistedBuildIndex.Update(
             NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true),
@@ -180,8 +176,10 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
     for(ui32 i = 0; i < info.BuildColumns.size(); i++) {
         db.Table<Schema::BuildColumnOperationSettings>().Key(info.Id, i).Update(
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::ColumnName>(info.BuildColumns[i].ColumnName),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::ColumnTypeProto>(info.BuildColumns[i].ColumnType.SerializeAsString()),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::HasDefaultFromLiteral>(info.BuildColumns[i].DefaultFromLiteral.Defined()),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
-                TString(info.BuildColumns[i].DefaultFromLiteral.SerializeAsString())),
+                info.BuildColumns[i].DefaultFromLiteral ? info.BuildColumns[i].DefaultFromLiteral->SerializeAsString() : TString{}),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromSequence>(info.BuildColumns[i].DefaultFromSequence),
@@ -556,6 +554,11 @@ void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorCon
         if (const auto* opPtr = SetColumnConstraintOperations.FindPtr(id); opPtr) {
             Execute(CreateTxSetColumnConstraintProgress(id), ctx);
         } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && !buildInfoPtr->get()->IsBroken) {
+            const auto& build = **buildInfoPtr;
+            if (build.IsBuildColumns() && build.State == TIndexBuildInfo::EState::Filling &&
+                TColumnBuildTestHooks::BeforeFillingProgress && TColumnBuildTestHooks::BeforeFillingProgress(build)) {
+                continue;
+            }
             Execute(CreateTxProgress(id), ctx);
         }
     }

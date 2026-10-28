@@ -14,11 +14,14 @@ using namespace NTableIndex;
 ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
-    if (!context.SS->EnableAddColumsWithDefaults) {
-        return CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled");
-    }
-
     const auto& op = tx.GetInitiateColumnBuild();
+    if (!context.SS->EnableAddColumsWithDefaults) {
+        for (const auto& column : op.column()) {
+            if (column.has_default_from_literal() && column.default_from_literal().has_value()) {
+                return CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled");
+            }
+        }
+    }
 
     const auto tablePath = TPath::Resolve(op.GetTable(), context.SS);
     {

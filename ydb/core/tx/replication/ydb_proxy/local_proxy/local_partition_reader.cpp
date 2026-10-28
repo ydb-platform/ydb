@@ -258,7 +258,7 @@ private:
         return proto;
     }
 
-    void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) try {
+    void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -358,8 +358,6 @@ private:
         Send(request.Sender, new TEvYdbProxy::TEvReadTopicResponse(PartitionId, std::move(messages)), 0, request.Cookie);
 
         DoWork();
-    } catch(...) {
-        return OnError(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
     }
 
     STATEFN(StateWaitData) {

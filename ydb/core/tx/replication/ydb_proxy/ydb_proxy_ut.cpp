@@ -796,21 +796,25 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         } while (true);
 
         UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message-1"));
-        {
-            auto data = ReadTopicData(env, newReader, "/Root/topic", proxy);
-            UNIT_ASSERT(data.Messages.size() >= 1);
 
-            for (int i = data.Messages.size() - 1; i >= 0; --i) {
-                const auto offset = i + int(data.Messages.size() == 1);
-                const auto& msg = data.Messages.at(i);
-                if (Local) { // XXX something is broken here
-                Cerr << "ReadTopic(Local) " << i << " exp offset " << offset << " received "  << msg << " data: " << msg.GetData() << Endl;
-                } else {
-                UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), offset);
-                UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), Sprintf("message-%i", offset));
-                }
+        // The new reader can start before the old reader's commit completes.
+        // In that case message-0 is redelivered, possibly in its own batch.
+        ui64 nextOffset = 0;
+        for (ui32 batch = 0; batch < 2 && nextOffset < 2; ++batch) {
+            auto data = ReadTopicData(env, newReader, "/Root/topic", proxy);
+            UNIT_ASSERT(!data.Messages.empty());
+            if (batch == 0) {
+                nextOffset = data.Messages.front().GetOffset();
+                UNIT_ASSERT_LE(nextOffset, 1);
+            }
+            for (const auto& msg : data.Messages) {
+                UNIT_ASSERT_LT(nextOffset, 2);
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), nextOffset);
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TStringBuilder() << "message-" << nextOffset);
+                ++nextOffset;
             }
         }
+        UNIT_ASSERT_VALUES_EQUAL(nextOffset, 2);
     }
 
     Y_UNIT_TEST_TWIN(ReadBadTopicData, Local) {

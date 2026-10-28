@@ -16,10 +16,9 @@ namespace NKikimr {
         Y_UNIT_TEST(CreateFromDistinctParts) {
             for (bool addHeader1 : {true, false}) {
                 for (bool addHeader2 : {true, false}) {
-                    const ui8 totalParts = MaxTotalPartCount;
                     const ui32 partSize = 6;
                     const ui64 fullDataSize = partSize;
-                    const char *data[totalParts] = {
+                    const char *data[] = {
                         "111111",
                         "222222",
                         "333333",
@@ -28,6 +27,7 @@ namespace NKikimr {
                         "666666",
                         "777777",
                     };
+                    const ui8 totalParts = std::size(data);
 
                     for (ui32 mask = 1; mask < (1 << totalParts); ++mask) {
                         std::array<TRope, MaxTotalPartCount> partsData;

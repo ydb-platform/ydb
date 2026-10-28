@@ -3,8 +3,6 @@
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/generic/yexception.h>
 
-#define MAX_TOTAL_PARTS 8
-
 #define IS_VERBOSE 0
 
 #if IS_VERBOSE
@@ -56,8 +54,25 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
+    ,{2} // 19 = ErasureSpicies::Erasure8Plus2Block
 }};
 
+
+TBlobStorageGroupType::TBlobStorageGroupType(TErasureType::EErasureSpecies s)
+    : TErasureType(s)
+{
+    const ui32 totalParts = TotalPartCount();
+    const ui32 handoff = Handoff();
+    Y_ABORT_UNLESS(totalParts && totalParts <= MaxTotalParts);
+    Y_ABORT_UNLESS(BlobSubgroupSize() <= MaxSubgroupSize);
+    Y_ABORT_UNLESS(handoff <= MaxHandoffNodes);
+    if (s != ErasureMirror3of4) {
+        // Generic ingress stores keep flags, main/local parts and two bits per handoff part in ui64.
+        Y_ABORT_UNLESS(2 + 2 * totalParts * (1 + handoff) <= 64,
+            "generic ingress does not fit its persistent 64-bit representation: parts# %u handoff# %u",
+            totalParts, handoff);
+    }
+}
 
 ui32 TBlobStorageGroupType::BlobSubgroupSize() const {
     const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];

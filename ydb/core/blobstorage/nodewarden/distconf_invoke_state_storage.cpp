@@ -290,12 +290,18 @@ namespace NKikimr::NStorage {
             if (nodesToReplace.size() == 1) {
                 auto placement = nodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
+                // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
+                // disables it, and the disabled rings, as well as rings with nodes not known to be good
                 std::unordered_set<ui32> badRings;
                 for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
                     auto& oldRing = oldRg.Rings[ringIdx];
+                    if (oldRing.IsDisabled) {
+                        badRings.insert(ringIdx);
+                    }
                     for (auto& rep : oldRing.Replicas) {
                         auto oldRep = rep.NodeId();
-                        if (Self->SelfHealNodesState[oldRep]) {
+                        const auto it = Self->SelfHealNodesState.find(oldRep);
+                        if (oldRep == placement->first || it == Self->SelfHealNodesState.end() || it->second) {
                             badRings.insert(ringIdx);
                         }
                     }

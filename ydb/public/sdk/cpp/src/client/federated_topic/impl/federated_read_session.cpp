@@ -1,8 +1,8 @@
 #include "federated_read_session.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
-#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
@@ -14,37 +14,25 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
-#include <optional>
-#include <utility>
+#include <set>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
 template <typename TEvent, typename TFederatedEvent>
-typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler,
-                                                           std::shared_ptr<TDbInfo> db,
-                                                           std::shared_ptr<TEventFederator> federator,
-                                                           ui64 readSourceGeneration) {
+typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db, std::shared_ptr<TEventFederator> federator, std::shared_ptr<std::atomic<bool>> retired) {
     if (outerHandler) {
-        return [outerHandler, db = std::move(db), federator = std::move(federator), readSourceGeneration](TEvent& ev) {
-            // A callback queued by an already retired subsession keeps the old generation.
-            // LocateFederate then returns empty and does not recreate the cached partition session.
-            auto fev = federator->LocateFederate(ev, db, readSourceGeneration);
-            if (!fev) {
-                return;
+        return [outerHandler, db = std::move(db), federator = std::move(federator), retired = std::move(retired)](TEvent& ev) {
+            if (auto fev = federator->LocateFederate(ev, db, *retired)) {
+                outerHandler(*fev);
             }
-            outerHandler(*fev);
         };
     }
     return {};
 }
 
-NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings,
-                                           const std::shared_ptr<TDbInfo>& db,
-                                           std::shared_ptr<TEventFederator> federator,
-                                           std::shared_ptr<std::atomic<bool>> retired,
-                                           ui64 readSourceGeneration) {
+NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db, std::shared_ptr<TEventFederator> federator, std::shared_ptr<std::atomic<bool>> retired) {
     NTopic::TReadSessionSettings SubsessionSettings = settings;
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
@@ -52,15 +40,16 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
         SubsessionSettings.EventHandlers_.SimpleDataHandlers(
             WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
-                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator, readSourceGeneration),
+                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator, retired),
             settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
 
-#define MAYBE_CONVERT_HANDLER(type, name)                                                                                          \
-    if (settings.FederatedEventHandlers_.name##_) {                                                                                \
-        SubsessionSettings.EventHandlers_.name(                                                                                    \
-            WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator, readSourceGeneration)); \
+#define MAYBE_CONVERT_HANDLER(type, name)                                                                                \
+    if (settings.FederatedEventHandlers_.name##_) {                                                                      \
+        SubsessionSettings.EventHandlers_.name(                                                                          \
+            WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator, retired)   \
+        );                                                                                                               \
     }
 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
@@ -74,26 +63,15 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 
 #undef MAYBE_CONVERT_HANDLER
 
-    // A closed subsession must not look like the end of the federated session.
-    // Intentional leaves set `retired` before Close(); an unexpected close still
-    // reaches the user handler. The subsession's own retry policy handles transient
-    // failures, so the federated session does not reopen it on its own.
-    auto sessionClosedHandler = settings.FederatedEventHandlers_.SessionClosedHandler_;
-    auto commonHandler = settings.FederatedEventHandlers_.CommonHandler_;
-    SubsessionSettings.EventHandlers_.SessionClosedHandler(
-        [retired = std::move(retired), sessionClosedHandler, commonHandler](const NTopic::TSessionClosedEvent& ev) {
-            if (retired->load()) {
-                return;
+    std::function<void(const NTopic::TSessionClosedEvent&)> sessionClosedHandler;
+    if (auto handler = settings.FederatedEventHandlers_.SessionClosedHandler_) {
+        sessionClosedHandler = [handler, retired](const NTopic::TSessionClosedEvent& ev) {
+            if (!*retired) {
+                handler(ev);
             }
-            if (sessionClosedHandler) {
-                sessionClosedHandler(ev);
-                return;
-            }
-            if (commonHandler) {
-                TReadSessionEvent::TEvent event = ev;
-                commonHandler(event);
-            }
-        });
+        };
+    }
+    SubsessionSettings.EventHandlers_.SessionClosedHandler(sessionClosedHandler);
 
     return SubsessionSettings;
 }
@@ -130,7 +108,7 @@ TStringBuilder TFederatedReadSessionImpl::GetLogPrefix() const {
 }
 
 void TFederatedReadSessionImpl::Start() {
-    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f) {
+    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f){
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             self->UpdateFederationState();
@@ -138,33 +116,23 @@ void TFederatedReadSessionImpl::Start() {
     });
 }
 
-void TFederatedReadSessionImpl::SignalWakeup(NThreading::TPromise<void> wakeup) {
-    if (wakeup.Initialized() && !wakeup.HasValue()) {
-        wakeup.SetValue();
+std::vector<TFederatedReadSessionImpl::TSubSession> TFederatedReadSessionImpl::OpenSubSessions(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos) {
+    if (dbInfos.empty()) {
+        return {};
     }
-}
-
-std::vector<TFederatedReadSessionImpl::TSubSession> TFederatedReadSessionImpl::OpenSubSessions(
-    const std::vector<std::shared_ptr<TDbInfo>>& dbInfos)
-{
     {
         TStringBuilder log(GetLogPrefix());
         log << "Open read subsessions to databases: ";
         bool first = true;
         for (const auto& db : dbInfos) {
-            if (first) {
-                first = false;
-            } else {
-                log << ", ";
-            }
+            if (first) first = false; else log << ", ";
             log << "{ name: " << db->name()
                 << ", endpoint: " << db->endpoint()
                 << ", path: " << db->path() << " }";
         }
         LOG_LAZY(Log, TLOG_INFO, log);
     }
-    std::vector<TSubSession> opened;
-    opened.reserve(dbInfos.size());
+    std::vector<TSubSession> subSessions;
     for (const auto& db : dbInfos) {
         NTopic::TTopicClientSettings settings = SubClientSettings;
         settings
@@ -172,181 +140,69 @@ std::vector<TFederatedReadSessionImpl::TSubSession> TFederatedReadSessionImpl::O
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
         auto retired = std::make_shared<std::atomic<bool>>(false);
-        // Capture the generation before the read session can queue callbacks.
-        const ui64 generation = EventFederator->CurrentGeneration(db);
-        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator, retired, generation));
-        opened.emplace_back(std::move(subsession), db, std::move(retired), generation);
+        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator, retired));
+        subSessions.emplace_back(subsession, db, retired);
     }
-    return opened;
+    return subSessions;
 }
 
-void TFederatedReadSessionImpl::RefreshMirroredTopics() {
-    if (!Settings.IsReadMirroredEnabled()) {
-        return;
-    }
-    Y_ABORT_UNLESS(Settings.GetDatabasesToReadFrom().size() == 1);
-    const auto& dbToReadFrom = *Settings.GetDatabasesToReadFrom().begin();
-
-    // Rebuild from the original topic list. Repeating the previous append on every
-    // refresh would subscribe to the same mirrored topic more than once.
-    Settings.Topics_ = OriginalTopics;
-    for (const auto& topic : OriginalTopics) {
-        for (const auto& db : FederationState->DbInfos) {
-            if (AsciiEqualsIgnoreCase(db->name(), dbToReadFrom) || !IsDatabaseReadable(*db)) {
-                continue;
-            }
-            auto mirroredTopic = topic;
-            mirroredTopic.PartitionIds_.clear();
-            mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + db->name());
-            Settings.AppendTopics(std::move(mirroredTopic));
-        }
-    }
-}
-
-std::string TFederatedReadSessionImpl::CurrentTopicSetKey() const {
-    std::vector<std::string> paths;
-    paths.reserve(Settings.Topics_.size());
-    for (const auto& topic : Settings.Topics_) {
-        paths.push_back(topic.Path_);
-    }
-    std::sort(paths.begin(), paths.end());
-    std::string key;
-    for (const auto& path : paths) {
-        key.append(path);
-        key.push_back('\n');
-    }
-    return key;
-}
-
-bool TFederatedReadSessionImpl::SameReadTarget(const TDbInfo& current, const TDbInfo& desired) {
-    return AsciiEqualsIgnoreCase(current.name(), desired.name()) && current.path() == desired.path() && current.endpoint() == desired.endpoint();
-}
-
-void TFederatedReadSessionImpl::DetachSubsessions(std::vector<TClosingSubsession>& toClose, bool retire) {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-    toClose.reserve(toClose.size() + SubSessions.size());
-    for (auto& sub : SubSessions) {
-        if (retire && sub.Retired) {
-            sub.Retired->store(true);
-        }
-        toClose.push_back(TClosingSubsession{std::move(sub.Session), sub.DbInfo});
-    }
-    SubSessions.clear();
-    SubsessionIndex = 0;
-}
-
-void TFederatedReadSessionImpl::CloseSubsessions(std::vector<TClosingSubsession>& toClose, TDuration timeout, bool& lastCloseResult, ESubsessionClose mode) {
-    // Unless the close is graceful, bump the generation before Close queues callbacks. Those
-    // callbacks still hold the old generation and must not recreate the cached partition sessions.
-    std::vector<TEventFederator::TRetiredPartitionSession> lost;
-    if (mode != ESubsessionClose::Graceful) {
-        for (const auto& sub : toClose) {
-            auto retired = EventFederator->RetireReadSource(sub.DbInfo);
-            if (mode == ESubsessionClose::Leave) {
-                std::move(retired.begin(), retired.end(), std::back_inserter(lost));
-            }
-        }
-    }
-    for (auto& sub : toClose) {
-        if (sub.Session) {
-            // TODO substract from user timeout
-            lastCloseResult = sub.Session->Close(timeout) && lastCloseResult;
-        }
-    }
-    toClose.clear();
-    ReportLostPartitions(std::move(lost));
-}
-
-void TFederatedReadSessionImpl::ReportLostPartitions(std::vector<TEventFederator::TRetiredPartitionSession> lost) {
-    if (lost.empty()) {
-        return;
-    }
-    const auto& handlers = Settings.FederatedEventHandlers_;
-    // SimpleDataHandlers manage partition sessions on their own and drop these events.
-    if (handlers.SimpleDataHandlers_.DataHandler && !handlers.PartitionSessionClosedHandler_) {
-        return;
-    }
-
-    std::vector<TReadSessionEvent::TPartitionSessionClosedEvent> events;
-    events.reserve(lost.size());
-    for (auto& partition : lost) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Partition session " << partition.FederatedPartitionSession->GetPartitionSessionId()
-            << " of database '" << partition.FederatedPartitionSession->GetReadSourceDatabaseName() << "' is lost: the database left the federation");
-        events.emplace_back(
-            NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
-                std::move(partition.PartitionSession),
-                NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::ConnectionLost),
-            std::move(partition.FederatedPartitionSession));
-    }
-
-    if (auto handler = handlers.PartitionSessionClosedHandler_) {
-        Post([handler = std::move(handler), events = std::move(events)]() mutable {
-            for (auto& event : events) {
-                handler(event);
-            }
-        });
-        return;
-    }
-    if (auto handler = handlers.CommonHandler_) {
-        Post([handler = std::move(handler), events = std::move(events)]() mutable {
-            for (auto& event : events) {
-                TReadSessionEvent::TEvent wrapped = std::move(event);
-                handler(wrapped);
-            }
-        });
-        return;
-    }
-
-    NThreading::TPromise<void> wakeup;
+void TFederatedReadSessionImpl::UpdateFederationState() {
+    std::vector<TSubSession> toClose;
+    std::vector<std::shared_ptr<TDbInfo>> toOpen;
+    bool failed = false;
     with_lock (Lock) {
         if (Closing) {
             return;
         }
-        for (auto& event : events) {
-            PendingEvents.emplace_back(std::move(event));
+        // The observer state is shared by all sessions of the client: copy it before
+        // this session stores its own BAD_REQUEST there.
+        FederationState = std::make_shared<TFederatedDbState>(*Observer->GetState());
+        OnFederatedStateUpdateImpl(toClose, toOpen);
+        failed = Closing;
+        if (failed) {
+            std::move(SubSessions.begin(), SubSessions.end(), std::back_inserter(toClose));
+            SubSessions.clear();
         }
-        wakeup = TakeWakeup();
     }
-    SignalWakeup(std::move(wakeup));
-}
+    const bool changed = !toClose.empty() || !toOpen.empty();
 
-void TFederatedReadSessionImpl::Post(std::function<void()> callback) const {
-    HandlersExecutor->Start();
-    HandlersExecutor->Post(std::move(callback));
-}
+    // Subsessions are closed and opened outside Lock: both can run user callbacks.
+    // Databases that left are closed first, so two subsessions never read the same database.
+    CloseSubSessions(std::move(toClose), TDuration::Zero(), failed ? ESubSessionClose::Discard : ESubSessionClose::Leave);
+    auto opened = OpenSubSessions(toOpen);
 
-void TFederatedReadSessionImpl::NotifySessionClosed() const {
-    const auto event = MakeSessionClosedEvent();
-    auto sessionHandler = Settings.FederatedEventHandlers_.SessionClosedHandler_;
-    auto commonHandler = Settings.FederatedEventHandlers_.CommonHandler_;
-    if (!sessionHandler && !commonHandler) {
-        return;
+    NThreading::TPromise<void> wakeup;
+    with_lock (Lock) {
+        if (!Closing) {
+            std::move(opened.begin(), opened.end(), std::back_inserter(SubSessions));
+            opened.clear();
+            if (!ScheduleFederationStateUpdateImpl()) {
+                CloseImpl();
+                failed = true;
+                std::move(SubSessions.begin(), SubSessions.end(), std::back_inserter(opened));
+                SubSessions.clear();
+            }
+        }
+        if (changed || Closing) {
+            wakeup = std::exchange(Wakeup, {});
+        }
     }
-
-    // Discovery runs this method. User callbacks belong on the handlers executor.
-    Post([sessionHandler = std::move(sessionHandler), commonHandler = std::move(commonHandler), event]() mutable {
-        if (sessionHandler) {
-            sessionHandler(event);
-            return;
-        }
-        if (commonHandler) {
-            TReadSessionEvent::TEvent wrapped = event;
-            commonHandler(wrapped);
-        }
-    });
-}
-
-NThreading::TPromise<void> TFederatedReadSessionImpl::TakeWakeup() {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-    return std::exchange(Wakeup, {});
+    if (wakeup.Initialized()) {
+        wakeup.SetValue();
+    }
+    // What is left in `opened` belongs to a session that is closing.
+    CloseSubSessions(std::move(opened), TDuration::Zero(), ESubSessionClose::Discard);
+    if (failed) {
+        NotifySessionClosed();
+    }
 }
 
 bool TFederatedReadSessionImpl::ScheduleFederationStateUpdateImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    if (Closing) {
+    auto ctx = Connections->CreateContext();
+    if (!ctx) {
         return false;
     }
-
     auto cb = [selfCtx = SelfContext](bool ok) {
         if (!ok) {
             return;
@@ -355,231 +211,117 @@ bool TFederatedReadSessionImpl::ScheduleFederationStateUpdateImpl() {
             self->UpdateFederationState();
         }
     };
-
-    UpdateStateDelayContext = Connections->CreateContext();
-    if (!UpdateStateDelayContext) {
-        Closing = true;
-        return false;
-    }
-    Connections->ScheduleCallback(FederationDiscoveryInterval, std::move(cb), UpdateStateDelayContext);
+    Connections->ScheduleCallback(FederationDiscoveryInterval, std::move(cb), std::move(ctx));
     return true;
 }
 
-void TFederatedReadSessionImpl::UpdateFederationState() {
-    std::vector<TClosingSubsession> toClose;
-    std::vector<std::shared_ptr<TDbInfo>> toOpen;
-    bool terminalFailure = false;
-    {
-        std::lock_guard guard(Lock);
-        if (Closing) {
-            return;
-        }
-        FederationState = Observer->GetState();
-        // The observer snapshot is shared by every session of this client. Keep a private copy
-        // before this reader stores BAD_REQUEST on it, otherwise another healthy reader can observe
-        // that status and shut down.
-        if (FederationState) {
-            FederationState = std::make_shared<TFederatedDbState>(*FederationState);
-        }
-        if (!FederationState || !FederationState->Status.IsSuccess()) {
-            if (FederationState) {
-                LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: " << *FederationState);
-            } else {
-                LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: <empty>");
-            }
-            CloseImpl();
-            terminalFailure = true;
-            DetachSubsessions(toClose, true);
-        } else {
-            EventFederator->SetFederationState(FederationState);
-            RefreshMirroredTopics();
-            const std::string topicKey = CurrentTopicSetKey();
-            const bool topicsChanged = topicKey != AppliedTopicSetKey;
-            AppliedTopicSetKey = topicKey;
+void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl(std::vector<TSubSession>& toClose, std::vector<std::shared_ptr<TDbInfo>>& toOpen) {
+    if (!FederationState->Status.IsSuccess()) {
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: " << *FederationState);
+        CloseImpl();
+        return;
+    }
 
-            // A database stays subscribed while it is listed, whatever its status: the subsession
-            // retries on its own, and dropping it on a short UNAVAILABLE would reread uncommitted data.
-            // New subsessions are opened only for readable databases.
-            std::vector<std::shared_ptr<TDbInfo>> selected;
-            bool anyReadable = false;
+    EventFederator->SetFederationState(FederationState);
+
+    bool topicsChanged = false;
+    if (Settings.IsReadMirroredEnabled()) {
+        Y_ABORT_UNLESS(Settings.GetDatabasesToReadFrom().size() == 1);
+        auto dbToReadFrom = *Settings.GetDatabasesToReadFrom().begin();
+
+        auto topics = OriginalTopics;
+        for (const auto& topic : OriginalTopics) {
             for (const auto& db : FederationState->DbInfos) {
-                if (IsDatabaseSelected(db)) {
-                    selected.push_back(db);
-                    anyReadable = anyReadable || IsDatabaseReadable(*db);
+                if (AsciiEqualsIgnoreCase(db->name(), dbToReadFrom) || !IsDatabaseReadable(db)) {
+                    continue;
                 }
+                auto mirroredTopic = topic;
+                mirroredTopic.PartitionIds_.clear();
+                mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + db->name());
+                topics.push_back(mirroredTopic);
             }
-
-            if (!anyReadable && !SawEligibleDatabase) {
-                LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
-                auto issues = FederationState->Status.GetIssues();
-                TStringBuilder issue;
-                issue << "Requested databases {";
-                bool first = true;
-                for (auto const& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
-                    if (first) {
-                        first = false;
-                    } else {
-                        issue << ",";
-                    }
-                    issue << " " << dbFromSettings;
-                }
-                issue << " } not found. Available databases {";
-                first = true;
-                for (auto const& db : FederationState->DbInfos) {
-                    if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
-                        if (first) {
-                            first = false;
-                        } else {
-                            issue << ",";
-                        }
-                        issue << " { name: " << db->name()
-                              << ", endpoint: " << db->endpoint()
-                              << ", path: " << db->path() << " }";
-                    }
-                }
-                issue << " }";
-                issues.AddIssue(issue);
-                FederationState->Status = TStatus(EStatus::BAD_REQUEST, std::move(issues));
-                CloseImpl();
-                terminalFailure = true;
-                DetachSubsessions(toClose, true);
-            } else {
-                if (anyReadable) {
-                    SawEligibleDatabase = true;
-                }
-
-                // A discovery response may repeat a database, and nothing validates that.
-                std::vector<std::shared_ptr<TDbInfo>> unique;
-                unique.reserve(selected.size());
-                for (const auto& db : selected) {
-                    bool duplicate = false;
-                    for (const auto& earlier : unique) {
-                        if (SameReadTarget(*earlier, *db)) {
-                            duplicate = true;
-                            break;
-                        }
-                    }
-                    if (!duplicate) {
-                        unique.push_back(db);
-                    }
-                }
-                selected = std::move(unique);
-
-                std::vector<bool> used(SubSessions.size(), false);
-                for (const auto& db : selected) {
-                    size_t found = SubSessions.size();
-                    if (!topicsChanged) {
-                        for (size_t i = 0; i < SubSessions.size(); ++i) {
-                            if (!used[i] && SubSessions[i].DbInfo && SameReadTarget(*SubSessions[i].DbInfo, *db)) {
-                                found = i;
-                                break;
-                            }
-                        }
-                    }
-                    if (found < SubSessions.size()) {
-                        used[found] = true;
-                        SubSessions[found].DbInfo = db;
-                    } else if (IsDatabaseReadable(*db)) {
-                        toOpen.push_back(db);
-                    }
-                }
-
-                std::vector<TSubSession> kept;
-                kept.reserve(SubSessions.size());
-                for (size_t i = 0; i < SubSessions.size(); ++i) {
-                    if (used[i]) {
-                        kept.push_back(std::move(SubSessions[i]));
-                    } else {
-                        if (SubSessions[i].DbInfo) {
-                            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading database '" << SubSessions[i].DbInfo->name() << "'");
-                        } else {
-                            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading database '<unknown>'");
-                        }
-                        if (SubSessions[i].Retired) {
-                            SubSessions[i].Retired->store(true);
-                        }
-                        toClose.push_back(TClosingSubsession{std::move(SubSessions[i].Session), SubSessions[i].DbInfo});
-                    }
-                }
-                SubSessions = std::move(kept);
-                if (SubSessions.empty()) {
-                    SubsessionIndex = 0;
-                } else if (SubsessionIndex >= SubSessions.size()) {
-                    SubsessionIndex %= SubSessions.size();
-                }
+        }
+        auto paths = [](const std::vector<NTopic::TTopicReadSettings>& list) {
+            std::set<std::string> result;
+            for (const auto& topic : list) {
+                result.insert(topic.Path_);
             }
+            return result;
+        };
+        topicsChanged = paths(topics) != paths(Settings.Topics_);
+        Settings.Topics_ = std::move(topics);
+    }
+
+    // A listed database keeps its subsession whatever its status: the subsession retries on its own,
+    // and dropping it on a short UNAVAILABLE would reread uncommitted data.
+    std::vector<std::shared_ptr<TDbInfo>> databases;
+    bool anyReadable = false;
+
+    for (const auto& db : FederationState->DbInfos) {
+        if (IsDatabaseSelected(db)) {
+            databases.push_back(db);
+            anyReadable = anyReadable || IsDatabaseReadable(db);
         }
     }
 
-    const bool membershipChanged = !toClose.empty() || !toOpen.empty();
-
-    // Drop databases that left before opening new ones, so two subsessions never
-    // read the same database. Close outside Lock: it can run callbacks.
-    bool ignoredCloseResult = true;
-    CloseSubsessions(toClose, TDuration::Zero(), ignoredCloseResult,
-                     terminalFailure ? ESubsessionClose::Discard : ESubsessionClose::Leave);
-
-    // CreateReadSession can run user callbacks. Do it without Lock so a callback
-    // that re-enters the federated session cannot deadlock on Lock.
-    std::vector<TSubSession> opened;
-    if (!toOpen.empty()) {
-        opened = OpenSubSessions(toOpen);
-    }
-
-    NThreading::TPromise<void> wakeup;
-    {
-        std::lock_guard guard(Lock);
-        if (Closing) {
-            for (auto& sub : opened) {
-                if (sub.Retired) {
-                    sub.Retired->store(true);
-                }
-                toClose.push_back(TClosingSubsession{std::move(sub.Session), sub.DbInfo});
+    if (!anyReadable && !SawReadableDatabase) {
+        // TODO: investigate here, why empty list?
+        // Reason (and returned status) could be BAD_REQUEST or UNAVAILABLE.
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
+        auto issues = FederationState->Status.GetIssues();
+        TStringBuilder issue;
+        issue << "Requested databases {";
+        bool first = true;
+        for (auto const& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
+            if (first) first = false; else issue << ",";
+            issue << " " << dbFromSettings;
+        }
+        issue << " } not found. Available databases {";
+        first = true;
+        for (auto const& db : FederationState->DbInfos) {
+            if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
+                if (first) first = false; else issue << ",";
+                issue << " { name: " << db->name()
+                      << ", endpoint: " << db->endpoint()
+                      << ", path: " << db->path() << " }";
             }
+        }
+        issue << " }";
+        issues.AddIssue(issue);
+        FederationState->Status = TStatus(EStatus::BAD_REQUEST, std::move(issues));
+        CloseImpl();
+        return;
+    }
+    SawReadableDatabase = true;
+
+    auto same = [](const std::shared_ptr<TDbInfo>& lhs, const std::shared_ptr<TDbInfo>& rhs) {
+        return AsciiEqualsIgnoreCase(lhs->name(), rhs->name()) && lhs->path() == rhs->path() && lhs->endpoint() == rhs->endpoint();
+    };
+
+    std::vector<TSubSession> kept;
+    for (auto& sub : SubSessions) {
+        if (!topicsChanged && std::any_of(databases.begin(), databases.end(), [&](const auto& db) { return same(db, sub.DbInfo); })) {
+            kept.push_back(std::move(sub));
         } else {
-            for (auto& sub : opened) {
-                SubSessions.push_back(std::move(sub));
-            }
-            if (SubSessions.empty()) {
-                SubsessionIndex = 0;
-            } else if (SubsessionIndex >= SubSessions.size()) {
-                SubsessionIndex %= SubSessions.size();
-            }
-        }
-        if (Closing || membershipChanged) {
-            wakeup = TakeWakeup();
+            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Stop reading database '" << sub.DbInfo->name() << "'");
+            toClose.push_back(std::move(sub));
         }
     }
+    SubSessions = std::move(kept);
 
-    SignalWakeup(std::move(wakeup));
-    CloseSubsessions(toClose, TDuration::Zero(), ignoredCloseResult, ESubsessionClose::Discard);
-
-    // Schedule only after this update finishes. The callback is armed with a
-    // delay, so the next update cannot overlap this one.
-    {
-        std::lock_guard guard(Lock);
-        if (!Closing && !ScheduleFederationStateUpdateImpl()) {
-            terminalFailure = true;
+    // A discovery response may repeat a database, and nothing validates that.
+    for (const auto& db : databases) {
+        if (IsDatabaseReadable(db) &&
+            std::none_of(SubSessions.begin(), SubSessions.end(), [&](const auto& sub) { return same(db, sub.DbInfo); }) &&
+            std::none_of(toOpen.begin(), toOpen.end(), [&](const auto& other) { return same(db, other); })) {
+            toOpen.push_back(db);
         }
-        if (!Closing) {
-            return;
-        }
-        // Membership removals already retired their subsessions. A terminal shutdown
-        // keeps close callbacks enabled unless this failure path owns the close.
-        DetachSubsessions(toClose, terminalFailure);
-        wakeup = TakeWakeup();
-    }
-    SignalWakeup(std::move(wakeup));
-    CloseSubsessions(toClose, TDuration::Zero(), ignoredCloseResult,
-                     terminalFailure ? ESubsessionClose::Discard : ESubsessionClose::Graceful);
-    if (terminalFailure) {
-        NotifySessionClosed();
     }
 }
 
-bool TFederatedReadSessionImpl::IsDatabaseReadable(const TDbInfo& db) {
-    return db.status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE ||
-        db.status() == TDbInfo::Status::DatabaseInfo_Status_READ_ONLY;
+bool TFederatedReadSessionImpl::IsDatabaseReadable(const std::shared_ptr<TDbInfo>& db) {
+    return db->status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE ||
+        db->status() == TDbInfo::Status::DatabaseInfo_Status_READ_ONLY;
 }
 
 bool TFederatedReadSessionImpl::IsDatabaseSelected(const std::shared_ptr<TDbInfo>& db) {
@@ -600,32 +342,113 @@ bool TFederatedReadSessionImpl::IsDatabaseSelected(const std::shared_ptr<TDbInfo
     return false;
 }
 
-NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
-    // TODO override with read session settings timeout
-    return AsyncInit.Apply([selfCtx = SelfContext](const NThreading::TFuture<void>&) {
-        NThreading::TFuture<void> ready = NThreading::MakeFuture();
-        if (auto self = selfCtx->LockShared()) {
-            std::vector<NThreading::TFuture<void>> waiters;
-            {
-                std::lock_guard guard(self->Lock);
-                if (self->Closing || !self->PendingEvents.empty()) {
-                    return ready;
-                }
-                // Every blocked reader shares one promise. Signaling it wakes them all, and a caller
-                // that drops a timed-out wait leaves nothing behind: the next signal replaces it.
-                if (!self->Wakeup.Initialized()) {
-                    self->Wakeup = NThreading::NewPromise<void>();
-                }
-                waiters.push_back(self->Wakeup.GetFuture());
-                for (const auto& sub : self->SubSessions) {
-                    if (sub.Session) {
-                        waiters.emplace_back(sub.Session->WaitEvent());
-                    }
+bool TFederatedReadSessionImpl::CloseSubSessions(std::vector<TSubSession> subSessions, TDuration timeout, ESubSessionClose mode) {
+    // Retire before Close: callbacks it queues must not recreate the cached partition sessions.
+    std::vector<TEventFederator::TRetiredPartitionSession> lost;
+    if (mode != ESubSessionClose::Graceful) {
+        for (const auto& sub : subSessions) {
+            auto retired = EventFederator->RetireReadSource(*sub.DbInfo, *sub.Retired);
+            if (mode == ESubSessionClose::Leave) {
+                std::move(retired.begin(), retired.end(), std::back_inserter(lost));
+            }
+        }
+    }
+    bool result = true;
+    for (const auto& sub : subSessions) {
+        // TODO substract from user timeout
+        result = sub.Session->Close(timeout) && result;
+    }
+    ReportLostPartitions(std::move(lost));
+    return result;
+}
+
+void TFederatedReadSessionImpl::ReportLostPartitions(std::vector<TEventFederator::TRetiredPartitionSession> lost) {
+    const auto& handlers = Settings.FederatedEventHandlers_;
+    // SimpleDataHandlers manage partition sessions on their own and drop these events.
+    if (lost.empty() || (handlers.SimpleDataHandlers_.DataHandler && !handlers.PartitionSessionClosedHandler_)) {
+        return;
+    }
+
+    std::vector<TReadSessionEvent::TPartitionSessionClosedEvent> events;
+    for (auto& partition : lost) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Partition session " << partition.FederatedPartitionSession->GetPartitionSessionId()
+            << " of database '" << partition.FederatedPartitionSession->GetReadSourceDatabaseName() << "' is lost: the database left the federation");
+        events.emplace_back(
+            NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
+                std::move(partition.PartitionSession),
+                NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::ConnectionLost),
+            std::move(partition.FederatedPartitionSession));
+    }
+
+    if (handlers.PartitionSessionClosedHandler_ || handlers.CommonHandler_) {
+        Post([specific = handlers.PartitionSessionClosedHandler_, common = handlers.CommonHandler_, events = std::move(events)]() mutable {
+            for (auto& event : events) {
+                if (specific) {
+                    specific(event);
+                } else {
+                    TReadSessionEvent::TEvent wrapped = std::move(event);
+                    common(wrapped);
                 }
             }
-            ready = NThreading::WaitAny(std::move(waiters));
+        });
+        return;
+    }
+
+    NThreading::TPromise<void> wakeup;
+    with_lock (Lock) {
+        if (Closing) {
+            return;
         }
-        return ready;
+        std::move(events.begin(), events.end(), std::back_inserter(PendingEvents));
+        wakeup = std::exchange(Wakeup, {});
+    }
+    if (wakeup.Initialized()) {
+        wakeup.SetValue();
+    }
+}
+
+void TFederatedReadSessionImpl::Post(std::function<void()> callback) const {
+    HandlersExecutor->Start();
+    HandlersExecutor->Post(std::move(callback));
+}
+
+void TFederatedReadSessionImpl::NotifySessionClosed() const {
+    const auto& handlers = Settings.FederatedEventHandlers_;
+    if (!handlers.SessionClosedHandler_ && !handlers.CommonHandler_) {
+        return;
+    }
+    // Runs on the discovery thread: user callbacks belong on the handlers executor.
+    Post([specific = handlers.SessionClosedHandler_, common = handlers.CommonHandler_, event = MakeSessionClosedEvent()]() {
+        if (specific) {
+            specific(event);
+        } else {
+            TReadSessionEvent::TEvent wrapped = event;
+            common(wrapped);
+        }
+    });
+}
+
+NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
+    // TODO override with read session settings timeout
+    return AsyncInit.Apply([selfCtx = SelfContext](const NThreading::TFuture<void>) {
+        if (auto self = selfCtx->LockShared()) {
+            std::vector<NThreading::TFuture<void>> waiters;
+            std::lock_guard guard(self->Lock);
+            if (self->Closing || !self->PendingEvents.empty()) {
+                return NThreading::MakeFuture();
+            }
+            // Every blocked reader shares one promise. Signaling it wakes them all, and a caller
+            // that drops a timed-out wait leaves nothing behind: the next signal replaces it.
+            if (!self->Wakeup.Initialized()) {
+                self->Wakeup = NThreading::NewPromise<void>();
+            }
+            waiters.push_back(self->Wakeup.GetFuture());
+            for (const auto& sub : self->SubSessions) {
+                waiters.emplace_back(sub.Session->WaitEvent());
+            }
+            return NThreading::WaitAny(std::move(waiters));
+        }
+        return NThreading::MakeFuture();
     });
 }
 
@@ -633,23 +456,18 @@ NTopic::TSessionClosedEvent TFederatedReadSessionImpl::MakeSessionClosedEvent() 
     if (!FederationState) {
         return NTopic::TSessionClosedEvent(EStatus::SUCCESS, {});
     }
-    return NTopic::TSessionClosedEvent(
-        FederationState->Status.GetStatus(),
-        NYdb::NIssue::TIssues(FederationState->Status.GetIssues()));
+    return NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), NYdb::NIssue::TIssues(FederationState->Status.GetIssues()));
 }
 
 std::vector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) {
     std::vector<TReadSessionEvent::TEvent> result;
     while (true) {
-        if (block && result.empty()) {
+        if (block) {
             WaitEvent().Wait();
         }
         with_lock (Lock) {
             if (Closing) {
-                if (result.empty()) {
-                    result.push_back(MakeSessionClosedEvent());
-                }
-                return result;
+                return {MakeSessionClosedEvent()};
             }
             if (!PendingEvents.empty()) {
                 const size_t limit = maxEventsCount.value_or(std::numeric_limits<size_t>::max());
@@ -659,25 +477,18 @@ std::vector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool
                 }
                 return result;
             }
-            if (!SubSessions.empty()) {
-                if (SubsessionIndex >= SubSessions.size()) {
-                    SubsessionIndex = 0;
-                }
-                // Non-blocking reads still visit a single subsession, preserving round-robin.
-                // Blocking reads walk the current set once and, if it has no events, wait again
-                // instead of spinning: a membership change wakes WaitEvent without a data event.
-                const size_t steps = block ? SubSessions.size() : 1;
-                for (size_t step = 0; step < steps && result.empty(); ++step) {
-                    auto sub = SubSessions[SubsessionIndex];
-                    if (sub.Session) {
-                        for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
-                            if (auto federated = EventFederator->LocateFederate(std::move(ev), sub.DbInfo, sub.Generation)) {
-                                result.push_back(std::move(*federated));
-                            }
-                        }
+            // Blocking reads walk the subsessions once and, if none has events, wait again
+            // instead of spinning: a membership change wakes WaitEvent without a data event.
+            const size_t steps = block ? SubSessions.size() : std::min<size_t>(1, SubSessions.size());
+            for (size_t step = 0; step < steps && result.empty(); ++step) {
+                SubsessionIndex %= SubSessions.size();
+                auto sub = SubSessions[SubsessionIndex];
+                for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
+                    if (auto federated = EventFederator->LocateFederate(std::move(ev), sub.DbInfo, *sub.Retired)) {
+                        result.push_back(std::move(*federated));
                     }
-                    SubsessionIndex = (SubsessionIndex + 1) % SubSessions.size();
                 }
+                SubsessionIndex = (SubsessionIndex + 1) % SubSessions.size();
             }
         }
         if (!result.empty() || !block) {
@@ -691,25 +502,20 @@ void TFederatedReadSessionImpl::CloseImpl() {
 }
 
 bool TFederatedReadSessionImpl::Close(TDuration timeout) {
-    std::vector<TClosingSubsession> sessions;
+    std::vector<TSubSession> subSessions;
     NThreading::TPromise<void> wakeup;
-    NYdbGrpc::IQueueClientContextPtr delayCtx;
-    {
-        std::lock_guard guard(Lock);
+    with_lock (Lock) {
         Closing = true;
-        delayCtx = std::exchange(UpdateStateDelayContext, nullptr);
-        // Do not retire: an explicit close must still deliver SessionClosedHandler.
-        DetachSubsessions(sessions, false);
-        wakeup = TakeWakeup();
+        subSessions = std::move(SubSessions);
+        SubSessions.clear();
+        wakeup = std::exchange(Wakeup, {});
     }
-    // Wake blocked readers before closing subsessions. SetValue is outside Lock:
-    // its subscriber may call back into the session.
-    SignalWakeup(std::move(wakeup));
-    NTopic::Cancel(delayCtx);
-
-    bool result = true;
-    CloseSubsessions(sessions, timeout, result, ESubsessionClose::Graceful);
-    return result;
+    // Outside Lock: a subscriber of the wakeup may call back into the session.
+    if (wakeup.Initialized()) {
+        wakeup.SetValue();
+    }
+    // Subsessions are not retired: an explicit close still delivers their queued handlers and SessionClosedHandler.
+    return CloseSubSessions(std::move(subSessions), timeout, ESubSessionClose::Graceful);
 }
 
-} // namespace NYdb::inline Dev::NFederatedTopic
+}  // namespace NYdb::NFederatedTopic

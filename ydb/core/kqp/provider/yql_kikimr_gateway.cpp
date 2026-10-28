@@ -311,7 +311,7 @@ TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IEx
     if (IsMessageStream()) {
         YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT,
             "A message stream must use a Ydb or YT connection");
-        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::YtProviderName};
+        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::QytProviderName};
     }
     YQL_ENSURE(DatabaseType, "Unknown source type for external data source \"" << DataSourcePath << "\"");
     return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();

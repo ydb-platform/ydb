@@ -23,7 +23,7 @@
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/ydb_external/common/read_limits.h>
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
-#include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
+#include <ydb/library/yql/providers/qyt/gateway/clients/message_stream/yql_yt_client.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>

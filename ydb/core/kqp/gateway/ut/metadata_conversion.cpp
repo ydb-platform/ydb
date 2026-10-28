@@ -193,7 +193,7 @@ TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
     EXPECT_EQ(source.BuildConnectorProperties().at("source_type"), "YT");
     EXPECT_EQ(source.MakeExternalSourceMetadata().Type, "YT");
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
-    EXPECT_EQ(source.GetProviderName(factory), TString(NYql::YtProviderName));
+    EXPECT_EQ(source.GetProviderName(factory), TString(NYql::QytProviderName));
     EXPECT_FALSE(source.IsYdb());
     EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
 

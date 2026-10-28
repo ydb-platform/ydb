@@ -13,8 +13,8 @@
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
+#include <ydb/library/yql/providers/qyt/provider/yql_qyt_provider.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -2072,17 +2072,21 @@ private:
                 .CreateOperationTracker(false)
         );
 
-        auto ytSource = CreateYtDataSource(ytState);
-        if (Config->FeatureFlags.GetEnableQYT()) {
-            ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
-                NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
-        }
-        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
+        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
         });
+    }
+
+    void InitQytProvider() {
+        if (!Config->FeatureFlags.GetEnableQYT()
+            || !ExternalSourceFactory->IsAvailableProvider(TString(NYql::QytProviderName))) {
+            return;
+        }
+
+        TypesCtx->AddDataSource(QytProviderName, CreateQytDataSource(FederatedQuerySetup->CredentialsFactory));
     }
 
     void InitPgProvider() {
@@ -2213,6 +2217,7 @@ private:
                 InitGenericProvider();
                 InitYdbExternalProvider();
                 InitSolomonProvider();
+                InitQytProvider();
 
                 if (FederatedQuerySetup->YtGateway) {
                     InitYtProvider(finalizers);

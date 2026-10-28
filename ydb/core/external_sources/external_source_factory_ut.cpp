@@ -139,4 +139,21 @@ Y_UNIT_TEST_SUITE(YdbExternalSourceFactory) {
     }
 }
 
+Y_UNIT_TEST_SUITE(QytExternalSourceFactory) {
+    Y_UNIT_TEST(YtConnectionEnablesBothTableAndQueueProviders) {
+        for (const bool enabled : { false, true }) {
+            std::set<NYql::EDatabaseType> available;
+            if (enabled) {
+                available.insert(NYql::EDatabaseType::YT);
+            }
+            const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, false, available);
+            UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::QytProviderName)), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YtProviderName)), enabled);
+            if (enabled) {
+                UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::YT)->GetName(), NYql::YtProviderName);
+            }
+        }
+    }
+}
+
 }   // namespace NKikimr::NExternalSource

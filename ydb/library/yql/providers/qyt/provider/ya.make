@@ -1,0 +1,27 @@
+YQL_LIBRARY()
+SRCS(
+    yql_qyt_provider.cpp
+    yql_qyt_type_ann.cpp
+    yql_qyt_dq_integration.cpp
+    yql_qyt_read_settings.cpp
+    yql_qyt_load_meta.cpp
+)
+PEERDIR(
+    ydb/library/yql/providers/common/message_stream
+    ydb/library/yql/providers/qyt/gateway/clients/message_stream
+    ydb/library/yql/providers/qyt/expr_nodes
+    ydb/library/yql/providers/qyt/proto
+    ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
+    yql/essentials/core
+    yql/essentials/core/dq_integration
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/transform
+    yql/essentials/providers/common/mkql
+)
+YQL_LAST_ABI_VERSION()
+END()
+RECURSE_FOR_TESTS(ut)

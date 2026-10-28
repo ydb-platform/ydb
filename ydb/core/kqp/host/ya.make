@@ -30,7 +30,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/ydb_external/provider
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/yt/provider
+    ydb/library/yql/providers/qyt/provider
     ydb/library/yql/providers/s3/expr_nodes
     yql/essentials/core
     yql/essentials/core/services

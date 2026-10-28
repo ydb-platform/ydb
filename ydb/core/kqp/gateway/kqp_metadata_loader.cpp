@@ -1238,7 +1238,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 const bool enableQyt = locked->Config && locked->Config->FeatureFlags.GetEnableQYT();
                                 if (!enableQyt) {
                                     loadDynamicMetadata(externalDataSourceMetadata);
-                                } else if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+                                } else if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::QytProviderName))) {
                                     auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
                                     GetYtEntityType(
                                         locked->FederatedQuerySetup,
@@ -1278,7 +1278,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     TTableMetadataResult result;
                                     result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                     result.AddIssues({NYql::TIssue({},
-                                        "YT MessageStream provider is not available")});
+                                        "QYT provider is not available")});
                                     promise.SetValue(result);
                                     return;
                                 }

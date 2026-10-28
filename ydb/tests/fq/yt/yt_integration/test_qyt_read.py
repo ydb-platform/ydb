@@ -1,4 +1,4 @@
-"""Read YT message streams through the YT provider."""
+"""Read YT message streams through the QYT provider."""
 
 import logging
 import random
@@ -161,7 +161,7 @@ def test_read_queue_via_federated_sql(
             try:
                 with pytest.raises(
                     ydb.issues.GenericError,
-                    match="Reading from data source yt is not supported now for streaming queries",
+                    match="Reading from data source qyt is not supported now for streaming queries",
                 ):
                     kikimr.ydb_client.query(f"""
                         CREATE STREAMING QUERY `{query_name}` AS DO BEGIN

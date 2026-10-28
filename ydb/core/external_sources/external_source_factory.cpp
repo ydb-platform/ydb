@@ -37,6 +37,9 @@ struct TExternalSourceFactory: public IExternalSourceFactory {
             const auto databaseType = NYql::DatabaseTypeFromString(typeStr);
             if (databaseType && AvailableExternalDataSources.contains(*databaseType)) {
                 AvailableProviders.insert(source->GetName());
+                if (*databaseType == NYql::EDatabaseType::YT) {
+                    AvailableProviders.insert(TString(NYql::QytProviderName));
+                }
             }
         }
     }

@@ -7,9 +7,9 @@ RECURSE(
     generic
     native
     pq
+    qyt
     s3
     solomon
     ydb
     ydb_external
-    yt
 )

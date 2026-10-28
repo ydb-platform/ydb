@@ -175,10 +175,10 @@
 /ydb/library/yql/providers/generic/ @ydb-platform/fq
 /ydb/library/yql/providers/native/ @ydb-platform/fq
 /ydb/library/yql/providers/pq/ @ydb-platform/fq
+/ydb/library/yql/providers/qyt/ @ydb-platform/fq
 /ydb/library/yql/providers/s3/ @ydb-platform/fq
 /ydb/library/yql/providers/solomon/ @ydb-platform/fq
 /ydb/library/yql/providers/ydb_external/ @ydb-platform/fq
-/ydb/library/yql/providers/yt/ @ydb-platform/fq
 /ydb/library/yql/tests/sql/suites/solomon/ @ydb-platform/fq
 /ydb/library/yql/tools/solomon_emulator/ @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/ @ydb-platform/fq

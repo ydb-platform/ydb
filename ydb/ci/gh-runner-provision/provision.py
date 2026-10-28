@@ -448,8 +448,9 @@ def label_plan(current, desired):
     """Custom labels to PUT, plus which names would be added and removed.
 
     GitHub-assigned labels (type read-only, or self-hosted/Linux/X64 and the
-    other platform labels) stay as they are. instance:<id> is kept too: the
-    register script adds it and the config does not list it.
+    other platform labels) stay as they are. instance:<id> is kept because the
+    register script adds it. postcommit is controlled by the gate, so preserve
+    it even when the fleet config does not list it.
     """
     custom = []
     preserved = []
@@ -466,9 +467,10 @@ def label_plan(current, desired):
         else:
             custom.append(name)
     added = [name for name in desired if name not in custom]
-    removed = [name for name in custom if name not in desired]
+    postcommit = [name for name in custom if name == "postcommit"]
+    removed = [name for name in custom if name not in desired and name != "postcommit"]
     final = []
-    for name in list(desired) + preserved:
+    for name in list(desired) + postcommit + preserved:
         if name not in final:
             final.append(name)
     return final, added, removed
@@ -1298,8 +1300,8 @@ def self_test():
     desired = ["auto-provisioned", "pool:asan"]
     final, added, removed = label_plan(current, desired)
     assert added == ["pool:asan"]
-    assert "postcommit" in removed and "pool:asan-postcommit" in removed
-    assert "instance:abc" in final and "self-hosted" not in final
+    assert "postcommit" not in removed and "pool:asan-postcommit" in removed
+    assert "postcommit" in final and "instance:abc" in final and "self-hosted" not in final
 
     taken = {"static-relwithdebinfo-d", "static-relwithdebinfo-d-01", "static-relwithdebinfo-d-2"}
     assert next_instance_name("static-relwithdebinfo-d", taken) == "static-relwithdebinfo-d-3"

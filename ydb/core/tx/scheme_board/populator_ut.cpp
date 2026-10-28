@@ -15,8 +15,6 @@
 
 #include <util/generic/map.h>
 
-#include <algorithm>
-
 namespace NKikimr {
 namespace NSchemeBoard {
 
@@ -546,7 +544,9 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         THashMap<ui64, ui64> completed;
         auto completions = runtime.AddObserver<TUpdateAck>([&](auto& ev) {
             if (ev->Recipient == edge) {
-                completed[ev->Cookie] = ev->Get()->Record.GetVersion();
+                UNIT_ASSERT_C(completed.emplace(ev->Cookie, ev->Get()->Record.GetVersion()).second,
+                    "a publication must complete only once");
+                ev.Reset();
             }
         });
         TBlockEvents<TUpdateAck> oldAcks(runtime, [&](const auto& ev) {
@@ -564,8 +564,8 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(oldIdAcks.size(), 3);
         // This is a quorum for the new route, but not for the old path.
         // Keep one more old-version ACK in flight across replay.
-        runtime.Send(oldIdAcks[0].Release());
-        runtime.Send(oldIdAcks[1].Release());
+        runtime.Send(oldIdAcks[0].Release(), 0, /* viaActorSystem */ true);
+        runtime.Send(oldIdAcks[1].Release(), 0, /* viaActorSystem */ true);
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(completed.empty());
         TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
@@ -578,37 +578,54 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         runtime.WaitFor("replay to the current replica children", [&] {
             return committed == expectedCommits && updates.size() == originalNewSelection.size() + 2 * newSelection.size();
         }, TDuration::Seconds(10));
-        THashSet<TActorId> replayedTo;
-        for (size_t i = originalNewSelection.size(); i < updates.size(); ++i) {
+        const auto delayedAckSender = oldIdAcks[2]->Sender;
+        THashMap<ui64, THashSet<TActorId>> replayedTo;
+        size_t freshAckIndex = updates.size();
+        for (size_t i = 0; i < updates.size(); ++i) {
             const auto& ev = updates[i];
-            if (ev->Cookie == oldCookie) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPath(), newPath);
-                replayedTo.insert(childToService.at(ev->Recipient));
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPath(), newPath);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPathId(), pathId);
+            UNIT_ASSERT_VALUES_EQUAL(NSchemeBoard::GetPathVersion(ev->Get()->GetRecord()), 2);
+            if (i < originalNewSelection.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, oldCookie + 1);
+                UNIT_ASSERT(originalNewSelection.contains(childToService.at(ev->Recipient)));
+            } else {
+                UNIT_ASSERT(ev->Cookie == oldCookie || ev->Cookie == oldCookie + 1);
+                replayedTo[ev->Cookie].insert(childToService.at(ev->Recipient));
+                if (ev->Cookie == oldCookie && ev->Recipient != delayedAckSender && freshAckIndex == updates.size()) {
+                    freshAckIndex = i;
+                }
             }
         }
-        UNIT_ASSERT_C(replayedTo == newSelection,
+        UNIT_ASSERT_C(replayedTo.at(oldCookie) == newSelection && replayedTo.at(oldCookie + 1) == newSelection,
             "replay of the latest description must use that description's current path for routing");
-        const auto delayedAckSender = oldIdAcks[2]->Sender;
-        runtime.Send(oldIdAcks[2].Release());
+        runtime.Send(oldIdAcks[2].Release(), 0, /* viaActorSystem */ true);
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_C(!completed.contains(oldCookie),
             "a delayed ACK of the old path must not complete the new route's quorum");
-        TBlockEvents<TUpdateAck> replayAcks(runtime, [&](const auto& ev) {
-            return ev->Recipient == populator && ev->Cookie == oldCookie && ev->Get()->Record.GetVersion() == 2;
-        });
-        updates.Stop().Unblock();
-        runtime.WaitFor("ACKs of the replayed description", [&] { return replayAcks.size() == newSelection.size(); }, TDuration::Seconds(10));
-        const auto freshAck = std::find_if(replayAcks.begin(), replayAcks.end(), [&](const auto& ev) {
-            return ev->Sender != delayedAckSender;
-        });
-        UNIT_ASSERT(freshAck != replayAcks.end());
-        std::iter_swap(replayAcks.begin(), freshAck);
-        replayAcks.Unblock(1);
+        // Changing the path for the same PathId exercises the parent routing contract.
+        // Real replicas retain an immutable path/PathId association, so keep these
+        // updates blocked and acknowledge them as their actual child recipients.
+        auto acknowledge = [&](const auto& ev) {
+            const auto& record = ev->Get()->GetRecord();
+            auto ack = new TUpdateAck(record.GetOwner(), record.GetGeneration(), ev->Get()->GetPathId(),
+                NSchemeBoard::GetPathVersion(record));
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, ack, 0, ev->Cookie),
+                0, /* viaActorSystem */ true);
+        };
+        UNIT_ASSERT(freshAckIndex != updates.size());
+        acknowledge(updates[freshAckIndex]);
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_C(!completed.contains(oldCookie),
             "ACKs accumulated for the old path must not substitute for fresh replay ACKs");
-        replayAcks.Stop().Unblock();
+        for (const auto& ev : updates) {
+            if (newSelection.contains(childToService.at(ev->Recipient))) {
+                acknowledge(ev);
+            }
+        }
         runtime.WaitFor("both publications completed", [&] { return completed.size() == 2; }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(completed.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(completed.at(oldCookie), 1);
         UNIT_ASSERT_VALUES_EQUAL(completed.at(oldCookie + 1), 2);
         runtime.Send(new IEventHandle(populator, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));

@@ -779,8 +779,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 continue;
             }
 
+            TStateStorageInfo::TSelection selection;
             for (ui64 key : keys) {
-                TStateStorageInfo::TSelection selection;
                 GroupInfo->SelectReplicas(key, &selection, ringGroupIndex);
                 ui32 acks = 0;
                 for (const auto& replica : selection) {

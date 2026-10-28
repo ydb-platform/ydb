@@ -255,10 +255,15 @@ public:
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
+        Initialize(schemeData, rootAttributes);
+    }
+
+    // UnauthenticatedGrpcMethods is read from AppData, which requires an actor
+    // activation. The secure-request bootstrap calls this before checking the token.
+    void PrepareAuthentication() {
         if (TBase::GetSecurityToken().empty() && IsAnonymousGrpcMethodAllowed(*GrpcRequestBaseCtx_)) {
             TBase::SetAllowMissingToken();
         }
-        Initialize(schemeData, rootAttributes);
     }
 
     void Bootstrap(const TActorContext& ctx) {

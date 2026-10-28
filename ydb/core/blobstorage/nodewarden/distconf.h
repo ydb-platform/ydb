@@ -945,6 +945,10 @@ namespace NKikimr::NStorage {
         }
     }
 
+    std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
+        const NKikimrBlobStorage::TNodeWardenServiceSet& proposed, const THashSet<ui32>& invalidatedNodeIds = {},
+        const THashSet<TBridgePileId>& removedPileIds = {});
+
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed);
 

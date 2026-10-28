@@ -343,6 +343,69 @@ void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::
 }
 
 Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
+    Y_UNIT_TEST(V1FailRealmStatesRequireNewGeneration) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        TTestActorSystem runtime(3, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+        };
+        runtime.Start();
+        auto& appData = *runtime.GetNode(1)->AppData;
+        appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+        appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig();
+
+        auto config = MakeIntrusive<TNodeWardenConfig>();
+        ObtainStaticKey(&config->StaticKey);
+        config->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>();
+        config->SelfManagementConfig->SetEnabled(false);
+        auto* group = config->BlobStorageConfig->MutableServiceSet()->AddGroups();
+        group->SetGroupID(0);
+        group->SetGroupGeneration(7);
+        group->SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            const ui32 nodeId = realm + 1;
+            auto* node = config->NameserviceConfig->AddNode();
+            node->SetNodeId(nodeId);
+            node->SetHost("node-" + ToString(nodeId));
+            node->SetInterconnectHost(node->GetHost());
+            node->SetPort(19000);
+            node->MutableLocation()->SetDataCenter("dc" + ToString(nodeId));
+            auto* ring = group->AddRings();
+            ring->SetRealmState(realm == 1 ? TFailRealm::Excluded : TFailRealm::Invariant0);
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                auto* location = ring->AddFailDomains()->AddVDiskLocations();
+                location->SetNodeID(nodeId);
+                location->SetPDiskID(1);
+                location->SetVDiskSlotID(domain);
+            }
+        }
+
+        const auto wardenId = runtime.Register(CreateBSNodeWarden(config), 1);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(1), wardenId);
+        UNIT_ASSERT(runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+            auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            warden.Bootstrap();
+            UNIT_ASSERT(!warden.SelfManagementEnabled);
+            UNIT_ASSERT(warden.Groups.contains(0));
+            const auto& record = warden.Groups.at(0);
+            UNIT_ASSERT(record.Info);
+            UNIT_ASSERT_VALUES_EQUAL(record.Info->GroupGeneration, 7);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(record.Info->GetFailRealmState(1)), ui32(TFailRealm::Excluded));
+
+            // V1 owns the generation in its static config. Equal-generation state changes are ignored.
+            auto updated = *record.Group;
+            updated.MutableRings(1)->SetRealmState(TFailRealm::Recovering);
+            warden.ApplyGroupInfo(0, 7, &updated, false, false);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(record.Info->GetFailRealmState(1)), ui32(TFailRealm::Excluded));
+
+            updated.SetGroupGeneration(8);
+            warden.ApplyGroupInfo(0, 8, &updated, false, false);
+            UNIT_ASSERT_VALUES_EQUAL(record.Info->GroupGeneration, 8);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(record.Info->GetFailRealmState(1)), ui32(TFailRealm::Recovering));
+        }));
+        runtime.Stop();
+    }
+
     ui64 GetBsc(TTestActorRuntime& /*runtime*/) {
         return MakeBSControllerID();
     }

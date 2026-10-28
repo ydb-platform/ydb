@@ -11760,3 +11760,106 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
 
 }
 }
+
+namespace NKikimr::NBlobStorageNodeWardenTest {
+
+Y_UNIT_TEST_SUITE(TStaticFailRealmStates) {
+    Y_UNIT_TEST(ExplicitFailRealmStateUpdates) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        NKikimrConfig::TAppConfig appConfig;
+        auto* bs = appConfig.MutableBlobStorageConfig();
+        auto* ss = bs->MutableServiceSet();
+        auto* group = ss->AddGroups();
+        group->SetGroupID(0);
+        group->SetGroupGeneration(1);
+        group->SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            const ui32 nodeId = realm + 1;
+            auto* node = appConfig.MutableNameserviceConfig()->AddNode();
+            node->SetNodeId(nodeId);
+            node->SetInterconnectHost("host-" + ToString(nodeId));
+            node->SetPort(19000);
+            node->MutableLocation()->SetDataCenter("dc" + ToString(nodeId));
+            auto* pdisk = ss->AddPDisks();
+            pdisk->SetNodeID(nodeId);
+            pdisk->SetPDiskID(1);
+            auto* ring = group->AddRings();
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                auto* location = ring->AddFailDomains()->AddVDiskLocations();
+                location->SetNodeID(nodeId);
+                location->SetPDiskID(1);
+                location->SetVDiskSlotID(domain);
+                auto* vdisk = ss->AddVDisks();
+                vdisk->MutableVDiskLocation()->CopyFrom(*location);
+                auto* id = vdisk->MutableVDiskID();
+                id->SetGroupID(0);
+                id->SetGroupGeneration(1);
+                id->SetRing(realm);
+                id->SetDomain(domain);
+                id->SetVDisk(0);
+            }
+        }
+        NKikimrBlobStorage::TStorageConfig config;
+        TString error;
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        auto implicitGenerations = appConfig;
+        auto* implicitSet = implicitGenerations.MutableBlobStorageConfig()->MutableServiceSet();
+        implicitSet->MutableGroups(0)->ClearGroupGeneration();
+        for (auto& vdisk : *implicitSet->MutableVDisks()) {
+            vdisk.MutableVDiskID()->ClearGroupGeneration();
+        }
+        NKikimrBlobStorage::TStorageConfig implicitConfig;
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(implicitGenerations, &implicitConfig, &error), error);
+        const auto implicitBefore = implicitConfig.SerializeAsString();
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(implicitGenerations, &implicitConfig, &error), error);
+        UNIT_ASSERT_VALUES_EQUAL(implicitConfig.SerializeAsString(), implicitBefore);
+        auto staleVDiskIds = appConfig;
+        auto* staleGroup = staleVDiskIds.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        staleGroup->SetGroupGeneration(2);
+        staleGroup->MutableRings(1)->SetRealmState(TFailRealm::Excluded);
+        auto rejected = config;
+        UNIT_ASSERT(!NStorage::DeriveStorageConfig(staleVDiskIds, &rejected, &error));
+        auto update = [&](std::array<TFailRealm::EState, 3> states, bool bumpGeneration, bool allowed) {
+            auto proposedApp = appConfig;
+            auto* proposedSet = proposedApp.MutableBlobStorageConfig()->MutableServiceSet();
+            auto* proposedGroup = proposedSet->MutableGroups(0);
+            const auto generation = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetGroupGeneration()
+                + bumpGeneration;
+            proposedGroup->SetGroupGeneration(generation);
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                proposedGroup->MutableRings(realm)->SetRealmState(states[realm]);
+            }
+            for (auto& vdisk : *proposedSet->MutableVDisks()) {
+                vdisk.MutableVDiskID()->SetGroupGeneration(generation);
+            }
+            auto proposed = config;
+            const bool success = NStorage::DeriveStorageConfig(proposedApp, &proposed, &error);
+            UNIT_ASSERT_VALUES_EQUAL_C(success, allowed, error);
+            if (success) {
+                config.Swap(&proposed);
+                appConfig.Swap(&proposedApp);
+                const auto& result = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetGroupGeneration(), generation);
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(result.GetRings(realm).GetRealmState()), ui32(states[realm]));
+                }
+            }
+        };
+        update({TFailRealm::Invariant0, TFailRealm::Excluded, TFailRealm::Invariant0}, false, false);
+        update({TFailRealm::Invariant0, TFailRealm::Excluded, TFailRealm::Invariant0}, true, true);
+        update({TFailRealm::Invariant0, TFailRealm::Excluded, TFailRealm::Excluded}, true, false);
+        update({TFailRealm::Invariant1, TFailRealm::Excluded, TFailRealm::Invariant1}, true, true);
+        update({TFailRealm::Invariant1, TFailRealm::Excluded, TFailRealm::Excluded}, true, true);
+        update({TFailRealm::Invariant1, TFailRealm::Recovering, TFailRealm::Excluded}, true, true);
+        update({TFailRealm::Invariant1, TFailRealm::Invariant2, TFailRealm::Excluded}, true, false);
+        update({TFailRealm::Invariant1, TFailRealm::Invariant1, TFailRealm::Excluded}, true, true);
+        update({TFailRealm::Invariant2, TFailRealm::Invariant2, TFailRealm::Excluded}, true, true);
+        update({TFailRealm::Invariant2, TFailRealm::Invariant2, TFailRealm::Recovering}, true, true);
+        update({TFailRealm::Invariant2, TFailRealm::Invariant2, TFailRealm::Invariant0}, true, false);
+        update({TFailRealm::Invariant0, TFailRealm::Invariant0, TFailRealm::Invariant0}, true, true);
+        update({TFailRealm::Invariant0, TFailRealm::Invariant0, TFailRealm::Invariant0}, false, true);
+    }
+
+}
+
+} // namespace NKikimr::NBlobStorageNodeWardenTest

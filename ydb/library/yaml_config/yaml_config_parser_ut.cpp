@@ -5,6 +5,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -12,6 +14,48 @@
 using namespace NKikimr::NYaml;
 
 Y_UNIT_TEST_SUITE(YamlConfigParser) {
+    Y_UNIT_TEST(StaticFailRealmStates) {
+        const auto json = Yaml2Json(YAML::Load(R"(
+erasure: mirror-3-dc
+static_erasure: mirror-3-dc
+default_disk_type: SSD
+hosts:
+- host: node-a
+  node_id: 1
+  location: {data_center: dc1, rack: r1}
+- host: node-b
+  node_id: 2
+  location: {data_center: dc2, rack: r2}
+- host: node-c
+  node_id: 3
+  location: {data_center: dc3, rack: r3}
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - realm_state: Invariant1
+        fail_domains:
+        - vdisk_locations:
+          - {node_id: 1, pdisk_category: SSD, path: /disk}
+      - realm_state: Excluded
+        fail_domains:
+        - vdisk_locations:
+          - {node_id: 2, pdisk_category: SSD, path: /disk}
+      - realm_state: Recovering
+        fail_domains:
+        - vdisk_locations:
+          - {node_id: 3, pdisk_category: SSD, path: /disk}
+)"), true);
+        NKikimrConfig::TAppConfig config;
+        Parse(json, GetJsonToProtoConfig(false), config, true, nullptr, true);
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(0).GetRealmState()), ui32(TFailRealm::Invariant1));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(1).GetRealmState()), ui32(TFailRealm::Excluded));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetRealmState()), ui32(TFailRealm::Recovering));
+    }
+
     Y_UNIT_TEST(EmptyOverrideMessagesKeepPresence) {
         const auto json = Yaml2Json(YAML::Load(R"(
 blob_storage_config:

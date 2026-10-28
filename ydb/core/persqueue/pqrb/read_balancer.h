@@ -104,12 +104,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     struct TTxInit;
     struct TTxWrite;
     struct TTxWriteReceiveAttemptPartitions;
-    struct TTxWriteReplicationDataFinished;
-    struct TTxCheckReplicationDataFinished;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
     void ScheduleWaitingReplicationData(const TActorContext& ctx);
-    void OnReplicationDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx);
+    void CheckReplicationDataFinished(const TActorContext& ctx);
     void RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx);
     void StartTopicConfigurationReplicator(const TActorContext& ctx);
@@ -195,7 +193,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
-    void ProcessReplicationDataFinishedRequests(const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
@@ -245,14 +242,6 @@ public:
 
 private:
     absl::flat_hash_map<ui32, TPartitionInfo> PartitionsInfo;
-
-    struct TReplicationDataFinishedRequest {
-        TActorId Sender;
-        ui64 Cookie;
-        ui32 PartitionId;
-    };
-    std::vector<TReplicationDataFinishedRequest> PendingReplicationDataFinishedRequests;
-    bool ReplicationDataFinishedWriteInProgress = false;
 
     struct TTabletInfo {
         ui64 Owner;
@@ -319,7 +308,6 @@ private:
 
     static constexpr ui64 WAITING_REPLICATION_DATA_WAKEUP_TAG = 12;
     bool WaitingReplicationDataScheduled = false;
-    bool ReplicationDataCheckInProgress = false;
     TActorId ReplicationStatusRequestActor;
     TActorId TopicConfigurationReplicatorActor;
     TInstant ReplicationStatusUpdateDeadline;

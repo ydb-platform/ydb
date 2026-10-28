@@ -4,8 +4,6 @@
 #include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
-#include "read_balancer__txwrite_replication.h"
-#include "read_balancer__txcheck_replication.h"
 #include "read_balancer__txwrite_receive_attempt.h"
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
@@ -207,9 +205,8 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
         }
         case WAITING_REPLICATION_DATA_WAKEUP_TAG: {
             WaitingReplicationDataScheduled = false;
-            if (TabletConfig.GetReplicationStatus() == NKikimrPQ::ReplicationData && !ReplicationDataCheckInProgress) {
-                ReplicationDataCheckInProgress = true;
-                Execute(new TTxCheckReplicationDataFinished(this), ctx);
+            if (TabletConfig.GetReplicationStatus() == NKikimrPQ::ReplicationData) {
+                CheckReplicationDataFinished(ctx);
             }
             break;
         }
@@ -224,7 +221,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
 }
 
 void TPersQueueReadBalancer::ScheduleWaitingReplicationData(const TActorContext& ctx) {
-    if (WaitingReplicationDataScheduled || ReplicationDataCheckInProgress
+    if (WaitingReplicationDataScheduled
         || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationData) {
         return;
     }
@@ -233,14 +230,20 @@ void TPersQueueReadBalancer::ScheduleWaitingReplicationData(const TActorContext&
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(WAITING_REPLICATION_DATA_WAKEUP_TAG));
 }
 
-void TPersQueueReadBalancer::OnReplicationDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx) {
-    ReplicationDataCheckInProgress = false;
+void TPersQueueReadBalancer::CheckReplicationDataFinished(const TActorContext& ctx) {
     if (TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationData) {
         return;
     }
 
+    bool allPartitionsSynced = !PartitionsInfo.empty();
+    for (const auto& [partitionId, info] : PartitionsInfo) {
+        if (!info.ReplicationDataFinished) {
+            allPartitionsSynced = false;
+            break;
+        }
+    }
     LOG_D("Checked partition replication progress", {"all_partitions_synced", allPartitionsSynced});
-    if (allPartitionsSynced && configVersion == Version && WaitingResponse.empty()) {
+    if (allPartitionsSynced && WaitingResponse.empty()) {
         RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
     }
     ScheduleWaitingReplicationData(ctx);
@@ -1038,31 +1041,8 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
-    PendingReplicationDataFinishedRequests.push_back({ev->Sender, ev->Cookie, record.GetPartitionId()});
-    ProcessReplicationDataFinishedRequests(ctx);
-}
-
-void TPersQueueReadBalancer::ProcessReplicationDataFinishedRequests(const TActorContext& ctx) {
-    if (ReplicationDataFinishedWriteInProgress) {
-        return;
-    }
-    std::vector<TReplicationDataFinishedRequest> requests;
-    for (const auto& request : PendingReplicationDataFinishedRequests) {
-        auto it = PartitionsInfo.find(request.PartitionId);
-        if (it == PartitionsInfo.end()) {
-            continue;
-        }
-        if (it->second.ReplicationDataFinished) {
-            ctx.Send(request.Sender, new TEvPQ::TEvPartitionReplicationFinishedAck(request.PartitionId), 0, request.Cookie);
-        } else {
-            requests.push_back(request);
-        }
-    }
-    PendingReplicationDataFinishedRequests.clear();
-    if (!requests.empty()) {
-        ReplicationDataFinishedWriteInProgress = true;
-        Execute(new TTxWriteReplicationDataFinished(this, std::move(requests)), ctx);
-    }
+    PartitionsInfo.at(record.GetPartitionId()).ReplicationDataFinished = true;
+    ctx.Send(ev->Sender, new TEvPQ::TEvPartitionReplicationFinishedAck(record.GetPartitionId()), 0, ev->Cookie);
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {

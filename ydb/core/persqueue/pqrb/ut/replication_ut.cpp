@@ -2,23 +2,9 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 namespace NKikimr::NPQ {
 namespace {
-
-bool ReadReplicationDataFinished(TTestContext& tc, ui32 partitionId) {
-    const TString query = TStringBuilder()
-        << "("
-        << "(let key '('('Partition (Uint32 '" << partitionId << "))))"
-        << "(let fields '('ReplicationDataFinished))"
-        << "(return (AsList (SetResult 'Result (SelectRow 'Partitions key fields))))"
-        << ")";
-    const auto result = NSchemeShardUT_Private::LocalMiniKQL(*tc.Runtime, tc.BalancerTabletId, query);
-    const auto& row = result.GetValue().GetStruct(0).GetOptional();
-    UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
-    return row.GetOptional().GetStruct(0).GetOptional().GetBool();
-}
 
 void SendFinished(TTestContext& tc, ui32 partitionId, ui64 cookie) {
     tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge,
@@ -209,20 +195,17 @@ Y_UNIT_TEST(ConfigurationOffsetsAckAndReplicationDoneRequest) {
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
-Y_UNIT_TEST(PersistBeforeAckAndRestoreAfterRestart) {
+Y_UNIT_TEST(AckWithoutPersist) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
     PQTabletPrepare({}, {}, tc);
     SendBalancerUpdate(tc, TBalancerUpdate{.Partitions = {{0, {tc.TabletId, 1}}, {1, {tc.TabletId, 2}}}});
     WaitBalancerReady(tc);
-    UNIT_ASSERT(!ReadReplicationDataFinished(tc, 0));
-    UNIT_ASSERT(!ReadReplicationDataFinished(tc, 1));
 
-    bool blockPuts = true;
     TVector<THolder<IEventHandle>> pendingPuts;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (blockPuts && ev->GetTypeRewrite() == TEvBlobStorage::EvPut
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut
             && ev->Get<TEvBlobStorage::TEvPut>()->Id.TabletID() == tc.BalancerTabletId) {
             pendingPuts.emplace_back(ev.Release());
             return TTestActorRuntimeBase::EEventAction::DROP;
@@ -232,20 +215,12 @@ Y_UNIT_TEST(PersistBeforeAckAndRestoreAfterRestart) {
 
     SendFinished(tc, 0, 42);
     SendFinished(tc, 1, 43);
-    auto earlyAck = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionReplicationFinishedAck>(TDuration::MilliSeconds(200));
-    UNIT_ASSERT(!earlyAck);
-    UNIT_ASSERT(!pendingPuts.empty());
-    blockPuts = false;
-    for (auto& put : pendingPuts) {
-        tc.Runtime->Send(put.Release(), 0, true);
-    }
     ExpectAck(tc, 0, 42);
     ExpectAck(tc, 1, 43);
+    UNIT_ASSERT(pendingPuts.empty());
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
     RestartBalancer(tc);
-    UNIT_ASSERT(ReadReplicationDataFinished(tc, 0));
-    UNIT_ASSERT(ReadReplicationDataFinished(tc, 1));
     SendFinished(tc, 0, 44);
     ExpectAck(tc, 0, 44);
 }
@@ -273,7 +248,6 @@ Y_UNIT_TEST(LostAckCanBeRetriedAfterRestart) {
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
     RestartBalancer(tc);
-    UNIT_ASSERT(ReadReplicationDataFinished(tc, 0));
     SendFinished(tc, 0, 101);
     ExpectAck(tc, 0, 101);
 }

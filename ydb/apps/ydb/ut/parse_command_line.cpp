@@ -1,5 +1,8 @@
 #include "mock_env.h"
 
+#include <library/cpp/testing/common/env.h>
+#include <util/system/shellcommand.h>
+
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
@@ -1510,5 +1513,22 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             profile
         );
         UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
+    }
+
+    // The storage replace in dedicated mode gets only the storage section: the command must refuse it with an error
+    // telling which sections are needed, before sending anything
+    Y_UNIT_TEST(StorageReplaceWithOneDedicatedSection) {
+        TTempDir dir;
+        const TString storageYaml = dir.Path() / "storage.yaml";
+        TFileOutput(storageYaml).Write("metadata:\n  kind: StorageConfig\n");
+
+        TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
+        command << "-e" << "grpc://localhost:1" << "admin" << "storage" << "replace"
+            << "--dedicated-storage-yaml" << storageYaml;
+        command.Run().Wait();
+        const TString error = command.GetError();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(command.GetExitCode(), 0, error);
+        UNIT_ASSERT_C(!error.Contains("optional"), error);
+        UNIT_ASSERT_STRING_CONTAINS(error, "--dedicated-cluster-yaml");
     }
 }

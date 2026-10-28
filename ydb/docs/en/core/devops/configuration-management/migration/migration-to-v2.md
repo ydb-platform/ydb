@@ -53,24 +53,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config generate > config.yaml
     ```
 
-<<<<<<< HEAD
-3. Add the following field to the `config.yaml` file obtained in step 1 or 2:
-=======
-3. Check that the `config.yaml` file obtained in step 1 or 2 contains the storage node settings from the current static configuration V1. If the file was obtained from an existing dynamic configuration, these settings may be missing because in V1 dynamic configuration might not contain storage node parameters.
-
-    The goal of this step is to get a single combined configuration file that contains both parameters from the dynamic configuration and settings from the static configuration.
-
-    Move all sections and parameters that describe storage nodes, disks, State Storage, static group, and channel profiles from the static configuration file to the `config` section of the `config.yaml` file. In particular, check for the following sections and parameters if they are set in the static configuration V1:
-
-    - `hosts`;
-    - `host_configs`;
-    - `domains_config`;
-    - `blob_storage_config`;
-    - `channel_profile_config`;
-    - other related storage configuration parameters, such as `static_erasure`.
-
-4. Enable the `switch_to_config_v2` [feature flag](../../../reference/configuration/feature_flags.md) in the checked and updated `config.yaml` file:
->>>>>>> ce647aaa590 ([docs] Document feature flags and experimental functionality (#55293))
+3. Enable the `switch_to_config_v2` [feature flag](../../../reference/configuration/feature_flags.md) in the `config.yaml` file obtained in step 1 or 2:
 
     ```yaml
     feature_flags:

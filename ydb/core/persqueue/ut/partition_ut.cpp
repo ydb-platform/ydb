@@ -3110,12 +3110,16 @@ Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
 
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
     auto& first = event->Data.emplace_back();
+    first.SetStartOffset(2);
+    first.SetEndOffset(12);
     (*first.MutableOffsetsByConsumers())["first"] = 2;
     (*first.MutableOffsetsByConsumers())["second"] = 3;
     auto& last = event->Data.emplace_back();
+    last.SetStartOffset(1);
+    last.SetEndOffset(11);
     (*last.MutableOffsetsByConsumers())["first"] = 4;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release(), 0, 17));
-    WaitCmdWrite({.UserInfos = {
+    WaitCmdWrite({.MetaStartOffset = 2, .MetaEndOffset = 12, .UserInfos = {
         {0, {.Consumer = "first", .Session = "first-session", .Offset = 4}},
         {1, {.Consumer = "second", .Offset = 3}},
     }});
@@ -3133,9 +3137,13 @@ Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
 
     // Acknowledging the batch frees PendingReplicationData for the next one.
     event = MakeHolder<TEvPQ::TEvReplicationData>();
-    (*event->Data.emplace_back().MutableOffsetsByConsumers())["first"] = 6;
+    auto& next = event->Data.emplace_back();
+    next.SetStartOffset(1);
+    next.SetEndOffset(9);
+    (*next.MutableOffsetsByConsumers())["first"] = 6;
     SendEvent(event.Release());
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Session = "first-session", .Offset = 6}}}});
+    WaitCmdWrite({.MetaStartOffset = 2, .MetaEndOffset = 12,
+        .UserInfos = {{0, {.Consumer = "first", .Session = "first-session", .Offset = 6}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
     UNIT_ASSERT(ack);

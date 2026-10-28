@@ -444,21 +444,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     bool incorrectRequest = false;
     ui64 nextOffset = 0;
-    while (!Queue.empty()) {
-        auto& front = Queue.front();
-        if (front.GetOffset() == 0) {
-            NKikimrPQ::TReplicationDataPayload replicationData;
-            if (replicationData.ParseFromString(front.GetData())) {
-                ReadWritesInSourceTopicDisabled = replicationData.GetSourceTopicIsClosedForReadWrites();
-                ReplicationDataQueue.emplace_back(std::move(replicationData));
-                Queue.pop_front();
-                continue;
-            }
-        }
-
-        if (!AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
-            break;
-        }
+    while (!Queue.empty() && AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
     }
@@ -718,6 +704,15 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+        if (offset == 0) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                ReadWritesInSourceTopicDisabled = replicationData.GetSourceTopicIsClosedForReadWrites();
+                ReplicationDataQueue.emplace_back(std::move(replicationData));
+                continue;
+            }
+        }
+
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();

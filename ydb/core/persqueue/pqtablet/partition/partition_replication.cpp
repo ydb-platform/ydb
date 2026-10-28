@@ -20,6 +20,9 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     for (const auto& data : (*PendingReplicationData)->Get()->Data) {
+        auto& startOffset = CompactionBlobEncoder.IsEmpty() ? BlobEncoder.StartOffset : CompactionBlobEncoder.StartOffset;
+        startOffset = Max(GetStartOffset(), data.GetStartOffset());
+        BlobEncoder.EndOffset = Max(GetEndOffset(), data.GetEndOffset());
         for (const auto& [consumer, offset] : data.GetOffsetsByConsumers()) {
             auto& userInfo = GetOrCreatePendingUser(consumer);
             userInfo.Offset = offset;

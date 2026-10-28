@@ -2322,10 +2322,14 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 class TDropAsyncReplication final: public TAsyncReplication {
     static TString GetMode(EDropAsyncReplicationMode mode) {
         switch (mode) {
-        case EDropAsyncReplicationMode::Drop: return "drop";
-        case EDropAsyncReplicationMode::DropCascade: return "dropCascade";
-        case EDropAsyncReplicationMode::DropForce: return "dropForce";
-        case EDropAsyncReplicationMode::DropCascadeForce: return "dropCascadeForce";
+            case EDropAsyncReplicationMode::Drop:
+                return "drop";
+            case EDropAsyncReplicationMode::DropCascade:
+                return "dropCascade";
+            case EDropAsyncReplicationMode::DropForce:
+                return "dropForce";
+            case EDropAsyncReplicationMode::DropCascadeForce:
+                return "dropCascadeForce";
         }
         Y_UNREACHABLE();
     }

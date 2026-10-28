@@ -450,6 +450,25 @@ int TCommandConfigFetch::Run(TConfig& config) {
     }
 
 
+    // each config goes to its own file of the output directory if one is given, or to stdout with its label;
+    // metadata is stripped if asked, after the version is set
+    auto emit = [&](const TString& label, TString text, const TString& fileName, bool printLabel) {
+        if (StripMetadata) {
+            text = NYamlConfig::StripMetadata(text);
+        }
+        if (OutDir) {
+            TFsPath dir(OutDir);
+            dir.MkDirs();
+            TFileOutput out(dir / fileName);
+            out << text;
+            return;
+        }
+        if (printLabel) {
+            Cerr << label << Endl;
+        }
+        Cout << text << Endl;
+    };
+
     // TODO: rewrite it in proper way, without stdout and stderr confusion
     if (!clusterConfig.empty()) {
         try {
@@ -461,12 +480,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump main config version, returning as-is" << Endl;
         }
-        if (!storageConfig.empty() || !databaseConfig.empty() ||
-            DedicatedStorageSection)
-        {
-            Cerr << "cluster config: " << Endl;
-        }
-        Cout << clusterConfig << Endl;
+        emit("cluster config: ", clusterConfig, "dynconfig.yaml",
+            !storageConfig.empty() || !databaseConfig.empty() || DedicatedStorageSection);
     }
 
     if (!storageConfig.empty()) {
@@ -479,12 +494,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump storage config version, returning as-is" << Endl;
         }
-        if (!clusterConfig.empty() || !databaseConfig.empty() ||
-            DedicatedClusterSection)
-        {
-            Cerr << "storage config:" << Endl;
-        }
-        Cout << storageConfig << Endl;
+        emit("storage config:", storageConfig, "storage.yaml",
+            !clusterConfig.empty() || !databaseConfig.empty() || DedicatedClusterSection);
     }
 
     if (!databaseConfig.empty()) {
@@ -499,12 +510,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
         // this branch can mirror the cluster/storage branches and call
         // UpgradeDatabaseConfigVersion.
 
-        if (!clusterConfig.empty() || !storageConfig.empty() ||
-            DedicatedStorageSection || DedicatedClusterSection)
-        {
-            Cerr << "database config:" << Endl;
-        }
-        Cout << databaseConfig << Endl;
+        emit("database config:", databaseConfig, "database.yaml",
+            !clusterConfig.empty() || !storageConfig.empty() || DedicatedStorageSection || DedicatedClusterSection);
     }
 
     if (clusterConfig.empty() && storageConfig.empty() && databaseConfig.empty())

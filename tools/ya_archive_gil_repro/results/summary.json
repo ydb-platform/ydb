@@ -1,0 +1,31 @@
+{
+  "input_bytes": 17179869184,
+  "ya_commit": "f927ec85865ba920d5b988cf748a077694d7ce6f",
+  "ya_revision": 21488830,
+  "output_sha256": {
+    "original": "a92ac9a03d444361f61cd6143bb09de1c2bdcd5667e12e080c9c375dbc11902c",
+    "release": "a92ac9a03d444361f61cd6143bb09de1c2bdcd5667e12e080c9c375dbc11902c"
+  },
+  "runs": [
+    {
+      "case": "original-1",
+      "mode": "original",
+      "extraction_seconds": 10.423363259993494,
+      "heartbeat_gap_seconds": 10.423216832103208,
+      "dependency_start_delay_seconds": 10.404128769878298,
+      "children_started_during_extraction": 0,
+      "graph_seconds": 13.719825029373169,
+      "cli_seconds": 14.228954281192273
+    },
+    {
+      "case": "release-1",
+      "mode": "release",
+      "extraction_seconds": 10.552054842934012,
+      "heartbeat_gap_seconds": 0.012026397045701742,
+      "dependency_start_delay_seconds": 0.03392274398356676,
+      "children_started_during_extraction": 39,
+      "graph_seconds": 10.586863994598389,
+      "cli_seconds": 11.096640520030633
+    }
+  ]
+}

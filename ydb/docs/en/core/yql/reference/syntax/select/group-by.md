@@ -42,7 +42,7 @@ Aggregate functions do not consider `NULL` in their arguments, except for the fu
 
 {% endnote %}
 
-Also in YQL, there is a mechanism of aggregate function factories, implemented using the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
+Also in YQL, there is a mechanism of aggregate function factories, implemented using the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by).
 
 ### Examples {#examples}
 

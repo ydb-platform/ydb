@@ -18,6 +18,7 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
     }
 
     Y_UNIT_TEST(TestSnakeToCamel) {
+        Cout << "DIR_OUTPUTS_PROBE: stdout from the intentional failure" << Endl;
         Cerr << "DIR_OUTPUTS_PROBE: naming intentional failure; preserve this stderr in the log ZIP" << Endl;
         UNIT_ASSERT_EQUAL("CamelCase", SnakeToCamelCase("camel_case"));
         UNIT_ASSERT_EQUAL("Snakesnake", SnakeToCamelCase("snakesnake"));

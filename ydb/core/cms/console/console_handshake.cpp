@@ -22,15 +22,18 @@ public:
             TActorId senderId,
             const TString& mainYamlConfig,
             TActorId interconnectSession,
-            ui64 cookie)
+            ui64 cookie,
+            ui64 sessionEpoch)
         : SenderId(senderId)
         , MainYamlConfig(mainYamlConfig)
         , InterconnectSession(interconnectSession)
         , Cookie(cookie)
+        , SessionEpoch(sessionEpoch)
     {}
 
     void Bootstrap(const TActorId& consoleId) {
         auto request = std::make_unique<TEvConsole::TEvSetYamlConfigRequest>();
+        request->Record.SetControllerSessionEpoch(SessionEpoch);
         request->Record.SetBypassAuth(true);
         request->Record.SetSkipAuditLog(true);
         request->Record.MutableRequest()->set_config(MainYamlConfig);
@@ -65,6 +68,7 @@ private:
     TString MainYamlConfig;
     TActorId InterconnectSession;
     ui64 Cookie;
+    ui64 SessionEpoch;
 
     void SendInReply(std::unique_ptr<IEventBase> ev) {
         auto h = std::make_unique<IEventHandle>(SenderId, SelfId(), ev.release(), 0, Cookie);
@@ -100,9 +104,14 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
     const auto& proposedConfigVersion = record.GetConfigVersion();
     ui64 currentConfigHash = NKikimr::NYaml::GetConfigHash(MainYamlConfig);
 
-    auto& [senderId, pipeServerId] = Self.ConfigClients[ev->Get()->Record.GetDistconf()];
+    const size_t slot = ev->Get()->Record.GetDistconf();
+    auto& [senderId, pipeServerId] = Self.ConfigClients[slot];
     if (pipeServerId != ev->Recipient) {
         NTabletPipe::CloseServer(Self.SelfId(), pipeServerId);
+    }
+    if (senderId != ev->Sender || pipeServerId != ev->Recipient) {
+        // a new session of this slot only; the session of the other controller goes on
+        ControllerSessionEpochs[slot] = ++LastControllerSessionEpoch;
     }
 
     senderId = ev->Sender;
@@ -141,11 +150,19 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
         return;
     }
 
+    // the session of the commit, the one CheckSession has found it in
+    ui64 sessionEpoch = 0;
+    for (size_t slot = 0; slot < Self.ConfigClients.size(); ++slot) {
+        if (Self.ConfigClients[slot] == std::make_tuple(ev->Sender, ev->Recipient)) {
+            sessionEpoch = ControllerSessionEpochs[slot];
+        }
+    }
     IActor* actor = new TConsoleCommitActor(
         ev->Sender,
         mainYamlConfig,
         ev->InterconnectSession,
-        ev->Cookie);
+        ev->Cookie,
+        sessionEpoch);
     CommitActor = Register(actor);
 }
 

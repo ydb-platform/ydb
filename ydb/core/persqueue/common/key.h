@@ -35,7 +35,7 @@ public:
         MarkUserDeprecated = 'u',
         MarkMLPSnapshot = 'S',
         MarkMLPWAL = 'w',
-        MarkTopicReplication = 't',
+        // 't' is reserved for the removed replication snapshot format.
     };
 
     enum EServiceType : char {

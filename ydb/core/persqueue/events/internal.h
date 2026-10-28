@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -30,6 +31,7 @@
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -251,9 +253,11 @@ struct TEvPQ {
         EvReadBalancerActorIdChanged,
         EvPartitionReplicationFinished,
         EvPartitionReplicationFinishedAck,
-        EvPartitionConsumerOffsets,
-        EvPartitionConsumerOffsetsAck,
+        EvPartitionConsumerOffsets, // reserved: legacy event removed
+        EvPartitionConsumerOffsetsAck, // reserved: legacy event removed
         EvTopicConfigurationReplicationFinished,
+        EvReplicationData,
+        EvReplicationDataAck,
         EvEnd,
     };
 
@@ -1398,13 +1402,14 @@ struct TEvPQ {
         }
     };
 
-    struct TEvPartitionConsumerOffsets : public TEventPB<TEvPartitionConsumerOffsets, NKikimrPQ::TEvPartitionConsumerOffsets, EvPartitionConsumerOffsets> {
-    };
-
-    struct TEvPartitionConsumerOffsetsAck : public TEventPB<TEvPartitionConsumerOffsetsAck, NKikimrPQ::TEvPartitionConsumerOffsetsAck, EvPartitionConsumerOffsetsAck> {
-    };
-
     struct TEvTopicConfigurationReplicationFinished : public TEventLocal<TEvTopicConfigurationReplicationFinished, EvTopicConfigurationReplicationFinished> {
+    };
+
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        TDeque<NKikimrPQ::TReplicationDataPayload> Data;
+    };
+
+    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

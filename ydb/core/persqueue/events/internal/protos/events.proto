@@ -40,24 +40,6 @@ message TEvPartitionReplicationFinishedAck {
     optional uint32 PartitionId = 1;
 }
 
-// Committed offsets collected from the source topic during configuration replication.
-message TEvPartitionConsumerOffsets {
-    message TConsumerOffset {
-        optional string Consumer = 1;
-        optional uint64 CommittedOffset = 2;
-    }
-    optional uint32 PartitionId = 1;
-    repeated TConsumerOffset ConsumerOffsets = 2;
-    // Source partition range [StartOffset, EndOffset) from DescribeTopic.
-    optional uint64 StartOffset = 3;
-    optional uint64 EndOffset = 4;
-}
-
-// The source snapshot and imported consumer offsets have been persisted.
-message TEvPartitionConsumerOffsetsAck {
-    optional uint32 PartitionId = 1;
-}
-
 message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;

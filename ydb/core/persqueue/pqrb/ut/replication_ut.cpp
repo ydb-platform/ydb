@@ -1,5 +1,7 @@
 #include "pqrb_ut_common.h"
 
+#include <ydb/core/persqueue/pqrb/topic_configuration_replicator.h>
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -109,7 +111,7 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
-Y_UNIT_TEST(ConfigurationOffsetsAckAndReplicationDoneRequest) {
+Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -118,20 +120,13 @@ Y_UNIT_TEST(ConfigurationOffsetsAckAndReplicationDoneRequest) {
     InstallProposeCapture(tc, proxy);
     TActorId replicator;
     TVector<THolder<IEventHandle>> proposals;
-    size_t acks = 0;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPersQueue::TEvUpdateBalancerConfig::EventType) {
             auto& config = *ev->Get<TEvPersQueue::TEvUpdateBalancerConfig>()->Record.MutableTabletConfig();
             config.MutablePartitionConfig()->MutableMirrorFrom()->SetTopic("source");
-        } else if (ev->GetTypeRewrite() == TEvPQ::TEvInitCredentials::EventType) {
+        } else if (ev->GetTypeRewrite() == TEvents::TEvBootstrap::EventType
+            && dynamic_cast<TTopicConfigurationReplicator*>(tc.Runtime->FindActor(ev->Recipient))) {
             replicator = ev->Recipient;
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        } else if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionConsumerOffsetsAck::EventType) {
-            UNIT_ASSERT(ev->Recipient == replicator);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 17);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionConsumerOffsetsAck>()->Record.GetPartitionId(), 0);
-            ++acks;
-            return TTestActorRuntimeBase::EEventAction::DROP;
         } else if (ev->GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType) {
             proposals.emplace_back(ev.Release());
             return TTestActorRuntimeBase::EEventAction::DROP;
@@ -146,14 +141,6 @@ Y_UNIT_TEST(ConfigurationOffsetsAckAndReplicationDoneRequest) {
     SendBalancerUpdate(tc, update);
     tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     UNIT_ASSERT(replicator);
-    auto offsets = MakeHolder<TEvPQ::TEvPartitionConsumerOffsets>();
-    offsets->Record.SetPartitionId(0);
-    auto* consumer = offsets->Record.AddConsumerOffsets();
-    consumer->SetConsumer("client");
-    consumer->SetCommittedOffset(0);
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, replicator, offsets.Release(), 0, GetPipeConfigWithRetries(), TActorId(), 17);
-    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(200));
-    UNIT_ASSERT_VALUES_EQUAL(acks, 1);
     UNIT_ASSERT(proposals.empty());
     auto complete = [&](const TActorId& sender) {
         ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, sender, new TEvPQ::TEvTopicConfigurationReplicationFinished());

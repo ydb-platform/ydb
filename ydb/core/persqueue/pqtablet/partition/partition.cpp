@@ -3262,9 +3262,10 @@ void TPartition::RunPersist() {
         Compacter->TryCompactionIfPossible();
     }
 
+    UpdatePendingUsersFromReplicationData();
+
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
-    haveChanges |= AddReplicationConsumerOffsetsToPersistRequest(ctx);
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig || PendingReplicationData.has_value();
     if (ReplicationDataFinishedPending) {
         ReplicationDataFinishedPending = false;
         ReplicationDataFinishedWriteInProgress = true;

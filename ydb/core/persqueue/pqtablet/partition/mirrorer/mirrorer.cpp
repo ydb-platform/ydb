@@ -101,6 +101,14 @@ void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, cons
     }
 }
 
+void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
+    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataInFlight.clear();
+    Send(SelfId(), new TEvents::TEvWakeup());
+}
+
 void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
     if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted) {
         return;
@@ -464,7 +472,20 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     bool incorrectRequest = false;
     ui64 nextOffset = 0;
-    while (!Queue.empty() && AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
+    while (!Queue.empty()) {
+        auto& front = Queue.front();
+        if (front.GetOffset() == 0) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(front.GetData())) {
+                ReplicationDataQueue.emplace_back(std::move(replicationData));
+                Queue.pop_front();
+                continue;
+            }
+        }
+
+        if (!AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
+            break;
+        }
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
     }
@@ -513,6 +534,17 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     }
     Send(PartitionActor, std::move(request));
     EndPartitionSessionEvent = std::nullopt;
+}
+
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (!ReplicationDataInFlight.empty() || ReplicationDataQueue.empty()) {
+        return;
+    }
+
+    ReplicationDataInFlight.swap(ReplicationDataQueue);
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->Data = ReplicationDataInFlight;
+    ctx.Send(PartitionActor, event.Release());
 }
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -585,6 +617,7 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
     TryToSplitMerge(ctx);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {

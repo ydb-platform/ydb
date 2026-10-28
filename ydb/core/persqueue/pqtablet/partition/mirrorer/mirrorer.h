@@ -48,6 +48,7 @@ private:
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -67,6 +68,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -125,11 +127,13 @@ public:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext& ctx);
     void TryNotifyReplicationDataFinished(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -156,6 +160,8 @@ private:
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
+    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataQueue;
+    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataInFlight;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;

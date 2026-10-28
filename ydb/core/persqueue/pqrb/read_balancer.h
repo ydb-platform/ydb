@@ -111,7 +111,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx);
     void StartTopicConfigurationReplicator(const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;

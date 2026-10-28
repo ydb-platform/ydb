@@ -276,9 +276,9 @@ private:
     void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
     void ForwardReplicationFinished(const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
-    bool AddReplicationConsumerOffsetsToPersistRequest(const TActorContext& ctx);
-    void CompleteReplicationConsumerOffsetsWrite(const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
+    void UpdatePendingUsersFromReplicationData();
+    void CompleteReplicationDataWrite(const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
@@ -664,7 +664,7 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -754,7 +754,7 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
@@ -1049,15 +1049,7 @@ private:
     bool ReplicationDataFinished = false; // Committed in the partition's KV metadata.
     bool ReplicationDataFinishedPending = false;
     bool ReplicationDataFinishedWriteInProgress = false;
-    // Source snapshot persisted atomically with the imported consumer offsets.
-    std::optional<NKikimrPQ::TEvPartitionConsumerOffsets> ReplicationConsumerOffsets;
-    struct TReplicationConsumerOffsetsWrite {
-        NKikimrPQ::TEvPartitionConsumerOffsets Offsets;
-        TVector<std::pair<TActorId, ui64>> Replies;
-    };
-    TDeque<TReplicationConsumerOffsetsWrite> PendingReplicationConsumerOffsets;
-    std::optional<TReplicationConsumerOffsetsWrite> ReplicationConsumerOffsetsWrite;
-
+    std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
 

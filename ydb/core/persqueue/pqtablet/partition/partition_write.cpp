@@ -579,7 +579,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
-    CompleteReplicationConsumerOffsetsWrite(ctx);
+    CompleteReplicationDataWrite(ctx);
     if (ReplicationDataFinishedWriteInProgress) {
         ReplicationDataFinishedWriteInProgress = false;
         ReplicationDataFinished = true;

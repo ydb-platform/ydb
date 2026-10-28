@@ -5449,20 +5449,6 @@ NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
     return config;
 }
 
-void TPersQueue::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev) {
-    if (!InitCompleted) {
-        AddPendingEvent(ev.Release());
-        return;
-    }
-    const auto partitionId = ev->Get()->Record.GetPartitionId();
-    const auto partition = Partitions.find(TPartitionId{partitionId});
-    if (partition == Partitions.end()) {
-        LOG_W("Received consumer offsets for an unknown partition", {"partition", partitionId});
-        return;
-    }
-    Forward(ev, partition->second.Actor);
-}
-
 void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
     const bool readBalancerChanged = ReadBalancerActorId != ev->Sender;
@@ -5952,7 +5938,6 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-        hFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);

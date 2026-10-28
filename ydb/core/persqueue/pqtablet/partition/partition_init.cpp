@@ -432,11 +432,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
                 key = &pair.GetKey();
                 const auto type = (*key)[TKeyPrefix::MarkPosition()];
-                if (type == TKeyPrefix::MarkTopicReplication && !isSupportive) {
-                    auto& offsets = Partition()->ReplicationConsumerOffsets.emplace();
-                    PQ_INIT_ENSURE(offsets.ParseFromString(pair.GetValue()));
-                    PQ_INIT_ENSURE(offsets.HasPartitionId() && offsets.GetPartitionId() == PartitionId().OriginalPartitionId);
-                } else if (type == TKeyPrefix::MarkSourceId) {
+                if (type == TKeyPrefix::MarkSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
                 } else if (type == TKeyPrefix::MarkProtoSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);

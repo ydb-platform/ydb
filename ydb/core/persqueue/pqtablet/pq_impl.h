@@ -91,7 +91,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);

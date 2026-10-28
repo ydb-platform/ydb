@@ -1015,20 +1015,6 @@ void TPersQueueReadBalancer::StartTopicConfigurationReplicator(const TActorConte
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != TopicConfigurationReplicatorActor || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationConfiguration) {
-        return;
-    }
-    const auto partitionId = ev->Get()->Record.GetPartitionId();
-    const auto partition = PartitionsInfo.find(partitionId);
-    if (partition == PartitionsInfo.end()) {
-        LOG_W("Cannot forward consumer offsets for an unknown partition", {"partition", partitionId});
-        return;
-    }
-    // Preserve the replicator as sender: the partition replies directly to this actor instance.
-    NTabletPipe::SendData(ev->Sender, GetPipeClient(partition->second.TabletId, ctx), ev->Release().Release(), ev->Cookie);
-}
-
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx) {
     if (ev->Sender != TopicConfigurationReplicatorActor || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationConfiguration) {
         return;
@@ -1320,7 +1306,6 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         // from PQ
         HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFunc(TEvPQ::TEvPartitionReplicationFinished, Handle);
-        HFunc(TEvPQ::TEvPartitionConsumerOffsets, Handle);
         HFunc(TEvPQ::TEvTopicConfigurationReplicationFinished, Handle);
         // from TPartitionScaleRequest
         HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);

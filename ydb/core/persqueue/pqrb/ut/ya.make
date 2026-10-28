@@ -18,7 +18,6 @@ SRCS(
     replication_ut.cpp
     topic_configuration_replicator_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
-    partition_replication_ut.cpp
     partition_scale_manager_ut.cpp
     partitions_location_queue_ut.cpp
     scale_and_mirror_ut.cpp

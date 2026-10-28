@@ -93,34 +93,6 @@ TMirrorer::TMirrorer(
     Counters.ResetCounters();
 }
 
-void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext&) {
-    if (ReplicationDataFinished && ev->Sender == PartitionActor
-        && ev->Cookie == ReplicationDataNotificationCookie
-        && ev->Get()->Record.HasPartitionId() && ev->Get()->Record.GetPartitionId() == Partition) {
-        ReplicationDataPersisted = true;
-    }
-}
-
-void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
-    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
-        return;
-    }
-    ReplicationDataInFlight.clear();
-    Send(SelfId(), new TEvents::TEvWakeup());
-}
-
-void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
-    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted) {
-        return;
-    }
-    if (LastReplicationDataNotification != TInstant::Zero()
-        && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
-        return;
-    }
-    ctx.Send(PartitionActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
-    LastReplicationDataNotification = ctx.Now();
-}
-
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateInitConsumer);
 
@@ -477,6 +449,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
         if (front.GetOffset() == 0) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(front.GetData())) {
+                ReadWritesInSourceTopicDisabled = replicationData.GetSourceTopicIsClosedForReadWrites();
                 ReplicationDataQueue.emplace_back(std::move(replicationData));
                 Queue.pop_front();
                 continue;
@@ -510,7 +483,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
-    if (Config.GetIsForTopicReplication() && !ReplicationDataFinished) {
+    if (Config.GetIsForTopicReplication() && !ReplicationDataFinished && ReadWritesInSourceTopicDisabled) {
         ReplicationDataFinished = true;
     }
     TryNotifyReplicationDataFinished(ctx);
@@ -630,6 +603,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
 
     LastInitStageTimestamp = ctx.Now();
     LOG_N("Creating new read session");
+    ReadWritesInSourceTopicDisabled = false;
 
     if (!Queue.empty()) {
         OffsetToRead = Queue.front().GetOffset();
@@ -994,6 +968,34 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
     }
     EndOffset = ev->Get()->EndOffset;
     ScheduleConsumerCreation(ctx);
+}
+
+void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext&) {
+    if (ReplicationDataFinished && ev->Sender == PartitionActor
+        && ev->Cookie == ReplicationDataNotificationCookie
+        && ev->Get()->Record.HasPartitionId() && ev->Get()->Record.GetPartitionId() == Partition) {
+        ReplicationDataPersisted = true;
+    }
+}
+
+void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
+    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataInFlight.clear();
+    Send(SelfId(), new TEvents::TEvWakeup());
+}
+
+void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
+    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted) {
+        return;
+    }
+    if (LastReplicationDataNotification != TInstant::Zero()
+        && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
+        return;
+    }
+    ctx.Send(PartitionActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
+    LastReplicationDataNotification = ctx.Now();
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

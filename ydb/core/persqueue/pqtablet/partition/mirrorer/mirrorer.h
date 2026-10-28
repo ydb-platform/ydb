@@ -181,8 +181,11 @@ private:
 
     bool WaitNextReaderEventInFlight = false;
     bool CredentialsRequestInFlight = false;
+
     bool ReplicationDataFinished = false;
     bool ReplicationDataPersisted = false;
+    bool ReadWritesInSourceTopicDisabled = false;
+    
     TInstant LastReplicationDataNotification;
     ui64 ReplicationDataNotificationCookie = 1;
 

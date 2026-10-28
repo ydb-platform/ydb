@@ -1022,12 +1022,23 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationReplicationFinis
     RequestReplicationStatus(NKikimrPQ::ReplicationDone, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext&) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
     PartitionsInfo.at(record.GetPartitionId()).ReplicationDataFinished = true;
+
+    bool allPartitionsFinished = true;
+    for (const auto& [partition, info] : PartitionsInfo) {
+        if (!info.ReplicationDataFinished) {
+            allPartitionsFinished = false;
+            break;
+        }
+    }
+    if (allPartitionsFinished) {
+        RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
+    }
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {

@@ -1,3 +1,5 @@
+#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/audit/audit_log_service.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/nodestate.h>
 #include <ydb/core/base/statestorage_impl.h>
@@ -21,6 +23,8 @@
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/scope.h>
 
@@ -4938,6 +4942,77 @@ selector_config: []
         ConcurrentReplace,
         NoCommittedQuorum,
     };
+
+    // the lines of the audit log
+    struct TAuditCollector : TLogBackend {
+        std::shared_ptr<std::vector<TString>> Lines;
+
+        explicit TAuditCollector(std::shared_ptr<std::vector<TString>> lines)
+            : Lines(std::move(lines))
+        {}
+
+        void WriteData(const TLogRecord& rec) override {
+            Lines->emplace_back(rec.Data, rec.Len);
+        }
+
+        void ReopenLog() override {}
+    };
+
+    // The replacement of the configuration is audited once, with its result: SUCCESS when it is done, ERROR when the
+    // writes of the proposal fail and the old configuration stays
+    void CheckReplaceAudited(bool failProposal) {
+        TCommitConfirmationFixture fixture;
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+
+        auto lines = std::make_shared<std::vector<TString>>();
+        NAudit::TAuditLogBackends backends;
+        backends[NKikimrConfig::TAuditConfig::TXT].push_back(MakeHolder<TAuditCollector>(lines));
+        const TActorId auditWriter = runtime.Register(NAudit::CreateAuditWriter(std::move(backends)).release(), 1);
+        runtime.RegisterService(NAudit::MakeAuditServiceID(), auditWriter);
+        Y_DEFER { NAudit::AUDIT_LOG_ENABLED.store(false); };
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (HandleReplaceEvent(runtime, nodeId, *ev, edge, response)) {
+                return false;
+            }
+            if (failProposal && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record.GetProposedStorageConfig().GetGeneration() == 2) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NStorage::TEvNodeWardenWriteMetadataResult(std::nullopt, NPDisk::EPDiskMetadataOutcome::ERROR),
+                    0, ev->Cookie), nodeId);
+                return false;
+            }
+            return true;
+        };
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, fixture.MakeReplaceRequest().release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(65)),
+            "replace did not finish");
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C((response->GetStatus() == TResult::OK) == !failProposal, response->DebugString());
+
+        std::vector<TString> replaceRecords;
+        for (const auto& line : *lines) {
+            if (line.Contains("REPLACE CONFIG")) {
+                replaceRecords.push_back(line);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replaceRecords.size(), 1);
+        const TString expected = failProposal ? "status=ERROR" : "status=SUCCESS";
+        UNIT_ASSERT_C(replaceRecords.front().Contains(expected), replaceRecords.front());
+    }
+
+    Y_UNIT_TEST(ReplaceAuditedAsSuccessWhenDone) {
+        CheckReplaceAudited(false);
+    }
+
+    Y_UNIT_TEST(ReplaceAuditedAsErrorWhenProposalFails) {
+        CheckReplaceAudited(true);
+    }
 
     void CheckReplaceAfterPartialDelivery(EPartialReplaceScenario scenario) {
         TCommitConfirmationFixture fixture;

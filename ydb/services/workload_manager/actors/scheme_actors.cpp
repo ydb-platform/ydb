@@ -39,8 +39,8 @@ public:
     void StartPoolFetchRequest() const {
         LOG_D("Start pool fetching");
         // Right after the default pool is created the scheme cache may still hold the negative entry, so it is synced
-        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken,
-            WorkloadManagerConfig, DefaultPoolCreated));
+        Register(CreatePoolFetcherActor(
+            SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken, WorkloadManagerConfig, DefaultPoolCreated));
     }
 
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {

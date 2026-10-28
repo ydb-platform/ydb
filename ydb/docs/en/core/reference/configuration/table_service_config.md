@@ -124,7 +124,7 @@ table_service_config:
 
 ### Directory configuration
 
-#### local_file_config.root
+#### local_file_config.root {#local-file-config-root}
 
 **Type:** `string`  \n**Default:** `""` (temporary directory)  \n**Description:** File directory for storing spilling files.
 

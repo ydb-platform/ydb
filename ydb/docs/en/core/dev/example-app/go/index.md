@@ -6,7 +6,7 @@ This page provides a detailed description of the code for a [test app](https://g
 
 ## Parameterized queries {#param-queries}
 
-See [parameterized queries](../optimization/parameterized-queries.md).
+See [parameterized queries](../../optimization/parameterized-queries.md).
 
 ## Downloading and starting {#download}
 

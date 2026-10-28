@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% if tech %}
+{% if backend_name == "YDB" %}
 
 ## YDB
 
@@ -461,6 +461,8 @@ The default level is 2
 
 The pragma for query hints is desicribed in [a separate section](../../../dev/optimization/hints.md).
 
+{% if tech %}
+
 ### `kikimr.IsolationLevel`
 
 | Value type | Default |
@@ -468,6 +470,8 @@ The pragma for query hints is desicribed in [a separate section](../../../dev/op
 | Serializable, ReadCommitted, ReadUncommitted, or ReadStale. | Serializable |
 
 An experimental pragma that allows you to reduce the isolation level of the current YDB transaction.
+
+{% endif %}
 
 {% endif %}
 

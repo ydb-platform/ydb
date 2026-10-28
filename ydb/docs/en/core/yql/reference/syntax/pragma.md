@@ -207,7 +207,7 @@ Output the [column order](select/order_by.md) in SELECT/JOIN/UNION ALL and prese
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](select/union.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](select/union.md#union-all). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -228,7 +228,7 @@ In the classical version, the result of integer division remains integer (by def
 If disabled, the result is always Double.
 ClassicDivision is a [scoped](pragma.md#pragmascope) setting.
 
-### UnicodeLiterals
+### UnicodeLiterals {#UnicodeLiterals}
 
 `UnicodeLiterals`/`DisableUnicodeLiterals`
 
@@ -293,7 +293,7 @@ Use this option with care, because the computational complexity of the query gro
 
 Managing the default behavior of Yson UDF, for more information, see the [documentation](../udf/list/yson.md) and, in particular, [Yson::Options](../udf/list/yson.md#ysonoptions).
 
-### `yson.AutoConvert`
+### `yson.AutoConvert` {#yson.autoconvert}
 
 | Value type | Default |
 | --- | --- |
@@ -301,7 +301,7 @@ Managing the default behavior of Yson UDF, for more information, see the [docume
 
 Automatic conversion of values to the required data type in all Yson UDF calls, including implicit calls.
 
-### `yson.Strict`
+### `yson.Strict` {#yson.strict}
 
 | Value type | Default |
 | --- | --- |

@@ -1,6 +1,6 @@
 # ALTER RESOURCE POOL
 
-`ALTER RESOURCE POOL` changes the definition of a [resource pool](../../../concepts/glossary.md#resource-pool.md).
+`ALTER RESOURCE POOL` changes the definition of a [resource pool](../../../concepts/glossary.md#resource-pool).
 
 ## Syntax
 

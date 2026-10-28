@@ -1009,7 +1009,7 @@ Available strategies:
 * `distance=euclidean`;
 * `distance=manhattan`.
 
-Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
 Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type).
 
@@ -1271,7 +1271,7 @@ Supported values:
 * `ManhattanDistance`;
 * `EuclideanDistance`.
 
-For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
+For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
 You can specify the index name. If set, the query will include the `VIEW index_name` expression so that the vector index is used for search.
 

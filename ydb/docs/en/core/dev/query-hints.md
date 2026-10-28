@@ -73,7 +73,7 @@ If the join order is not fixed by a separate hint, the optimizer will build both
 {% endnote %}
 
 - ShuffleJoin is a type of join in which the data is divided (shuffled) by the join key so that records with the same key are processed on the same processing node. After such a redistribution of data, each node performs a local join of the tables. The results are combined into one common data set.
-- LookupJoin - for each row of one input, a query is made to the table or index of the other input, currently supported only for [row tables](../concepts/datamodel/table.md#row-oriented-table).
+- LookupJoin - for each row of one input, a query is made to the table or index of the other input, currently supported only for [row tables](../concepts/datamodel/table.md#row-oriented-tables).
 
 {% note info %}
 

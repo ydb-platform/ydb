@@ -49,7 +49,7 @@ The `SELECT` query result is calculated as follows:
 * Evaluate expressions in `SELECT`.
 * Assign names set by aliases to expressions in `SELECT`.
 * Apply top-level [DISTINCT](distinct.md) to the resulting columns.
-* Execute similarly every subquery inside [UNION ALL](union.md#union_all), combine them (see [PRAGMA AnsiOrderByLimitInUnionAll](../pragma.md#pragmas)).
+* Execute similarly every subquery inside [UNION ALL](union.md#union-all), combine them (see [PRAGMA AnsiOrderByLimitInUnionAll](../pragma.md#pragmas)).
 * Perform sorting with [ORDER BY](order_by.md).
 * Apply [OFFSET and LIMIT](limit_offset.md) to the result.
 
@@ -58,7 +58,7 @@ The `SELECT` query result is calculated as follows:
 ## Column order in YQL {#orderedcolumns}
 
 The standard SQL is sensitive to the order of columns in projections (that is, in `SELECT`). While the order of columns must be preserved in the query results or when writing data to a new table, some SQL constructs use this order.
-This applies, for example, to [UNION ALL](union.md#union_all) and positional [ORDER BY](order_by.md) (ORDER BY ordinal).
+This applies, for example, to [UNION ALL](union.md#union-all) and positional [ORDER BY](order_by.md) (ORDER BY ordinal).
 
 The column order is ignored in YQL by default:
 
@@ -76,7 +76,7 @@ If you enable `PRAGMA OrderedColumns;`, the order of columns is preserved in the
 
 {% endif %}
 
-* The order in `UNION ALL` depends on the [UNION ALL](union.md#union_all) execution mode.
+* The order in `UNION ALL` depends on the [UNION ALL](union.md#union-all) execution mode.
 * The column order for [AS_TABLE](from_as_table.md) is undefined.
 
 {% note warning %}

@@ -353,11 +353,11 @@ Release date: December 24, 2024.
 * Added support for backup/restore of ACL for tables from/to S3-compatible storage.
 * Included paths and decompression methods in query plans for reading from S3.
 * Added new parsing options for timestamp/datetime fields when reading data from S3.
-* Added support for the `Decimal` type in [partitioning keys](./dev/primary-key/column-oriented.md#klyuch-particionirovaniya).
+* Added support for the `Decimal` type in [partitioning keys](./dev/primary-key/column-oriented.md#partitioning-key).
 * Improved diagnostics for storage issues in HealthCheck.
 * **_(Experimental)_** Added a [cost-based optimizer](./concepts/query_execution/optimizer.md#cost-based-query-optimizer) for complex queries, involving [column-oriented tables](./concepts/glossary.md#column-oriented-table). The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option.  Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/select/join.md) operations.
 * **_(Experimental)_** Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
-* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
+* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes.md#automatic-use) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
 
 #### YDB UI
 

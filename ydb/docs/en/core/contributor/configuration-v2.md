@@ -7,7 +7,7 @@ The {{ ydb-short-name }} cluster configuration is stored in several locations, a
 - as a set of node configuration files in the file system of each {{ ydb-short-name }} node (required to connect to the cluster when a node starts up).
 - in a special metadata storage area on each [PDisk](../concepts/glossary.md#pdisk) (a quorum of PDisks is considered the single source of truth for the configuration).
 - in the local database of the [DS Controller](../concepts/glossary.md#ds-controller) tablet (required for the [distributed storage](../concepts/glossary.md#distributed-storage)).
-- in the local database of the [Console](../concepts/glossary.md#console) tablet.
+- in the local database of the Console tablet.
 
 Some parameters take effect on a node immediately after the modified configuration is delivered to its location, while others only take effect after the node is restarted.
 

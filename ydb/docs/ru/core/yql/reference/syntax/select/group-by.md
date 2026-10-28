@@ -42,7 +42,7 @@ GROUP BY
 
 {% endnote %}
 
-Также в YQL доступен механизм фабрик агрегатных функций, реализованный с помощью функций [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) и [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
+Также в YQL доступен механизм фабрик агрегатных функций, реализованный с помощью функций [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) и [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by).
 
 ### Примеры {#examples}
 

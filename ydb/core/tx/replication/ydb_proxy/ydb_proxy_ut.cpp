@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             auto ev = env.GetRuntime().template GrabEdgeEventRethrow<TEvYdbProxy::TEvTopicReaderGone>(env.GetSender());
             UNIT_ASSERT_VALUES_EQUAL(ev->Sender, reader);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), Local ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::EXTERNAL_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
     }
 

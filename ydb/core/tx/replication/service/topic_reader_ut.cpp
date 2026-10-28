@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
-        // create reader again & read
+        // create reader again & read (expecting error)
         {
             reader = CreateReader(env, settings);
             env.SendAsync(reader, new TEvWorker::TEvPoll());
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
             UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvWorker::EvGone);
             const auto &result = *ev->Get<TEvWorker::TEvGone>();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::UNAVAILABLE, result.ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::SCHEME_ERROR, result.ToString());
         }
 
     }

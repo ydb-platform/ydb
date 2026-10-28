@@ -350,8 +350,8 @@ private:
         Send(request.Sender, new TEvYdbProxy::TEvReadTopicResponse(PartitionId, std::move(messages)), 0, request.Cookie);
 
         DoWork();
-    } catch(...) {
-        return OnError(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+    } catch(const std::exception&) {
+        return OnFatalError(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
     }
 
     STATEFN(StateWaitData) {

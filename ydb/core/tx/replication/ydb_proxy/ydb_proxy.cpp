@@ -251,9 +251,9 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             ReadRequest.reset();
             try {
                 return (void)Send(sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, cookie);
-            } catch (...) {
+            } catch(const std::exception&) {
                 // constructor calls x->GetData() and may rethrow on decompression error
-                auto status = TStatus(EStatus::EXTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
+                auto status = TStatus(EStatus::SCHEME_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
                 return Leave(Client, std::move(status));
             }
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {

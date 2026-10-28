@@ -99,11 +99,11 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                     requestData.DecompressionDone = true;
                 }
             }
-        } catch(...) {
+        } catch(const std::exception&) {
             if (Settings.ReportStats_) {
                 SendError();
             }
-            Leave(TEvWorker::TEvGone::UNAVAILABLE, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+            Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
             return;
         }
         ResponseQueue.emplace_back(std::move(requestData));

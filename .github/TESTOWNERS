@@ -21,14 +21,8 @@
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/composite/ut @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/dictionary/ut @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/plain/ut @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/sparsed/ut @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/sub_columns/dense_encoding/ut @ydb-platform/cs
-/ydb/core/formats/arrow/accessor/sub_columns/ut @ydb-platform/cs
-/ydb/core/formats/arrow/ut @ydb-platform/cs
-/ydb/core/tx/tiering/ut @ydb-platform/cs
+/ydb/core/formats/arrow @ydb-platform/cs
+/ydb/core/tx/tiering @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
@@ -69,12 +63,8 @@
 
 #Security Team @azevaykin TEAM:@ydb-platform/security
 /ydb/core/security @ydb-platform/security
-/ydb/library/login/account_lockout/ut @ydb-platform/Security
-/ydb/library/login/hashes_checker/ut @ydb-platform/Security
-/ydb/library/login/password_checker/ut @ydb-platform/Security
-/ydb/library/login/sasl/ut @ydb-platform/Security
-/ydb/library/login/ut @ydb-platform/Security
-/ydb/library/security/ut @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/security @ydb-platform/Security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
@@ -95,7 +85,6 @@
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
 /ydb/public/tools/local_ydb @ydb-platform/appteam
-/ydb/public/tools/local_ydb/ut @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
@@ -106,15 +95,13 @@
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering
-/ydb/tests/library/compatibility/binaries/downloader @ydb-platform/Engineering
-/ydb/tests/library/compatibility/configs/comparator @ydb-platform/Engineering
-/ydb/tests/library/ut @ydb-platform/Engineering
+/ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
-/ydb/library/pdisk_io/ut @ydb-platform/blobstorage
-/ydb/library/workload/tpcc/ut @ydb-platform/blobstorage
+/ydb/library/pdisk_io @ydb-platform/blobstorage
+/ydb/library/workload/tpcc @ydb-platform/blobstorage
 /ydb/core/mind/bscontroller @ydb-platform/blobstorage
 /ydb/library/actors @ydb-platform/blobstorage
 /ydb/core/actorlib_impl @ydb-platform/blobstorage
@@ -135,27 +122,9 @@
 /ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
-/ydb/core/config/ut @ydb-platform/core
-/ydb/core/config/init/ut @ydb-platform/core
-/ydb/core/config/tools/protobuf_plugin/ut @ydb-platform/core
-/ydb/core/config/validation/auth_config_validator_ut @ydb-platform/core
-/ydb/core/config/validation/column_shard_config_validator_ut @ydb-platform/core
-/ydb/core/config/validation/ut @ydb-platform/core
-/ydb/core/kesus/proxy/ut @ydb-platform/core
-/ydb/core/kesus/tablet/ut @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_assign_tx_id @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_dst_creator @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_replication @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_schema_change @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_stream_creator @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_target_discoverer @ydb-platform/core
-/ydb/core/tx/replication/controller/ut_worker_lifecycle @ydb-platform/core
-/ydb/core/tx/replication/service/ut_json_change_record @ydb-platform/core
-/ydb/core/tx/replication/service/ut_s3_writer @ydb-platform/core
-/ydb/core/tx/replication/service/ut_table_writer @ydb-platform/core
-/ydb/core/tx/replication/service/ut_topic_reader @ydb-platform/core
-/ydb/core/tx/replication/service/ut_worker @ydb-platform/core
-/ydb/core/tx/replication/ydb_proxy/ut @ydb-platform/core
+/ydb/core/config @ydb-platform/core
+/ydb/core/kesus @ydb-platform/core
+/ydb/core/tx/replication @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
@@ -171,7 +140,7 @@
 /ydb/tests/functional/sqs @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
 /ydb/core/persqueue @ydb-platform/Topics
-/ydb/library/persqueue/topic_parser/ut @ydb-platform/Topics
+/ydb/library/persqueue @ydb-platform/Topics
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
@@ -207,17 +176,13 @@
 /ydb/core/public_http/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/tests/compatibility/streaming @ydb-platform/fq
-/ydb/core/external_sources/s3 @ydb-platform/fq
-/ydb/core/external_sources/object_storage/inference/ut @ydb-platform/fq
-/ydb/core/external_sources/ut @ydb-platform/fq
-/ydb/core/local_proxy/local_pq_client/ut @ydb-platform/fq
-/ydb/library/query_actor/ut @ydb-platform/fq
-/ydb/library/wasm/unittests @ydb-platform/fq
-/ydb/public/lib/udf/manifest/ut @ydb-platform/fq
+/ydb/core/external_sources @ydb-platform/fq
+/ydb/core/local_proxy @ydb-platform/fq
+/ydb/library/query_actor @ydb-platform/fq
+/ydb/library/wasm @ydb-platform/fq
+/ydb/public/lib/udf @ydb-platform/fq
 /ydb/tests/functional/udf_store @ydb-platform/fq
-/ydb/tests/functional/udf_store/upload_udf @ydb-platform/fq
-/ydb/tests/tools/kqprun/recipe @ydb-platform/fq
-/ydb/tests/tools/kqprun/tests @ydb-platform/fq
+/ydb/tests/tools/kqprun @ydb-platform/fq
 /ydb/tests/tools/mdb_mock @ydb-platform/fq
 /ydb/tests/tools/s3_recipe @ydb-platform/fq
 /ydb/tests/tools/token_accessor_mock @ydb-platform/fq

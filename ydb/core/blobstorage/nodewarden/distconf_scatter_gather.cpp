@@ -59,6 +59,7 @@ namespace NKikimr::NStorage {
         if (remote && task.UsesDistconfStateProtocol && !stateProtocol
                 && (RequiresDistconfStateSupport(task.Request.GetProposeStorageConfig().GetConfig())
                     || !std::holds_alternative<TBinding>(task.Origin))) {
+            task.ProposalRejected = true;
             auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
             SelfNode.Serialize(status->MutableNodeId());
             status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
@@ -66,10 +67,7 @@ namespace NKikimr::NStorage {
         } else {
             PrepareScatterTask(cookie, task);
         }
-        const bool stateProposalRejected = task.UsesDistconfStateProtocol
-            && task.Response.GetProposeStorageConfig().StatusSize()
-            && task.Response.GetProposeStorageConfig().GetStatus(0).GetStatus() == TEvGather::TProposeStorageConfig::ERROR;
-        if (!stateProposalRejected && !std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)) {
+        if (task.CanForward()) {
             for (auto& [nodeId, info] : DirectBoundNodes) {
                 IssueScatterTaskForNode(nodeId, info, cookie, task);
             }
@@ -105,7 +103,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task) {
-        if (IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(nodeId)) {
+        if (!task.CanForward() || IsDistconfNodeExcluded(SelfId().NodeId()) || IsDistconfNodeExcluded(nodeId)) {
             return;
         }
         auto ev = std::make_unique<TEvNodeConfigScatter>();
@@ -176,7 +174,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
-        if (task.UsesDistconfStateProtocol && !info.SupportsDistconfStates) {
+        if (!task.CanForward() || (task.UsesDistconfStateProtocol && !info.SupportsDistconfStates)) {
             return;
         }
         if (!info.ReportedSubtreeHeight && !info.ExpiredScatterTasks.empty()

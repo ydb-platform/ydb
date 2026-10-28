@@ -268,6 +268,7 @@ namespace NKikimr::NStorage {
             ui64 PersistCookie = 0;
             bool LocalContributionExpired = false;
             bool UsesDistconfStateProtocol = false;
+            bool ProposalRejected = false;
 
             TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
                 : Origin(std::move(origin))
@@ -278,6 +279,10 @@ namespace NKikimr::NStorage {
                 if (Request.HasCookie()) {
                     Response.SetCookie(Request.GetCookie());
                 }
+            }
+
+            bool CanForward() const {
+                return !ProposalRejected && !std::holds_alternative<TScatterTaskOriginTargeted>(Origin);
             }
         };
 

@@ -4947,6 +4947,135 @@ selector_config: []
             == NKikimrBlobStorage::TDistconfState::ACTIVE);
     }
 
+    void CheckDistconfRecoveryThroughEmptyIntermediateNode(bool invalidDeclaration) {
+        TCommitConfirmationFixture fixture(false, 9);
+        PrepareDistconfRecovery(fixture);
+        fixture.State.RequiredParentNodeIds = {{1, 0}, {2, 1}, {3, 2}};
+        fixture.Metadata(2).Clear();
+        const auto declaration = DistconfRecoveryDeclaration(fixture);
+        auto intermediateDeclaration = declaration;
+        if (invalidDeclaration) {
+            intermediateDeclaration.MutableSelfManagementConfig()->MutableDataCenterStates(1)
+                ->SetState(NKikimrBlobStorage::TDistconfState::ACTIVE);
+        }
+        bool holdRefill = true;
+        bool chainReady = false;
+        bool sawIntermediateError = false;
+        bool sawDescendantVote = false;
+        ui32 descendantProposals = 0;
+        std::vector<std::unique_ptr<IEventHandle>> heldRefills;
+        std::vector<std::unique_ptr<IEventHandle>> heldScatters;
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            const ui32 type = ev->GetTypeRewrite();
+            if (!chainReady && ev->InterconnectSession && nodeId == 2
+                    && type == NStorage::TEvNodeConfigScatter::EventType) {
+                heldScatters.push_back(std::move(ev));
+                return false;
+            }
+            if (holdRefill && nodeId == 2 && type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                if (record.HasQueryConfig() && record.GetQueryConfig().GetFresh()) {
+                    heldRefills.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigScatter::EventType && nodeId == 3) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                descendantProposals += record.HasProposeStorageConfigWithDistconfStates();
+            }
+            if (holdRefill && ev->InterconnectSession && type == NStorage::TEvNodeConfigGather::EventType
+                    && nodeId == 1 && ev->Sender.NodeId() == 2) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasProposeStorageConfig()) {
+                    using TResponse = NKikimrBlobStorage::TEvNodeConfigGather::TProposeStorageConfig;
+                    for (const auto& status : record.GetProposeStorageConfig().GetStatus()) {
+                        if (status.GetNodeId().GetNodeId() == 2) {
+                            UNIT_ASSERT(status.GetStatus() == TResponse::ERROR);
+                            UNIT_ASSERT_VALUES_EQUAL(status.SuccessfulDrivesSize(), 0);
+                            sawIntermediateError = true;
+                        } else if (status.GetNodeId().GetNodeId() == 3 && status.GetStatus() == TResponse::ACCEPTED) {
+                            UNIT_ASSERT(status.GetSupportsDistconfStates());
+                            UNIT_ASSERT_VALUES_EQUAL(status.SuccessfulDrivesSize(), 1);
+                            if (fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration() < 2) {
+                                UNIT_ASSERT(status.GetForceDistconfStateValidated());
+                            }
+                            sawDescendantVote |= status.GetForceDistconfStateValidated();
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+        fixture.Runtime.Start();
+        RegisterDistconfRecoveryKeeper(fixture, declaration, 1);
+        RegisterDistconfRecoveryKeeper(fixture, intermediateDeclaration, 2);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            bool bound = false;
+            UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Keepers[1], [&](IActor* actor) {
+                bound = static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetRootNodeId() == 1;
+            }));
+            return bound;
+        }));
+        RegisterDistconfRecoveryKeeper(fixture, declaration, 3);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            bool bound = false;
+            UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Keepers[1], [&](IActor* actor) {
+                bound = static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetSubtreeHeight() == 1;
+            }));
+            return bound;
+        }));
+        chainReady = true;
+        ReplayDelayedEvents(fixture.Runtime, heldScatters);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return sawIntermediateError; }));
+        if (invalidDeclaration) {
+            SimUntil(fixture.Runtime, [] { return false; }, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(descendantProposals, 0);
+            UNIT_ASSERT(!sawDescendantVote);
+            for (ui32 nodeId : {1, 3}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(),
+                    fixture.Config.GetFingerprint());
+            }
+            UNIT_ASSERT(!fixture.Metadata(2).HasCommittedStorageConfig());
+            UNIT_ASSERT(!fixture.Metadata(2).HasProposedStorageConfig());
+            return;
+        }
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            const auto& committed = fixture.Metadata(1).GetCommittedStorageConfig();
+            return committed.GetGeneration() > fixture.Config.GetGeneration()
+                && fixture.Metadata(3).GetCommittedStorageConfig().GetFingerprint() == committed.GetFingerprint();
+        }));
+        const ui64 recoveredGeneration = fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration();
+        UNIT_ASSERT(descendantProposals);
+        UNIT_ASSERT(sawDescendantVote);
+        UNIT_ASSERT(!fixture.Metadata(2).HasCommittedStorageConfig());
+        UNIT_ASSERT(!fixture.Metadata(2).HasProposedStorageConfig());
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableAdvanceGeneration();
+        const auto result = InvokeKeeper(fixture.Runtime, fixture.Keepers[0], std::move(request));
+        UNIT_ASSERT_C(result->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result->Get()->Record.DebugString());
+        const auto advanced = QueryKeeper(fixture.Runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(advanced.GetGeneration(), recoveredGeneration + 1);
+        UNIT_ASSERT(!fixture.Metadata(2).HasCommittedStorageConfig());
+        UNIT_ASSERT(!fixture.Metadata(2).HasProposedStorageConfig());
+        holdRefill = false;
+        ReplayDelayedEvents(fixture.Runtime, heldRefills);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] {
+            return std::ranges::all_of(std::array{1u, 2u, 3u}, [&](ui32 nodeId) {
+                return fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint() == advanced.GetFingerprint();
+            });
+        }));
+    }
+
+    Y_UNIT_TEST(DistconfRecoveryRelaysProposalThroughEmptyIntermediateNode) {
+        CheckDistconfRecoveryThroughEmptyIntermediateNode(false);
+    }
+
+    Y_UNIT_TEST(DistconfRecoveryRejectsInvalidProposalAtEmptyIntermediateNode) {
+        CheckDistconfRecoveryThroughEmptyIntermediateNode(true);
+    }
+
     Y_UNIT_TEST(DistconfRecoveryRequiresDurableMajorityInSurvivingDataCenter) {
         TCommitConfirmationFixture fixture(false, 9);
         PrepareDistconfRecovery(fixture);
@@ -5060,6 +5189,27 @@ selector_config: []
         }
     }
 
+    void DisableDistconfStateSupport(IEventHandle& ev) {
+        switch (ev.GetTypeRewrite()) {
+            case NStorage::TEvNodeConfigPush::EventType:
+                ev.Get<NStorage::TEvNodeConfigPush>()->Record.SetSupportsDistconfStates(false);
+                break;
+            case NStorage::TEvNodeConfigReversePush::EventType:
+                ev.Get<NStorage::TEvNodeConfigReversePush>()->Record.SetSupportsDistconfStates(false);
+                break;
+            case NStorage::TEvNodeConfigGather::EventType: {
+                auto& record = ev.Get<NStorage::TEvNodeConfigGather>()->Record;
+                if (record.HasProposeStorageConfig()) {
+                    for (auto& status : *record.MutableProposeStorageConfig()->MutableStatus()) {
+                        status.SetSupportsDistconfStates(false);
+                        status.SetForceDistconfStateValidated(false);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     Y_UNIT_TEST(StatefulUpdateDoesNotSendProposalBodyToBoundLegacyPeer) {
         TCommitConfirmationFixture fixture(true);
         fixture.State.RequiredRootNodeId = 1;
@@ -5069,18 +5219,7 @@ selector_config: []
         fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             const ui32 type = ev->GetTypeRewrite();
             if (ev->InterconnectSession && ev->Sender.NodeId() == 2) {
-                if (type == NStorage::TEvNodeConfigPush::EventType) {
-                    ev->Get<NStorage::TEvNodeConfigPush>()->Record.SetSupportsDistconfStates(false);
-                } else if (type == NStorage::TEvNodeConfigReversePush::EventType) {
-                    ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.SetSupportsDistconfStates(false);
-                } else if (type == NStorage::TEvNodeConfigGather::EventType) {
-                    auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
-                    if (record.HasProposeStorageConfig()) {
-                        for (auto& status : *record.MutableProposeStorageConfig()->MutableStatus()) {
-                            status.SetSupportsDistconfStates(false);
-                        }
-                    }
-                }
+                DisableDistconfStateSupport(*ev);
             }
             if (ev->InterconnectSession && nodeId == 2) {
                 if (type == NStorage::TEvNodeConfigScatter::EventType) {
@@ -5133,19 +5272,7 @@ selector_config: []
             const ui32 sender = ev->Sender.NodeId();
             const ui32 type = ev->GetTypeRewrite();
             if (ev->InterconnectSession && legacyNodes.contains(sender)) {
-                if (type == NStorage::TEvNodeConfigPush::EventType) {
-                    ev->Get<NStorage::TEvNodeConfigPush>()->Record.SetSupportsDistconfStates(false);
-                } else if (type == NStorage::TEvNodeConfigReversePush::EventType) {
-                    ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.SetSupportsDistconfStates(false);
-                } else if (type == NStorage::TEvNodeConfigGather::EventType) {
-                    auto& record = ev->Get<NStorage::TEvNodeConfigGather>()->Record;
-                    if (record.HasProposeStorageConfig()) {
-                        for (auto& status : *record.MutableProposeStorageConfig()->MutableStatus()) {
-                            status.SetSupportsDistconfStates(false);
-                            status.SetForceDistconfStateValidated(false);
-                        }
-                    }
-                }
+                DisableDistconfStateSupport(*ev);
             }
             if (ev->InterconnectSession && type == NStorage::TEvNodeConfigScatter::EventType) {
                 const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;

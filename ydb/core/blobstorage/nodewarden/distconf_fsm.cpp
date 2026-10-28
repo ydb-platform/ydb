@@ -1102,6 +1102,7 @@ namespace NKikimr::NStorage {
             const auto& request = task.Request.GetProposeStorageConfig();
             const auto& proposed = request.GetConfig();
             if (auto error = ValidateDistconfStates(proposed, bool(Cfg->BridgeConfig))) {
+                task.ProposalRejected = true;
                 auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                 SelfNode.Serialize(status->MutableNodeId());
                 status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
@@ -1114,6 +1115,7 @@ namespace NKikimr::NStorage {
                 || SameDistconfStates(proposed, MakeDistconfQuorumConfig(proposed, *Cfg));
             if (forced != proposed.GetForcedDistconfState() || !statesMatch || (forced && (!proposed.HasPrevConfig()
                     || !IsForcedDistconfExclusionTransition(proposed.GetPrevConfig(), proposed, *Cfg)))) {
+                task.ProposalRejected = true;
                 auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                 SelfNode.Serialize(status->MutableNodeId());
                 status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);

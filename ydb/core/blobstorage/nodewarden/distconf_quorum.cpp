@@ -2,6 +2,8 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -100,7 +102,7 @@ namespace NKikimr::NStorage {
                 }
                 return result;
             };
-            if (topology(previous).SerializeAsString() != topology(proposed).SerializeAsString()) {
+            if (!google::protobuf::util::MessageDifferencer::Equals(topology(previous), topology(proposed))) {
                 return false;
             }
             const auto oldDisks = ActiveDisks(previous);
@@ -128,7 +130,7 @@ namespace NKikimr::NStorage {
         auto candidate = proposed;
         ClearConfigVersion(expected);
         ClearConfigVersion(candidate);
-        if (expected.SerializeAsString() != candidate.SerializeAsString()) {
+        if (!google::protobuf::util::MessageDifferencer::Equals(expected, candidate)) {
             return false;
         }
         return IsStoredForcedTransition(previous, proposed);

@@ -167,6 +167,97 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         runtime.WaitFor("the replica reported present", [&] { return reports == 2; }, TDuration::Seconds(10));
     }
 
+    // A replica is gone from the start. Its child must report it missing only after three seconds of failures, not
+    // at the first one.
+    Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        // the children of the guardian retry on wakeups, which the test runtime drops by default
+        runtime.SetScheduledEventFilter([](auto&&, auto&&, auto&&, auto&&) { return false; });
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto replicas = resolved->Get()->GetPlainReplicas();
+        UNIT_ASSERT(!replicas.empty());
+        runtime.Send(new IEventHandle(replicas.front(), edge, new TEvents::TEvPoisonPill()));
+
+        const ui32 replicaMissingType = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 1;
+        TActorId guardian;
+        TInstant reportedAt;
+        auto missingReports = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == replicaMissingType && guardian && ev->Recipient == guardian && !reportedAt) {
+                reportedAt = runtime.GetCurrentTime();
+            }
+        });
+
+        const TActorId follower = runtime.AllocateEdgeActor();
+        const TInstant startedAt = runtime.GetCurrentTime();
+        guardian = runtime.Register(CreateStateStorageFollowerGuardian(tabletId, 1, follower));
+        runtime.WaitFor("the replica reported missing", [&] { return bool(reportedAt); }, TDuration::Seconds(10));
+        UNIT_ASSERT_GE_C(reportedAt - startedAt, TDuration::Seconds(3), "reported missing after " << reportedAt - startedAt);
+    }
+
+    // The replica fails, gets back within the grace period, and fails again much later. The second failure starts a
+    // grace period of its own, so the child must not report the replica missing at once.
+    Y_UNIT_TEST(GracePeriodStartsAgainAfterRecovery) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto replicas = resolved->Get()->GetPlainReplicas();
+        UNIT_ASSERT(!replicas.empty());
+        const TActorId replica = replicas.front();
+
+        // the child of the replica and the cookie of its latest request; the first lookup is lost, as by a failure
+        TActorId child;
+        ui64 lastCookie = 0;
+        bool dropLookup = true;
+        auto lookups = runtime.AddObserver<TEvStateStorage::TEvReplicaLookup>([&](auto& ev) {
+            if (ev->Recipient == replica) {
+                child = ev->Sender;
+                lastCookie = ev->Cookie;
+                if (std::exchange(dropLookup, false)) {
+                    ev.Reset();
+                }
+            }
+        });
+        auto updates = runtime.AddObserver<TEvStateStorage::TEvReplicaUpdate>([&](auto& ev) {
+            if (ev->Recipient == replica && ev->Sender == child) {
+                lastCookie = ev->Cookie;
+            }
+        });
+        const ui32 replicaMissingType = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 1;
+        TActorId guardian;
+        ui32 missingReports = 0;
+        auto reports = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == replicaMissingType && guardian && ev->Recipient == guardian) {
+                ++missingReports;
+            }
+        });
+        auto fail = [&] {
+            runtime.Send(new IEventHandle(child, replica, new TEvents::TEvUndelivered(TEvStateStorage::EvReplicaLookup,
+                TEvents::TEvUndelivered::ReasonActorUnknown), 0, lastCookie));
+        };
+
+        guardian = runtime.Register(CreateStateStorageTabletGuardian(tabletId, runtime.AllocateEdgeActor(),
+            runtime.AllocateEdgeActor(), 1));
+        runtime.WaitFor("the lookup of the child", [&] { return bool(child); }, TDuration::Seconds(10));
+        fail(); // the first failure; the next lookup reaches the replica within the grace period
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(missingReports, 0);
+
+        fail(); // the second failure, long after the first one
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL_C(missingReports, 0, "the second failure was reported at once");
+    }
+
 }
 
 } // NKikimr

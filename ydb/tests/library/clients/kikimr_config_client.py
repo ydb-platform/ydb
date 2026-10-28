@@ -14,11 +14,13 @@ from ydb.public.api.protos import ydb_config_pb2 as config_api
 logger = logging.getLogger()
 
 
-def config_client_factory(server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
+def config_client_factory(server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None,
+                          timeout=None):
     return ConfigClient(
         server, port, cluster=cluster,
         retry_count=retry_count,
         ca_path=ca_path, cert_path=cert_path, key_path=key_path,
+        timeout=timeout,
     )
 
 
@@ -38,10 +40,12 @@ class ConfigClient(object):
         ATTACH_STORAGE_CONFIG_SECTION = 3
         ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG = 4
 
-    def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
+    def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None,
+                 timeout=None):
         self.server = server
         self.port = port
         self._cluster = cluster
+        self._timeout = timeout
         self.__domain_id = 1
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
@@ -69,7 +73,7 @@ class ConfigClient(object):
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
 
-    def invoke(self, request, method):
+    def invoke(self, request, method, database=None):
         retry = self.__retry_count
         while True:
             try:
@@ -77,7 +81,9 @@ class ConfigClient(object):
                 metadata = []
                 if self._auth_token:
                     metadata.append(('x-ydb-auth-ticket', self._auth_token))
-                return callee(request, metadata=metadata)
+                if database:
+                    metadata.append(('x-ydb-database', database))
+                return callee(request, metadata=metadata, timeout=self._timeout)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 
@@ -86,12 +92,12 @@ class ConfigClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def replace_config(self, main_config, dry_run=False, allow_unknown_fields=False):
+    def replace_config(self, main_config, dry_run=False, allow_unknown_fields=False, database=None):
         request = config_api.ReplaceConfigRequest()
         request.replace = main_config
         request.dry_run = dry_run
         request.allow_unknown_fields = allow_unknown_fields
-        return self.invoke(request, 'ReplaceConfig')
+        return self.invoke(request, 'ReplaceConfig', database=database)
 
     def fetch_all_configs(self, transform=None):
         request = config_api.FetchConfigRequest()
@@ -108,10 +114,10 @@ class ConfigClient(object):
 
         return self.invoke(request, 'FetchConfig')
 
-    def bootstrap_cluster(self, self_assembly_uuid):
+    def bootstrap_cluster(self, self_assembly_uuid, database=None):
         request = config_api.BootstrapClusterRequest()
         request.self_assembly_uuid = self_assembly_uuid
-        return self.invoke(request, 'BootstrapCluster')
+        return self.invoke(request, 'BootstrapCluster', database=database)
 
     def close(self):
         self._channel.close()

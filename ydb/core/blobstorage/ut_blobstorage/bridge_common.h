@@ -137,8 +137,11 @@ namespace NBridgeTest {
         return res->Get()->Record;
     }
 
-    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env) {
-        return InvokeDistconf(env, [](auto& record) { record.MutableConvertToBridge(); });
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env,
+            bool skipStoragePoolConversion = false) {
+        return InvokeDistconf(env, [&](auto& record) {
+            record.MutableConvertToBridge()->SetSkipStoragePoolConversion(skipStoragePoolConversion);
+        });
     }
 
     inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
@@ -393,17 +396,23 @@ namespace NBridgeTest {
     }
 
     // create cluster with dynamic groups and convert it into single-pile bridged one; returns the first group id, which
-    // some data is written to
-    inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1) {
+    // some data is written to; groups of BSC stay non-bridged when skipStoragePoolConversion is set, which requires
+    // non-uniform storage to be enabled in the bridge config
+    inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1,
+            bool skipStoragePoolConversion = false) {
         const ui32 groupId = CreatePoolAndGetGroup(env, numGroups);
 
         checker.Write(groupId);
+        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(skipStoragePoolConversion);
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
 
-        const auto res = ConvertToBridge(env);
+        const auto res = ConvertToBridge(env, skipStoragePoolConversion);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
-        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        const auto config = QueryStorageConfig(env);
+        const auto& details = config.GetClusterStateDetails();
+        UNIT_ASSERT(!details.GetBscConversionPending());
+        UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
         return groupId;
     }
 

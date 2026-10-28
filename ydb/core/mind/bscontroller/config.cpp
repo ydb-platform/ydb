@@ -612,6 +612,15 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            // groups relying on single parts get synced or lose their parts, see if they are done with it
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&
+                        cur->BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                    state.Callbacks.push_back([this] { CheckBridgeGroupModes(); });
+                    break;
+                }
+            }
+
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);
             state.VSlots.ApplyToTable(this, txc);

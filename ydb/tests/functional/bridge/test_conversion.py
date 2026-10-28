@@ -15,20 +15,18 @@ from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 import ydb.public.api.protos.ydb_config_pb2 as config
-from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
+
+from common import kv_readable, kv_works
 
 logger = logging.getLogger(__name__)
 
 PILE_NAME = "r1"
 
 
-def value_for(key, tablet_id):
-    return "Value: <key = {key}, tablet_id = {tablet_id}>".format(key=key, tablet_id=tablet_id)
-
-
 class TestBridgeConversion(object):
     erasure = Erasure.BLOCK_4_2
     nodes_count = 8
+    skip_storage_pool_conversion = False
 
     @classmethod
     def setup_class(cls):
@@ -76,23 +74,10 @@ class TestBridgeConversion(object):
         return yaml.safe_load(result.config[0].config)
 
     def kv_works(self, table_path, tablet_ids, key):
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            write_resp = self.cluster.kv_client.kv_write(table_path, partition_id, key, value_for(key, tablet_id))
-            if write_resp.operation.status != StatusIds.SUCCESS:
-                logger.debug("kv_write failed: %s", write_resp)
-                return False
-        return self.kv_readable(table_path, tablet_ids, key)
+        return kv_works(self.cluster.kv_client, table_path, tablet_ids, key, logger)
 
     def kv_readable(self, table_path, tablet_ids, key):
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
-            if read_resp.operation.status != StatusIds.SUCCESS:
-                logger.debug("kv_read failed: %s", read_resp)
-                return False
-            result = ReadResult()
-            assert_that(read_resp.operation.result.Unpack(result))
-            assert_that(result.value.decode("utf-8") == value_for(key, tablet_id))
-        return True
+        return kv_readable(self.cluster.kv_client, table_path, tablet_ids, key, logger)
 
     def get_cluster_state(self):
         response = self.bridge_client.get_cluster_state()
@@ -103,7 +88,7 @@ class TestBridgeConversion(object):
         return response.operation.status, result
 
     def convert(self):
-        response = self.bridge_client.convert_to_bridge()
+        response = self.bridge_client.convert_to_bridge(self.skip_storage_pool_conversion)
         logger.debug("ConvertToBridge response: %s", response)
         return response.operation
 
@@ -135,6 +120,8 @@ class TestBridgeConversion(object):
         cfg = self.fetch_config()
         cfg["metadata"]["version"] += 1
         cfg["config"]["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
+        if self.skip_storage_pool_conversion:
+            cfg["config"]["bridge_config"]["enable_non_uniform_storage"] = True
         expected_version = cfg["metadata"]["version"]
         response = self.cluster.config_client.replace_config(yaml.dump(cfg))
         logger.debug("replace_config response: %s", response)
@@ -176,6 +163,11 @@ class TestBridgeConversion(object):
             return operation.status == StatusIds.SUCCESS
         assert_that(wait_for(converted, timeout_seconds=60))
 
+        if self.skip_storage_pool_conversion:
+            # storage controller has nothing to convert
+            status, result = self.get_cluster_state()
+            assert_that(status == StatusIds.SUCCESS and not result.conversion_in_progress)
+
         def conversion_finished():
             status, result = self.get_cluster_state()
             logger.debug("GetClusterState status# %s result# %s", status, result)
@@ -187,8 +179,9 @@ class TestBridgeConversion(object):
         assert_that(result.pile_states[0].pile_name == PILE_NAME)
         assert_that(result.pile_states[0].state == PileState.PRIMARY)
 
-        # data written before conversion is still there and the cluster keeps working
-        assert_that(self.kv_readable(table_path, tablet_ids, "initial"))
+        # data written before conversion is still there and the cluster keeps working; database resolution may be
+        # unavailable for a while, as state storage switches to its bridged configuration
+        assert_that(wait_for(lambda: self.kv_readable(table_path, tablet_ids, "initial"), timeout_seconds=60))
         for node_id in node_ids:
             assert_that(self.kv_readable(table_path, tablet_ids, "key%d" % node_id))
         assert_that(self.kv_works(table_path, tablet_ids, "after"))
@@ -196,3 +189,7 @@ class TestBridgeConversion(object):
         # second conversion is refused
         operation = self.convert()
         assert_that(operation.status != StatusIds.SUCCESS)
+
+
+class TestBridgeConversionSkippingStoragePools(TestBridgeConversion):
+    skip_storage_pool_conversion = True

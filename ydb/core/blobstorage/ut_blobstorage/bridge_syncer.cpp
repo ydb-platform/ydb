@@ -1,7 +1,11 @@
 #include "bridge_common.h"
+#include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
+#include <util/system/type_name.h>
 
 using NBridgeTest::GetBridgedLocation;
 
@@ -216,5 +220,70 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
 
     Y_UNIT_TEST(RegistrationPreservesCompletedGeneration) {
         TestLateSyncerCompletion(ECompletionRace::ReregisterAfterCompletion);
+    }
+
+    // the reply to the commit of the static part as SYNCED comes by another path than configs do, so the config with the
+    // part SYNCED and even the one resetting it again (the pile goes out) may come first; the reply then belongs to the
+    // syncer entry that is gone and must not touch the new one
+    Y_UNIT_TEST(StaticCommitReplyAfterReset) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        auto isBsc = [&](const TActorId& actorId) {
+            IActor *actor = env.Runtime->GetActor(actorId);
+            return actor && TypeName(*actor).Contains("TBlobStorageController");
+        };
+        bool holding = true;
+        THashSet<ui64> syncedCommitCookies;
+        std::vector<std::tuple<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && isBsc(ev->Sender)) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasUpdateBridgeGroupInfo()) {
+                    const auto& state = record.GetUpdateBridgeGroupInfo().GetBridgeGroupInfo().GetBridgeGroupState();
+                    const auto *pile = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(1));
+                    if (pile && pile->GetStage() == NKikimrBridge::TGroupState::SYNCED) {
+                        syncedCommitCookies.insert(ev->Cookie);
+                    }
+                }
+            } else if (holding && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
+                    syncedCommitCookies.contains(ev->Cookie) && isBsc(ev->GetRecipientRewrite())) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId);
+        RejoinPile(env, 1); // the static part gets SYNCED while BSC doesn't know its commit has finished
+        UNIT_ASSERT(!held.empty());
+
+        // the pile goes out again, its static part gets reset and BSC makes new syncer entry for it
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+
+        holding = false;
+        for (auto& [nodeId, ev] : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        checker.Write(groupId);
+        RejoinPile(env, 1);
+        checker.CheckAll();
+        CheckPileData(env, checker, 1, 9);
     }
 }

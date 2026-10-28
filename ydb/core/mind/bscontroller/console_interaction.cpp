@@ -584,6 +584,21 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::ProcessDryRunResponse(bool success, TString errorReason) {
+        // the validation resolves the hosts of the box with the node list of the new config, but the commit applies the
+        // box with the node list the controller has now; reject a host this list does not know yet, otherwise the
+        // commit would persist the YAML and then fail to resolve it
+        if (success && PendingCommitState && PendingCommitState->StorageConfig && Self.Boxes.size() <= 1
+                && PendingCommitState->StorageConfig->HasBlobStorageConfig()) {
+            for (const auto& host : PendingCommitState->StorageConfig->GetBlobStorageConfig().GetDefineBox().GetHost()) {
+                const ui32 nodeId = host.GetEnforcedNodeId();
+                if (!Self.HostRecords || !Self.HostRecords->GetHostId(nodeId)) {
+                    success = false;
+                    errorReason = TStringBuilder() << "host with node id " << nodeId
+                        << " is not known to BS controller yet";
+                    break;
+                }
+            }
+        }
         if (success) {
             if (IsDryRun) {
                 IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);

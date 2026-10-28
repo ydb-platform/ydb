@@ -1,3 +1,5 @@
+* Added `Float8E4M3` (E4M3FN) and `Float8E5M2` vector index types.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

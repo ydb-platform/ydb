@@ -341,6 +341,8 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -373,6 +375,8 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
     };
 
     TVectorIndexSettings Settings;

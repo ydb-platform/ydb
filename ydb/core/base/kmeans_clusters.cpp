@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
@@ -73,6 +74,10 @@ namespace {
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
         else if (vectorType == "bfloat16")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        else if (vectorType == "float8_e4m3")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        else if (vectorType == "float8_e5m2")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -120,8 +125,8 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    // Half-precision coordinates are stored in 16 bits, but arithmetic uses float.
-    using TArithmeticCoord = std::conditional_t<std::is_same_v<TCoord, TFloat16> || std::is_same_v<TCoord, TBFloat16>, float, TCoord>;
+    // Reduced-precision coordinates use float arithmetic and double sums.
+    using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
     static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
     using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
     static constexpr bool AggregateNormalized = false;
@@ -639,6 +644,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             return handleMetric.template operator()<TFloat16>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
             return handleMetric.template operator()<TBFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return handleMetric.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return handleMetric.template operator()<TFloat8E5M2>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -685,6 +694,16 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
             break;
         case EFormat::BFloat16Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16, sizeof(TBFloat16), "bfloat16")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E4M3Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E5M2Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2, sizeof(TFloat8E5M2), "float8_e5m2")) {
                 return nullptr;
             }
             break;
@@ -955,6 +974,20 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
                 return false;
             }
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
+        }
+        break;
+    case EFormat::Float8E4M3Vector:
+    case EFormat::Float8E5M2Vector:
+        if (embedding.size() <= HeaderLen) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float8E4M3Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
         }
         break;
     case EFormat::Uint8Vector:

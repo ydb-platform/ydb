@@ -407,6 +407,8 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         Float,
         Float16,
         BFloat16,
+        Float8E4M3,
+        Float8E5M2,
         Bit,
         Uint8,
         Int8
@@ -453,6 +455,8 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             case EVectorType::Float:
             case EVectorType::Float16:
             case EVectorType::BFloat16:
+            case EVectorType::Float8E4M3:
+            case EVectorType::Float8E5M2:
                 insertQuery = R"(
                     UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
                     (1, Untag(Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]), "FloatVector")),
@@ -465,10 +469,17 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 targetVector = "Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f])";
                 tagName = "FloatVector";
                 if (vectorType != EVectorType::Float) {
-                    const TString type = vectorType == EVectorType::Float16 ? "Float16" : "BFloat16";
+                    const TString type = vectorType == EVectorType::Float16 ? "Float16"
+                        : vectorType == EVectorType::BFloat16 ? "BFloat16"
+                        : vectorType == EVectorType::Float8E4M3 ? "Float8E4M3" : "Float8E5M2";
                     SubstGlobal(insertQuery, "Float", type);
                     SubstGlobal(targetVector, "Float", type);
                     tagName = type + "Vector";
+                }
+                if (vectorType == EVectorType::Float8E5M2) {
+                    // E5M2 rounds row 5 to [12, 14, 16], proportional to
+                    // the target [96, 112, 128]. Keep the cosine winner unique.
+                    SubstGlobal(insertQuery, "[13.0f, 14.0f, 15.0f]", "[13.0f, -14.0f, 15.0f]");
                 }
                 expectedMatchPk = 6;
                 break;
@@ -603,6 +614,14 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     Y_UNIT_TEST(BFloat16VectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::BFloat16);
+    }
+
+    Y_UNIT_TEST(Float8E4M3VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Float8E4M3);
+    }
+
+    Y_UNIT_TEST(Float8E5M2VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Float8E5M2);
     }
 
     Y_UNIT_TEST(BitVectorKnnPushdown) {

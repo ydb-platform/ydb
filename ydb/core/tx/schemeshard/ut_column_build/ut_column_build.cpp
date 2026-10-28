@@ -7,6 +7,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <google/protobuf/text_format.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -161,7 +162,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(AlterPayloadWithDropRejected) {
+    Y_UNIT_TEST(AlterPayloadOnlyAddColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
@@ -172,30 +173,73 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
+        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
 
         size_t scans = 0;
         auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
         Ydb::TypedValue literal;
         literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
         literal.mutable_value()->set_uint32_value(10);
-        // Existing, newly added, and unknown names must all be rejected before a build is created.
-        for (const TString& dropped : {TString("value"), TString("default_value"), TString("plain"), TString("missing")}) {
+        const TVector<TString> forbidden = {
+            R"(DropColumns { Name: "value" })",
+            R"(DropColumns { Name: "default_value" })",
+            R"(DropColumns { Name: "plain" })",
+            R"(DropColumns { Name: "missing" })",
+            R"(Columns { Name: "value" EmptyDefault: NULL_VALUE })",
+            R"(Columns { Name: "value" DefaultFromLiteral { type { type_id: UINT32 } value { uint32_value: 20 } } })",
+            R"(Columns { Name: "value" NotNull: false })",
+            R"(Columns { Name: "value" FamilyName: "cold" })",
+            R"(Columns { Name: "untyped" NotNull: false })",
+            R"(TTLSettings { Enabled { ColumnName: "key" ColumnUnit: UNIT_SECONDS ExpireAfterSeconds: 3600 } })",
+            R"(TTLSettings { Disabled {} })",
+            R"(PartitionConfig { EnableFilterByKey: false })",
+            R"(PartitionConfig { ColumnFamilies { Id: 1 Name: "cold" } })",
+            R"(MultiColumnStatistics {})",
+            R"(DropMultiColumnStatistics: "stats")",
+            R"(DetailedMetricsSettings { NotConfigured {} })",
+            R"(AllowUnderSameOperation: false)",
+            R"(PartitionCount: 0)",
+        };
+        for (const auto& change : forbidden) {
             auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain");
             auto* settings = request->Record.MutableSettings();
             NKikimrSchemeOp::TModifyScheme payload;
             UNIT_ASSERT(settings->GetAlterMainTablePayload().UnpackTo(&payload));
-            payload.MutableAlterTable()->AddDropColumns()->SetName(dropped);
+            NKikimrSchemeOp::TTableDescription extra;
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(change, &extra), change);
+            payload.MutableAlterTable()->MergeFrom(extra);
             settings->MutableAlterMainTablePayload()->PackFrom(payload);
             ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
             TAutoPtr<IEventHandle> handle;
             auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, change << ": " << response->Record.DebugString());
+            const auto table = DescribePath(runtime, "/MyRoot/Table");
+            UNIT_ASSERT_VALUES_EQUAL_C(table.GetPathDescription().GetTable().SerializeAsString(), original, change);
+            TestDescribeResult(table, {
                 NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
             });
         }
         UNIT_ASSERT_VALUES_EQUAL(scans, 0);
         UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
+
+        // KQP's empty settings container is inert, and legacy DEFAULT descriptors have no type.
+        const ui64 buildId = ++txId;
+        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain");
+        NKikimrSchemeOp::TModifyScheme payload;
+        UNIT_ASSERT(request->Record.GetSettings().GetAlterMainTablePayload().UnpackTo(&payload));
+        payload.MutableAlterTable()->MutablePartitionConfig();
+        request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Record.DebugString());
+        env.TestWaitNotification(runtime, buildId);
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId).GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::CheckColumns("Table", {"key", "value", "default_value", "plain"}, {}, {"key"}, true),
+        });
+        UNIT_ASSERT(scans > 0);
     }
 
     Y_UNIT_TEST(InvalidAlterPayload) {

@@ -120,10 +120,6 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             column.SetFamilyName("cold");
         }
     }
-    // ALTER of an existing column shares Columns with ADDs and must never become a rollback DROP.
-    auto* existingColumn = payload.MutableAlterTable()->AddColumns();
-    existingColumn->SetName("value");
-    existingColumn->SetFamilyName("cold");
     settings->MutableAlterMainTablePayload()->PackFrom(payload);
     const auto retrySettings = *settings;
 

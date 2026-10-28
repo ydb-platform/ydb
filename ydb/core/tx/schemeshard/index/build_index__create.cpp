@@ -8,6 +8,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
+#include <util/generic/hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr::NSchemeShard {
@@ -295,8 +297,28 @@ public:
                 {
                     return makeReply("invalid ALTER TABLE payload for column build");
                 }
-                if (modifyScheme.GetAlterTable().DropColumnsSize()) {
-                    return makeReply("DROP COLUMN cannot be combined with ADD COLUMN with DEFAULT");
+                // Only the table name and column additions may accompany a column build.
+                auto extraAlter = modifyScheme.GetAlterTable();
+                extraAlter.ClearName();
+                extraAlter.ClearColumns();
+                // KQP also supplies an empty PartitionConfig for ADD COLUMN alone.
+                if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
+                    extraAlter.ClearPartitionConfig();
+                }
+                bool onlyAddColumns = extraAlter.ByteSizeLong() == 0;
+                THashSet<TString> columnsToBuild;
+                for (const auto& column : settings.column_build_operation().column()) {
+                    columnsToBuild.insert(column.GetColumnName());
+                }
+                for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
+                    // Legacy build descriptors may get their type from the build settings.
+                    if (!column.HasType() && !columnsToBuild.contains(column.GetName())) {
+                        onlyAddColumns = false;
+                        break;
+                    }
+                }
+                if (!onlyAddColumns) {
+                    return makeReply("Only ADD COLUMN operations are allowed alongside columns with DEFAULT");
                 }
                 buildInfo->AlterMainTablePayload.CopyFrom(modifyScheme.GetAlterTable());
             }

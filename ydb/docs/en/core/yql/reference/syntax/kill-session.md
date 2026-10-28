@@ -2,6 +2,14 @@
 
 `KILL SESSION` forcibly terminates a [query execution session](../../../concepts/query_execution/execution_process.md#sessions) in the current database. Use it to stop a query that causes unwanted load or close an unnecessary long-lived session.
 
+{% if feature_flags.enable_kill_session == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_kill_session`](../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 The statement runs through Query Service and can terminate both Query Service and Table Service sessions, including sessions on another node. It does not terminate topic read or write sessions or Coordination Service sessions.
 
 ## Syntax {#syntax}

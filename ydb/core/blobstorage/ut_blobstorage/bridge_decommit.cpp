@@ -1,8 +1,11 @@
 #include "bridge_common.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blob_depot/blob_depot_tablet.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+#include <util/system/type_name.h>
 
 #include <algorithm>
 #include <deque>
@@ -750,5 +753,49 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         for (size_t i = 1; i < timestamps.size(); ++i) {
             UNIT_ASSERT_GE_C(timestamps[i] - timestamps[i - 1], TDuration::Seconds(5), "notify# " << i);
         }
+    }
+
+    // the copy of the decommitted group's blob into BlobDepot fails; it never gets bound to the key, and the retry writes
+    // another blob, so the failed one must not hold BlobDepot garbage collection back
+    Y_UNIT_TEST(FailedCopyReleasesGarbageCollection) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+
+        TFilterChain chain(env);
+        bool failed = false;
+        TActorId blobDepotId;
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+            if (!actor) {
+                return true;
+            } else if (TypeName(*actor).EndsWith("::TBlobDepot")) {
+                blobDepotId = ev->GetRecipientRewrite();
+            } else if (!failed && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->HasEvent() &&
+                    TypeName(*actor).EndsWith("::TGroupAssimilator")) {
+                ev->Get<TEvBlobStorage::TEvPutResult>()->Status = NKikimrProto::ERROR;
+                failed = true;
+            }
+            return true;
+        });
+        RunDecommission(env, chain, checker, groupId, {});
+        UNIT_ASSERT(failed);
+        UNIT_ASSERT(blobDepotId);
+
+        size_t pinned = 0;
+        UNIT_ASSERT(env.Runtime->WrapInActorContext(blobDepotId, [&](IActor *actor) {
+            auto *blobDepot = dynamic_cast<NBlobDepot::TBlobDepot*>(actor);
+            UNIT_ASSERT(blobDepot);
+            for (const auto& channel : blobDepot->Channels) {
+                pinned += channel.AssimilatedBlobsInFlight.size();
+            }
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(pinned, 0);
     }
 }

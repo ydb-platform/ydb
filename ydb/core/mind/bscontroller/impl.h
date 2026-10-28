@@ -2319,7 +2319,10 @@ private:
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Request;
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)> Callback;
         TBackoffTimer Timer{10, 3000};
+        TMonotonic StartedAt;
+        bool Alarmed = false; // the command has been retried for too long, which is reported
     };
+    static constexpr TDuration InvokeOnRootAlarmTimeout = TDuration::Minutes(1);
     THashMap<ui64, TInvokeOnRootCommand> InvokeOnRootCommands;
 
     void InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,

@@ -17,7 +17,7 @@ namespace NEventLog {
 class TColumnShardLogWriter : public TBaseEventLogWriter {
 public:
     struct TDatabaseSettings {
-        TString Path;
+        TString DatabasePath;
         TString StoreName;
         TString TableName;
         ui32 StoreShardsCount = 5;
@@ -28,6 +28,7 @@ public:
         ui32 MaxBatchSize = 1000000;
         ui8 MaxWriteAttempts = 10;
         ui8 MaxActiveWrites = 10;
+        TDuration TryCreateTimeout;
 
         NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction ShardingMethod =
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
@@ -63,7 +64,7 @@ protected:
     // Write batch queue
     struct TWriteBatch {
         std::shared_ptr<arrow::RecordBatch> Data;
-        ui8 AttemptNum {0};
+        ui16 AttemptNum {0};
     };
     std::atomic<unsigned> ActiveWriteCount{0};
     void ProcessWriteBatch(const TWriteBatch& batch);

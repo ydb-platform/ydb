@@ -20,18 +20,19 @@ public:
     }
 
     bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (message.Component != Component || !Messages.contains(message.TextMessage)) {
+        if (message.Component != Component) {
             return false;
         }
 
         TStringValueExtractor extractor;
-        const auto& componentName = extractor.ExtractValue(
+        const auto componentName = extractor.ExtractValue(
             message.StructuredMessage, std::vector<TKeyName>{"component"});
-        const auto& messageText = extractor.ExtractValue(
+        const auto messageText = extractor.ExtractValue(
             message.StructuredMessage, std::vector<TKeyName>{"message"});
         if (!messageText.has_value()) {
             return false;
         }
+
         return componentName.has_value() && componentName.value() == ComponentName && Messages.find(messageText.value()) != end(Messages);
     }
 
@@ -102,7 +103,7 @@ public:
         auto result = TBaseTliEventLogWriter::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("message", std::vector<TKeyName>{"message"}, notNullDict),
-            std::make_shared<TDBLogColumnUint64>("trace_id", std::vector<TKeyName>{"traceId"}),
+            std::make_shared<TDBLogMessageStringValueColumn>("trace_id", std::vector<TKeyName>{"traceId"}),
             std::make_shared<TDBLogColumnUint64>("breaker_tx_span_id", std::vector<TKeyName>{"breakerTxSpanId"}),
             std::make_shared<TDBLogColumnUint64>("victim_tx_span_id", std::vector<TKeyName>{"victimTxSpanId"}),
             std::make_shared<TDBLogColumnUint64>("query_span_id", std::vector<TKeyName>{"querySpanId"}),

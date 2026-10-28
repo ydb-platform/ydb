@@ -14,6 +14,12 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
+namespace {
+
+const TString DefaultSinkName("default");
+
+}
+
 namespace NKikimr::NConsole {
 
 class TLogSettingsConfigurator : public TActorBootstrapped<TLogSettingsConfigurator> {
@@ -45,10 +51,12 @@ public:
     static std::pair<TString, TString> GetDefaultStoreTableName(const TString& eventSource);
 
     static NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings
-    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink);
+    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
-    NStructuredLog::ILogSinkSPtr CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink);
-    NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink);
+    NStructuredLog::ILogSinkSPtr CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
+    NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
     void ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx);
 
     STFUNC(StateWork) {
@@ -245,33 +253,51 @@ std::pair<TString, TString> TLogSettingsConfigurator::GetDefaultStoreTableName(c
 }
 
 NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings
-TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink) {
+TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
     NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings settings;
-    if (sink.HasDatabasePath()) {
-        settings.Path = sink.GetDatabasePath();
-    }
-    if (sink.HasStorageName()) {
-        settings.StoreName = sink.GetStorageName();
-    }
-    if (sink.HasTableName()) {
-        settings.TableName = sink.GetTableName();
-    }
-    settings.MaxBatchSize = sink.GetMaxBatchSize();
-    settings.FlushBatchSize = sink.GetFlushBatchSize();
-    settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
 
-    settings.StoreShardsCount = sink.GetStoreShardsCount();
-    settings.TableShardsCount = sink.GetTableShardsCount();
+#define SET_PROPERTY(X)                                             \
+    if (!sink.Has##X()) {                                           \
+        settings.X = sink.Get##X();                                 \
+    } else if (defaultSink != nullptr && defaultSink->Has##X()) {   \
+        settings.X = defaultSink->Get##X();                         \
+    }
 
-    settings.MaxWriteAttempts = sink.GetMaxWriteAttempts();
-    settings.MaxActiveWrites = sink.GetMaxActiveWrites();
+    SET_PROPERTY(DatabasePath);
+    SET_PROPERTY(StoreName);
+    SET_PROPERTY(TableName);
+    SET_PROPERTY(MaxBatchSize);
+    SET_PROPERTY(FlushBatchSize);
+
+    if (!sink.HasFlushTimeout()) {
+        settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
+    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
+        settings.FlushTimeout = TDuration::MilliSeconds(defaultSink->GetFlushTimeout());
+    }
+
+    SET_PROPERTY(StoreShardsCount);
+    SET_PROPERTY(TableShardsCount);
+    SET_PROPERTY(MaxWriteAttempts);
+    SET_PROPERTY(MaxActiveWrites);
+
+    if (!sink.HasTryCreateTimeout()) {
+        settings.TryCreateTimeout = TDuration::MilliSeconds(sink.GetTryCreateTimeout());
+    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
+        settings.TryCreateTimeout = TDuration::MilliSeconds(defaultSink->GetTryCreateTimeout());
+    }
+
+#undef SET_PROPERTY
+
     return settings;
 }
 
-NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink) {
+NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
     auto eventSource = sink.GetSource();
 
-    auto databaseSettings = GetColumnShardDatabaseSettings(sink);
+    auto databaseSettings = GetColumnShardDatabaseSettings(sink, defaultSink);
     if (databaseSettings.StoreName.empty() || databaseSettings.TableName.empty()) {
         auto defaults = GetDefaultStoreTableName(eventSource);
         if (databaseSettings.StoreName.empty()) {
@@ -326,13 +352,18 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateColumnShardLogSink(
     return nullptr;
 }
 
-NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink) {
-    using namespace NKikimr::NKqp::NEventLog;
+NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
 
-    const TString destination = sink.HasDestination() ? sink.GetDestination() : TString();
+    TString destination;
+    if (sink.HasDestination()) {
+        destination = sink.GetDestination();
+    } else if (defaultSink != nullptr && defaultSink->HasDestination()) {
+        destination = defaultSink->GetDestination();
+    }
 
     if (destination == "local-db") {
-        return CreateColumnShardLogSink(sink);
+        return CreateColumnShardLogSink(sink, defaultSink);
     }
     return nullptr;
 }
@@ -351,18 +382,31 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
 
     Cerr << "Start dump sinks" << Endl;
 
+    const NKikimrConfig::TLogConfig_TSink* defaultSinkPtr{nullptr};
+    for(const auto& sink: config.GetSink()) {
+        if (sink.GetSource() == DefaultSinkName) {
+            auto sinkConfig = sink.ShortDebugString();
+            YDB_LOG_INFO("LogSinksConfig: Found default sink settings",
+                {"sinkConfig", sinkConfig});
+
+            Cerr << "       found default sink " << sinkConfig << Endl;
+
+            defaultSinkPtr = & sink;
+            break;
+        }
+    }
+
     std::map<TString, NKikimrConfig::TLogConfig_TSink> result;
-    for(auto& sink: config.GetSink()) {
+    for(const auto& sink: config.GetSink()) {
+        if (&sink == defaultSinkPtr) {
+            continue;
+        }
+
         auto sinkConfig = sink.ShortDebugString();
         YDB_LOG_CREATE_CONTEXT({"sinkConfig", sinkConfig});
 
         if (!sink.HasSource()) {
             YDB_LOG_ERROR("LogSinksConfig: Source is not specified");
-            continue;
-        }
-
-        if (!sink.HasDestination()) {
-            YDB_LOG_ERROR("LogSinksConfig: Destination is not specified");
             continue;
         }
 
@@ -375,7 +419,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
             newSinks[sinkConfig] = it->second;
             oldSinks.erase(it);
         } else {
-            auto sinkPtr = CreateLogSink(sink);
+            auto sinkPtr = CreateLogSink(sink, defaultSinkPtr);
             if (sinkPtr != nullptr) {
                 YDB_LOG_INFO("LogSinksConfig: Create sink");
 
@@ -386,8 +430,10 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
         }
     }
 
-    // (*newSinks)["1"] = std::make_shared<TKqpEventLogWriter>(GetSettings("kqp_requests"));
     logSettings->SetSinks(std::make_shared<NLog::TSettings::TLogSinkMap>(newSinks));
+    for(auto& oldSink: oldSinks) {
+        oldSink.second->Stop();
+    }
 
     Cerr << "Done dump sinks" << Endl;
 }

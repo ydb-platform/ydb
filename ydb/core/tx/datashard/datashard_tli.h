@@ -31,7 +31,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
 
     // Build message body once (everything except Component and Type)
     auto stlogMessage = YDB_LOG_CREATE_MESSAGE(
-        {"tabletId", ToString(tabletId)},
+        {"tabletId", tabletId},
         {"message", message});
 
     // Log to TLI service (only if we have victim query trace IDs)
@@ -42,7 +42,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
 
         if (breakerQuerySpanId && *breakerQuerySpanId != 0) {
             YDB_LOG_UPDATE_MESSAGE(stlogMessageTLI,
-                {"breakerQuerySpanId", ToString(*breakerQuerySpanId)});
+                {"breakerQuerySpanId", *breakerQuerySpanId});
         }
         for(auto victimQuerySpanId: victimQuerySpanIds) {
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
@@ -76,12 +76,12 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
 
     // Build message body once (everything except Component and Type)
     TStructuredMessage stlogMessage = YDB_LOG_CREATE_MESSAGE(
-        {"tabletId", ToString(tabletId)},
+        {"tabletId", tabletId},
         {"message", message});
 
     if (victimQuerySpanId && *victimQuerySpanId != 0) {
         YDB_LOG_UPDATE_MESSAGE(stlogMessage,
-            {"victimQuerySpanId", ToString(*victimQuerySpanId)});
+            {"victimQuerySpanId", *victimQuerySpanId});
     }
 
     // Log to TLI service

@@ -38,7 +38,7 @@ public:
     virtual void Flush();
 
     unsigned GetCurrentBatchSize() const {
-        return CurrentBatchSize;
+        return CurrentBatchSize.load();
     }
 
     enum class TStateKind : std::uint8_t {
@@ -79,7 +79,7 @@ protected:
         TState(TStateKind kind): Kind(kind) {};
     };
     std::atomic<TState> State {TState(TStateKind::Started)};
-    unsigned CurrentBatchSize {0};
+    std::atomic<unsigned> CurrentBatchSize {0};
     bool CheckFlushActorCreate {true};
     TMutex BatchMutex;  // Lock access to current batch
 

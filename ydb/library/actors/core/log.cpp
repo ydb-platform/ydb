@@ -552,7 +552,11 @@ namespace NActors {
                 .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
 
             for(auto& sink: *sinks) {
-                sink.second->Write(message);
+                try {
+                    sink.second->Write(message);
+                } catch (...) {
+
+                }
             }
         }
         return OutputRecord(

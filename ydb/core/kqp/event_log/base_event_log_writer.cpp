@@ -37,7 +37,7 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         return false;
     }
 
-    if (CurrentBatchSize >= MaxBatchSize) {
+    if (CurrentBatchSize.load() >= MaxBatchSize) {
         return false;
     }
 
@@ -126,13 +126,12 @@ void TBaseEventLogWriter::Flush() {
         return;
     }
 
-    if (CurrentBatchSize == 0) {
+    if (CurrentBatchSize.load() == 0) {
         return;
     }
 
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
-    CurrentBatchSize = 0;
 }
 
 std::shared_ptr<arrow::Schema> TBaseEventLogWriter::GetArrowSchema() const {
@@ -150,8 +149,8 @@ std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
     for (auto& column : Columns) {
         arrays.push_back(column->MakeArray());
     }
-    auto batch = arrow::RecordBatch::Make(GetArrowSchema(), CurrentBatchSize, arrays);
-    CurrentBatchSize = 0;
+    auto batch = arrow::RecordBatch::Make(GetArrowSchema(), CurrentBatchSize.load(), arrays);
+    CurrentBatchSize.store(0);
     return batch;
 }
 

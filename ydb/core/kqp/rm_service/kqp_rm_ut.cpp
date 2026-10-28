@@ -2364,8 +2364,12 @@ void KqpRm::ArenaGrowRefusalLoggedOnChange() {
             const auto* log = ev->Get<NLog::TEvLog>();
             if (log->Component == NKikimrServices::KQP_RESOURCE_MANAGER && log->Line.StartsWith("Memory arena growth")) {
                 const auto& fields = *log->StructuredMessage;
-                lines.push_back({log->Line, fields.GetValue<TString>("size").value_or(""),
-                    fields.GetValue<TString>("delta").value_or(""), fields.GetValue<TString>("granted").value_or("")});
+                TStringValueExtractor extractor;
+                const auto size = extractor.ExtractedValue(fields, "size").value_or("");
+                const auto delta = extractor.ExtractedValue(fields, "delta").value_or("");
+                const auto granted = extractor.ExtractedValue(fields, "granted").value_or("");
+
+                lines.push_back({log->Line, size, delta, granted});
             }
         }
         return prevFilter(runtime, ev);

@@ -1861,7 +1861,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 using namespace NKikimr::NKqp::NEventLog;
 
 TColumnShardLogWriter::TDatabaseSettings GetSettings(const TString& tableName) {
-    TColumnShardLogWriter::TDatabaseSettings settings{.Path = "/local/testdb", .StoreName = tableName, .TableName  = tableName};
+    TColumnShardLogWriter::TDatabaseSettings settings{.DatabasePath = "/local/testdb", .StoreName = tableName, .TableName  = tableName};
     return settings;
 }
 

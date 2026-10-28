@@ -52,7 +52,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
         return false;
     }
 
-    if (Settings.FlushBatchSize.has_value() && CurrentBatchSize >= Settings.FlushBatchSize.value()) {
+    if (Settings.FlushBatchSize.has_value() && CurrentBatchSize.load() >= Settings.FlushBatchSize.value()) {
         Flush();
     }
     return true;
@@ -60,7 +60,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
 
 TString TColumnShardLogWriter::GetCreateStoreQuery() {
     TStringBuilder sb;
-    sb << " CREATE TABLESTORE IF NOT EXISTS `" << Settings.Path << "/" << Settings.StoreName << "` (";
+    sb << " CREATE TABLESTORE IF NOT EXISTS `" << Settings.DatabasePath << "/" << Settings.StoreName << "` (";
 
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
@@ -94,7 +94,7 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
 
     TStringBuilder sb;
 
-    sb << " CREATE TABLE IF NOT EXISTS `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
+    sb << " CREATE TABLE IF NOT EXISTS `" << Settings.DatabasePath << "/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
 
@@ -124,11 +124,11 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
 }
 
 TString TColumnShardLogWriter::GetStorePath() const {
-    return TStringBuilder() << Settings.Path << "/" << Settings.StoreName;
+    return TStringBuilder() << Settings.DatabasePath << "/" << Settings.StoreName;
 }
 
 TString TColumnShardLogWriter::GetTablePath() const {
-    return TStringBuilder() << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName;
+    return TStringBuilder() << Settings.DatabasePath << "/" << Settings.StoreName << "/" << Settings.TableName;
 }
 
 void TColumnShardLogWriter::CreateSession() {
@@ -137,7 +137,7 @@ void TColumnShardLogWriter::CreateSession() {
 
     auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
-        std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
+        std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis](const NThreading::TFuture<Ydb::Table::CreateSessionResponse> f) {
         YDB_LOG_DEBUG("TColumnShardLogWriter: Create session response");
 
@@ -185,7 +185,7 @@ void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
 
     auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
-        std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
+        std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis, query, handle, sessionId](const NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> f) {
         if (pThis->State.load().Kind == TStateKind::Stop) {
             return ;
@@ -273,7 +273,7 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
 
     auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvDescribeTableRequest>(
-        std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
+        std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis](const NThreading::TFuture<Ydb::Table::DescribeTableResponse> f) {
         YDB_LOG_CREATE_CONTEXT(
             {"storeName", pThis->Settings.StoreName},
@@ -334,10 +334,10 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
 
 void TColumnShardLogWriter::SetTryCreateAgainState() {
     State.store(TState{TStateKind::Started});
-    if (!FlushInterval) {
-        YDB_LOG_NOTICE("TColumnShardLogWriter: Schedule once flush");
+    if (Settings.TryCreateTimeout) {
+        YDB_LOG_NOTICE("TColumnShardLogWriter: Schedule retry create store and table");
         NActors::TActivationContext::Register(
-            new TBaseEventLogAutoFlushActor(shared_from_this(), TDuration::Seconds(1), true));
+            new TBaseEventLogAutoFlushActor(shared_from_this(), Settings.TryCreateTimeout, true));
     }
 }
 
@@ -377,7 +377,7 @@ void TColumnShardLogWriter::ProcessWriteBatch(const TWriteBatch& writeBatch) {
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
     request.set_data(data);
-    request.set_table(Sprintf("%s/%s/%s", Settings.Path.c_str(), Settings.StoreName.c_str(), Settings.TableName.c_str()));
+    request.set_table(Sprintf("%s/%s/%s", Settings.DatabasePath.c_str(), Settings.StoreName.c_str(), Settings.TableName.c_str()));
 
     auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;

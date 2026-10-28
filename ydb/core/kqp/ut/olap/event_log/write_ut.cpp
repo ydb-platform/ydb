@@ -22,6 +22,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 namespace NKikimr::NKqp {
 
@@ -90,16 +91,16 @@ namespace {
     }
 
     std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
-        for(unsigned i = 10;i > 0;i--) {
+        for(unsigned i = 100;i > 0;i--) {
             auto client = kikimr.GetTableClient();
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             if (!it.IsSuccess()) {
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
             auto result = FetchStreamData(it, i == 1);
             if (!result.has_value()) {
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
             return result.value();
@@ -141,7 +142,7 @@ public:
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TEventLogColumn>> columns,
             std::optional<ui32> flushBatchSize = {}, TDuration flushTimeout = {})
         : TColumnShardLogWriter(TColumnShardLogWriter::TDatabaseSettings {
-            .Path = "/Root",
+            .DatabasePath = "/Root",
             .StoreName = "olapStore",
             .TableName = "olapTable",
             .FlushTimeout = flushTimeout,
@@ -186,7 +187,7 @@ public:
         TStringBuilder query;
         query << "--!syntax_v1\n";
         query << "\n";
-        query << "SELECT " << selectList << " FROM `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName << "`";
+        query << "SELECT " << selectList << " FROM `" << Settings.DatabasePath << "/" << Settings.StoreName << "/" << Settings.TableName << "`";
         if (!orderBy.empty()) {
             query << " ORDER BY " << orderBy;
         }
@@ -203,7 +204,11 @@ public:
         auto query = GetFetchQuery();
 
         // Execute query
-        auto result = ExecuteQueryAndFetchData(Runner, query);
+        std::optional<TQueryResult> result;
+        WaitCondition([&]() {
+            result = ExecuteQueryAndFetchData(Runner, query);
+            return result.has_value() && result.value().size() == requiredResult.size();
+        });
 
         // Dump on error
         if (true /*result != requiredResult*/) {
@@ -245,6 +250,8 @@ struct TEnvironment {
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
     std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
 
+    TEnvironment() : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {}
+
     TEnvironment(const TVector<std::shared_ptr<TEventLogColumn>>& columns,
         std::optional<ui32> flushBatchSize = 0,
         TDuration flushTimeout = {})
@@ -262,7 +269,10 @@ struct TEnvironment {
             auto settings = runtime->GetLogSettings(i);
             settings->DefPriority = NActors::NLog::PRI_TRACE;
             auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
-            (*sinks)[""] = Writer;
+
+            if (Writer != nullptr) {
+                (*sinks)[""] = Writer;
+            }
 
             ui32 j = 0;
             for (auto& sink: AddSinks) {
@@ -273,6 +283,7 @@ struct TEnvironment {
             settings->SetSinks(sinks);
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
+        runtime->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
     }
 
     void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
@@ -314,10 +325,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:307")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:309")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:311")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:312")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:318")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:320")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:322")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:323")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -562,7 +573,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
             message.NodeId = 5;
             env.Writer->Write(message);
-            message.NodeId = 6;
         });
 
         // Check flushed
@@ -606,15 +616,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"3u", "3u"}});
     }
 
-    Y_UNIT_TEST(KqpRequestLog) {
-        TEnvironment env({
-            std::make_shared<TDBLogMessageIdColumn>(1)
-        });
+    Y_UNIT_TEST(RequestLog) {
+        TEnvironment env;
 
         TKqpEventLogWriter::TDatabaseSettings settings;
         env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(
             TKqpEventLogWriter::TDatabaseSettings{
-                .Path = "/Root",
+                .DatabasePath = "/Root",
                 .StoreName = "kqp_requests",
                 .TableName = "kqp_requests",
                 .FlushBatchSize = 0}));
@@ -645,6 +653,76 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         UNIT_ASSERT_EQUAL(result.value()[0][1], R"("SELECT A B C D E")");
         UNIT_ASSERT_EQUAL(result.value()[0][2], R"(["QUERY_ACTION_EXECUTE"])");
         UNIT_ASSERT_EQUAL(result.value()[0][3], R"(["CANCELLED"])");
+    }
+
+    Y_UNIT_TEST(TliLog) {
+        using namespace NYdb;
+        using namespace NYdb::NQuery;
+
+        TEnvironment env;
+        env.AddSinks.push_back(std::make_shared<TDataShardTliEventLogWriter>(
+            TKqpEventLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "tli_datashard",
+                .TableName = "tli_datashard",
+                .FlushBatchSize = 0}));
+        env.AddSinks.push_back(std::make_shared<TSessionTliEventLogWriter>(
+            TKqpEventLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "tli_session",
+                .TableName = "tli_session",
+                .FlushBatchSize = 0}));
+        env.UpdateSinks();
+
+        auto client = env.Kikimr.GetQueryClient();
+        auto sessionVictim = client.GetSession().GetValueSync().GetSession();
+        auto sessionBreaker = client.GetSession().GetValueSync().GetSession();
+
+        // Create table
+        NKqp::AssertSuccessResult(sessionVictim.ExecuteQuery(R"(create table C(ID SERIAL, VAL INTEGER, PRIMARY KEY(ID) );)",TTxControl::NoTx()).GetValueSync());
+
+        // Initial fill
+        NKqp::AssertSuccessResult(sessionVictim.ExecuteQuery(R"(insert into C(ID, VAL) values(1, 100);)", TTxControl::NoTx()).GetValueSync());
+
+        // Victim select query
+        auto result = sessionVictim.ExecuteQuery(R"(SELECT * FROM C WHERE ID = 1;)", TTxControl::BeginTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto victimTx = result.GetTransaction();
+
+        // Breaker query
+        NKqp::AssertSuccessResult(sessionBreaker.ExecuteQuery(R"(UPSERT INTO C(ID, VAL) VALUES (1, 101);)", TTxControl::NoTx()).GetValueSync());
+
+        // Victim commit query
+        result = sessionVictim.ExecuteQuery(R"(UPSERT INTO C(ID, VAL) VALUES (1, 102);)", TTxControl::Tx(victimTx.value()).CommitTx()).GetValueSync();
+        auto status = result.GetStatus();
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        // check tli_datashard content
+
+        {
+            std::optional<TQueryResult> result;
+            WaitCondition([&]()->bool {
+                result = ExecuteQueryAndFetchData(env.Kikimr, "select message, breaker_query_span_id, victim_query_span_id "
+                    "from `/Root/tli_datashard/tli_datashard`");
+                return result.has_value() && result.value().size() >= 2;
+            });
+
+            Cerr << "DATASHARD_RESULT:" << Endl;
+            Dump(result.value());
+        }
+
+        // check tli_session content
+        {
+            std::optional<TQueryResult> result;
+            WaitCondition( [&]()->bool {
+                result = ExecuteQueryAndFetchData(env.Kikimr, "select message, breaker_tx_span_id, victim_tx_span_id, query_span_id, query_text "
+                    "from `/Root/tli_session/tli_session`");
+                return result.has_value() && result.value().size() >= 1;
+            });
+
+            Cerr << "SESSION_RESULT:" << Endl;
+            Dump(result.value());
+        }
     }
 }
 

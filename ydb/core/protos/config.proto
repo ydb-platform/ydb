@@ -495,7 +495,7 @@ message TLogConfig {
 
         // Local database destionation params
         optional string DatabasePath = 3;
-        optional string StorageName = 4;
+        optional string StoreName = 4;
         optional string TableName = 5;
         optional uint32 MaxBatchSize = 6 [default = 1000000];
         optional uint32 FlushBatchSize = 7 [default = 1000];
@@ -504,6 +504,7 @@ message TLogConfig {
         optional uint32 TableShardsCount = 10 [default = 5];
         optional uint32 MaxWriteAttempts = 11 [default = 10];
         optional uint32 MaxActiveWrites = 12 [default = 10];
+        optional uint32 TryCreateTimeout = 13 [default = 1000];
     }
     repeated TSink Sink = 18;
 }

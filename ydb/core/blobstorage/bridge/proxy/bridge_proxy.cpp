@@ -879,6 +879,9 @@ namespace NKikimr {
         TPendingQueue PendingForNextGeneration;
         // requests waiting for the cluster state not older than the one the group state was made for
         TPendingQueue PendingForClusterState;
+        // requests no pile could take, or the pile of the authority part couldn't; a newer group state or cluster state
+        // (the pile getting back into data quorum without the group generation changing) may let them go
+        TPendingQueue PendingForPileState;
         TMonotonic PendingCheckAt = TMonotonic::Max();
 
         struct TEvCheckPendingRequests : TEventLocal<TEvCheckPendingRequests, EventSpaceBegin(TEvents::ES_PRIVATE)> {
@@ -912,7 +915,7 @@ namespace NKikimr {
 
         void SchedulePendingCheck() {
             TMonotonic deadline = TMonotonic::Max();
-            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState, &PendingForPileState}) {
                 if (!queue->empty()) {
                     deadline = Min(deadline, queue->begin()->first);
                 }
@@ -929,7 +932,7 @@ namespace NKikimr {
             }
             PendingCheckAt = TMonotonic::Max();
             const auto now = TActivationContext::Monotonic();
-            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState, &PendingForPileState}) {
                 while (!queue->empty()) {
                     if (auto& [deadline, ev] = *queue->begin(); deadline <= now) {
                         ReplyWithError(*ev, "bridge request timed out");
@@ -1005,6 +1008,7 @@ namespace NKikimr {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
             RetryPending(PendingForClusterState);
+            RetryPending(PendingForPileState);
         }
 
         template<typename TEvent>
@@ -1049,7 +1053,7 @@ namespace NKikimr {
                 }
             }
             RequestsInFlight.clear();
-            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState, &PendingForPileState}) {
                 for (auto& [deadline, ev] : std::exchange(*queue, {})) {
                     ReplyWithError(*ev, errorReason);
                 }
@@ -1168,7 +1172,7 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
+                QueuePending(PendingForPileState, MakePendingHandle(*ev), routingDeadline);
                 return;
             }
             if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
@@ -1177,7 +1181,7 @@ namespace NKikimr {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
                     (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
+                QueuePending(PendingForPileState, MakePendingHandle(*ev), routingDeadline);
                 return;
             }
 
@@ -1463,6 +1467,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
                 RetryPending(PendingForNextGeneration);
+                RetryPending(PendingForPileState);
             }
         }
 

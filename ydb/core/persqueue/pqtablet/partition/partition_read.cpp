@@ -153,6 +153,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
         } else {
+            SendOffsetsToReplicationConsumer(ctx);
             sendResponse(0, true);
 
             auto now = ctx.Now();

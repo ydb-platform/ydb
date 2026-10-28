@@ -1231,6 +1231,8 @@ private:
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
 
+    void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
+
     void OnHandleWriteResponse(const TActorContext& ctx);
 
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);

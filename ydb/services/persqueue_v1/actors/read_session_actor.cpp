@@ -1933,6 +1933,29 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
 }
 
 template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
+        return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        auto* partitionData = response.mutable_read_response()->add_partition_data();
+        partitionData->set_partition_session_id(record.GetPartitionSessionId());
+        auto* batch = partitionData->add_batches();
+        batch->set_codec(Ydb::Topic::CODEC_RAW);
+        auto* message = batch->add_message_data();
+        message->set_offset(0);
+        message->set_data(record.GetPayload());
+        message->set_uncompressed_size(record.GetPayload().size());
+        if (!WriteToStreamOrDie(ctx, std::move(response))) {
+            return;
+        }
+    }
+}
+
+template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;

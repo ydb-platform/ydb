@@ -109,6 +109,53 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
     }
 
+    // the blob written to the pile being synced only, as the write which has failed in the other pile is, gets no
+    // DoNotKeep flag from the syncer; the bridge proxy can restore the blob into the other pile, and the piles must
+    // agree on its fate then
+    Y_UNIT_TEST(SyncerLeavesTargetOnlyBlobUnflagged) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        const TString data = "blob in pile 1 only";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[1], 9, id, data);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+        RejoinPile(env, 1);
+
+        // the read restores the blob into pile 0
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[0], 1, id, data), NKikimrProto::OK);
+
+        // the blob is kept behind the barrier now, so both piles must keep it
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        for (ui32 pile : {0, 1}) {
+            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+        }
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, true, 1, 10,
+            new TVector<TLogoBlobID>{id}, nullptr, TInstant::Max(), false), {}, groupId);
+        for (ui32 pile : {0, 1}) {
+            WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data), NKikimrProto::OK);
+        }
+
+        const auto res = QueryPileGroup<TEvBlobStorage::TEvGetResult>(env, pileGroups[1], 9,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead,
+                /*mustRestoreFirst=*/ false, /*isIndexOnly=*/ true));
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+        UNIT_ASSERT_C(res->Responses[0].Keep && !res->Responses[0].DoNotKeep, res->ToString());
+    }
+
     // the bridge proxy restoring the blob missing in a pile reads it after the query that found it missing; the Keep
     // flag known from that query must survive the read not seeing it
     Y_UNIT_TEST(RestoreKeepsKnownKeepFlag) {

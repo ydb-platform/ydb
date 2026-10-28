@@ -83,21 +83,22 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         TActorId reader;
 
+        // note: messages must be long and repetitive to benefit from compression
         // write, create reader & read
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessage-1", codec));
+        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-1", codec));
         {
             auto records = ReadData(env, reader, settings);
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessage-1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-1");
         }
 
         // trigger commit, write new data & kill reader
         {
             env.SendAsync(reader, new TEvWorker::TEvPoll());
-            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessage-2", codec));
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-2", codec));
             env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
@@ -108,8 +109,9 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessage-2");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-2");
         }
+
     }
 
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {

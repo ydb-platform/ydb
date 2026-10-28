@@ -1,6 +1,7 @@
 #include <ydb/core/protos/grpc.grpc.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/grpc/server/actors/logger.h>
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
@@ -27,6 +28,8 @@ const TString InvalidToken = "invalid-token";
 const TString ChooseProxyMethod = "NKikimrClient.TGRpcServer/ChooseProxy";
 const TString SchemeDescribeMethod = "NKikimrClient.TGRpcServer/SchemeDescribe";
 const TString SchemeOperationMethod = "NKikimrClient.TGRpcServer/SchemeOperation";
+const TString ListEndpointsMethod = "Ydb.Discovery.V1.DiscoveryService/ListEndpoints";
+const TString Database = "/Root";
 
 struct TCallAuth {
     TString ProtoToken;
@@ -151,11 +154,83 @@ void AssertChooseProxyOk(const TLegacyCallResult& result) {
     UNIT_ASSERT_C(result.Response.HasProxyCookie(), result.Response.ShortDebugString());
 }
 
-void AssertUnauthenticated(const TLegacyCallResult& result) {
+void AssertUnauthenticated(const grpc::Status& status) {
     UNIT_ASSERT_VALUES_EQUAL_C(
-        result.Status.error_code(),
+        status.error_code(),
         grpc::StatusCode::UNAUTHENTICATED,
-        result.Status.error_message());
+        status.error_message());
+}
+
+void AssertUnauthenticated(const TLegacyCallResult& result) {
+    AssertUnauthenticated(result.Status);
+}
+
+struct TListEndpointsCallResult {
+    grpc::Status Status;
+    Ydb::Discovery::ListEndpointsResponse Response;
+};
+
+TListEndpointsCallResult CallListEndpoints(ui16 grpcPort, const TCallAuth& auth = {}) {
+    auto channel = grpc::CreateChannel(
+        TStringBuilder() << "localhost:" << grpcPort,
+        grpc::InsecureChannelCredentials());
+    auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(channel);
+    Ydb::Discovery::ListEndpointsRequest request;
+    request.set_database(Database);
+
+    TListEndpointsCallResult result;
+    grpc::ClientContext context;
+    context.AddMetadata(NYdb::YDB_DATABASE_HEADER, Database);
+    if (!auth.MetadataToken.empty()) {
+        context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, auth.MetadataToken);
+    }
+    context.set_deadline(
+        std::chrono::system_clock::now() + std::chrono::milliseconds(CallTimeout.MilliSeconds()));
+    result.Status = stub->ListEndpoints(&context, request, &result.Response);
+    return result;
+}
+
+bool ShouldRetryListEndpoints(const TListEndpointsCallResult& result) {
+    if (result.Status.error_code() == grpc::StatusCode::UNAVAILABLE) {
+        return true;
+    }
+    if (!result.Status.ok()) {
+        return false;
+    }
+    const auto status = result.Response.operation().status();
+    if (status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::OVERLOADED) {
+        return true;
+    }
+    if (status == Ydb::StatusIds::SUCCESS && result.Response.operation().result().value().empty()) {
+        return true;
+    }
+    return false;
+}
+
+TListEndpointsCallResult WaitListEndpoints(ui16 grpcPort, const TCallAuth& auth = {}) {
+    TListEndpointsCallResult result;
+    const TInstant deadline = TInstant::Now() + CallTimeout;
+    do {
+        result = CallListEndpoints(grpcPort, auth);
+        if (!ShouldRetryListEndpoints(result)) {
+            return result;
+        }
+        Sleep(RetryDelay);
+    } while (TInstant::Now() < deadline);
+    return result;
+}
+
+void AssertListEndpointsOk(const TListEndpointsCallResult& result) {
+    UNIT_ASSERT_C(result.Status.ok(), result.Status.error_message());
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        result.Response.operation().status(),
+        Ydb::StatusIds::SUCCESS,
+        result.Response.ShortDebugString());
+    Ydb::Discovery::ListEndpointsResult endpoints;
+    UNIT_ASSERT_C(
+        result.Response.operation().result().UnpackTo(&endpoints),
+        result.Response.ShortDebugString());
+    UNIT_ASSERT_C(endpoints.endpoints_size() > 0, endpoints.ShortDebugString());
 }
 
 struct TChooseProxyServer {
@@ -268,5 +343,32 @@ Y_UNIT_TEST_SUITE(TChooseProxyGrpc) {
     Y_UNIT_TEST(SchemeDescribeWithInvalidProtoTokenWhenTokenRequired) {
         TChooseProxyServer env(/*enforceUserToken=*/true);
         AssertUnauthenticated(WaitSchemeDescribe(env.GrpcPort, {.ProtoToken = InvalidToken}));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TListEndpointsGrpc) {
+    Y_UNIT_TEST(WithoutTokenWhenTokenRequired) {
+        TChooseProxyServer env(/*enforceUserToken=*/true);
+        AssertUnauthenticated(WaitListEndpoints(env.GrpcPort).Status);
+    }
+
+    Y_UNIT_TEST(WithoutTokenWhenMethodListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {ListEndpointsMethod});
+        AssertListEndpointsOk(WaitListEndpoints(env.GrpcPort));
+    }
+
+    Y_UNIT_TEST(WithInvalidMetadataTokenWhenMethodListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {ListEndpointsMethod});
+        AssertUnauthenticated(WaitListEndpoints(env.GrpcPort, {.MetadataToken = InvalidToken}).Status);
+    }
+
+    Y_UNIT_TEST(WithMetadataTokenWhenTokenRequired) {
+        TChooseProxyServer env(/*enforceUserToken=*/true);
+        AssertListEndpointsOk(WaitListEndpoints(env.GrpcPort, {.MetadataToken = BuiltinToken}));
+    }
+
+    Y_UNIT_TEST(WithoutTokenWhenOtherMethodListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
+        AssertUnauthenticated(WaitListEndpoints(env.GrpcPort).Status);
     }
 }

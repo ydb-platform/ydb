@@ -3,6 +3,7 @@ ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestExpectedSlotSettingsTransitions
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestExpectedSlotSizeCalculatesSlotCount
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInferPDiskSlotCountFromSlotSizeWithRealNodeWarden
+ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.UseFixedVDiskSlotSizeRuntimeSwitch
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.ActivationAndValidation
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum

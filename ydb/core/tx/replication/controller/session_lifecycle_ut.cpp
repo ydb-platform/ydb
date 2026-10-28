@@ -114,6 +114,19 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             const auto run = Env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(Edges[node]);
             UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), Worker);
         }
+
+        TString Monitoring(const TVector<std::pair<TString, TString>>& parameters = {}) {
+            NActorsProto::TRemoteHttpInfo request;
+            request.SetMethod(HTTP_METHOD_GET);
+            request.SetPath("/app");
+            for (const auto& [key, value] : parameters) {
+                auto* parameter = request.AddQueryParams();
+                parameter->SetKey(key);
+                parameter->SetValue(value);
+            }
+            return Env.Send<NMon::TEvRemoteHttpInfoRes>(Controller,
+                new NMon::TEvRemoteHttpInfo(std::move(request)))->Get()->Html;
+        }
     };
 
     Y_UNIT_TEST(DisconnectBeforeStopAcknowledgement) {
@@ -210,6 +223,93 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.Disconnect(0);
         s.ProcessQueues();
         UNIT_ASSERT_VALUES_EQUAL(duplicateRuns, 0);
+    }
+
+    Y_UNIT_TEST(MonitoringMemoryAndPersistedTables) {
+        TSetup s;
+        const auto memory = s.Monitoring();
+        for (TStringBuf expected : {"Replication controller", "In memory", "Persisted tables",
+                "/Root/replica", "Workers", "Sessions", "Pipeline", "Schema barriers", "Index builds"}) {
+            UNIT_ASSERT_C(memory.Contains(expected), expected);
+        }
+        for (const TString table : {"Replications", "Targets", "SrcStreams", "Workers", "TxIds",
+                "SysParams", "SchemaBarrierWorkers", "IndexBuildWorkers"}) {
+            const auto storage = s.Monitoring({{"view", "storage"}, {"table", table}});
+            UNIT_ASSERT_C(storage.Contains("<h3>" + table + "</h3>"), storage);
+            UNIT_ASSERT_C(storage.Contains("Read-only snapshot"), storage);
+            UNIT_ASSERT_C(!storage.Contains("Cannot decode"), storage);
+        }
+        const auto storedTargets = s.Monitoring({{"view", "storage"}, {"table", "Targets"}});
+        UNIT_ASSERT_C(storedTargets.Contains("/Root/replica"), storedTargets);
+
+        const auto filtered = s.Monitoring({{"rid", ToString(Max<ui64>())}});
+        UNIT_ASSERT_C(filtered.Contains("is not present in memory"), filtered);
+        UNIT_ASSERT_C(!filtered.Contains("/Root/replica"), filtered);
+        const auto secondPage = s.Monitoring({{"page", "1"}});
+        UNIT_ASSERT_C(secondPage.Contains("Previous page"), secondPage);
+        UNIT_ASSERT_C(secondPage.Contains("No entries on this page"), secondPage);
+        UNIT_ASSERT_C(!secondPage.Contains("/Root/replica"), secondPage);
+    }
+
+    Y_UNIT_TEST(MonitoringEscapesErrorsAndRejectsInvalidParameters) {
+        TSetup s;
+        const TString error = "source <script>alert('error')</script> & destination";
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0], new TEvService::TEvWorkerStatus(
+            s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, error)));
+        s.Sync();
+
+        for (const auto& parameters : TVector<TVector<std::pair<TString, TString>>>{
+                {}, {{"view", "storage"}, {"table", "Replications"}}, {{"view", "storage"}, {"table", "Targets"}}}) {
+            const auto page = s.Monitoring(parameters);
+            UNIT_ASSERT_C(!page.Contains(error), page);
+            UNIT_ASSERT_C(page.Contains("&lt;script&gt;alert(&#39;error&#39;)&lt;/script&gt; &amp; destination"), page);
+        }
+        const auto invalidId = s.Monitoring({{"rid", "<script>"}});
+        UNIT_ASSERT_C(invalidId.Contains("Invalid replication ID"), invalidId);
+        const auto invalidPage = s.Monitoring({{"page", "-1"}});
+        UNIT_ASSERT_C(invalidPage.Contains("Invalid page number"), invalidPage);
+        const auto invalidTable = s.Monitoring({{"view", "storage"}, {"table", "<script>untrusted-table</script>"}});
+        UNIT_ASSERT_C(invalidTable.Contains("Unknown persisted table"), invalidTable);
+        UNIT_ASSERT_C(!invalidTable.Contains("untrusted-table"), invalidTable);
+        for (const TString cursor : {"1", "1,2,3,4", "-1,2,3", "1,2,<script>"}) {
+            const auto invalidCursor = s.Monitoring({{"view", "storage"}, {"table", "Workers"}, {"from", cursor}});
+            UNIT_ASSERT_C(invalidCursor.Contains("Invalid table cursor"), invalidCursor);
+        }
+    }
+
+    Y_UNIT_TEST(MonitoringReadsStorageIndependentlyAndPaginates) {
+        TSetup s;
+        NKikimrMiniKQL::TResult result;
+        const auto query = Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
+            (return (AsList (UpdateRow 'Targets key '('('DstPath (Utf8 '/Root/persisted-only))))))
+        ))", s.Worker.ReplicationId(), s.Worker.TargetId());
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, query, result), NKikimrProto::OK);
+        UNIT_ASSERT(s.Monitoring().Contains("/Root/replica"));
+        UNIT_ASSERT(!s.Monitoring().Contains("/Root/persisted-only"));
+        const auto targets = s.Monitoring({{"view", "storage"}, {"table", "Targets"}});
+        UNIT_ASSERT_C(targets.Contains("/Root/persisted-only"), targets);
+
+        TStringBuilder updates;
+        updates << "((return (AsList ";
+        for (ui32 id = 100; id <= 200; ++id) {
+            updates << "(UpdateRow 'SysParams '('('Id (Uint32 '" << id << "))) "
+                << "'('('IntValue (Uint64 '" << id << ")) "
+                << "'('TextValue (Utf8 'monitoring-secret)) '('BinaryValue (String 'monitoring-secret)))) ";
+        }
+        updates << ")))";
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, updates, result), NKikimrProto::OK);
+        const auto first = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}});
+        UNIT_ASSERT_C(first.Contains("Next page"), first);
+        UNIT_ASSERT_C(first.Contains("from=199"), first);
+        UNIT_ASSERT_C(!first.Contains("<td>200</td>"), first);
+        UNIT_ASSERT_C(!first.Contains("monitoring-secret"), first);
+        const auto next = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}, {"from", "199"}});
+        UNIT_ASSERT_C(next.Contains("<td>199</td>"), next);
+        UNIT_ASSERT_C(next.Contains("<td>200</td>"), next);
+        UNIT_ASSERT_C(!next.Contains("Next page"), next);
+        UNIT_ASSERT_C(!next.Contains("monitoring-secret"), next);
     }
 }
 

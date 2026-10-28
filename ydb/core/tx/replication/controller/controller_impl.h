@@ -25,6 +25,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/stream/fwd.h>
 
 #include <optional>
 
@@ -116,6 +117,8 @@ private:
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext& ctx) override;
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
+    bool RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 page) const;
 
     // state functions
     STFUNC(StateInit);
@@ -204,6 +207,7 @@ private:
     // local transactions
     class TTxInitSchema;
     class TTxInit;
+    class TTxMonitoring;
     class TTxCreateReplication;
     class TTxAlterReplication;
     class TTxDropReplication;

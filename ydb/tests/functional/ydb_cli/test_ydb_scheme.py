@@ -4,9 +4,10 @@ import pytest
 import yatest
 
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
+from ydb.tests.library.fixtures import ydb_database_ctx
 
 CLUSTER_CONFIG = dict(
-    extra_feature_flags=["enable_views", "enable_external_data_sources"],
+    extra_feature_flags=["enable_views", "enable_external_data_sources", "enable_relative_paths"],
     extra_grpc_services=["view"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )

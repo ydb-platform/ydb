@@ -19,7 +19,8 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h>
+#include <util/generic/hash_multi_map.h>
+#include <util/generic/iterator_range.h>
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/random/random.h>
@@ -158,6 +159,8 @@ public:
         TString Pem;
         std::optional<NSecurity::EJwkAlg> Algorithm;
     };
+    using TKeysMap = THashMultiMap<TString, TKey>;
+    using TKeys = TIteratorRange<TKeysMap::const_iterator>;
 
     TJwksCache() = default;
     TJwksCache(
@@ -168,15 +171,15 @@ public:
     bool IsStale(const TInstant& now) const;
 
     size_t Count() const;
-    TMaybe<TKey> Get(const TString& key) const;
-    void Update(const TInstant& now, THashMap<TString, TKey> keys);
+    TKeys Get(const TString& key) const;
+    void Update(const TInstant& now, TKeysMap keys);
 
     void Clear();
 
     TString GetHtml(const TInstant& now) const;
 
 private:
-    THashMap<TString, TKey> Keys;
+    TKeysMap Keys;
 
     TDuration Timeout{TDuration::Max()};
     TInstant LastUpdate{TInstant::Zero()};
@@ -350,15 +353,14 @@ size_t TJwksCache::Count() const {
     return Keys.size();
 }
 
-TMaybe<TJwksCache::TKey> TJwksCache::Get(const TString& key) const {
-    const auto it = Keys.find(key);
-    return (it == Keys.end()) ? Nothing() : MakeMaybe(it->second);
+TJwksCache::TKeys TJwksCache::Get(const TString& key) const {
+    return MakeIteratorRange(Keys.equal_range(key));
 }
 
-void TJwksCache::Update(const TInstant& now, THashMap<TString, TKey> keys) {
+void TJwksCache::Update(const TInstant& now, TKeysMap keys) {
     Keys = std::move(keys);
     LastUpdate = now;
-    KeyCount->Set(static_cast<i64>(Keys.size()));
+    KeyCount->Set(static_cast<i64>(Count()));
 }
 
 void TJwksCache::Clear() {
@@ -549,8 +551,10 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
+    auto verifier = jwt::verify();
+
     NSecurity::EJwkAlg alg;
-    if (!TryFromString(decoded->get_algorithm(), alg) || !SUPPORTED_ALGOS<decltype(jwt::verify())>.contains(alg)) {
+    if (!TryFromString(decoded->get_algorithm(), alg) || !SUPPORTED_ALGOS<decltype(verifier)>.contains(alg)) {
         return ReplyError(
             ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
@@ -573,8 +577,8 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
-    const auto key = JwksCache.Get(BuildKey(ToString(kty.value()), kid));
-    if (!key.Defined()) {
+    const auto keys = JwksCache.Get(BuildKey(ToString(kty.value()), kid));
+    if (keys.empty()) {
         return ReplyError(
             ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::UNAVAILABLE,
             TStringBuilder() << "No matching key was found for token in"
@@ -586,8 +590,6 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             true
         );
     }
-
-    auto verifier = jwt::verify();
 
     if (AllowedClockSkew != TDuration::Zero()) {
         verifier.leeway(AllowedClockSkew.Seconds());
@@ -605,13 +607,25 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         }
     }
 
-    try {
-        const auto verificationAlgorithm = key->Algorithm.has_value() ? key->Algorithm.value() : alg;
-        SUPPORTED_ALGOS<decltype(verifier)>.at(verificationAlgorithm)(verifier, key->Pem);
-        verifier.verify(*decoded);
-    } catch (const std::exception& e) {
+    bool verified = false;
+    TString verificationError = "No key matches the token algorithm";
+    for (const auto& [keyId, key] : keys) {
+        if (key.Algorithm.has_value() && key.Algorithm.value() != alg) {
+            continue;
+        }
+        try {
+            auto keyVerifier = verifier;
+            SUPPORTED_ALGOS<decltype(verifier)>.at(alg)(keyVerifier, key.Pem);
+            keyVerifier.verify(*decoded);
+            verified = true;
+            break;
+        } catch (const std::exception& e) {
+            verificationError = e.what();
+        }
+    }
+    if (!verified) {
         YDB_LOG_ERROR("Failed to verify token",
-            {"error", e.what()}
+            {"error", verificationError}
         );
         return ReplyError(
             ev->Sender, msg->Key,
@@ -867,7 +881,7 @@ void TExternalIdpProvider::HandleJwksResponse(
         return;
     }
 
-    const auto arr = NSecurity::ParseJwkSet(json);
+    auto arr = NSecurity::ParseJwkSet(json);
     if (!arr.has_value()) {
         YDB_LOG_ERROR("Failed to parse JWKS",
             {"issuer", Config.GetIssuer()}
@@ -875,8 +889,8 @@ void TExternalIdpProvider::HandleJwksResponse(
         return;
     }
 
-    THashMap<TString, TJwksCache::TKey> newKeys;
-    for (const auto& jwk : arr->Keys) {
+    TJwksCache::TKeysMap newKeys;
+    for (auto& jwk : arr->Keys) {
         if (jwk.Usage.has_value() && jwk.Usage.value() == NSecurity::EJwkUsage::ENC) {
             continue;
         }
@@ -903,7 +917,8 @@ void TExternalIdpProvider::HandleJwksResponse(
             );
             continue;
         }
-        newKeys[BuildKey(ToString(jwk.Type), TString{jwk.KeyId})] = {std::move(pubkey.value()), jwk.Algorithm};
+        newKeys.emplace(BuildKey(ToString(jwk.Type), TString{jwk.KeyId}),
+            TJwksCache::TKey{std::move(pubkey.value()), jwk.Algorithm});
     }
     if (newKeys.empty()) {
         YDB_LOG_ERROR("No supported keys in JWKS response",

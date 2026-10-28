@@ -177,6 +177,12 @@ namespace NKikimr::NStorage {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
             auto targetSS = *(targetConfig.*ssMutableFunc)();
+            if (!targetSS.RingGroupsSize() && (!targetSS.HasRing() || (!targetSS.GetRing().RingSize() &&
+                    !targetSS.GetRing().NodeSize()))) {
+                // the generator could place no rings at all (e.g. no allowed node is left), which forcing the heal
+                // can't help; the configuration of faulty nodes, which it can, has rings
+                throw TExError() << "No recommended configuration could be made";
+            }
             const auto clearActorIdOffsets = [](auto& config) {
                 if (config.RingGroupsSize() == 0) {
                     config.MutableRing()->ClearRingGroupActorIdOffset();

@@ -10,7 +10,9 @@
 #include <util/string/cast.h>
 
 #include <exception>
+#include <future>
 #include <stdexcept>
+#include <utility>
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
@@ -73,6 +75,51 @@ public:
     }
 
     std::shared_ptr<ISessionClient> Client;
+};
+
+class TPoolSessionClient : public TMockSessionClient {
+public:
+    void DeleteSession(TKqpSessionCommon* session) override {
+        DeletedSession.reset(session);
+    }
+
+    std::unique_ptr<TKqpSessionCommon> DeletedSession;
+};
+
+struct TGetSessionResult {
+    TKqpSessionCommon* Session = nullptr;
+    int Replies = 0;
+    int NewSessions = 0;
+    int Errors = 0;
+};
+
+class TGetSessionProbe : public NSessionPool::IGetSessionCtx {
+public:
+    explicit TGetSessionProbe(TGetSessionResult& result)
+        : Result(result)
+    {}
+
+    void ReplySessionToUser(TKqpSessionCommon* session) override {
+        Result.Session = session;
+        ++Result.Replies;
+    }
+
+    void ReplyError(TStatus) override {
+        ++Result.Errors;
+    }
+
+    void ReplyNewSession() override {
+        ++Result.NewSessions;
+    }
+
+    void ScheduleOnDeadlineWaiterCleanup() override {}
+
+    TDeadline GetDeadline() const override {
+        return TDeadline::Max();
+    }
+
+private:
+    TGetSessionResult& Result;
 };
 
 Ydb::Query::SessionState MakeSessionShutdownState() {
@@ -153,6 +200,83 @@ Y_UNIT_TEST(SessionShutdownNullSessionStopsReading) {
     UNIT_ASSERT(HandleAttachSessionState(MakeSessionShutdownState(), nullptr, client)
         == EAttachStreamReadAction::Stop);
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
+}
+
+Y_UNIT_TEST(ShutdownAfterReturnDoesNotLeaveClosingSessionInPool) {
+    NSessionPool::TSessionPool pool(1);
+    auto session = std::make_unique<TKqpSessionCommon>("", "host:2136", true);
+    UNIT_ASSERT(session->MarkActive());
+    auto* rawSession = session.get();
+    auto client = std::make_shared<TPoolSessionClient>();
+
+    std::promise<void> shutdownReady;
+    auto shutdownReadyFuture = shutdownReady.get_future();
+    std::promise<void> returnedToPool;
+    auto returnedToPoolFuture = returnedToPool.get_future();
+    auto shutdown = std::async(std::launch::async, [&] {
+        return HandleAttachSessionState(MakeSessionShutdownState(), rawSession, client, [&] {
+            shutdownReady.set_value();
+            returnedToPoolFuture.get();
+        });
+    });
+
+    shutdownReadyFuture.get();
+    const bool markedIdle = session->MarkIdle();
+    const bool returned = pool.ReturnSession(session.get(), false);
+    if (returned) {
+        session.release();
+    }
+    // Release the callback before assertions or future destruction, even on failure.
+    returnedToPool.set_value();
+    const auto action = shutdown.get();
+
+    UNIT_ASSERT(markedIdle);
+    UNIT_ASSERT(returned);
+    UNIT_ASSERT(action == EAttachStreamReadAction::Stop);
+    // The server-closed session must be removed instead of left CLOSING in the pool.
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetCurrentPoolSize(), 0);
+    UNIT_ASSERT(client->DeletedSession.get() == rawSession);
+    UNIT_ASSERT(client->DeletedSession->GetState() == TKqpSessionCommon::S_BROKEN);
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetActiveSessions(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 0);
+
+    TGetSessionResult result;
+    pool.GetSession(std::make_unique<TGetSessionProbe>(result));
+    UNIT_ASSERT_VALUES_EQUAL(result.Replies, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result.NewSessions, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result.Errors, 0);
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetActiveSessions(), 1);
+    pool.DecrementActiveCounter();
+}
+
+Y_UNIT_TEST(ShutdownBeforeReturnPreventsPooling) {
+    NSessionPool::TSessionPool pool(1);
+    auto session = std::make_unique<TKqpSessionCommon>("", "host:2136", true);
+    UNIT_ASSERT(session->MarkActive());
+    auto client = std::make_shared<TMockSessionClient>();
+    UNIT_ASSERT(HandleAttachSessionState(MakeSessionShutdownState(), session.get(), client)
+        == EAttachStreamReadAction::Stop);
+    UNIT_ASSERT(session->GetState() == TKqpSessionCommon::S_CLOSING);
+    UNIT_ASSERT(!session->MarkIdle());
+    UNIT_ASSERT(!pool.ReturnSession(session.get(), false));
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetCurrentPoolSize(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetActiveSessions(), 0);
+}
+
+Y_UNIT_TEST(RepeatedShutdownPreservesTerminalStateAndCountsOnce) {
+    TTestKqpSession session("", "host:2136");
+    auto client = std::make_shared<TMockSessionClient>();
+    HandleAttachSessionState(MakeSessionShutdownState(), &session, client);
+    HandleAttachSessionState(MakeNodeShutdownState(), &session, client);
+    UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_CLOSING);
+    UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 1);
+    UNIT_ASSERT_VALUES_EQUAL(client->LastReason, "session_shutdown");
+
+    TTestKqpSession broken("", "host:2136");
+    broken.MarkBroken();
+    HandleAttachSessionState(MakeSessionShutdownState(), &broken, client);
+    UNIT_ASSERT(broken.GetState() == TKqpSessionCommon::S_BROKEN);
+    UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 1);
 }
 
 Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {

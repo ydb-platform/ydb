@@ -847,20 +847,25 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    bool CheckQuorum(const THashSet<TActorId>& ackedPopulators) const {
-        for (const auto& ringGroup : GroupInfo->RingGroups) {
+    // Subscribers read the replicas selected either by the path or by the path id, so the update must reach the
+    // majority of each of these selections in every ring group, not just the majority of their union
+    bool CheckQuorum(TPathId pathId, TStringBuf path, const THashSet<TActorId>& ackedPopulators) const {
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
             if (ShouldIgnoreInQuorum(ringGroup)) {
                 continue;
             }
-            ui32 acks = 0;
-            for (const auto& ring : ringGroup.Rings) {
-                for (const auto& replica : ring.Replicas) {
+            for (const ui64 hash : {CityHash64(path), pathId.Hash()}) {
+                TStateStorageInfo::TSelection selection;
+                GroupInfo->SelectReplicas(hash, &selection, ringGroupIndex);
+                ui32 acks = 0;
+                for (const TActorId& replica : selection) {
                     const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);
                     acks += populator && ackedPopulators.contains(*populator);
                 }
-            }
-            if (!IsMajorityReached(ringGroup, acks)) {
-                return false;
+                if (!IsMajorityReached(ringGroup, acks)) {
+                    return false;
+                }
             }
         }
         return true;
@@ -901,7 +906,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             pathIt->second.AckedPopulators.insert(ev->Sender);
-            if (CheckQuorum(pathIt->second.AckedPopulators)) {
+            if (CheckQuorum(pathId, it->second.Paths.at(pathId), pathIt->second.AckedPopulators)) {
                 YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},

@@ -1,6 +1,8 @@
 #include "topic_configuration_replicator.h"
 #include "topic_configuration_replicator_factory.h"
 
+#include <ydb/core/persqueue/events/internal.h>
+
 namespace NKikimr::NPQ {
 
 TTopicConfigurationReplicator::TTopicConfigurationReplicator(ui64 tabletId, const TActorId& tabletActor,
@@ -9,8 +11,9 @@ TTopicConfigurationReplicator::TTopicConfigurationReplicator(ui64 tabletId, cons
     , Config(config)
 {}
 
-void TTopicConfigurationReplicator::Bootstrap(const TActorContext&) {
+void TTopicConfigurationReplicator::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateWork);
+    ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationReplicationFinished());
 }
 
 STFUNC(TTopicConfigurationReplicator::StateWork) {

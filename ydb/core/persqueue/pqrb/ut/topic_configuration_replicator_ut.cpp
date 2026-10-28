@@ -9,7 +9,7 @@ namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TTopicConfigurationReplicatorTests) {
 
-Y_UNIT_TEST(NoOp) {
+Y_UNIT_TEST(CompletesWithoutReplicatingConfiguration) {
     TTestBasicRuntime runtime(1, false);
     TAppPrepare prepare;
     runtime.Initialize(prepare.Unwrap());
@@ -26,12 +26,13 @@ Y_UNIT_TEST(NoOp) {
         }
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
-    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    auto completion = runtime.GrabEdgeEvent<TEvPQ::TEvTopicConfigurationReplicationFinished>(parent);
+    UNIT_ASSERT_VALUES_EQUAL(completion->Sender, replicator);
     runtime.Send(new IEventHandle(replicator, parent, new TEvents::TEvWakeup()), 0, true);
     runtime.SimulateSleep(TDuration::Seconds(10));
     UNIT_ASSERT(runtime.FindActor(replicator));
     UNIT_ASSERT_VALUES_EQUAL(credentialsRequests, 0);
-    UNIT_ASSERT_VALUES_EQUAL(completionNotifications, 0);
+    UNIT_ASSERT_VALUES_EQUAL(completionNotifications, 1);
     runtime.Send(new IEventHandle(replicator, parent, new TEvents::TEvPoisonPill()), 0, true);
     runtime.SimulateSleep(TDuration::MilliSeconds(100));
     UNIT_ASSERT(!runtime.FindActor(replicator));

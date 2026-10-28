@@ -141,13 +141,13 @@ Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
     SendBalancerUpdate(tc, update);
     tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     UNIT_ASSERT(replicator);
-    UNIT_ASSERT(proposals.empty());
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
     auto complete = [&](const TActorId& sender) {
         ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, sender, new TEvPQ::TEvTopicConfigurationReplicationFinished());
         tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     };
     complete(tc.Edge); // Unrelated sender cannot finish the move.
-    UNIT_ASSERT(proposals.empty());
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
     complete(replicator);
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
     const auto& modify = proposals.back()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction().GetModifyScheme();
@@ -164,8 +164,9 @@ Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
     SendBalancerUpdate(tc, update);
     tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     UNIT_ASSERT(replicator != oldReplicator);
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
     complete(oldReplicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
     complete(replicator);
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
     update.ReplicationStatus = NKikimrPQ::ReplicationDone;

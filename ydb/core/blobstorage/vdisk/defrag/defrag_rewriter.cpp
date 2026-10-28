@@ -143,7 +143,7 @@ namespace NKikimr {
                     memcpy(&fullDataSize, header, sizeof(fullDataSize));
                     header += sizeof(fullDataSize);
                     Y_VERIFY_S(fullDataSize == rec.LogoBlobId.BlobSize(), DCtx->VCtx->VDiskLogPrefix);
-                    Y_VERIFY_S(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header),
+                    Y_VERIFY_S(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw8() == static_cast<ui8>(*header),
                         DCtx->VCtx->VDiskLogPrefix);
                     break;
                 }

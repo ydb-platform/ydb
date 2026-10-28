@@ -182,6 +182,112 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(RejectedChangeDoesNotAdvanceOffset, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        using TChangeProto = NKikimrTxDataShard::TEvApplyReplicationChanges::TChange;
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+        const auto makeChange = [](i64 offset, ui32 key, ui32 value) {
+            TChangeProto change;
+            change.SetSourceOffset(offset);
+            const TCell keyCell = TCell::Make(key);
+            change.SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+            auto* upsert = change.MutableUpsert();
+            upsert->AddTags(2);
+            const TCell valueCell = TCell::Make(value);
+            upsert->SetData(TSerializedCellVec::Serialize({&valueCell, 1}));
+            return change;
+        };
+        const auto apply = [&](const TVector<TChangeProto>& changes, TEvResult::EStatus status,
+                TEvResult::EReason reason = TEvResult::REASON_NONE) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            for (const auto& change : changes) {
+                request->Record.AddChanges()->CopyFrom(change);
+            }
+            const auto replyTo = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, replyTo, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(replyTo);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_C(record.GetStatus() == status,
+                record.ShortDebugString() << ", expected " << TEvResult::EStatus_Name(status));
+            UNIT_ASSERT_C(record.GetReason() == reason,
+                record.ShortDebugString() << ", expected " << TEvResult::EReason_Name(reason));
+        };
+
+        TVector<std::pair<TString, TChangeProto>> invalidChanges;
+        for (bool reset : {false, true}) {
+            const TString operation = reset ? "reset" : "upsert";
+            auto change = makeChange(1, 2, 22);
+            if (reset) {
+                const auto updates = change.GetUpsert();
+                change.MutableReset()->CopyFrom(updates);
+            }
+            auto* updates = reset ? change.MutableReset() : change.MutableUpsert();
+            updates->SetTags(0, 3);
+            invalidChanges.emplace_back(operation + " unknown column", change);
+            updates->SetTags(0, 1);
+            invalidChanges.emplace_back(operation + " primary key column", change);
+            updates->SetTags(0, 2);
+            updates->AddTags(2);
+            invalidChanges.emplace_back(operation + " tag count mismatch", change);
+            updates->ClearTags();
+            updates->AddTags(2);
+            updates->SetData("\x01");
+            invalidChanges.emplace_back(operation + " malformed data", change);
+        }
+        auto missingOperation = makeChange(1, 2, 22);
+        missingOperation.ClearUpsert();
+        invalidChanges.emplace_back("missing operation", missingOperation);
+
+        TString expected;
+        ui32 firstKey = 1;
+        for (auto& [name, invalid] : invalidChanges) {
+            const i64 firstOffset = firstKey - 1;
+            const auto prefix = makeChange(firstOffset, firstKey, 11);
+            const auto corrected = makeChange(firstOffset + 1, firstKey + 1, 22);
+            const auto suffix = makeChange(firstOffset + 2, firstKey + 2, 33);
+            invalid.SetSourceOffset(corrected.GetSourceOffset());
+            invalid.SetKey(corrected.GetKey());
+
+            // A rejected record commits the valid prefix, but neither itself nor the suffix.
+            const auto reason = invalid.RowOperation_case() == TChangeProto::ROWOPERATION_NOT_SET
+                ? TEvResult::REASON_UNEXPECTED_ROW_OPERATION : TEvResult::REASON_BAD_REQUEST;
+            apply({prefix, invalid, suffix}, TEvResult::STATUS_REJECTED, reason);
+            expected += TStringBuilder() << "key = " << firstKey << ", value = 11\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+
+            if (Reboot) {
+                RebootTablet(runtime, shard, sender);
+            }
+
+            // Reuse the rejected offset and replay the prefix with a different value.
+            apply({makeChange(firstOffset, firstKey, 99), corrected, suffix}, TEvResult::STATUS_OK);
+            expected += TStringBuilder() << "key = " << firstKey + 1 << ", value = 22\n"
+                << "key = " << firstKey + 2 << ", value = 33\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+
+            // Previously accepted offsets remain duplicates, even with invalid payloads.
+            apply({invalid}, TEvResult::STATUS_OK);
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+            firstKey += 3;
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SplitReplicationSourceOffsets, RebootSrc) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

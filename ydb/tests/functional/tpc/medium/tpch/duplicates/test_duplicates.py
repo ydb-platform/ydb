@@ -28,6 +28,10 @@ class TpchDoubleImportTestBase(tpch.TestTpch1, FunctionalTestBase):
 
 class TestTpchDuplicatesZeroLevel(TpchDoubleImportTestBase):
     """https://github.com/ydb-platform/ydb/issues/22253"""
+    scale: float = 0.1
+    tables_size: dict[str, int] = {
+        'lineitem': 600572,
+    }
 
     @classmethod
     def _alter_compaction(cls, table) -> str:

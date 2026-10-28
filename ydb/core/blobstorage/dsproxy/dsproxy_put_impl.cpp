@@ -90,6 +90,9 @@ void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
         if (item.DataKind != NKikimrBlobStorage::TDataKind::USER) {
             pb->SetDataKind(item.DataKind);
         }
+        if (item.WriteSource != UnknownWriteSource()) {
+            pb->SetWriteSourceOp(WriteSourceToProto(item.WriteSource));
+        }
         for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
             auto *check = pb->AddExtraBlockChecks();
             check->SetTabletId(tabletId);

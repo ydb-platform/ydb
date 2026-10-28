@@ -2221,7 +2221,7 @@ namespace NKikimr {
             // and confirmed.
             const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, std::move(fullSnap), confirmedLsn,
+            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, GInfo, std::move(fullSnap), confirmedLsn,
                     Config->AnubisOsirisMaxInFly);
             auto aid = ctx.Register(actor);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -3260,6 +3260,11 @@ namespace NKikimr {
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            // assimilation requests go without QoS, so their clients don't learn of the VDisk going away from the
+            // connection, and they must get replies
+            for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
+            }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
         }

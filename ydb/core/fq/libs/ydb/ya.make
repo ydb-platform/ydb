@@ -14,6 +14,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
+    library/cpp/time_provider
     ydb/library/actors/core
     library/cpp/retry
     ydb/core/base

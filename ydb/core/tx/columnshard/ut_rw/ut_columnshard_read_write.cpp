@@ -2157,20 +2157,52 @@ Y_UNIT_TEST_SUITE(TColumnShardInit) {
         UNIT_ASSERT_GT(csControllerGuard->GetCompactionFinishedCounter().Val(), 0);
     }
 
-    Y_UNIT_TEST(LoadsSchemaVersionsOnStart) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        TTestBasicRuntime runtime;
+    TActorId StartShard(TTestBasicRuntime & runtime, const ui64 tableId, const TestTableDescription& table) {
         TTester::Setup(runtime);
-
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+        return sender;
+    }
 
+    void AlterSchema(TTestBasicRuntime & runtime, TActorId & sender, const ui64 tableId, const TestTableDescription& table, const ui32 version,
+        const ui64 txId) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, true, version, table.Schema, table.Pk, {})));
+        tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+        Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), txId));
+    }
+
+    void AddColumns(TestTableDescription & table, const ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            table.Schema.emplace_back("added_" + ::ToString(table.Schema.size()), NScheme::TTypeInfo(NTypeIds::Int32));
+        }
+    }
+
+    std::map<ui64, std::vector<TString>> ColumnsByVersion(
+        TTestBasicRuntime & runtime, NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> & csControllerGuard) {
+        for (ui32 i = 0; i < 10 && !csControllerGuard->GetShardActualsCount(); ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        std::map<ui64, std::vector<TString>> result;
+        for (auto&& [version, info] : csControllerGuard->GetTheOnlyShard()->GetIndexVerified().GetVersionedIndex().GetSchemaByVersion()) {
+            result.emplace(version, info.GetSchema()->GetIndexInfo().GetColumnNames());
+        }
+        return result;
+    }
+
+    // one more change than the writer allows in a stored diff
+    constexpr ui32 MoreChangesThanDiffLimit = 101;
+
+    Y_UNIT_TEST(LoadsSchemaVersionsOnStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
         const ui64 tableId = 1;
         TestTableDescription table;
-        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+        TActorId sender = StartShard(runtime, tableId, table);
         for (ui32 version = 2, txId = 100; version <= 4; ++version, ++txId) {
             // the drop makes a field of one version's diff wrong in the next one, if it leaked there
             if (version == 3) {
@@ -2178,28 +2210,69 @@ Y_UNIT_TEST_SUITE(TColumnShardInit) {
             } else {
                 table.Schema.emplace_back("added_" + ::ToString(version), NScheme::TTypeInfo(NTypeIds::Int32));
             }
-            NKikimrTxColumnShard::TSchemaTxBody tx;
-            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, true, version, table.Schema, table.Pk, {})));
-            tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
-            Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), txId));
+            AlterSchema(runtime, sender, tableId, table, version, txId);
         }
 
-        const auto columnsByVersion = [&]() {
-            for (ui32 i = 0; i < 10 && !csControllerGuard->GetShardActualsCount(); ++i) {
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            }
-            std::map<ui64, std::vector<TString>> result;
-            for (auto&& [version, info] : csControllerGuard->GetTheOnlyShard()->GetIndexVerified().GetVersionedIndex().GetSchemaByVersion()) {
-                result.emplace(version, info.GetSchema()->GetIndexInfo().GetColumnNames());
-            }
-            return result;
-        };
-        const auto beforeReboot = columnsByVersion();
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
         UNIT_ASSERT_VALUES_EQUAL(beforeReboot.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(beforeReboot.rbegin()->second.size(), beforeReboot.begin()->second.size() + 1);
 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        UNIT_ASSERT(columnsByVersion() == beforeReboot);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
+
+    Y_UNIT_TEST(WritesSchemaDiffAfterStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        AddColumns(table, 1);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto versions = ReadSchemaPresetVersions(runtime, TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_VALUES_EQUAL(versions.size(), 2);
+        UNIT_ASSERT(versions[1].HasDiff());
+        // the diff is made against the schema filled on start, so a reboot checks that schema is right
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
+
+    Y_UNIT_TEST(WritesNoSchemaDiffOverHundredChanges) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        AddColumns(table, MoreChangesThanDiffLimit);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto versions = ReadSchemaPresetVersions(runtime, TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_VALUES_EQUAL(versions.size(), 2);
+        UNIT_ASSERT(!versions[1].HasDiff());
+        UNIT_ASSERT(versions[1].HasSchema());
+    }
+
+    Y_UNIT_TEST(LoadsSchemaVersionWithoutDiff) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        AddColumns(table, MoreChangesThanDiffLimit);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
     }
 }
 

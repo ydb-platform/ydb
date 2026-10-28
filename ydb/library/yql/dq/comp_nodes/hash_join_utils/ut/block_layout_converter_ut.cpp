@@ -11,6 +11,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
+#include <util/system/cpu_id.h>
+
 using namespace NYql::NUdf;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -38,6 +40,9 @@ constexpr int TestSize = 128 * 3 * sizeof(i64);
 
 Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     Y_UNIT_TEST(TestFixedSize) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -81,6 +86,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMultipleFixedSize) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -131,6 +139,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestString) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -183,6 +194,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMultipleStrings) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -242,6 +256,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMultipleVariousTypes) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -319,6 +336,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestOptional) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -370,6 +390,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestTuple) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         std::vector<NMiniKQL::TType*> t;
@@ -438,6 +461,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestTzDate) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
         using TDtLayout = NUdf::TDataType<TTzDatetime>::TLayout;
 
@@ -486,6 +512,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -544,6 +573,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestSingularColumns) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -598,6 +630,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     // without packing its allnull validity bitmap
     // two Null keys compare equal and would match in the join.
     Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();
@@ -637,6 +672,9 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBuckets) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);

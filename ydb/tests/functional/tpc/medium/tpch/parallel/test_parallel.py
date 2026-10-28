@@ -1,12 +1,13 @@
 import ydb.tests.olap.load.lib.tpch as tpch
-import test_s_float
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 
 class TestTpchParallelS0_1T10(tpch.TpchParallelBase, FunctionalTestBase):
     iterations: int = 1
-    tables_size = test_s_float.TestTpchS0_1.tables_size
-    scale: float = test_s_float.TestTpchS0_1.scale
+    tables_size: dict[str, int] = {
+        'lineitem': 600572,
+    }
+    scale: float = 0.1
     threads: int = 10
 
     @classmethod

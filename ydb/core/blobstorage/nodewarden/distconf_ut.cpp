@@ -1,28 +1,27 @@
-#include <ydb/core/testlib/tablet_helpers.h>
-
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tabletid.h>
-#include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/nodewarden/distconf_quorum.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/util/random.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/testlib/helpers.h>
-#include <ydb/core/util/random.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/scope.h>
-
-#include <ydb/core/blobstorage/nodewarden/distconf.h>
-#include <ydb/core/blobstorage/nodewarden/distconf_quorum.h>
 
 #include <array>
 
@@ -269,16 +268,24 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     TActorId RegisterKeeper(TTestActorSystem& runtime, const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId,
                             TNodeWardenTestState& state, const TString& startupConfigYaml = {},
                             const NKikimrConfig::TBridgeConfig *bridgeConfig = nullptr,
-                            const NKikimrConfig::TSelfManagementConfig *selfManagementConfig = nullptr) {
+                            const NKikimrConfig::TSelfManagementConfig *selfManagementConfig = nullptr,
+                            const TString& dynamicPileName = {})
+    {
         auto nodeWardenConfig = MakeNodeWardenConfig(config, bridgeConfig);
         nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
+        if (dynamicPileName) {
+            nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>();
+            auto *info = nodeWardenConfig->DynamicNodeConfig->MutableNodeInfo();
+            info->SetNodeId(nodeId);
+            info->MutableLocation()->SetBridgePileName(dynamicPileName);
+        }
         if (selfManagementConfig) {
             nodeWardenConfig->SelfManagementConfig =
                 std::make_unique<NKikimrConfig::TSelfManagementConfig>(*selfManagementConfig);
         }
         auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
         const TActorId keeperId = runtime.Register(
-            new NStorage::TDistributedConfigKeeper(std::move(nodeWardenConfig), storageConfig, true), nodeId);
+            new NStorage::TDistributedConfigKeeper(std::move(nodeWardenConfig), storageConfig, !dynamicPileName), nodeId);
 
         const TActorId nodeWardenProxyId = runtime.Register(new TNodeWardenProxyActor(keeperId, state), nodeId);
         runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), nodeWardenProxyId);
@@ -749,6 +756,48 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             }
             return true;
         };
+    }
+
+    Y_UNIT_TEST(PileConnectivityFromDynamicNode) {
+        const auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        FillTwoPileBridgedMetadata(state, config);
+        TTestActorSystem runtime(5);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        const auto dynamicKeeper = RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
+        const auto edge = runtime.AllocateEdgeActor(5);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableQueryPileConnectivity();
+        runtime.Send(new IEventHandle(dynamicKeeper, edge, request.release(), 0, 123), 5);
+        runtime.Schedule(runtime.GetClock() + TDuration::Seconds(5),
+            new IEventHandle(TEvents::TSystem::Wakeup, 0, edge, {}, nullptr, 0), nullptr, 5);
+        auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 123);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            record.DebugString());
+        UNIT_ASSERT(record.HasPileConnectivity());
+        const auto& report = record.GetPileConnectivity();
+        UNIT_ASSERT_VALUES_EQUAL(report.GetReporterNodeId(), 1);
+        UNIT_ASSERT(report.GetHasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(report.PilesSize(), 2);
+        for (const auto& pile : report.GetPiles()) {
+            UNIT_ASSERT_VALUES_EQUAL(pile.GetNumStaticNodes(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pile.GetNumConnectedStaticNodes(), 2);
+            UNIT_ASSERT(pile.GetHasNodeQuorum());
+        }
     }
 
     // pile registry lists piles in the order other than local BridgeConfig does; pile ids must come from the registry

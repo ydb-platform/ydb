@@ -618,7 +618,7 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
-          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" \
+          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" YA_MAKE_OUT_DIR="$YA_MAKE_OUT_DIR" \
           RETRY="$RETRY" DASHBOARD_SANITIZER="$DASHBOARD_SANITIZER" \
           BRANCH_NAME="$BRANCH_NAME" ORIGINAL_HEAD="$ORIGINAL_HEAD" \
           bash .github/scripts/utils/dashboard/build_tests_dashboard.sh || true

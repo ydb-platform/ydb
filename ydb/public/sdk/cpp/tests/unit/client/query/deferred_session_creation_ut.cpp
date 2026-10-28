@@ -32,6 +32,7 @@ public:
     std::atomic_uint CreateSessionRequests = 0;
     std::atomic_uint ClosedSessions = 0;
     std::function<void(grpc::ServerWriter<Ydb::Query::SessionState>*)> OnAttach;
+    grpc::Status AttachStatus = grpc::Status::OK;
     Ydb::StatusIds::StatusCode TxStatus = Ydb::StatusIds::SUCCESS;
     grpc::StatusCode TxRpcStatus = grpc::StatusCode::OK;
 
@@ -51,6 +52,7 @@ public:
         const Ydb::Query::AttachSessionRequest* request,
         grpc::ServerWriter<Ydb::Query::SessionState>* writer) override
     {
+        Y_DEFER { ++ClosedSessions; };
         if (AttachDelay != TDuration::Zero()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(AttachDelay.MilliSeconds()));
         }
@@ -59,11 +61,13 @@ public:
         writer->Write(state);
         if (OnAttach && request->session_id() == "fake-query-session-id-1") {
             OnAttach(writer);
+            if (!AttachStatus.ok()) {
+                return AttachStatus;
+            }
         }
         while (!context->IsCancelled()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-        ++ClosedSessions;
         return grpc::Status::OK;
     }
 
@@ -243,18 +247,32 @@ void WaitUntil(TPredicate predicate) {
 
 enum class EShutdownOrder { Active, Idle, Waiter, ConcurrentReturn };
 
-void TestSessionShutdown(EShutdownOrder order) {
-    for (bool nodeShutdown : {false, true}) {
+void TestSessionShutdown(EShutdownOrder order, bool closeStream = false) {
+    struct TCloseEvent {
+        bool NodeShutdown;
+        grpc::StatusCode Status;
+        const char* Reason;
+    };
+    const TCloseEvent shutdowns[] = {
+        {false, grpc::StatusCode::OK, "session_shutdown"},
+        {true, grpc::StatusCode::OK, "node_shutdown"},
+    };
+    const TCloseEvent closures[] = {
+        {false, grpc::StatusCode::OUT_OF_RANGE, "attach_closed"},
+        {false, grpc::StatusCode::UNAVAILABLE, "transport_error"},
+    };
+    for (const auto& event : closeStream ? closures : shutdowns) {
         for (bool deferred : {false, true}) {
             NTesting::InitPortManagerFromEnv();
             const auto endpoint = TStringBuilder() << "127.0.0.1:" << NTesting::GetFreePort();
             std::atomic_uint completions = 0;
             TManualEvent shutdown;
             TDelayedMockQueryService service;
+            service.AttachStatus = grpc::Status(event.Status, "test attach status");
             service.OnAttach = [&](auto* writer) {
-                if (shutdown.WaitT(TDuration::Seconds(10))) {
+                if (shutdown.WaitT(TDuration::Seconds(10)) && event.Status == grpc::StatusCode::OK) {
                     Ydb::Query::SessionState state;
-                    if (nodeShutdown) {
+                    if (event.NodeShutdown) {
                         state.mutable_node_shutdown();
                     } else {
                         state.mutable_session_shutdown();
@@ -300,7 +318,7 @@ void TestSessionShutdown(EShutdownOrder order) {
             }
             const NMetrics::TLabels labels = {
                 {"ydb.query.session.pool.name", "/Root/My/DB@" + std::string(endpoint)},
-                {"reason", nodeShutdown ? "node_shutdown" : "session_shutdown"},
+                {"reason", event.Reason},
             };
             WaitUntil([&] {
                 auto count = metrics->GetCounter("ydb.query.session.closed", labels);
@@ -345,4 +363,5 @@ Y_UNIT_TEST(ActiveSession) { TestSessionShutdown(EShutdownOrder::Active); }
 Y_UNIT_TEST(IdleSession) { TestSessionShutdown(EShutdownOrder::Idle); }
 Y_UNIT_TEST(QueuedWaiter) { TestSessionShutdown(EShutdownOrder::Waiter); }
 Y_UNIT_TEST(ConcurrentReturn) { TestSessionShutdown(EShutdownOrder::ConcurrentReturn); }
+Y_UNIT_TEST(IdleAttachClosure) { TestSessionShutdown(EShutdownOrder::Idle, true); }
 }

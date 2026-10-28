@@ -268,19 +268,22 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
     std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
-        if (Closed_ || !impl->CanReturnToPool())
+        if (Closed_)
             return false;
 
+        // Register before checking eligibility so shutdown cannot miss the pool.
+        impl->UpdateServerCloseHandler(this);
+        if (!impl->CanReturnToPool()) {
+            impl->UpdateServerCloseHandler(nullptr);
+            return false;
+        }
+
         if (auto maybeCtx = WaitersQueue_.TryGet()) {
+            impl->UpdateServerCloseHandler(nullptr);
             getSessionCtx = std::move(maybeCtx);
             if (!active)
                 IncrementActiveCounterUnsafe();
         } else {
-            impl->UpdateServerCloseHandler(this);
-            if (!impl->CanReturnToPool()) {
-                impl->UpdateServerCloseHandler(nullptr);
-                return false;
-            }
             Sessions_.emplace(std::make_pair(
                 impl->GetTimeToTouchFast(),
                 impl));

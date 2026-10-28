@@ -176,6 +176,57 @@ Y_UNIT_TEST(ShutdownBetweenMarkIdleAndReturnPreventsPooling) {
     }
 }
 
+Y_UNIT_TEST(ShutdownWithoutClientPreservesStateAndRejectsReturn) {
+    for (const auto& shutdown : {MakeSessionShutdownState(), MakeNodeShutdownState()}) {
+        for (const auto state : {TKqpSessionCommon::S_ACTIVE, TKqpSessionCommon::S_IDLE,
+                               TKqpSessionCommon::S_BROKEN}) {
+            TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
+            if (state == TKqpSessionCommon::S_IDLE) {
+                UNIT_ASSERT(session.MarkIdle());
+            } else if (state == TKqpSessionCommon::S_BROKEN) {
+                session.MarkBroken();
+            }
+            UNIT_ASSERT(HandleAttachSessionState(shutdown, &session, {}) == EAttachStreamReadAction::Stop);
+            const auto expected = state == TKqpSessionCommon::S_ACTIVE ? TKqpSessionCommon::S_CLOSING : state;
+            UNIT_ASSERT(session.GetState() == expected);
+            UNIT_ASSERT(!session.CanReturnToPool());
+            UNIT_ASSERT(!session.MarkIdle());
+        }
+    }
+}
+
+Y_UNIT_TEST(PoolRejectsUnusableSessionsWithoutTakingOwnership) {
+    for (const auto state : {TKqpSessionCommon::S_STANDALONE, TKqpSessionCommon::S_ACTIVE,
+                            TKqpSessionCommon::S_IDLE, TKqpSessionCommon::S_BROKEN,
+                            TKqpSessionCommon::S_CLOSING}) {
+        auto session = std::make_unique<TKqpSessionCommon>("", "host:2136", true);
+        if (state == TKqpSessionCommon::S_ACTIVE) {
+            session->MarkActive();
+        } else if (state == TKqpSessionCommon::S_IDLE) {
+            session->MarkIdle();
+        } else if (state == TKqpSessionCommon::S_BROKEN) {
+            session->MarkBroken();
+        } else if (state == TKqpSessionCommon::S_CLOSING) {
+            UNIT_ASSERT(session->MarkAsClosing());
+            UNIT_ASSERT(!session->NeedUpdateActiveCounter());
+            UNIT_ASSERT(!session->MarkActive());
+        }
+        NSessionPool::TSessionPool pool(1);
+        UNIT_ASSERT_VALUES_EQUAL(session->CanReturnToPool(), state == TKqpSessionCommon::S_IDLE);
+        if (state == TKqpSessionCommon::S_IDLE) {
+            pool.Drain([](auto&&) { return true; }, true);
+        }
+        const bool returned = pool.ReturnSession(session.get(), false);
+        if (returned) {
+            session.release();
+        }
+        UNIT_ASSERT(!returned);
+        UNIT_ASSERT(session->GetState() == state);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetCurrentPoolSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetActiveSessions(), 0);
+    }
+}
+
 Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
     const std::pair<const NSessionPool::TSessionCloseCommand*, std::string_view> commands[] = {
         {&NSessionPool::NSessionCloseCommands::PoolIdleTimeout, "pool_idle_timeout"},

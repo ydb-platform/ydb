@@ -58,7 +58,7 @@ const TEndpointKey& TKqpSessionCommon::GetEndpointKey() const {
 // Can be called from interceptor, need lock
 bool TKqpSessionCommon::MarkBroken() {
     std::lock_guard guard(Lock_);
-    const bool firstTerminal = !CloseRequested_ && State_ != EState::S_BROKEN && State_ != EState::S_CLOSING;
+    const bool firstTerminal = !CloseRequested_ && State_ != EState::S_BROKEN;
     if (State_ == EState::S_ACTIVE) {
         NeedUpdateActiveCounter_ = true;
     }
@@ -68,7 +68,7 @@ bool TKqpSessionCommon::MarkBroken() {
 
 bool TKqpSessionCommon::MarkAsClosing() {
     std::lock_guard guard(Lock_);
-    if (CloseRequested_ || State_ == S_BROKEN || State_ == S_CLOSING) {
+    if (CloseRequested_ || State_ == S_BROKEN) {
         return false;
     }
     CloseRequested_ = true;
@@ -97,7 +97,7 @@ bool TKqpSessionCommon::MarkActive() {
 
 bool TKqpSessionCommon::MarkIdle() {
     std::lock_guard guard(Lock_);
-    if (CloseRequested_ || State_ == EState::S_BROKEN || State_ == EState::S_CLOSING) {
+    if (CloseRequested_ || State_ == EState::S_BROKEN) {
         return false;
     }
     State_ = EState::S_IDLE;

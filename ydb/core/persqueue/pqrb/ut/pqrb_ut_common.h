@@ -82,7 +82,7 @@ struct TBalancerUpdate {
     absl::flat_hash_map<ui32, TVector<ui32>> ChildPartitionIds;
     ui32 NextPartitionId = 0;
     ui32 ReceiveAttemptIdPeriodMs = 0;
-    NKikimrPQ::ETopicMovingStatus MovingStatus = NKikimrPQ::Unspecified;
+    NKikimrPQ::ETopicReplicationStatus ReplicationStatus = NKikimrPQ::Unspecified;
     TString DatabasePath;
 };
 
@@ -104,7 +104,7 @@ inline void SendBalancerUpdate(TTestContext& tc, TBalancerUpdate params) {
     record.SetTopicName(params.Topic);
     record.SetPath("/Root/" + params.Topic);
     record.SetSchemeShardId(params.SsId);
-    record.MutableTabletConfig()->SetMovingStatus(params.MovingStatus);
+    record.MutableTabletConfig()->SetReplicationStatus(params.ReplicationStatus);
     if (!params.DatabasePath.empty()) {
         record.MutableTabletConfig()->SetYdbDatabasePath(params.DatabasePath);
     }

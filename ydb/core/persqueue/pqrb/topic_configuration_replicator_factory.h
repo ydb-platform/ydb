@@ -9,7 +9,7 @@ class TMirrorPartitionConfig;
 
 namespace NKikimr::NPQ {
 
-NActors::IActor* CreateTopicConfigurationMover(ui64 tabletId, const NActors::TActorId& tabletActor,
+NActors::IActor* CreateTopicConfigurationReplicator(ui64 tabletId, const NActors::TActorId& tabletActor,
     const NKikimrPQ::TMirrorPartitionConfig& config);
 
 } // namespace NKikimr::NPQ

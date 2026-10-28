@@ -3094,11 +3094,11 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
 
 } // namespace
 
-Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyMovingReads, TPartitionFixture)
+Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyReplicationReads, TPartitionFixture)
 {
     const TConfigParams initialConfig{
         .Version = 1,
-        .Consumers = {{.Consumer = "client"}, {.Consumer = "moving"}},
+        .Consumers = {{.Consumer = "client"}, {.Consumer = "replication"}},
     };
     CreatePartition({
         .Partition = TPartitionId{0},
@@ -3119,7 +3119,7 @@ Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyMovingReads, TPartitionFixture)
     auto updateConfig = [&](bool disabled) {
         Config.SetVersion(Config.GetVersion() + 1);
         Config.SetWriteAndReadDisabled(disabled);
-        GetConsumer(Config, "moving")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING);
+        GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
         SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
         WaitCmdWrite();
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -3154,7 +3154,7 @@ Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyMovingReads, TPartitionFixture)
         WaitErrorResponse({.Cookie = 43, .ErrorCode = NPersQueue::NErrorCode::ERROR,
             .Error = "Read from topic is disabled", .IsInternal = false});
     }
-    expectRead(44, "moving");
+    expectRead(44, "replication");
 
     for (bool direct : {false, true}) {
         for (size_t size : {size_t(10), size_t(600_KB)}) {

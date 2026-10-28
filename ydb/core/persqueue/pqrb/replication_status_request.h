@@ -7,7 +7,7 @@
 
 namespace NKikimr::NPQ {
 
-IActor* CreateMovingStatusRequest(const TActorId& parent,
+IActor* CreateReplicationStatusRequest(const TActorId& parent,
     std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposal);
 
 } // namespace NKikimr::NPQ

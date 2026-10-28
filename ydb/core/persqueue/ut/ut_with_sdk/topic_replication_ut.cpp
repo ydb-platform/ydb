@@ -9,7 +9,7 @@
 namespace NKikimr::NPersQueueTests {
 namespace {
 
-class TTopicMovingEnv {
+class TTopicReplicationEnv {
 public:
     // The factory must outlive the server and its mirrorer actors.
     std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> Factory;
@@ -18,8 +18,8 @@ public:
     NYdb::NTopic::TTopicClient Client;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
 
-    TTopicMovingEnv()
-        : Setup("TopicMoving", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
+    TTopicReplicationEnv()
+        : Setup("TopicReplication", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
@@ -33,7 +33,7 @@ public:
         }
     }
 
-    void Create(const TString& path, bool movingConsumer) {
+    void Create(const TString& path, bool replicationConsumer) {
         Ydb::PersQueue::V1::CreateTopicRequest request;
         request.set_path(path);
         auto* settings = request.mutable_settings();
@@ -41,14 +41,14 @@ public:
         settings->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
         settings->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
         settings->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
-        for (const auto* name : {"reader", "mover"}) {
+        for (const auto* name : {"reader", "replicator"}) {
             auto* rule = settings->add_read_rules();
             rule->set_consumer_name(name);
             rule->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
             rule->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
         }
-        if (movingConsumer) {
-            (*settings->mutable_attributes())["_moving_consumer"] = "mover";
+        if (replicationConsumer) {
+            (*settings->mutable_attributes())["_replication_consumer"] = "replicator";
         }
         grpc::ClientContext context;
         InitContext(context);
@@ -166,31 +166,31 @@ private:
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TTopicMoving) {
-    Y_UNIT_TEST(RejectInvalidMovingAttributes) {
-        TTopicMovingEnv env;
-        const TString path = "/Root/moving_attributes";
+Y_UNIT_TEST_SUITE(TTopicReplication) {
+    Y_UNIT_TEST(RejectInvalidReplicationAttributes) {
+        TTopicReplicationEnv env;
+        const TString path = "/Root/replication_attributes";
         env.Create(path, false);
         const auto original = env.Describe(path);
         for (const auto& [name, value] : TVector<std::pair<TString, TString>>{
-                 {"_moving_consumer", "unknown"},
-                 {"_is_for_topic_moving", "not-a-bool"},
-                 {"_is_for_topic_moving", "true"}}) {
+                 {"_replication_consumer", "unknown"},
+                 {"_is_for_topic_replication", "not-a-bool"},
+                 {"_is_for_topic_replication", "true"}}) {
             auto settings = original;
             (*settings.mutable_attributes())[name] = value;
             env.Alter(path, settings, Ydb::StatusIds::BAD_REQUEST);
         }
-        UNIT_ASSERT_VALUES_EQUAL(env.Describe(path).attributes().at("_topic_moving_status"), "0");
+        UNIT_ASSERT_VALUES_EQUAL(env.Describe(path).attributes().at("_topic_replication_status"), "0");
     }
 
-    Y_UNIT_TEST(ContinueReadingAndWritingAfterMovingDone) {
-        TTopicMovingEnv env;
-        const TString source = "/Root/moving_source";
-        const TString destination = "/Root/moving_destination";
+    Y_UNIT_TEST(ContinueReadingAndWritingAfterReplicationDone) {
+        TTopicReplicationEnv env;
+        const TString source = "/Root/replication_source";
+        const TString destination = "/Root/replication_destination";
         env.Create(source, true);
         env.Create(destination, false);
-        UNIT_ASSERT_VALUES_EQUAL(env.Describe(source).attributes().at("_moving_consumer"), "mover");
-        UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_topic_moving_status"), "0");
+        UNIT_ASSERT_VALUES_EQUAL(env.Describe(source).attributes().at("_replication_consumer"), "replicator");
+        UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_topic_replication_status"), "0");
         env.Write(source, 0, 1000);
 
         auto settings = env.Describe(destination);
@@ -198,12 +198,12 @@ Y_UNIT_TEST_SUITE(TTopicMoving) {
         mirror->set_endpoint(env.Setup.GetEndpoint());
         mirror->set_database(env.Setup.GetDatabase());
         mirror->set_topic_path(source);
-        mirror->set_consumer_name("mover");
+        mirror->set_consumer_name("replicator");
         mirror->mutable_credentials()->set_oauth_token("");
-        (*settings.mutable_attributes())["_is_for_topic_moving"] = "true";
+        (*settings.mutable_attributes())["_is_for_topic_replication"] = "true";
         (*settings.mutable_attributes())["start_replication_in_dest_topic"] = "true";
         env.Alter(destination, settings);
-        UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_is_for_topic_moving"), "true");
+        UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_is_for_topic_replication"), "true");
 
         env.Read(source, 0, 500, 1000);
         settings = env.Describe(source);
@@ -213,14 +213,14 @@ Y_UNIT_TEST_SUITE(TTopicMoving) {
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         TString status;
         while (TInstant::Now() < deadline) {
-            status = env.Describe(destination).attributes().at("_topic_moving_status");
+            status = env.Describe(destination).attributes().at("_topic_replication_status");
             if (status == "3") {
                 break;
             }
             UNIT_ASSERT_C(status == "1" || status == "2", status);
             Sleep(TDuration::MilliSeconds(200));
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(status, "3", "Timed out waiting for MovingDone through PQv1 DescribeTopic");
+        UNIT_ASSERT_VALUES_EQUAL_C(status, "3", "Timed out waiting for ReplicationDone through PQv1 DescribeTopic");
 
         env.Write(destination, 1000, 100);
         env.Read(destination, 500, 600, 1100);

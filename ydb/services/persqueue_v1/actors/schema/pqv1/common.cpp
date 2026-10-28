@@ -260,8 +260,8 @@ TResult ApplyChangesInt( // create and alter
 
     TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
     auto attributes = settings.attributes();
-    // PQv1 moving settings are applied below, after consumers and mirror rules are built.
-    for (const auto* name : {"_moving_consumer", "_is_for_topic_moving", "_topic_moving_status",
+    // PQv1 replication settings are applied below, after consumers and mirror rules are built.
+    for (const auto* name : {"_replication_consumer", "_is_for_topic_replication", "_topic_replication_status",
              "start_replication_in_dest_topic", "finish_replication_in_src_topic"}) {
         attributes.erase(name);
     }
@@ -557,33 +557,33 @@ TResult ApplyChangesInt( // create and alter
         }
     }
 
-    if (auto it = settings.attributes().find("_moving_consumer"); it != settings.attributes().end() && !it->second.empty()) {
+    if (auto it = settings.attributes().find("_replication_consumer"); it != settings.attributes().end() && !it->second.empty()) {
         const auto name = NPersQueue::ConvertNewConsumerName(it->second, pqConfig);
         auto* consumer = NPQ::GetConsumer(*pqTabletConfig, name);
         if (!consumer) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown _moving_consumer: " << it->second};
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown _replication_consumer: " << it->second};
         }
         if (consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            return {Ydb::StatusIds::BAD_REQUEST, "_moving_consumer cannot be a shared consumer"};
+            return {Ydb::StatusIds::BAD_REQUEST, "_replication_consumer cannot be a shared consumer"};
         }
-        consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING);
+        consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
     }
 
-    if (auto it = settings.attributes().find("_is_for_topic_moving"); it != settings.attributes().end()) {
+    if (auto it = settings.attributes().find("_is_for_topic_replication"); it != settings.attributes().end()) {
         bool enabled = false;
         if (!it->second.empty() && !TryFromString(it->second, enabled)) {
-            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _is_for_topic_moving must be bool"};
+            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _is_for_topic_replication must be bool"};
         }
         if (enabled && !partConfig->HasMirrorFrom()) {
-            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _is_for_topic_moving requires remote_mirror_rule"};
+            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _is_for_topic_replication requires remote_mirror_rule"};
         }
         if (partConfig->HasMirrorFrom()) {
-            partConfig->MutableMirrorFrom()->SetIsForTopicMoving(enabled);
+            partConfig->MutableMirrorFrom()->SetIsForTopicReplication(enabled);
         }
     }
 
     if (auto it = settings.attributes().find("start_replication_in_dest_topic"); it != settings.attributes().end() && it->second == "true") {
-        pqTabletConfig->SetMovingStatus(NKikimrPQ::ETopicMovingStatus::MovingData);
+        pqTabletConfig->SetReplicationStatus(NKikimrPQ::ETopicReplicationStatus::ReplicationData);
     }
 
     if (auto it = settings.attributes().find("finish_replication_in_src_topic"); it != settings.attributes().end() && it->second == "true") {

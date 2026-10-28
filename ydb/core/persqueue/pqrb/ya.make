@@ -2,8 +2,8 @@ LIBRARY()
 
 SRCS(
     mirror_describer.cpp
-    topic_configuration_mover.cpp
-    moving_status_request.cpp
+    topic_configuration_replicator.cpp
+    replication_status_request.cpp
     partition_scale_request.cpp
     partition_scale_manager.cpp
     partition_scale_manager_graph_cmp.cpp

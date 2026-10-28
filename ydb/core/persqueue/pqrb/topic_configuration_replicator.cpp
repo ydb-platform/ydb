@@ -1,5 +1,5 @@
-#include "topic_configuration_mover.h"
-#include "topic_configuration_mover_factory.h"
+#include "topic_configuration_replicator.h"
+#include "topic_configuration_replicator_factory.h"
 
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <util/generic/hash_set.h>
@@ -8,32 +8,32 @@
 
 namespace NKikimr::NPQ {
 
-TTopicConfigurationMover::TEvTopicDescription::TEvTopicDescription(NYdb::NTopic::TAsyncDescribeTopicResult result)
+TTopicConfigurationReplicator::TEvTopicDescription::TEvTopicDescription(NYdb::NTopic::TAsyncDescribeTopicResult result)
     : Result(std::move(result))
 {}
 
-TTopicConfigurationMover::TEvConsumerDescription::TEvConsumerDescription(size_t consumer,
+TTopicConfigurationReplicator::TEvConsumerDescription::TEvConsumerDescription(size_t consumer,
     NYdb::NTopic::TAsyncDescribeConsumerResult result)
     : Consumer(consumer)
     , Result(std::move(result))
 {}
 
-TTopicConfigurationMover::TEvRetryConsumer::TEvRetryConsumer(size_t consumer)
+TTopicConfigurationReplicator::TEvRetryConsumer::TEvRetryConsumer(size_t consumer)
     : Consumer(consumer)
 {}
 
-TTopicConfigurationMover::TTopicConfigurationMover(ui64 tabletId, const TActorId& tabletActor,
+TTopicConfigurationReplicator::TTopicConfigurationReplicator(ui64 tabletId, const TActorId& tabletActor,
     const NKikimrPQ::TMirrorPartitionConfig& config)
     : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
     , Config(config)
 {}
 
-void TTopicConfigurationMover::Bootstrap(const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateInit);
     ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials());
 }
 
-void TTopicConfigurationMover::Handle(TEvPQ::TEvInitCredentials::TPtr&, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvPQ::TEvInitCredentials::TPtr&, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
         return;
     }
@@ -57,7 +57,7 @@ void TTopicConfigurationMover::Handle(TEvPQ::TEvInitCredentials::TPtr&, const TA
         });
 }
 
-void TTopicConfigurationMover::Handle(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
         RetryInit(*ev->Get()->Error, ctx);
@@ -79,24 +79,24 @@ void TTopicConfigurationMover::Handle(TEvPQ::TEvCredentialsCreated::TPtr& ev, co
     }
 
     InitRetryInterval = INIT_RETRY_INTERVAL_START;
-    LOG_I("Configuration mover topic client initialized");
+    LOG_I("Configuration replicator topic client initialized");
     Become(&TThis::StateWork);
     RequestTopicDescription(ctx);
 }
 
-void TTopicConfigurationMover::RetryInit(const TString& error, const TActorContext& ctx) {
-    LOG_W("Cannot initialize configuration mover topic client", {"error", error});
+void TTopicConfigurationReplicator::RetryInit(const TString& error, const TActorContext& ctx) {
+    LOG_W("Cannot initialize configuration replicator topic client", {"error", error});
     TopicClient.reset();
     CredentialsProvider.reset();
     ctx.Schedule(InitRetryInterval, new TEvPQ::TEvInitCredentials());
     InitRetryInterval = Min(InitRetryInterval * 2, INIT_RETRY_INTERVAL_MAX);
 }
 
-TStructuredMessage TTopicConfigurationMover::BuildLogPrefix() const {
+TStructuredMessage TTopicConfigurationReplicator::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE({"tablet_id", TabletId}, {"source_topic", Config.GetTopic()});
 }
 
-STFUNC(TTopicConfigurationMover::StateInit) {
+STFUNC(TTopicConfigurationReplicator::StateInit) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPQ::TEvInitCredentials, Handle);
         HFunc(TEvPQ::TEvCredentialsCreated, Handle);
@@ -104,7 +104,7 @@ STFUNC(TTopicConfigurationMover::StateInit) {
     }
 }
 
-STFUNC(TTopicConfigurationMover::StateWork) {
+STFUNC(TTopicConfigurationReplicator::StateWork) {
     switch (ev->GetTypeRewrite()) {
         CFunc(TEvents::TEvWakeup::EventType, RequestTopicDescription);
         HFunc(TEvTopicDescription, Handle);
@@ -114,16 +114,16 @@ STFUNC(TTopicConfigurationMover::StateWork) {
     }
 }
 
-NYdb::NTopic::TAsyncDescribeTopicResult TTopicConfigurationMover::DescribeTopic() {
+NYdb::NTopic::TAsyncDescribeTopicResult TTopicConfigurationReplicator::DescribeTopic() {
     return TopicClient->DescribeTopic(Config.GetTopic(), NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true));
 }
 
-NYdb::NTopic::TAsyncDescribeConsumerResult TTopicConfigurationMover::DescribeConsumer(const TString& consumer) {
+NYdb::NTopic::TAsyncDescribeConsumerResult TTopicConfigurationReplicator::DescribeConsumer(const TString& consumer) {
     return TopicClient->DescribeConsumer(Config.GetTopic(), consumer,
         NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true));
 }
 
-void TTopicConfigurationMover::RequestTopicDescription(const TActorContext& ctx) {
+void TTopicConfigurationReplicator::RequestTopicDescription(const TActorContext& ctx) {
     try {
         DescribeTopic().Subscribe([actorSystem = ctx.ActorSystem(), selfId = SelfId()](const auto& result) {
             actorSystem->Send(new IEventHandle(selfId, selfId, new TEvTopicDescription(result)));
@@ -134,7 +134,7 @@ void TTopicConfigurationMover::RequestTopicDescription(const TActorContext& ctx)
     }
 }
 
-void TTopicConfigurationMover::Handle(TEvTopicDescription::TPtr& ev, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvTopicDescription::TPtr& ev, const TActorContext& ctx) {
     try {
         const auto& result = ev->Get()->Result.GetValue();
         if (!result.IsSuccess()) {
@@ -161,7 +161,7 @@ void TTopicConfigurationMover::Handle(TEvTopicDescription::TPtr& ev, const TActo
     PumpConsumerDescriptions(ctx);
 }
 
-void TTopicConfigurationMover::RequestConsumerDescription(size_t consumer, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::RequestConsumerDescription(size_t consumer, const TActorContext& ctx) {
     try {
         const TString name(TopicDescription->GetTopicDescription().GetConsumers()[consumer].GetConsumerName());
         DescribeConsumer(name).Subscribe(
@@ -174,7 +174,7 @@ void TTopicConfigurationMover::RequestConsumerDescription(size_t consumer, const
     }
 }
 
-void TTopicConfigurationMover::PumpConsumerDescriptions(const TActorContext& ctx) {
+void TTopicConfigurationReplicator::PumpConsumerDescriptions(const TActorContext& ctx) {
     const auto& consumers = TopicDescription->GetTopicDescription().GetConsumers();
     while (NextConsumer < consumers.size() && ConsumerRequestsInFlight < MAX_CONSUMER_REQUESTS_IN_FLIGHT) {
         ++ConsumerRequestsInFlight;
@@ -189,7 +189,7 @@ void TTopicConfigurationMover::PumpConsumerDescriptions(const TActorContext& ctx
     }
 }
 
-void TTopicConfigurationMover::Handle(TEvConsumerDescription::TPtr& ev, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvConsumerDescription::TPtr& ev, const TActorContext& ctx) {
     const auto consumer = ev->Get()->Consumer;
     const TString name(TopicDescription->GetTopicDescription().GetConsumers()[consumer].GetConsumerName());
     try {
@@ -225,14 +225,14 @@ void TTopicConfigurationMover::Handle(TEvConsumerDescription::TPtr& ev, const TA
     PumpConsumerDescriptions(ctx);
 }
 
-void TTopicConfigurationMover::Handle(TEvRetryConsumer::TPtr& ev, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvRetryConsumer::TPtr& ev, const TActorContext& ctx) {
     RequestConsumerDescription(ev->Get()->Consumer, ctx);
 }
 
-void TTopicConfigurationMover::SendOffsets(const TActorContext& ctx) {
+void TTopicConfigurationReplicator::SendOffsets(const TActorContext& ctx) {
     if (PendingOffsetAcks.empty()) {
         Become(&TThis::StateDone);
-        ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationMovingFinished());
+        ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationReplicationFinished());
     } else {
         for (const auto partition : PendingOffsetAcks) {
             auto event = MakeHolder<TEvPQ::TEvPartitionConsumerOffsets>();
@@ -244,7 +244,7 @@ void TTopicConfigurationMover::SendOffsets(const TActorContext& ctx) {
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
-void TTopicConfigurationMover::Handle(TEvPQ::TEvPartitionConsumerOffsetsAck::TPtr& ev, const TActorContext& ctx) {
+void TTopicConfigurationReplicator::Handle(TEvPQ::TEvPartitionConsumerOffsetsAck::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (!record.HasPartitionId() || ev->Cookie != ui64(record.GetPartitionId()) + 1
         || !PendingOffsetAcks.erase(record.GetPartitionId()))
@@ -254,11 +254,11 @@ void TTopicConfigurationMover::Handle(TEvPQ::TEvPartitionConsumerOffsetsAck::TPt
     if (PendingOffsetAcks.empty()) {
         Become(&TThis::StateDone);
         LOG_I("All partitions acknowledged source consumer offsets");
-        ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationMovingFinished());
+        ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationReplicationFinished());
     }
 }
 
-STFUNC(TTopicConfigurationMover::StateWaitingOffsets) {
+STFUNC(TTopicConfigurationReplicator::StateWaitingOffsets) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPQ::TEvPartitionConsumerOffsetsAck, Handle);
         CFunc(TEvents::TEvWakeup::EventType, SendOffsets);
@@ -266,17 +266,17 @@ STFUNC(TTopicConfigurationMover::StateWaitingOffsets) {
     }
 }
 
-STFUNC(TTopicConfigurationMover::StateDone) {
+STFUNC(TTopicConfigurationReplicator::StateDone) {
     switch (ev->GetTypeRewrite()) {
         CFunc(TEvents::TEvWakeup::EventType, SendOffsets);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
     }
 }
 
-NActors::IActor* CreateTopicConfigurationMover(ui64 tabletId, const NActors::TActorId& tabletActor,
+NActors::IActor* CreateTopicConfigurationReplicator(ui64 tabletId, const NActors::TActorId& tabletActor,
     const NKikimrPQ::TMirrorPartitionConfig& config)
 {
-    return new TTopicConfigurationMover(tabletId, tabletActor, config);
+    return new TTopicConfigurationReplicator(tabletId, tabletActor, config);
 }
 
 } // namespace NKikimr::NPQ

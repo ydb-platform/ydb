@@ -1,4 +1,4 @@
-#include "moving_status_request.h"
+#include "replication_status_request.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -6,12 +6,12 @@
 namespace NKikimr::NPQ {
 namespace {
 
-class TMovingStatusRequest : public TActorBootstrapped<TMovingStatusRequest> {
+class TReplicationStatusRequest : public TActorBootstrapped<TReplicationStatusRequest> {
     const TActorId Parent;
     std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
 
 public:
-    TMovingStatusRequest(const TActorId& parent,
+    TReplicationStatusRequest(const TActorId& parent,
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposal)
         : Parent(parent)
         , Proposal(std::move(proposal))
@@ -44,10 +44,10 @@ private:
 
 } // namespace
 
-IActor* CreateMovingStatusRequest(const TActorId& parent,
+IActor* CreateReplicationStatusRequest(const TActorId& parent,
     std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposal)
 {
-    return new TMovingStatusRequest(parent, std::move(proposal));
+    return new TReplicationStatusRequest(parent, std::move(proposal));
 }
 
 } // namespace NKikimr::NPQ

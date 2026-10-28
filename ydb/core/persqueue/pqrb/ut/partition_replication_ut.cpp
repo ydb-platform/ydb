@@ -7,15 +7,15 @@
 namespace NKikimr::NPQ {
 namespace {
 
-struct TMovingPartitionEnv {
+struct TReplicationPartitionEnv {
     TTestContext Context;
-    const TString Key = TKeyPrefix(TKeyPrefix::TypeInfo, TPartitionId(0), TKeyPrefix::MarkTopicMoving).ToString();
+    const TString Key = TKeyPrefix(TKeyPrefix::TypeInfo, TPartitionId(0), TKeyPrefix::MarkTopicReplication).ToString();
     TVector<ui64> Acks;
     THolder<IEventHandle> HeldWrite;
     bool BlockWrites = false;
     size_t SnapshotWrites = 0;
 
-    explicit TMovingPartitionEnv(bool kafka = false) {
+    explicit TReplicationPartitionEnv(bool kafka = false) {
         Context.Prepare();
         Context.Runtime->SetScheduledLimit(10000);
         if (kafka) {
@@ -47,7 +47,7 @@ struct TMovingPartitionEnv {
         });
     }
 
-    ~TMovingPartitionEnv() {
+    ~TReplicationPartitionEnv() {
         Context.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
     }
 
@@ -107,7 +107,7 @@ struct TMovingPartitionEnv {
 };
 
 void CheckDurableImport(bool kafka) {
-    TMovingPartitionEnv env(kafka);
+    TReplicationPartitionEnv env(kafka);
     env.Fill(kafka);
     const auto offsets = env.MakeOffsets();
     env.BlockWrites = true;
@@ -153,7 +153,7 @@ void CheckDurableImport(bool kafka) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TPartitionMoving) {
+Y_UNIT_TEST_SUITE(TPartitionReplication) {
 
 Y_UNIT_TEST(DurableOffsetsNativeMessages) {
     CheckDurableImport(false);
@@ -164,7 +164,7 @@ Y_UNIT_TEST(DurableOffsetsKafkaBatches) {
 }
 
 Y_UNIT_TEST(RestartBeforePersistDoesNotAcknowledgeOrApplyOffsets) {
-    TMovingPartitionEnv env;
+    TReplicationPartitionEnv env;
     env.Fill(false);
     const auto offsets = env.MakeOffsets();
     env.BlockWrites = true;
@@ -185,7 +185,7 @@ Y_UNIT_TEST(RestartBeforePersistDoesNotAcknowledgeOrApplyOffsets) {
 }
 
 Y_UNIT_TEST(UnknownConsumerDoesNotPartiallyApplyOffsets) {
-    TMovingPartitionEnv env;
+    TReplicationPartitionEnv env;
     env.Fill(false);
     auto offsets = env.MakeOffsets();
     offsets.MutableConsumerOffsets(1)->SetConsumer("unknown");
@@ -198,5 +198,5 @@ Y_UNIT_TEST(UnknownConsumerDoesNotPartiallyApplyOffsets) {
     CmdGetOffset(0, "client", 5, env.Context);
 }
 
-} // Y_UNIT_TEST_SUITE(TPartitionMoving)
+} // Y_UNIT_TEST_SUITE(TPartitionReplication)
 } // namespace NKikimr::NPQ

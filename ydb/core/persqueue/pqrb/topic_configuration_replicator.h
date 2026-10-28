@@ -9,9 +9,9 @@
 
 namespace NKikimr::NPQ {
 
-class TTopicConfigurationMover : public TBaseTabletActor<TTopicConfigurationMover>, private TConstantLogPrefix {
+class TTopicConfigurationReplicator : public TBaseTabletActor<TTopicConfigurationReplicator>, private TConstantLogPrefix {
 public:
-    TTopicConfigurationMover(ui64 tabletId, const TActorId& tabletActor,
+    TTopicConfigurationReplicator(ui64 tabletId, const TActorId& tabletActor,
         const NKikimrPQ::TMirrorPartitionConfig& config);
 
     void Bootstrap(const TActorContext& ctx);

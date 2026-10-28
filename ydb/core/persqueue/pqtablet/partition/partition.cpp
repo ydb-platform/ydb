@@ -229,17 +229,17 @@ bool TPartition::IsActive() const {
     return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
-bool TPartition::IsTopicMovingFinishing(const TString& consumer) const {
-    bool consumerForTopicMoving = false;
+bool TPartition::IsTopicReplicationFinishing(const TString& consumer) const {
+    bool consumerForTopicReplication = false;
     for (const auto& consumerConfig : Config.GetConsumers()) {
         if (consumerConfig.GetName() == consumer) {
-            consumerForTopicMoving =
-                consumerConfig.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING;
+            consumerForTopicReplication =
+                consumerConfig.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
             break;
         }
     }
 
-    return consumerForTopicMoving && Config.GetWriteAndReadDisabled();
+    return consumerForTopicReplication && Config.GetWriteAndReadDisabled();
 }
 
 bool TPartition::CanWrite() const {
@@ -3262,7 +3262,7 @@ void TPartition::RunPersist() {
 
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
     haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
-    haveChanges |= AddMovingConsumerOffsetsToPersistRequest(ctx);
+    haveChanges |= AddReplicationConsumerOffsetsToPersistRequest(ctx);
 
     if (haveChanges) {
         WriteCycleStartTime = now;

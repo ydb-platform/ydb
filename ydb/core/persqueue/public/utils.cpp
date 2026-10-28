@@ -45,7 +45,7 @@ bool IsReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TString& con
         return false;
     }
     const auto* consumer = GetConsumer(config, consumerName);
-    return !consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING;
+    return !consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {

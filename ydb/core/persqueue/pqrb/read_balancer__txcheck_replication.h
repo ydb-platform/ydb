@@ -5,12 +5,12 @@
 
 namespace NKikimr::NPQ {
 
-struct TPersQueueReadBalancer::TTxCheckMovingDataFinished : public NTabletFlatExecutor::ITransaction {
+struct TPersQueueReadBalancer::TTxCheckReplicationDataFinished : public NTabletFlatExecutor::ITransaction {
     TPersQueueReadBalancer* const Self;
     bool AllPartitionsSynced = false;
     int ConfigVersion = -1;
 
-    explicit TTxCheckMovingDataFinished(TPersQueueReadBalancer* self)
+    explicit TTxCheckReplicationDataFinished(TPersQueueReadBalancer* self)
         : Self(self)
     {}
 
@@ -23,7 +23,7 @@ struct TPersQueueReadBalancer::TTxCheckMovingDataFinished : public NTabletFlatEx
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
-        auto partitions = db.Table<TPartitions>().Range().Select<TPartitions::MovingDataFinished>();
+        auto partitions = db.Table<TPartitions>().Range().Select<TPartitions::ReplicationDataFinished>();
         if (!partitions.IsReady()) {
             return false;
         }
@@ -34,7 +34,7 @@ struct TPersQueueReadBalancer::TTxCheckMovingDataFinished : public NTabletFlatEx
         }
 
         while (!partitions.EndOfSet()) {
-            if (!partitions.GetValueOrDefault<TPartitions::MovingDataFinished>(false)) {
+            if (!partitions.GetValueOrDefault<TPartitions::ReplicationDataFinished>(false)) {
                 return true;
             }
             if (!partitions.Next()) {
@@ -47,7 +47,7 @@ struct TPersQueueReadBalancer::TTxCheckMovingDataFinished : public NTabletFlatEx
     }
 
     void Complete(const TActorContext& ctx) override {
-        Self->OnMovingDataChecked(AllPartitionsSynced, ConfigVersion, ctx);
+        Self->OnReplicationDataChecked(AllPartitionsSynced, ConfigVersion, ctx);
     }
 };
 

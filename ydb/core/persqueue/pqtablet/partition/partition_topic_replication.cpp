@@ -33,23 +33,23 @@ void TPartition::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TAct
     if (IsSupportive() || !offsets.HasPartitionId() || offsets.GetPartitionId() != Partition.OriginalPartitionId
         || (offsets.HasStartOffset() && offsets.HasEndOffset() && offsets.GetStartOffset() > offsets.GetEndOffset()))
     {
-        LOG_W("Received moving offsets for an unexpected partition");
+        LOG_W("Received replication offsets for an unexpected partition");
         return;
     }
 
-    if (!PendingMovingConsumerOffsets.empty() && SameOffsets(PendingMovingConsumerOffsets.back().Offsets, offsets)) {
-        PendingMovingConsumerOffsets.back().Replies.emplace_back(ev->Sender, ev->Cookie);
-    } else if (PendingMovingConsumerOffsets.empty() && MovingConsumerOffsetsWrite
-        && SameOffsets(MovingConsumerOffsetsWrite->Offsets, offsets))
+    if (!PendingReplicationConsumerOffsets.empty() && SameOffsets(PendingReplicationConsumerOffsets.back().Offsets, offsets)) {
+        PendingReplicationConsumerOffsets.back().Replies.emplace_back(ev->Sender, ev->Cookie);
+    } else if (PendingReplicationConsumerOffsets.empty() && ReplicationConsumerOffsetsWrite
+        && SameOffsets(ReplicationConsumerOffsetsWrite->Offsets, offsets))
     {
-        MovingConsumerOffsetsWrite->Replies.emplace_back(ev->Sender, ev->Cookie);
-    } else if (InitDone && PendingMovingConsumerOffsets.empty() && !MovingConsumerOffsetsWrite
-        && MovingConsumerOffsets && SameOffsets(*MovingConsumerOffsets, offsets))
+        ReplicationConsumerOffsetsWrite->Replies.emplace_back(ev->Sender, ev->Cookie);
+    } else if (InitDone && PendingReplicationConsumerOffsets.empty() && !ReplicationConsumerOffsetsWrite
+        && ReplicationConsumerOffsets && SameOffsets(*ReplicationConsumerOffsets, offsets))
     {
         ReplyOffsetsPersisted(ctx, ev->Sender, ev->Cookie, offsets.GetPartitionId());
         return;
     } else {
-        auto& pending = PendingMovingConsumerOffsets.emplace_back();
+        auto& pending = PendingReplicationConsumerOffsets.emplace_back();
         pending.Offsets = offsets;
         pending.Replies.emplace_back(ev->Sender, ev->Cookie);
     }
@@ -59,15 +59,15 @@ void TPartition::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TAct
     }
 }
 
-bool TPartition::AddMovingConsumerOffsetsToPersistRequest(const TActorContext& ctx) {
-    if (MovingConsumerOffsetsWrite || ChangingConfig || ChangeConfig) {
+bool TPartition::AddReplicationConsumerOffsetsToPersistRequest(const TActorContext& ctx) {
+    if (ReplicationConsumerOffsetsWrite || ChangingConfig || ChangeConfig) {
         return false;
     }
-    while (!PendingMovingConsumerOffsets.empty()) {
-        auto& front = PendingMovingConsumerOffsets.front();
-        if (MovingConsumerOffsets && SameOffsets(*MovingConsumerOffsets, front.Offsets)) {
+    while (!PendingReplicationConsumerOffsets.empty()) {
+        auto& front = PendingReplicationConsumerOffsets.front();
+        if (ReplicationConsumerOffsets && SameOffsets(*ReplicationConsumerOffsets, front.Offsets)) {
             auto pending = std::move(front);
-            PendingMovingConsumerOffsets.pop_front();
+            PendingReplicationConsumerOffsets.pop_front();
             for (const auto& [recipient, cookie] : pending.Replies) {
                 ReplyOffsetsPersisted(ctx, recipient, cookie, pending.Offsets.GetPartitionId());
             }
@@ -82,13 +82,13 @@ bool TPartition::AddMovingConsumerOffsetsToPersistRequest(const TActorContext& c
                 || offset.GetCommittedOffset() > ui64(Max<i64>())
                 || (front.Offsets.HasEndOffset() && offset.GetCommittedOffset() > front.Offsets.GetEndOffset()))
             {
-                LOG_W("Invalid moving consumer offset", {"consumer", consumer});
-                PendingMovingConsumerOffsets.pop_front();
+                LOG_W("Invalid replication consumer offset", {"consumer", consumer});
+                PendingReplicationConsumerOffsets.pop_front();
                 return false;
             }
             if (!GetConsumer(Config, consumer) || offset.GetCommittedOffset() > GetEndOffset()) {
-                LOG_W("Cannot apply moving offset before consumer and partition data are ready", {"consumer", consumer});
-                PendingMovingConsumerOffsets.pop_front();
+                LOG_W("Cannot apply replication offset before consumer and partition data are ready", {"consumer", consumer});
+                PendingReplicationConsumerOffsets.pop_front();
                 return false;
             }
             if (TxAffectedConsumers.contains(consumer) || AffectedUsers.contains(consumer)) {
@@ -105,24 +105,24 @@ bool TPartition::AddMovingConsumerOffsetsToPersistRequest(const TActorContext& c
             user.Generation = user.Step = 0;
             user.CommittedMetadata.reset();
         }
-        MovingConsumerOffsetsWrite.emplace(std::move(front));
-        PendingMovingConsumerOffsets.pop_front();
-        const TKeyPrefix key(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkTopicMoving);
+        ReplicationConsumerOffsetsWrite.emplace(std::move(front));
+        PendingReplicationConsumerOffsets.pop_front();
+        const TKeyPrefix key(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkTopicReplication);
         auto* write = PersistRequest->Record.AddCmdWrite();
         write->SetKey(key.Data(), key.Size());
-        write->SetValue(MovingConsumerOffsetsWrite->Offsets.SerializeAsString());
+        write->SetValue(ReplicationConsumerOffsetsWrite->Offsets.SerializeAsString());
         write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         return true;
     }
     return false;
 }
 
-void TPartition::CompleteMovingConsumerOffsetsWrite(const TActorContext& ctx) {
-    if (!MovingConsumerOffsetsWrite) {
+void TPartition::CompleteReplicationConsumerOffsetsWrite(const TActorContext& ctx) {
+    if (!ReplicationConsumerOffsetsWrite) {
         return;
     }
-    MovingConsumerOffsets.emplace(std::move(MovingConsumerOffsetsWrite->Offsets));
-    for (const auto& offset : MovingConsumerOffsets->GetConsumerOffsets()) {
+    ReplicationConsumerOffsets.emplace(std::move(ReplicationConsumerOffsetsWrite->Offsets));
+    for (const auto& offset : ReplicationConsumerOffsets->GetConsumerOffsets()) {
         if (auto* user = UsersInfoStorage->GetIfExists(offset.GetConsumer())) {
             user->AnyCommits = user->Offset > i64(GetStartOffset());
             user->PartitionSessionId = 0;
@@ -130,11 +130,11 @@ void TPartition::CompleteMovingConsumerOffsetsWrite(const TActorContext& ctx) {
             FailStaleSessionReadRequests(offset.GetConsumer(), ctx);
         }
     }
-    for (const auto& [recipient, cookie] : MovingConsumerOffsetsWrite->Replies) {
-        ReplyOffsetsPersisted(ctx, recipient, cookie, MovingConsumerOffsets->GetPartitionId());
+    for (const auto& [recipient, cookie] : ReplicationConsumerOffsetsWrite->Replies) {
+        ReplyOffsetsPersisted(ctx, recipient, cookie, ReplicationConsumerOffsets->GetPartitionId());
     }
-    MovingConsumerOffsetsWrite.reset();
-    LOG_I("Source consumer offsets persisted", {"consumers", MovingConsumerOffsets->ConsumerOffsetsSize()});
+    ReplicationConsumerOffsetsWrite.reset();
+    LOG_I("Source consumer offsets persisted", {"consumers", ReplicationConsumerOffsets->ConsumerOffsetsSize()});
 }
 
 } // namespace NKikimr::NPQ

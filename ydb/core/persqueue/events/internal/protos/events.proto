@@ -31,16 +31,16 @@ message TEvReadingPartitionStatusRequest {
 };
 
 // From the mirrorer to PQRB after all source partition data has been written.
-message TEvPartitionMovingFinished {
+message TEvPartitionReplicationFinished {
     optional uint32 PartitionId = 1;
 }
 
-// From PQRB after persisting TEvPartitionMovingFinished.
-message TEvPartitionMovingFinishedAck {
+// From PQRB after persisting TEvPartitionReplicationFinished.
+message TEvPartitionReplicationFinishedAck {
     optional uint32 PartitionId = 1;
 }
 
-// Committed offsets collected from the source topic during configuration moving.
+// Committed offsets collected from the source topic during configuration replication.
 message TEvPartitionConsumerOffsets {
     message TConsumerOffset {
         optional string Consumer = 1;

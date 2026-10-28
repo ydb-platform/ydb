@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/pqrb/topic_configuration_mover.h>
+#include <ydb/core/persqueue/pqrb/topic_configuration_replicator.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -66,10 +66,10 @@ struct TDescribeRequests {
     TVector<TConsumerRequest> Consumers;
 };
 
-class TTestMover : public TTopicConfigurationMover {
+class TTestReplicator : public TTopicConfigurationReplicator {
 public:
-    TTestMover(const TActorId& parent, const NKikimrPQ::TMirrorPartitionConfig& config, TDescribeRequests& requests)
-        : TTopicConfigurationMover(42, parent, config)
+    TTestReplicator(const TActorId& parent, const NKikimrPQ::TMirrorPartitionConfig& config, TDescribeRequests& requests)
+        : TTopicConfigurationReplicator(42, parent, config)
         , Requests(requests)
     {}
 
@@ -128,7 +128,7 @@ struct TEnv {
     TDescribeRequests Requests;
     TTestBasicRuntime Runtime;
     TActorId Parent;
-    TActorId Mover;
+    TActorId Replicator;
 
     TEnv(bool deferCredentials = false, ui32 credentialFailures = 0, ui32 clientFailures = 0)
         : Runtime(1, false)
@@ -146,8 +146,8 @@ struct TEnv {
         config.SetEndpointPort(1);
         config.SetDatabase("/Root/source");
         config.SetTopic("source-topic");
-        Mover = Runtime.Register(new TTestMover(Parent, config, Requests));
-        Runtime.EnableScheduleForActor(Mover);
+        Replicator = Runtime.Register(new TTestReplicator(Parent, config, Requests));
+        Runtime.EnableScheduleForActor(Replicator);
     }
 
     void WaitFor(const std::function<bool()>& condition) {
@@ -163,13 +163,13 @@ struct TEnv {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TTopicConfigurationMoverTests) {
+Y_UNIT_TEST_SUITE(TTopicConfigurationReplicatorTests) {
 
 Y_UNIT_TEST(WaitsForCredentialsBeforeCreatingClient) {
     TEnv env(true);
     env.WaitFor([&] { return env.Factory.CredentialsRequests == 1; });
     UNIT_ASSERT_VALUES_EQUAL(env.Factory.ClientsCreated, 0);
-    env.Runtime.Send(new IEventHandle(env.Mover, env.Parent, new TEvPQ::TEvInitCredentials()));
+    env.Runtime.Send(new IEventHandle(env.Replicator, env.Parent, new TEvPQ::TEvInitCredentials()));
     env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
     UNIT_ASSERT_VALUES_EQUAL(env.Factory.CredentialsRequests, 1);
 
@@ -193,7 +193,7 @@ Y_UNIT_TEST(RetriesCredentialsAndClientCreation) {
 Y_UNIT_TEST(CanStopWhileWaitingForCredentials) {
     TEnv env(true);
     env.WaitFor([&] { return env.Factory.CredentialsRequests == 1; });
-    env.Runtime.Send(new IEventHandle(env.Mover, env.Parent, new TEvents::TEvPoisonPill()));
+    env.Runtime.Send(new IEventHandle(env.Replicator, env.Parent, new TEvents::TEvPoisonPill()));
     env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
     env.Factory.CredentialsPromise.SetValue(NYdb::CreateInsecureCredentialsProviderFactory());
     env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
@@ -301,7 +301,7 @@ Y_UNIT_TEST(CanStopWithConsumerFuturesPending) {
     env.WaitFor([&] { return env.Requests.Topics.size() == 1; });
     env.Requests.Topics[0].SetValue(MakeTopic(6));
     env.WaitFor([&] { return env.Requests.Consumers.size() == 5; });
-    env.Runtime.Send(new IEventHandle(env.Mover, env.Parent, new TEvents::TEvPoisonPill()));
+    env.Runtime.Send(new IEventHandle(env.Replicator, env.Parent, new TEvents::TEvPoisonPill()));
     env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
     for (auto& request : env.Requests.Consumers) {
         request.Promise.SetValue(MakeConsumer(request.Name, 123));
@@ -320,7 +320,7 @@ Y_UNIT_TEST(WaitsForEveryAckAndRetriesOnlyPendingPartitions) {
         if (event->GetTypeRewrite() == TEvPQ::TEvPartitionConsumerOffsets::EventType) {
             sentOffsets.emplace_back(event->Get<TEvPQ::TEvPartitionConsumerOffsets>()->Record.GetPartitionId(), event->Cookie);
             return TTestActorRuntimeBase::EEventAction::DROP;
-        } else if (event->GetTypeRewrite() == TEvPQ::TEvTopicConfigurationMovingFinished::EventType) {
+        } else if (event->GetTypeRewrite() == TEvPQ::TEvTopicConfigurationReplicationFinished::EventType) {
             ++completions;
             return TTestActorRuntimeBase::EEventAction::DROP;
         }
@@ -334,7 +334,7 @@ Y_UNIT_TEST(WaitsForEveryAckAndRetriesOnlyPendingPartitions) {
     auto ack = [&](ui32 partition, ui64 cookie) {
         auto event = MakeHolder<TEvPQ::TEvPartitionConsumerOffsetsAck>();
         event->Record.SetPartitionId(partition);
-        env.Runtime.Send(new IEventHandle(env.Mover, env.Parent, event.Release(), 0, cookie), 0, true);
+        env.Runtime.Send(new IEventHandle(env.Replicator, env.Parent, event.Release(), 0, cookie), 0, true);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
     };
     ack(0, 1);
@@ -356,5 +356,5 @@ Y_UNIT_TEST(WaitsForEveryAckAndRetriesOnlyPendingPartitions) {
     env.Runtime.SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
 }
 
-} // Y_UNIT_TEST_SUITE(TTopicConfigurationMoverTests)
+} // Y_UNIT_TEST_SUITE(TTopicConfigurationReplicatorTests)
 } // namespace NKikimr::NPQ

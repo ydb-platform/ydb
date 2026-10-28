@@ -5,11 +5,11 @@
 
 namespace NKikimr::NPQ {
 
-struct TPersQueueReadBalancer::TTxWriteMovingDataFinished : public NTabletFlatExecutor::ITransaction {
+struct TPersQueueReadBalancer::TTxWriteReplicationDataFinished : public NTabletFlatExecutor::ITransaction {
     TPersQueueReadBalancer* const Self;
-    std::vector<TMovingDataFinishedRequest> Requests;
+    std::vector<TReplicationDataFinishedRequest> Requests;
 
-    TTxWriteMovingDataFinished(TPersQueueReadBalancer* self, std::vector<TMovingDataFinishedRequest> requests)
+    TTxWriteReplicationDataFinished(TPersQueueReadBalancer* self, std::vector<TReplicationDataFinishedRequest> requests)
         : Self(self)
         , Requests(std::move(requests))
     {}
@@ -20,7 +20,7 @@ struct TPersQueueReadBalancer::TTxWriteMovingDataFinished : public NTabletFlatEx
         for (const auto& request : Requests) {
             if (Self->PartitionsInfo.contains(request.PartitionId) && updatedPartitions.insert(request.PartitionId).second) {
                 db.Table<NPQRBPrivate::Schema::Partitions>().Key(request.PartitionId).Update(
-                    NIceDb::TUpdate<NPQRBPrivate::Schema::Partitions::MovingDataFinished>(true));
+                    NIceDb::TUpdate<NPQRBPrivate::Schema::Partitions::ReplicationDataFinished>(true));
             }
         }
         return true;
@@ -32,11 +32,11 @@ struct TPersQueueReadBalancer::TTxWriteMovingDataFinished : public NTabletFlatEx
             if (it == Self->PartitionsInfo.end()) {
                 continue;
             }
-            it->second.MovingDataFinished = true;
-            ctx.Send(request.Sender, new TEvPQ::TEvPartitionMovingFinishedAck(request.PartitionId), 0, request.Cookie);
+            it->second.ReplicationDataFinished = true;
+            ctx.Send(request.Sender, new TEvPQ::TEvPartitionReplicationFinishedAck(request.PartitionId), 0, request.Cookie);
         }
-        Self->MovingDataFinishedWriteInProgress = false;
-        Self->ProcessMovingDataFinishedRequests(ctx);
+        Self->ReplicationDataFinishedWriteInProgress = false;
+        Self->ProcessReplicationDataFinishedRequests(ctx);
     }
 };
 

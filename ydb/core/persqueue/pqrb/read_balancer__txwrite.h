@@ -97,8 +97,8 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
             Self->Inited = true;
             Self->InitDone(ctx);
         } else {
-            Self->ScheduleWaitingMovingData(ctx);
-            Self->StartTopicConfigurationMover(ctx);
+            Self->ScheduleWaitingReplicationData(ctx);
+            Self->StartTopicConfigurationReplicator(ctx);
         }
     }
 };

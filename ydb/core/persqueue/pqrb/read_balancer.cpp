@@ -4,13 +4,13 @@
 #include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
-#include "read_balancer__txwrite_moving.h"
-#include "read_balancer__txcheck_moving.h"
+#include "read_balancer__txwrite_replication.h"
+#include "read_balancer__txcheck_replication.h"
 #include "read_balancer__txwrite_receive_attempt.h"
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
-#include "moving_status_request.h"
-#include "topic_configuration_mover_factory.h"
+#include "replication_status_request.h"
+#include "topic_configuration_replicator_factory.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
@@ -120,11 +120,11 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
     if (MirrorTopicDescriberActorId) {
         ctx.Send(MirrorTopicDescriberActorId, new TEvents::TEvPoisonPill());
     }
-    if (MovingStatusRequestActor) {
-        ctx.Send(MovingStatusRequestActor, new TEvents::TEvPoisonPill());
+    if (ReplicationStatusRequestActor) {
+        ctx.Send(ReplicationStatusRequestActor, new TEvents::TEvPoisonPill());
     }
-    if (TopicConfigurationMoverActor) {
-        ctx.Send(TopicConfigurationMoverActor, new TEvents::TEvPoisonPill());
+    if (TopicConfigurationReplicatorActor) {
+        ctx.Send(TopicConfigurationReplicatorActor, new TEvents::TEvPoisonPill());
     }
     TActor<TPersQueueReadBalancer>::Die(ctx);
 }
@@ -184,8 +184,8 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
-    ScheduleWaitingMovingData(ctx);
-    StartTopicConfigurationMover(ctx);
+    ScheduleWaitingReplicationData(ctx);
+    StartTopicConfigurationReplicator(ctx);
     ProcessPartitionsLocationQueue(ctx);
     ProcessMLPGetPartitionRequests(ctx);
 }
@@ -205,11 +205,11 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             ProcessPartitionsLocationQueue(ctx);
             break;
         }
-        case WAITING_MOVING_DATA_WAKEUP_TAG: {
-            WaitingMovingDataScheduled = false;
-            if (TabletConfig.GetMovingStatus() == NKikimrPQ::MovingData && !MovingDataCheckInProgress) {
-                MovingDataCheckInProgress = true;
-                Execute(new TTxCheckMovingDataFinished(this), ctx);
+        case WAITING_REPLICATION_DATA_WAKEUP_TAG: {
+            WaitingReplicationDataScheduled = false;
+            if (TabletConfig.GetReplicationStatus() == NKikimrPQ::ReplicationData && !ReplicationDataCheckInProgress) {
+                ReplicationDataCheckInProgress = true;
+                Execute(new TTxCheckReplicationDataFinished(this), ctx);
             }
             break;
         }
@@ -223,31 +223,31 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
     }
 }
 
-void TPersQueueReadBalancer::ScheduleWaitingMovingData(const TActorContext& ctx) {
-    if (WaitingMovingDataScheduled || MovingDataCheckInProgress
-        || TabletConfig.GetMovingStatus() != NKikimrPQ::MovingData) {
+void TPersQueueReadBalancer::ScheduleWaitingReplicationData(const TActorContext& ctx) {
+    if (WaitingReplicationDataScheduled || ReplicationDataCheckInProgress
+        || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationData) {
         return;
     }
 
-    WaitingMovingDataScheduled = true;
-    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(WAITING_MOVING_DATA_WAKEUP_TAG));
+    WaitingReplicationDataScheduled = true;
+    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(WAITING_REPLICATION_DATA_WAKEUP_TAG));
 }
 
-void TPersQueueReadBalancer::OnMovingDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx) {
-    MovingDataCheckInProgress = false;
-    if (TabletConfig.GetMovingStatus() != NKikimrPQ::MovingData) {
+void TPersQueueReadBalancer::OnReplicationDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx) {
+    ReplicationDataCheckInProgress = false;
+    if (TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationData) {
         return;
     }
 
-    LOG_D("Checked partition moving progress", {"all_partitions_synced", allPartitionsSynced});
+    LOG_D("Checked partition replication progress", {"all_partitions_synced", allPartitionsSynced});
     if (allPartitionsSynced && configVersion == Version && WaitingResponse.empty()) {
-        RequestMovingStatus(NKikimrPQ::MovingConfiguration, ctx);
+        RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
     }
-    ScheduleWaitingMovingData(ctx);
+    ScheduleWaitingReplicationData(ctx);
 }
 
-void TPersQueueReadBalancer::RequestMovingStatus(NKikimrPQ::ETopicMovingStatus status, const TActorContext& ctx) {
-    if (MovingStatusRequestActor || ctx.Now() < MovingStatusUpdateDeadline || !WaitingResponse.empty()) {
+void TPersQueueReadBalancer::RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx) {
+    if (ReplicationStatusRequestActor || ctx.Now() < ReplicationStatusUpdateDeadline || !WaitingResponse.empty()) {
         return;
     }
 
@@ -275,19 +275,19 @@ void TPersQueueReadBalancer::RequestMovingStatus(NKikimrPQ::ETopicMovingStatus s
     config->CopyFrom(TabletConfig);
     // SchemeShard preserves the current key schema; specifying it in alter is forbidden.
     config->ClearPartitionKeySchema();
-    config->SetMovingStatus(status);
-    if (status == NKikimrPQ::MovingDone) {
+    config->SetReplicationStatus(status);
+    if (status == NKikimrPQ::ReplicationDone) {
         config->MutablePartitionConfig()->ClearMirrorFrom();
     }
 
-    MovingStatusRequestActor = ctx.Register(CreateMovingStatusRequest(SelfId(), std::move(proposal)));
+    ReplicationStatusRequestActor = ctx.Register(CreateReplicationStatusRequest(SelfId(), std::move(proposal)));
 }
 
 void TPersQueueReadBalancer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != MovingStatusRequestActor) {
+    if (ev->Sender != ReplicationStatusRequestActor) {
         return;
     }
-    MovingStatusRequestActor = {};
+    ReplicationStatusRequestActor = {};
 
     using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
     switch (ev->Get()->Status()) {
@@ -295,14 +295,14 @@ void TPersQueueReadBalancer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         case EStatus::ExecComplete:
         case EStatus::ExecAlready:
             // The authoritative status arrives in TEvUpdateBalancerConfig.
-            MovingStatusUpdateDeadline = ctx.Now() + TDuration::Seconds(30);
+            ReplicationStatusUpdateDeadline = ctx.Now() + TDuration::Seconds(30);
             break;
         default:
-            MovingStatusUpdateDeadline = {};
-            LOG_W("Failed to update topic moving status", {"response", ev->Get()->Record.ShortDebugString()});
+            ReplicationStatusUpdateDeadline = {};
+            LOG_W("Failed to update topic replication status", {"response", ev->Get()->Record.ShortDebugString()});
             break;
     }
-    ScheduleWaitingMovingData(ctx);
+    ScheduleWaitingReplicationData(ctx);
 }
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
@@ -370,15 +370,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = std::move(record.GetPath());
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
-    if (TopicConfigurationMoverActor) {
-        ctx.Send(TopicConfigurationMoverActor, new TEvents::TEvPoisonPill());
-        TopicConfigurationMoverActor = {};
+    if (TopicConfigurationReplicatorActor) {
+        ctx.Send(TopicConfigurationReplicatorActor, new TEvents::TEvPoisonPill());
+        TopicConfigurationReplicatorActor = {};
     }
-    if (MovingStatusRequestActor) {
-        ctx.Send(MovingStatusRequestActor, new TEvents::TEvPoisonPill());
-        MovingStatusRequestActor = {};
+    if (ReplicationStatusRequestActor) {
+        ctx.Send(ReplicationStatusRequestActor, new TEvents::TEvPoisonPill());
+        ReplicationStatusRequestActor = {};
     }
-    MovingStatusUpdateDeadline = {};
+    ReplicationStatusUpdateDeadline = {};
 
     if (!TabletConfig.GetAllPartitions().size()) {
         for (auto& p : record.GetPartitions()) {
@@ -1003,17 +1003,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr&
 // Autoscaling
 //
 
-void TPersQueueReadBalancer::StartTopicConfigurationMover(const TActorContext& ctx) {
-    if (!TopicConfigurationMoverActor && TabletConfig.GetMovingStatus() == NKikimrPQ::MovingConfiguration
+void TPersQueueReadBalancer::StartTopicConfigurationReplicator(const TActorContext& ctx) {
+    if (!TopicConfigurationReplicatorActor && TabletConfig.GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration
         && MirroringEnabled(TabletConfig))
     {
-        TopicConfigurationMoverActor = ctx.Register(CreateTopicConfigurationMover(
+        TopicConfigurationReplicatorActor = ctx.Register(CreateTopicConfigurationReplicator(
             TabletID(), SelfId(), TabletConfig.GetPartitionConfig().GetMirrorFrom()));
     }
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != TopicConfigurationMoverActor || TabletConfig.GetMovingStatus() != NKikimrPQ::MovingConfiguration) {
+    if (ev->Sender != TopicConfigurationReplicatorActor || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationConfiguration) {
         return;
     }
     const auto partitionId = ev->Get()->Record.GetPartitionId();
@@ -1022,46 +1022,46 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev
         LOG_W("Cannot forward consumer offsets for an unknown partition", {"partition", partitionId});
         return;
     }
-    // Preserve the mover as sender: the partition replies directly to this actor instance.
+    // Preserve the replicator as sender: the partition replies directly to this actor instance.
     NTabletPipe::SendData(ev->Sender, GetPipeClient(partition->second.TabletId, ctx), ev->Release().Release(), ev->Cookie);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationMovingFinished::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != TopicConfigurationMoverActor || TabletConfig.GetMovingStatus() != NKikimrPQ::MovingConfiguration) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Sender != TopicConfigurationReplicatorActor || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationConfiguration) {
         return;
     }
-    RequestMovingStatus(NKikimrPQ::MovingDone, ctx);
+    RequestReplicationStatus(NKikimrPQ::ReplicationDone, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionMovingFinished::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
-    PendingMovingDataFinishedRequests.push_back({ev->Sender, ev->Cookie, record.GetPartitionId()});
-    ProcessMovingDataFinishedRequests(ctx);
+    PendingReplicationDataFinishedRequests.push_back({ev->Sender, ev->Cookie, record.GetPartitionId()});
+    ProcessReplicationDataFinishedRequests(ctx);
 }
 
-void TPersQueueReadBalancer::ProcessMovingDataFinishedRequests(const TActorContext& ctx) {
-    if (MovingDataFinishedWriteInProgress) {
+void TPersQueueReadBalancer::ProcessReplicationDataFinishedRequests(const TActorContext& ctx) {
+    if (ReplicationDataFinishedWriteInProgress) {
         return;
     }
-    std::vector<TMovingDataFinishedRequest> requests;
-    for (const auto& request : PendingMovingDataFinishedRequests) {
+    std::vector<TReplicationDataFinishedRequest> requests;
+    for (const auto& request : PendingReplicationDataFinishedRequests) {
         auto it = PartitionsInfo.find(request.PartitionId);
         if (it == PartitionsInfo.end()) {
             continue;
         }
-        if (it->second.MovingDataFinished) {
-            ctx.Send(request.Sender, new TEvPQ::TEvPartitionMovingFinishedAck(request.PartitionId), 0, request.Cookie);
+        if (it->second.ReplicationDataFinished) {
+            ctx.Send(request.Sender, new TEvPQ::TEvPartitionReplicationFinishedAck(request.PartitionId), 0, request.Cookie);
         } else {
             requests.push_back(request);
         }
     }
-    PendingMovingDataFinishedRequests.clear();
+    PendingReplicationDataFinishedRequests.clear();
     if (!requests.empty()) {
-        MovingDataFinishedWriteInProgress = true;
-        Execute(new TTxWriteMovingDataFinished(this, std::move(requests)), ctx);
+        ReplicationDataFinishedWriteInProgress = true;
+        Execute(new TTxWriteReplicationDataFinished(this, std::move(requests)), ctx);
     }
 }
 
@@ -1340,9 +1340,9 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
         // from PQ
         HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
-        HFunc(TEvPQ::TEvPartitionMovingFinished, Handle);
+        HFunc(TEvPQ::TEvPartitionReplicationFinished, Handle);
         HFunc(TEvPQ::TEvPartitionConsumerOffsets, Handle);
-        HFunc(TEvPQ::TEvTopicConfigurationMovingFinished, Handle);
+        HFunc(TEvPQ::TEvTopicConfigurationReplicationFinished, Handle);
         // from TPartitionScaleRequest
         HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);

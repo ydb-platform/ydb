@@ -51,7 +51,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        (*settings->mutable_attributes())["_topic_moving_status"] = ToString(static_cast<ui32>(config.GetMovingStatus()));
+        (*settings->mutable_attributes())["_topic_replication_status"] = ToString(static_cast<ui32>(config.GetReplicationStatus()));
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }
@@ -197,8 +197,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     }
                     break;
                 }
-                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING: {
-                    (*settings->mutable_attributes())["_moving_consumer"] = consumerName;
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+                    (*settings->mutable_attributes())["_replication_consumer"] = consumerName;
                     break;
                 }
             }
@@ -229,8 +229,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         if (NPQ::MirroringEnabled(config)) {
-            (*settings->mutable_attributes())["_is_for_topic_moving"] =
-                partConfig.GetMirrorFrom().GetIsForTopicMoving() ? "true" : "false";
+            (*settings->mutable_attributes())["_is_for_topic_replication"] =
+                partConfig.GetMirrorFrom().GetIsForTopicReplication() ? "true" : "false";
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

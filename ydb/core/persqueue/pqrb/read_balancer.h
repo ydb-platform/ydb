@@ -104,15 +104,15 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     struct TTxInit;
     struct TTxWrite;
     struct TTxWriteReceiveAttemptPartitions;
-    struct TTxWriteMovingDataFinished;
-    struct TTxCheckMovingDataFinished;
+    struct TTxWriteReplicationDataFinished;
+    struct TTxCheckReplicationDataFinished;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
-    void ScheduleWaitingMovingData(const TActorContext& ctx);
-    void OnMovingDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx);
-    void RequestMovingStatus(NKikimrPQ::ETopicMovingStatus status, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvTopicConfigurationMovingFinished::TPtr& ev, const TActorContext& ctx);
-    void StartTopicConfigurationMover(const TActorContext& ctx);
+    void ScheduleWaitingReplicationData(const TActorContext& ctx);
+    void OnReplicationDataChecked(bool allPartitionsSynced, int configVersion, const TActorContext& ctx);
+    void RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx);
+    void StartTopicConfigurationReplicator(const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
 
@@ -194,8 +194,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionMovingFinished::TPtr& ev, const TActorContext& ctx);
-    void ProcessMovingDataFinishedRequests(const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
+    void ProcessReplicationDataFinishedRequests(const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
@@ -240,19 +240,19 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 public:
     struct TPartitionInfo {
         ui64 TabletId;
-        bool MovingDataFinished = false;
+        bool ReplicationDataFinished = false;
     };
 
 private:
     absl::flat_hash_map<ui32, TPartitionInfo> PartitionsInfo;
 
-    struct TMovingDataFinishedRequest {
+    struct TReplicationDataFinishedRequest {
         TActorId Sender;
         ui64 Cookie;
         ui32 PartitionId;
     };
-    std::vector<TMovingDataFinishedRequest> PendingMovingDataFinishedRequests;
-    bool MovingDataFinishedWriteInProgress = false;
+    std::vector<TReplicationDataFinishedRequest> PendingReplicationDataFinishedRequests;
+    bool ReplicationDataFinishedWriteInProgress = false;
 
     struct TTabletInfo {
         ui64 Owner;
@@ -317,12 +317,12 @@ private:
     static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
     static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);
 
-    static constexpr ui64 WAITING_MOVING_DATA_WAKEUP_TAG = 12;
-    bool WaitingMovingDataScheduled = false;
-    bool MovingDataCheckInProgress = false;
-    TActorId MovingStatusRequestActor;
-    TActorId TopicConfigurationMoverActor;
-    TInstant MovingStatusUpdateDeadline;
+    static constexpr ui64 WAITING_REPLICATION_DATA_WAKEUP_TAG = 12;
+    bool WaitingReplicationDataScheduled = false;
+    bool ReplicationDataCheckInProgress = false;
+    TActorId ReplicationStatusRequestActor;
+    TActorId TopicConfigurationReplicatorActor;
+    TInstant ReplicationStatusUpdateDeadline;
 
     struct TPartitionsLocationRequest {
         TActorId Sender;

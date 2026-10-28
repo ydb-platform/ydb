@@ -579,7 +579,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
-    CompleteMovingConsumerOffsetsWrite(ctx);
+    CompleteReplicationConsumerOffsetsWrite(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();

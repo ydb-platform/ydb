@@ -16,7 +16,7 @@ SRCS(
     partition_monitoring.cpp
     partition_read.cpp
     partition_reset_offset.cpp
-    partition_topic_moving.cpp
+    partition_topic_replication.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     sourceid.cpp

@@ -149,7 +149,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         ctx.Send(request.Sender, response.Release());
     };
 
-    if (!IsActive() || IsTopicMovingFinishing(request.ClientId)) {
+    if (!IsActive() || IsTopicReplicationFinishing(request.ClientId)) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
         } else {

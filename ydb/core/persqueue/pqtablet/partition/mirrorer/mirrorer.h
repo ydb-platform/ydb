@@ -22,7 +22,7 @@ private:
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
-    const TDuration MOVING_FINISHED_RETRY_INTERVAL = TDuration::Seconds(5);
+    const TDuration REPLICATION_FINISHED_RETRY_INTERVAL = TDuration::Seconds(5);
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
     const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
@@ -48,7 +48,7 @@ private:
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionMovingFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -68,7 +68,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionMovingFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -127,8 +127,8 @@ public:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionMovingFinishedAck::TPtr& ev, const TActorContext& ctx);
-    void TryNotifyMovingDataFinished(const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
+    void TryNotifyReplicationDataFinished(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
@@ -179,10 +179,10 @@ private:
 
     bool WaitNextReaderEventInFlight = false;
     bool CredentialsRequestInFlight = false;
-    bool MovingDataFinished = false;
-    bool MovingDataPersisted = false;
-    TInstant LastMovingDataNotification;
-    ui64 MovingDataNotificationCookie = 1;
+    bool ReplicationDataFinished = false;
+    bool ReplicationDataPersisted = false;
+    TInstant LastReplicationDataNotification;
+    ui64 ReplicationDataNotificationCookie = 1;
 
     bool WasSuccessfulRecording = false;
     TInstant LastStateLogTimestamp;

@@ -80,7 +80,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
                 partitionsInfo[part] = {tabletId};
-                partitionsInfo[part].MovingDataFinished = partsRowset.GetValueOrDefault<Schema::Partitions::MovingDataFinished>(false);
+                partitionsInfo[part].ReplicationDataFinished = partsRowset.GetValueOrDefault<Schema::Partitions::ReplicationDataFinished>(false);
                 Self->TopicMetricsHandler->InitializePartitions(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                     partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 

@@ -201,7 +201,7 @@ private:
                      TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
-    bool IsTopicMovingFinishing(const TString& consumer) const;
+    bool IsTopicReplicationFinishing(const TString& consumer) const;
     bool CanWrite() const;
     bool CanEnqueue() const;
 
@@ -275,8 +275,8 @@ private:
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
-    bool AddMovingConsumerOffsetsToPersistRequest(const TActorContext& ctx);
-    void CompleteMovingConsumerOffsetsWrite(const TActorContext& ctx);
+    bool AddReplicationConsumerOffsetsToPersistRequest(const TActorContext& ctx);
+    void CompleteReplicationConsumerOffsetsWrite(const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
@@ -1041,13 +1041,13 @@ private:
     ui64 PQRBCookie = 0;
     TActorId ReadBalancerActorId;
     // Source snapshot persisted atomically with the imported consumer offsets.
-    std::optional<NKikimrPQ::TEvPartitionConsumerOffsets> MovingConsumerOffsets;
-    struct TMovingConsumerOffsetsWrite {
+    std::optional<NKikimrPQ::TEvPartitionConsumerOffsets> ReplicationConsumerOffsets;
+    struct TReplicationConsumerOffsetsWrite {
         NKikimrPQ::TEvPartitionConsumerOffsets Offsets;
         TVector<std::pair<TActorId, ui64>> Replies;
     };
-    TDeque<TMovingConsumerOffsetsWrite> PendingMovingConsumerOffsets;
-    std::optional<TMovingConsumerOffsetsWrite> MovingConsumerOffsetsWrite;
+    TDeque<TReplicationConsumerOffsetsWrite> PendingReplicationConsumerOffsets;
+    std::optional<TReplicationConsumerOffsetsWrite> ReplicationConsumerOffsetsWrite;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

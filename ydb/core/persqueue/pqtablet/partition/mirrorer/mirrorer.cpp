@@ -95,31 +95,31 @@ TMirrorer::TMirrorer(
 
 void TMirrorer::Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx) {
     if (ReadBalancerActor != ev->Get()->ReadBalancerActorId) {
-        LastMovingDataNotification = TInstant::Zero();
+        LastReplicationDataNotification = TInstant::Zero();
     }
     ReadBalancerActor = ev->Get()->ReadBalancerActorId;
-    TryNotifyMovingDataFinished(ctx);
+    TryNotifyReplicationDataFinished(ctx);
     TryToSplitMerge(ctx);
 }
 
-void TMirrorer::Handle(TEvPQ::TEvPartitionMovingFinishedAck::TPtr& ev, const TActorContext&) {
-    if (MovingDataFinished && ev->Sender == ReadBalancerActor
-        && ev->Cookie == MovingDataNotificationCookie
+void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext&) {
+    if (ReplicationDataFinished && ev->Sender == ReadBalancerActor
+        && ev->Cookie == ReplicationDataNotificationCookie
         && ev->Get()->Record.HasPartitionId() && ev->Get()->Record.GetPartitionId() == Partition) {
-        MovingDataPersisted = true;
+        ReplicationDataPersisted = true;
     }
 }
 
-void TMirrorer::TryNotifyMovingDataFinished(const TActorContext& ctx) {
-    if (!Config.GetIsForTopicMoving() || !MovingDataFinished || MovingDataPersisted || !ReadBalancerActor) {
+void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
+    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted || !ReadBalancerActor) {
         return;
     }
-    if (LastMovingDataNotification != TInstant::Zero()
-        && ctx.Now() - LastMovingDataNotification < MOVING_FINISHED_RETRY_INTERVAL) {
+    if (LastReplicationDataNotification != TInstant::Zero()
+        && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
         return;
     }
-    ctx.Send(ReadBalancerActor, new TEvPQ::TEvPartitionMovingFinished(Partition), 0, MovingDataNotificationCookie);
-    LastMovingDataNotification = ctx.Now();
+    ctx.Send(ReadBalancerActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
+    LastReplicationDataNotification = ctx.Now();
 }
 
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
@@ -332,7 +332,7 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
-    TryNotifyMovingDataFinished(ctx);
+    TryNotifyReplicationDataFinished(ctx);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
     Counters.Cumulative().ResetCounters();
     Counters.Percentile().ResetCounters();
@@ -442,10 +442,10 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
     );
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        MovingDataFinished = false;
-        MovingDataPersisted = false;
-        LastMovingDataNotification = TInstant::Zero();
-        ++MovingDataNotificationCookie;
+        ReplicationDataFinished = false;
+        ReplicationDataPersisted = false;
+        LastReplicationDataNotification = TInstant::Zero();
+        ++ReplicationDataNotificationCookie;
         EndPartitionSessionEvent.reset();
         LOG_N("Changing config");
 
@@ -498,10 +498,10 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
-    if (Config.GetIsForTopicMoving() && !MovingDataFinished) {
-        MovingDataFinished = true;
+    if (Config.GetIsForTopicReplication() && !ReplicationDataFinished) {
+        ReplicationDataFinished = true;
     }
-    TryNotifyMovingDataFinished(ctx);
+    TryNotifyReplicationDataFinished(ctx);
     if (!AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
         return;
     }

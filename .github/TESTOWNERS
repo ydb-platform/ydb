@@ -26,9 +26,7 @@
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/config/validation/column_shard_config_validator_ut @ydb-platform/cs
-/ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/io_formats/arrow/scheme/ut @ydb-platform/cs
-/ydb/core/tx/tiering/ut @ydb-platform/cs
 /ydb/library/arrow_clickhouse/ut @ydb-platform/cs
 /ydb/library/arrow_kernels/ut @ydb-platform/cs
 /ydb/library/formats/arrow @ydb-platform/cs
@@ -76,8 +74,6 @@
 
 #Security Team @azevaykin TEAM:@ydb-platform/security
 /ydb/library/http_proxy/authorization/ut @ydb-platform/security
-/ydb/library/login @ydb-platform/security
-/ydb/library/security/ut @ydb-platform/security
 /ydb/tests/functional/encryption @ydb-platform/security
 /ydb/tests/functional/mvp/oidc_proxy @ydb-platform/security
 /ydb/core/security @ydb-platform/security
@@ -92,9 +88,7 @@
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/library/mkql_proto/ut @ydb-platform/qp
-/ydb/library/query_actor/ut @ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
-/ydb/tests/tools/kqprun @ydb-platform/qp
 /ydb/udfs/wasm @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
@@ -111,7 +105,6 @@
 /ydb/public/lib/validation/ut @ydb-platform/appteam
 /ydb/public/lib/value/ut @ydb-platform/appteam
 /ydb/public/tools/lib/cmds/ut @ydb-platform/appteam
-/ydb/public/tools/local_ydb @ydb-platform/appteam
 /ydb/public/tools/ydb_recipe @ydb-platform/appteam
 /ydb/tests/functional/sdk @ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -147,24 +140,17 @@
 /ydb/library/testlib/ut @ydb-platform/engineering
 /ydb/library/time_series_vec/ut @ydb-platform/engineering
 /ydb/library/union_copy_set/ut @ydb-platform/engineering
-/ydb/library/wasm/unittests @ydb-platform/engineering
 /ydb/library/workload @ydb-platform/engineering
 /ydb/library/ycloud/impl/ut @ydb-platform/engineering
-/ydb/public/lib/udf/manifest/ut @ydb-platform/engineering
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/functional/restarts @ydb-platform/engineering
-/ydb/tests/functional/script_execution @ydb-platform/engineering
 /ydb/tests/functional/tpcc @ydb-platform/engineering
-/ydb/tests/library @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/supp @ydb-platform/engineering
 /ydb/tests/tools/canondata_sync @ydb-platform/engineering
 /ydb/tests/tools/local_cluster @ydb-platform/engineering
-/ydb/tests/tools/mdb_mock @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
-/ydb/tests/tools/s3_recipe @ydb-platform/engineering
-/ydb/tests/tools/token_accessor_mock @ydb-platform/engineering
 /ydb/tests/tools/ydb_serializable @ydb-platform/engineering
 /ydb/tools/cfg @ydb-platform/engineering
 /ydb/tools/include_sanitizer @ydb-platform/engineering
@@ -180,7 +166,6 @@
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/apps/bridge_skipper @ydb-platform/blobstorage
 /ydb/apps/dstool @ydb-platform/blobstorage
-/ydb/library/pdisk_io/ut @ydb-platform/blobstorage
 /ydb/services/distributed_storage/ut @ydb-platform/blobstorage
 /ydb/tools/blobsan/ut @ydb-platform/blobstorage
 /ydb/tools/pdisktool/ut @ydb-platform/blobstorage
@@ -209,10 +194,6 @@
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/backup @ydb-platform/core
 /ydb/core/base/generated/ut @ydb-platform/core
-/ydb/core/config/init/ut @ydb-platform/core
-/ydb/core/config/tools/protobuf_plugin/ut @ydb-platform/core
-/ydb/core/config/validation/auth_config_validator_ut @ydb-platform/core
-/ydb/core/config/validation/ut @ydb-platform/core
 /ydb/core/control/ut @ydb-platform/core
 /ydb/core/debug_tools/ut @ydb-platform/core
 /ydb/core/driver_lib @ydb-platform/core
@@ -220,7 +201,6 @@
 /ydb/core/grpc_services @ydb-platform/core
 /ydb/core/grpc_streaming/ut @ydb-platform/core
 /ydb/core/jaeger_tracing/ut @ydb-platform/core
-/ydb/core/kesus @ydb-platform/core
 /ydb/core/log_backend/ut @ydb-platform/core
 /ydb/core/memory_controller/ut @ydb-platform/core
 /ydb/core/metering/ut @ydb-platform/core
@@ -237,7 +217,6 @@
 /ydb/core/tx/limiter/grouped_memory/ut @ydb-platform/core
 /ydb/core/tx/long_tx_service @ydb-platform/core
 /ydb/core/tx/mediator/ut @ydb-platform/core
-/ydb/core/tx/replication @ydb-platform/core
 /ydb/core/tx/sequenceproxy/ut @ydb-platform/core
 /ydb/core/tx/sequenceshard @ydb-platform/core
 /ydb/core/tx/time_cast/ut @ydb-platform/core
@@ -280,8 +259,6 @@
 /ydb/tests/stress/scheme_board @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
-/ydb/core/local_proxy/local_pq_client/ut @ydb-platform/topics
-/ydb/library/persqueue/topic_parser/ut @ydb-platform/topics
 /ydb/services/persqueue_cluster_discovery @ydb-platform/topics
 /ydb/services/sqs_topic @ydb-platform/topics
 /ydb/tests/functional/kafka @ydb-platform/topics
@@ -311,10 +288,9 @@
 #YDB Analytics TEAM:???
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
-/ydb/core/external_sources @ydb-platform/fq
 /ydb/public/tools/federation_discovery_recipe @ydb-platform/fq
 /ydb/public/tools/federation_recipe @ydb-platform/fq
-/ydb/tests/functional/udf_store @ydb-platform/fq
+/ydb/tests/functional/script_execution @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
 /ydb/tests/solomon @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq

@@ -494,7 +494,8 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});
-        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
+        // the reply comes with the cookie of the request, so a late one is told from the reply to a newer request
+        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release(), ExpectedValidationTimeoutCookie);
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
@@ -574,6 +575,14 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Console validate config response",
             {"marker", "BSC27"},
             {"response", ev->Get()->Record});
+        if (ev->Cookie != ExpectedValidationTimeoutCookie || !ClientId) {
+            // the request it replies to has timed out, a newer one may be going on
+            YDB_LOG_DEBUG("Late console validate config response ignored",
+                {"marker", "BSC56"},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", ExpectedValidationTimeoutCookie});
+            return;
+        }
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
         using TResponseProto = NKikimrBlobStorage::TEvControllerReplaceConfigResponse;
         auto& record = ev->Get()->Record;

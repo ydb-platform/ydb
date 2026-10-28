@@ -13,6 +13,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnec
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeRestart.RegistrationSnapshotPrecedesDiskUpdates
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.CutLogAppendsDoNotFragmentDiskIndex
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
@@ -146,6 +147,7 @@ ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlook
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-1-2]
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-1]
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-2]
+ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_time_ago[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_shared]

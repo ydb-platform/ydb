@@ -1782,6 +1782,7 @@ message TEvInterpilePutResult {
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
+        optional bool WrittenBeyondBarrier = 3;
     }
 
     repeated TItem Items = 1;

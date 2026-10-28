@@ -298,6 +298,9 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
     if (msg.ErrorReason) {
         item->SetErrorReason(msg.ErrorReason);
     }
+    if (msg.WrittenBeyondBarrier) {
+        item->SetWrittenBeyondBarrier(true);
+    }
     if (!--common.RepliesRemaining) {
         auto ev = std::make_unique<TEvInterpilePutResult>();
         common.Result.Swap(&ev->Record);

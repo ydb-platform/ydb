@@ -114,6 +114,7 @@ void TPutImpl::ProcessInterpilePutResult(TEvInterpilePutResult& ev, TLogContext&
 
     for (size_t i = 0; i < Blobs.size(); ++i) {
         auto& item = ev.Record.GetItems(i);
+        WrittenBeyondBarrier[i] = WrittenBeyondBarrier[i] || item.GetWrittenBeyondBarrier();
         PrepareOneReply(item.GetStatus(), i, logCtx, item.GetErrorReason(), outPutResults);
     }
 }

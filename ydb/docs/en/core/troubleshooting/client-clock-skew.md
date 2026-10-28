@@ -25,7 +25,9 @@ chronyc tracking
 chronyc sources -v
 ```
 
-In the `chronyc tracking` output, check the `System time` field (current offset) and `Leap status` (should be `Normal`). If chrony is not installed, use `timedatectl` to verify that the system clock is synchronized.
+In `chronyc tracking`, check `System time` (the system clock offset relative to chrony’s clock) and `Leap status` (normally `Normal`). `Reference ID = 7F7F0101` without a name or IP address indicates local mode without external synchronization.
+
+In `chronyc sources -v`, find the source marked `*` in column `S`: it is selected for synchronization. Verify that it is the expected time source. If chrony is not installed, use `timedatectl` to check synchronization status.
 
 ## Recommendations {#recommendations}
 

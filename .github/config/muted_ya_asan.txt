@@ -33,6 +33,8 @@ ydb/core/kqp/ut/scheme GeneratedStored.DropGeneratedUnlocksDependencyAlterAndDro
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionPrimaryKeyConflictIsAtomic
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionRollbackRestoresGeneratedState
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleDmlStatementsCommitAndAbortAtomically
+ydb/core/kqp/ut/scheme GeneratedStored.MultipleIndexesStayConsistentWithOneGeneratedColumn
+ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnNullableGeneratedColumnTracksNullTransitions
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateExpressionsUseOldValuesAndRecomputeStoredColumn
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint

@@ -55,8 +55,27 @@ static void MergeDuplicateTxStats(NKikimrQueryStats::TTxStats& dst, const NKikim
     // A write delivery has at most one PerShardStats entry (for this shard); the
     // fresh reply gets its own entry from FillExecutionStats when it is sent.
     Y_ENSURE(src.PerShardStatsSize() <= 1);
-    if (src.PerShardStatsSize() == 1 && dst.PerShardStatsSize() == 0) {
-        *dst.AddPerShardStats() = src.GetPerShardStats(0);
+    if (src.PerShardStatsSize() == 1) {
+        const auto& srcShard = src.GetPerShardStats(0);
+        if (dst.PerShardStatsSize() == 0) {
+            *dst.AddPerShardStats() = srcShard;
+        } else {
+            // dst already has the entry of this shard: merge the counters on top.
+            Y_ENSURE(dst.PerShardStatsSize() == 1);
+            auto* dstShard = dst.MutablePerShardStats(0);
+            if (srcShard.HasCpuTimeUsec()) {
+                dstShard->SetCpuTimeUsec(srcShard.GetCpuTimeUsec() + (dstShard->HasCpuTimeUsec() ? dstShard->GetCpuTimeUsec() : 0));
+            }
+            if (srcShard.HasOutgoingReadSetsCount()) {
+                dstShard->SetOutgoingReadSetsCount(srcShard.GetOutgoingReadSetsCount() + (dstShard->HasOutgoingReadSetsCount() ? dstShard->GetOutgoingReadSetsCount() : 0));
+            }
+            if (!dstShard->HasProgramSize() && srcShard.HasProgramSize()) {
+                dstShard->SetProgramSize(srcShard.GetProgramSize());
+            }
+            if (!dstShard->HasReplySize() && srcShard.HasReplySize()) {
+                dstShard->SetReplySize(srcShard.GetReplySize());
+            }
+        }
     }
 
     if (src.HasLocksBrokenAsBreaker()) {
@@ -212,19 +231,17 @@ public:
     }
 
     // The stored result of a duplicate delivery carries the reply the writer never
-    // saw. Missing or corrupt results degrade to "nothing known".
+    // saw. A missing result degrades to "nothing known"; a corrupt one is a bug
+    // (corrupted state or a buggy migration peer) and must not fail silently.
     static bool ParseStoredWriteSeqNumResult(
             const TWriteSeqNumState& state,
             NKikimrDataEvents::TEvWriteResult& parsed) {
         if (state.SerializedResult.empty()) {
             return false;
         }
-        if (!parsed.ParseFromString(state.SerializedResult)) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Failed to parse stored write result for writer " << state.WriterIndex
-                << " seq num " << state.WriteSeqNum);
-            return false;
-        }
+        Y_ENSURE(parsed.ParseFromString(state.SerializedResult),
+            "Failed to parse stored write result for writer " << state.WriterIndex
+            << " seq num " << state.WriteSeqNum);
         return true;
     }
 

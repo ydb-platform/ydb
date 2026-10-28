@@ -3,6 +3,7 @@
 #include "audit_log.h"
 #include "audit_dml_operations.h"
 #include "service_ratelimiter_events.h"
+#include "grpc_request_proxy.h"
 #include "grpc_request_proxy_handle_methods.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
@@ -253,6 +254,9 @@ public:
             if (!clientCertificates.empty()) {
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
+        }
+        if (TBase::GetSecurityToken().empty() && IsAnonymousGrpcMethodAllowed(*GrpcRequestBaseCtx_)) {
+            TBase::SetAllowMissingToken();
         }
         Initialize(schemeData, rootAttributes);
     }

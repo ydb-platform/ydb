@@ -26,7 +26,6 @@ constexpr TDuration RetryDelay = TDuration::MilliSeconds(50);
 const TString BuiltinToken = "root@builtin";
 const TString InvalidToken = "invalid-token";
 const TString ChooseProxyMethod = "NKikimrClient.TGRpcServer/ChooseProxy";
-const TString SchemeDescribeMethod = "NKikimrClient.TGRpcServer/SchemeDescribe";
 const TString SchemeOperationMethod = "NKikimrClient.TGRpcServer/SchemeOperation";
 const TString ListEndpointsMethod = "Ydb.Discovery.V1.DiscoveryService/ListEndpoints";
 const TString Database = "/Root";
@@ -82,18 +81,6 @@ TLegacyCallResult CallSchemeOperation(ui16 grpcPort, const TCallAuth& auth = {})
     return result;
 }
 
-TLegacyCallResult CallSchemeDescribe(ui16 grpcPort, const TCallAuth& auth = {}) {
-    auto stub = MakeStub(grpcPort);
-    NKikimrClient::TSchemeDescribe request;
-    request.SetPath("/Root");
-
-    TLegacyCallResult result;
-    grpc::ClientContext context;
-    ApplyAuth(context, request, auth);
-    result.Status = stub->SchemeDescribe(&context, request, &result.Response);
-    return result;
-}
-
 bool IsTemporarilyUnavailable(const TLegacyCallResult& result) {
     if (result.Status.error_code() == grpc::StatusCode::UNAVAILABLE) {
         return true;
@@ -123,19 +110,6 @@ TLegacyCallResult WaitSchemeOperation(ui16 grpcPort, const TCallAuth& auth = {})
     const TInstant deadline = TInstant::Now() + CallTimeout;
     do {
         result = CallSchemeOperation(grpcPort, auth);
-        if (result.Status.error_code() != grpc::StatusCode::UNAVAILABLE) {
-            return result;
-        }
-        Sleep(RetryDelay);
-    } while (TInstant::Now() < deadline);
-    return result;
-}
-
-TLegacyCallResult WaitSchemeDescribe(ui16 grpcPort, const TCallAuth& auth = {}) {
-    TLegacyCallResult result;
-    const TInstant deadline = TInstant::Now() + CallTimeout;
-    do {
-        result = CallSchemeDescribe(grpcPort, auth);
         if (result.Status.error_code() != grpc::StatusCode::UNAVAILABLE) {
             return result;
         }
@@ -293,12 +267,6 @@ Y_UNIT_TEST_SUITE(TChooseProxyGrpc) {
         AssertUnauthenticated(WaitChooseProxy(env.GrpcPort, {.ProtoToken = InvalidToken}));
     }
 
-    Y_UNIT_TEST(SchemeDescribeWithoutTokenWhenListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {SchemeDescribeMethod});
-        const auto result = WaitSchemeDescribe(env.GrpcPort);
-        UNIT_ASSERT_C(result.Status.ok(), result.Status.error_message());
-    }
-
     Y_UNIT_TEST(SchemeOperationWithoutTokenWhenListed) {
         TChooseProxyServer env(/*enforceUserToken=*/true, {SchemeOperationMethod});
         AssertUnauthenticated(WaitSchemeOperation(env.GrpcPort));
@@ -327,22 +295,6 @@ Y_UNIT_TEST_SUITE(TChooseProxyGrpc) {
     Y_UNIT_TEST(WithoutTokenWhenTokenNotRequired) {
         TChooseProxyServer env(/*enforceUserToken=*/false);
         AssertChooseProxyOk(WaitChooseProxy(env.GrpcPort));
-    }
-
-    Y_UNIT_TEST(SchemeDescribeWithoutTokenWhenTokenRequired) {
-        TChooseProxyServer env(/*enforceUserToken=*/true);
-        AssertUnauthenticated(WaitSchemeDescribe(env.GrpcPort));
-    }
-
-    Y_UNIT_TEST(SchemeDescribeWithMetadataTokenWhenTokenRequired) {
-        TChooseProxyServer env(/*enforceUserToken=*/true);
-        const auto result = WaitSchemeDescribe(env.GrpcPort, {.MetadataToken = BuiltinToken});
-        UNIT_ASSERT_C(result.Status.ok(), result.Status.error_message());
-    }
-
-    Y_UNIT_TEST(SchemeDescribeWithInvalidProtoTokenWhenTokenRequired) {
-        TChooseProxyServer env(/*enforceUserToken=*/true);
-        AssertUnauthenticated(WaitSchemeDescribe(env.GrpcPort, {.ProtoToken = InvalidToken}));
     }
 }
 

@@ -28,7 +28,8 @@ IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig)
 class IRequestProxyCtx;
 
 // True when SecurityConfig.UnauthenticatedGrpcMethods lists this non-modifying method.
-// Caller still checks a presented token or client certificate.
+// A presented token or client certificate is still checked. Missing credentials skip
+// only the token requirement; the check actor still resolves the database and rate limits.
 bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx);
 
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {

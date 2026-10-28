@@ -160,12 +160,16 @@ Syntax of TTL value is described in the article [{#T}](../../../yql/reference/sy
 
 {{ ydb-short-name }} allows you to rename an existing table, move it to another directory in the same database, and replace one table with another, in which case the data of the replaced table is deleted. When performing operations, only the table metadata changes, such as its path and name. The table data is not moved or overwritten.
 
-Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
 The speed of the rename operation is determined by the type of data transactions currently running on the table and does not depend on the amount of data in the table.
 
 * [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
+
+### Column groups {#column-groups}
+
+{{ ydb-short-name }} lets you group table columns to optimize storage and access. Column groups improve partial row read performance by splitting column storage into separate groups. See [creating column groups](../../../yql/reference/syntax/create_table/family.md) and [changing column groups](../../../yql/reference/syntax/alter_table/family.md).
 
 ### Local Bloom skip indexes {#bloom-filter}
 
@@ -252,7 +256,7 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
-* You can configure compression and encoding individually for each column. For details, see [CREATE TABLE request parameters](../../../yql/reference/syntax/create_table/index.md#parametry-zaprosa).
+* You can configure compression and encoding individually for each column. For details, see [CREATE TABLE request parameters](../../../yql/reference/syntax/create_table/index.md#request-parameters).
 
 Let's recreate the `article` table, this time in column-oriented format, using the following YQL command:
 

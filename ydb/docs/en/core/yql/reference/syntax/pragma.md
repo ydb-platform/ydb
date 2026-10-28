@@ -282,7 +282,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 

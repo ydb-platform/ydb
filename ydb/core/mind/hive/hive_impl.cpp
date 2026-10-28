@@ -144,10 +144,6 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
         YDB_LOG_INFO("TryToDeleteNode: deleting node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", node->Id});
-        if (BridgeInfo) {
-            auto& pileInfo = GetPile(node->BridgePileId);
-            pileInfo.Nodes.erase(node->Id);
-        }
         if (node->Down) {
             UpdateCounterNodesDown(-1);
         }

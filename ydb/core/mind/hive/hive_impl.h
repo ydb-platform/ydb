@@ -158,6 +158,7 @@ public:
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
+    friend struct TGetNodes;
     friend class THiveFill;
     friend class TReassignTabletWaitActor;
     friend class TMoveTabletWaitActor;

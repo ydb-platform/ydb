@@ -8143,6 +8143,55 @@ selector_config: []
         }
     }
 
+    // State storage is given as the Node list of three one-node rings. Disabling the ring of node 1 can't be expressed
+    // there: the flag set on the ring group is not what the decoder reads, and the replica would keep running. The
+    // command must fail instead of committing a disabled ring that doesn't take effect.
+    Y_UNIT_TEST(DisableRingOfNodeListFails) {
+        TCommitConfirmationFixture fixture(false);
+        auto *ss = fixture.Config.MutableStateStorageConfig();
+        ss->SetSSId(1);
+        ss->MutableRing()->SetNToSelect(3);
+        for (ui32 nodeId : {1, 2, 3}) {
+            ss->MutableRing()->AddNode(nodeId);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> result;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (edge && ev->GetRecipientRewrite() == edge
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                return false;
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableReassignStateStorageNode();
+        command->SetFrom(1);
+        command->SetStateStorage(true);
+        command->SetDisableRing(true);
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return result.has_value(); }), "no reply to the command");
+        UNIT_ASSERT_C(result->GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result->DebugString());
+        const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(),
+            fixture.Config.GetStateStorageConfig().SerializeAsString());
+    }
+
     void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal, bool changePileList = false) {
         TCommitConfirmationFixture fixture(false, 5);
         fixture.Config = MakeTwoPileBridgedConfig("pile0", "pile1");

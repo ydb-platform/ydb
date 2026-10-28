@@ -2442,6 +2442,10 @@ FROM `{table_name}`"""
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
+                  AND CAST(str1 AS Utf8) NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT ILIKE "%FOO%BAR%" -- YQ-4054
+                  AND str1 NOT ILIKE "%Foo%Bar!%" ESCAPE "!" -- YQ-4054
                   AND (CAST(CAST(d AS String) AS Date) = Date("1984-01-01"))
                   AND (i < Interval("PT3600S"))
                   AND (i > Interval("-PT1S"))
@@ -2510,6 +2514,9 @@ FROM `{table_name}`"""
                     assert "`str1`" in filter
                     assert "`str2`" in filter
                     assert " REGEXP " in filter
+                    assert " LIKE " in filter
+                    assert " ILIKE " in filter
+                    assert " ESCAPE " in filter
                     assert " IN (" in filter
                     assert ">= MIN_OF(" in filter
                     assert "<= MAX_OF(" in filter
@@ -2525,8 +2532,7 @@ FROM `{table_name}`"""
                     assert '"xar"' in filter
                     assert '"pat"' in filter
                     assert '"xyp"' in filter
-                    # complex LIKE pattern is not supported yet, YQ-4054
-                    assert '"xtp"' not in filter
+                    assert '"xtp"' in filter
                     sources += 1
         assert sources > 0
 

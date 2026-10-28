@@ -100,6 +100,78 @@ void CheckPlan(TQueryClient& client, const TString& query, bool expectScalarHash
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
+    Y_UNIT_TEST_TWIN(SelectImplementationByInputLayout, ForceBlockChannels) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(false);
+        tableService->SetEnableOlapSink(true);
+        tableService->SetBlockChannelsMode(ForceBlockChannels
+            ? NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE
+            : NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/CL` (
+                id Int32 NOT NULL,
+                k Int32,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+            CREATE TABLE `/Root/CR` (
+                id Int32 NOT NULL,
+                k Int64,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = client.ExecuteQuery(R"(
+            INSERT INTO `/Root/CL` (id, k) VALUES (1, 1), (2, 2), (3, NULL);
+            INSERT INTO `/Root/CR` (id, k) VALUES (1, 1), (2, 2), (3, NULL);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto makeQuery = [](TStringBuf left, TStringBuf right, bool useScalarHashJoin) {
+            return TStringBuilder() << R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.UseBlockHashJoin='true';
+                PRAGMA ydb.UseScalarHashJoin=')" << (useScalarHashJoin ? "true" : "false") << R"(';
+                PRAGMA ydb.OptShuffleElimination='true';
+                PRAGMA ydb.OptShuffleEliminationWithMap='true';
+                PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
+                SELECT L.id AS lid, R.id AS rid
+                FROM )" << left << R"( AS L
+                INNER JOIN )" << right << R"( AS R ON L.k = R.k;
+            )";
+        };
+        const auto explain = [&](const TString& query) {
+            auto explainResult = client.ExecuteQuery(query, TTxControl::NoTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            return TString(*explainResult.GetStats()->GetAst());
+        };
+
+        struct TCase {
+            TStringBuf Left;
+            TStringBuf Right;
+            bool UseScalarHashJoin;
+            bool ExpectScalarHashJoin;
+        };
+        const std::vector<TCase> cases = {
+            {"L", "R", true, !ForceBlockChannels},
+            {"L", "R", false, false},
+            {"CL", "CR", true, false},
+            {"L", "CR", true, !ForceBlockChannels},
+            {"CL", "R", true, !ForceBlockChannels},
+        };
+        for (const auto& [left, right, useScalarHashJoin, expectScalarHashJoin] : cases) {
+            const TString ast = explain(makeQuery(left, right, useScalarHashJoin));
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("ScalarHashJoin"), expectScalarHashJoin, ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("BlockHashJoin"), !expectScalarHashJoin, ast);
+        }
+    }
+
     Y_UNIT_TEST(ReplaceMapJoin) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();

@@ -121,6 +121,52 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
             "the follower of the kept child is lost: " << JoinSeq(", ", followerList));
     }
 
+    // A replica is gone, so the child of the follower guardian for it reports the replica missing. The replica gets
+    // back and registers the follower, which it acknowledges with a ping; the child must report the replica present.
+    Y_UNIT_TEST(FollowerGuardianPingClearsMissingReplica) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        // the children of the guardian retry on wakeups, which the test runtime drops by default
+        runtime.SetScheduledEventFilter([](auto&&, auto&&, auto&&, auto&&) { return false; });
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto replicas = resolved->Get()->GetPlainReplicas();
+        UNIT_ASSERT(!replicas.empty());
+        const TActorId replica = replicas.front();
+        runtime.Send(new IEventHandle(replica, edge, new TEvents::TEvPoisonPill()));
+
+        // the private event a child of the guardian tells its parent whether its replica is missing with
+        const ui32 replicaMissingType = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 1;
+        // a report is sent only when the state changes, so the first one says missing and the next one present
+        ui32 reports = 0;
+        bool acknowledge = false;
+        auto registrations = runtime.AddObserver<TEvStateStorage::TEvReplicaRegFollower>([&](auto& ev) {
+            if (ev->Recipient == replica && std::exchange(acknowledge, false)) {
+                // the replica is back and registers the follower; this ping comes before the undelivery of the
+                // registration the test runtime makes, as the replica actor is still gone for it
+                runtime.Send(new IEventHandle(ev->Sender, replica, new TEvTablet::TEvPing(tabletId, 0)));
+            }
+        });
+        TActorId guardian;
+        auto missingReports = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            // other actors have private events of the same type, so only the ones to the guardian count
+            if (ev->GetTypeRewrite() == replicaMissingType && guardian && ev->Recipient == guardian) {
+                ++reports;
+            }
+        });
+
+        const TActorId follower = runtime.AllocateEdgeActor();
+        guardian = runtime.Register(CreateStateStorageFollowerGuardian(tabletId, 1, follower));
+        runtime.WaitFor("the replica reported missing", [&] { return reports == 1; }, TDuration::Seconds(10));
+
+        acknowledge = true; // at the next registration, made after a pause
+        runtime.WaitFor("the replica reported present", [&] { return reports == 2; }, TDuration::Seconds(10));
+    }
+
 }
 
 } // NKikimr

@@ -132,6 +132,10 @@ A **region** is a large geographic area containing multiple availability zones. 
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
 
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disabled at the same time while other parts of the cluster (other piles) keep running. Piles are used in [bridge mode](#bridge) to split the cluster into several parts with synchronous replication between them. A pile may consist of nodes in one or several regions.
+
 ### Table {#table}
 
 A **table** is a structured piece of information arranged in rows and columns. Each row represents a single record or entry, while each column represents a specific attribute or field with a particular data type.
@@ -298,7 +302,7 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 ### Scheme root {#scheme-root}
 
-A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](#scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 

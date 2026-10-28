@@ -10,7 +10,7 @@ Frequent access to system views leads to additional load on the database, especi
 
 ## Partitions {#partitions}
 
-The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning) of DB tables:
+The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning_row_table) of DB tables:
 
 * `partition_stats`: Contains information about instant metrics and cumulative operation counters. Instant metrics are, for example, CPU load or count of in-flight [transactions](../concepts/transactions.md). Cumulative counters, for example, count the total number of rows read.
 

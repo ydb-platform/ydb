@@ -1,4 +1,4 @@
-# Миграция на конфигурацию V1
+﻿# Миграция на конфигурацию V1
 
 Данный документ содержит инструкцию по миграции с [конфигурации V2](../../configuration-management/configuration-v2/config-overview.md) на [конфигурацию V1](../../configuration-management/configuration-v1/index.md).
 
@@ -29,7 +29,7 @@
 
     {% cut "Подробнее" %}
 
-    Аргумент `--v2-internal-state` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
+    Аргумент `--v2-internal-state` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/domains_config.md#domains-state) и [статической группы](../../../reference/configuration/blob_storage_config.md#blob_storage_config).
 
     {% endcut %}
 

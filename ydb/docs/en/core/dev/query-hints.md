@@ -97,7 +97,7 @@ JoinType(t1 t2 ... tn Broadcast | Shuffle | Lookup)
 
 #### How it works
 
-If the query plan contains a join operator that joins only those tables listed in the hint, the optimizer will choose the specified join algorithm if it is applicable (for example, you cannot apply the LookupJoin algorithm to [column-oriented tables](../concepts/datamodel/table.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
+If the query plan contains a join operator that joins only those tables listed in the hint, the optimizer will choose the specified join algorithm if it is applicable (for example, you cannot apply the LookupJoin algorithm to [column-oriented tables](../concepts/glossary.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
 
 #### Examples
 

@@ -10,7 +10,7 @@
 
 ## Партиции {#partitions}
 
-Следующее системное представление хранит детализированную информацию об [партициях](../concepts/datamodel/table.md#partitioning)  таблиц базы данных:
+Следующее системное представление хранит детализированную информацию об [партициях](../concepts/datamodel/table.md#partitioning_row_table)  таблиц базы данных:
 
 * `partition_stats` — содержит информацию о моментальных метриках и кумулятивных счетчиках операций. К первым относятся, например, данные о нагрузке на CPU или количестве выполняемых [транзакций](../concepts/transactions.md). Ко вторым — общее количество прочитанных строк.
 
@@ -52,8 +52,8 @@
 | `LastTtlRowsProcessed` | Количество проверенных строк партиции при последней очистке по TTL | `Uint64` | Моментальная |
 | `LastTtlRowsErased` | Количество удалённых строк партиции при последней очистке по TTL | `Uint64` | Моментальная |
 | `LocksAcquired` | Количество установленных [блокировок](../contributor/datashard-locks-and-change-visibility.md) . | `Uint64` | Кумулятивная |
-| `LocksWholeShard` | Количество установленных [блокировок "весь шард"](../contributor/datashard-locks-and-change-visibility.md#ограничения). | `Uint64` | Кумулятивная |
-| `LocksBroken` | Количество [сломанных блокировок](../contributor/datashard-locks-and-change-visibility.md#высокоуровневая-схема-работы). | `Uint64` | Кумулятивная |
+| `LocksWholeShard` | Количество установленных [блокировок "весь шард"](../contributor/datashard-locks-and-change-visibility.md#ogranicheniya). | `Uint64` | Кумулятивная |
+| `LocksBroken` | Количество [сломанных блокировок](../contributor/datashard-locks-and-change-visibility.md#vysokourovnevaya-skhema-raboty). | `Uint64` | Кумулятивная |
 
 ### Примеры запросов {#partitions-examples}
 

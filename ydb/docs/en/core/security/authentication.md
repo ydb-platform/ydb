@@ -27,7 +27,7 @@ Anonymous authentication should be used only for informational purposes for loca
 
 {% endnote %}
 
-To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/auth_config.md#auth).
+To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/security_config.md#security-auth).
 
 ## Authenticating by username and password {#static-credentials}
 
@@ -65,7 +65,15 @@ If necessary, a {{ ydb-short-name }} cluster or database administrator can [unlo
 
 ### Manual user lockout
 
-{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command description.
+By default, a user is given 4 attempts to enter the correct password. Otherwise, authentication will be denied for one hour. You can configure the user lockout criteria in the [configuration](../reference/configuration/index.md#account-lockout).
+
+If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) the user prematurely.
+
+Information about the user's lockout status and the number of incorrect password attempts can be found in the user's [system view](../dev/system-views.md#users).
+
+### Forced lock/unlock of a user
+
+There is another way to prevent a user from authenticating—forced lockout by the cluster or database administrator. Administrators can unlock users who have been forcibly locked, as well as those who have exceeded the number of incorrect password attempts. Detailed information on forced locking and unlocking of users can be found in the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
 
 ## LDAP directory integration {#ldap-auth-provider}
 
@@ -148,7 +156,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/auth_config.md#auth-config) section.
+In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/auth_config.md#local-auth-config) section.
 
 {% endnote %}
 

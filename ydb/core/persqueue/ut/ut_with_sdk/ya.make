@@ -36,6 +36,7 @@ SRCS(
     mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
     topic_timestamp_ut.cpp
+    topic_moving_ut.cpp
     topic_ut.cpp
 )
 

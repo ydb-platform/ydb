@@ -198,6 +198,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     break;
                 }
                 case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING: {
+                    (*settings->mutable_attributes())["_moving_consumer"] = consumerName;
                     break;
                 }
             }
@@ -228,6 +229,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         if (NPQ::MirroringEnabled(config)) {
+            (*settings->mutable_attributes())["_is_for_topic_moving"] =
+                partConfig.GetMirrorFrom().GetIsForTopicMoving() ? "true" : "false";
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

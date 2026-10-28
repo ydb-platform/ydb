@@ -3,9 +3,62 @@
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
+#include <future>
 #include <stdexcept>
 
 namespace NDataShardReadLoad {
+
+TEST(PhaseStartGate, ReportingAndThreadStartupGapsDoNotConsumeArrivals) {
+    TPhaseStartGate gate(2);
+    constexpr int64_t previousEndUs = 1000000;
+    constexpr int64_t actualStartUs = previousEndUs + 125000;
+    constexpr int64_t durationUs = 1000000;
+    auto run = [&](uint64_t partition) {
+        const int64_t start = gate.ArriveAndWait();
+        TArrivalClock clock(32000, start, start + durationUs, partition, 2);
+        const auto first = clock.PollBatch(actualStartUs, 64);
+        uint64_t scheduled = first.Scheduled;
+        uint64_t dispatched = first.Dispatch;
+        for (int64_t now = actualStartUs + 80; now < start + durationUs; now += 80) {
+            const auto batch = clock.PollBatch(now, 64);
+            scheduled += batch.Scheduled;
+            dispatched += batch.Dispatch;
+        }
+        const auto last = clock.PollBatch(start + durationUs - 1, 64);
+        return std::array<uint64_t, 4>{static_cast<uint64_t>(start), first.Scheduled,
+            scheduled + last.Scheduled, dispatched + last.Dispatch};
+    };
+    auto first = std::async(std::launch::async, run, 0);
+    auto second = std::async(std::launch::async, run, 1);
+    gate.WaitForWorkers();
+    EXPECT_EQ(first.wait_for(std::chrono::seconds(0)), std::future_status::timeout);
+    EXPECT_EQ(second.wait_for(std::chrono::seconds(0)), std::future_status::timeout);
+    gate.Start(actualStartUs);
+    const auto a = first.get();
+    const auto b = second.get();
+    EXPECT_EQ(a[0], static_cast<uint64_t>(actualStartUs));
+    EXPECT_EQ(b[0], static_cast<uint64_t>(actualStartUs));
+    EXPECT_EQ(a[1] + b[1], 1u); // No catch-up arrivals from the 125ms gap.
+    EXPECT_EQ(a[2] + b[2], 32000u);
+    EXPECT_EQ(a[3] + b[3], 32000u);
+}
+
+TEST(PhaseStartGate, StartupFailureReleasesWaitingWorkers) {
+    TPhaseStartGate gate(2); // Simulate failure to create the second worker.
+    auto worker = std::async(std::launch::async, [&] { return gate.ArriveAndWait(); });
+    gate.Fail(std::make_exception_ptr(std::runtime_error("thread startup failed")));
+    EXPECT_THROW(worker.get(), std::runtime_error);
+}
+
+TEST(PhaseStartGate, FailureAfterReleaseDoesNotCompletePromiseTwice) {
+    TPhaseStartGate gate(1);
+    auto worker = std::async(std::launch::async, [&] { return gate.ArriveAndWait(); });
+    gate.WaitForWorkers();
+    gate.Start(1234567);
+    EXPECT_NO_THROW(gate.Fail(std::make_exception_ptr(std::runtime_error("later failure"))));
+    EXPECT_EQ(worker.get(), 1234567);
+}
 
 TEST(ReportClock, DelayedCollectionDoesNotOverlapIntervalsOrTriggerCatchUpReports) {
     TReportClock clock;
@@ -55,6 +108,15 @@ TEST(ArrivalClock, ZeroRateAndPhaseBoundaries) {
     EXPECT_EQ(after.Poll(999999), 0u);
     EXPECT_EQ(after.Poll(1000000), 1u);
     EXPECT_EQ(after.Poll(2000000), 0u);
+}
+
+TEST(ArrivalClock, DurationLimitAllowsActualPhaseStartOffsets) {
+    constexpr int64_t maxDurationUs = 24LL * 60 * 60 * 1000000;
+    TArrivalClock maximum(1, 125000, 125000 + maxDurationUs);
+    EXPECT_EQ(maximum.Poll(125000), 1u);
+    TArrivalClock late(1, maxDurationUs + 125000, maxDurationUs + 1125000);
+    EXPECT_EQ(late.Poll(maxDurationUs + 125000), 1u);
+    EXPECT_THROW(TArrivalClock(1, 125000, 125000 + maxDurationUs + 1), std::invalid_argument);
 }
 
 TEST(ArrivalClock, FractionalMicrosecondIntervalsRoundUp) {

@@ -2,6 +2,7 @@
 #include "stats.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -96,26 +97,28 @@ uint64_t ResultRows(const TDataQueryResult& result) {
     return rows;
 }
 
-void Init(TTableClient& client, const TOptions& options) {
-    auto created = client.GetSession(SessionSettings()).GetValueSync();
-    Check(created, "create initialization session");
-    auto session = created.GetSession();
-    auto table = TTableBuilder()
-        .AddNonNullableColumn("Bucket", EPrimitiveType::Uint64)
-        .AddNonNullableColumn("Item", EPrimitiveType::Uint64)
-        .AddNullableColumn("Payload", EPrimitiveType::String)
-        .SetPrimaryKeyColumns({"Bucket", "Item"})
-        .SetUniformPartitions(1)
-        .BeginPartitioningSettings()
-            .SetPartitioningByLoad(false)
-            .SetPartitioningBySize(false)
-            .SetMinPartitionsCount(1)
-            .SetMaxPartitionsCount(1)
-        .EndPartitioningSettings()
-        .Build();
-    Check(session.CreateTable(options.Table, std::move(table)).GetValueSync(), "create table (existing tables are not reused)");
+void Init(TDriver& driver, TTableClient& client, const TOptions& options) {
+    // Table Service CreateTable and ExecuteSchemeQuery accept existing tables.
+    // Query Service CREATE without IF NOT EXISTS rejects them, including races
+    // with another initializer, before any BulkUpsert is permitted.
+    NQuery::TQueryClient queryClient(driver);
+    const std::string createQuery = "CREATE TABLE `" + options.Table + R"(` (
+        Bucket Uint64 NOT NULL,
+        Item Uint64 NOT NULL,
+        Payload String,
+        PRIMARY KEY (Bucket, Item)
+    ) WITH (
+        UNIFORM_PARTITIONS = 1,
+        AUTO_PARTITIONING_BY_LOAD = DISABLED,
+        AUTO_PARTITIONING_BY_SIZE = DISABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1
+    );)";
+    Check(queryClient.ExecuteQuery(createQuery, NQuery::TTxControl::NoTx(), NQuery::TExecuteQuerySettings()
+        .RetrySettings(NQuery::TRetryOperationSettings().MaxRetries(0))).GetValueSync(),
+        "create table (existing tables are not reused)");
     const std::string payload(options.PayloadBytes, 'x');
-    // Keep each BulkUpsert batch around 1 MiB, including large payloads.
+    // Cap each BulkUpsert batch at 1000 rows and roughly 1 MiB.
     const uint64_t batchSize = std::max<uint64_t>(1, std::min<uint64_t>(1000, 1048576 / (options.PayloadBytes + 32)));
     for (uint64_t start = 0; start < options.Rows; start += batchSize) {
         if (StopRequested) {
@@ -438,11 +441,16 @@ private:
                     completion.LatencyUs = std::max<int64_t>(1, SinceUs(start));
                     try {
                         const auto& result = future.GetValue();
-                        completion.Status = ToString(result.GetStatus()).c_str();
+                        const auto status = result.GetStatus();
+                        completion.Status = ToString(status).c_str();
                         completion.Success = result.IsSuccess();
                         completion.Rows = result.IsSuccess() ? ResultRows(result) : 0;
-                        completion.ReplaceSession = result.IsTransportError() || result.GetStatus() == EStatus::BAD_SESSION
-                            || result.GetStatus() == EStatus::SESSION_EXPIRED || result.GetStatus() == EStatus::SESSION_BUSY;
+                        // Match the SDK's session-breaking transport classification.
+                        const bool breakingTransport = result.IsTransportError()
+                            && status != EStatus::CLIENT_RESOURCE_EXHAUSTED
+                            && status != EStatus::CLIENT_OUT_OF_RANGE;
+                        completion.ReplaceSession = breakingTransport || status == EStatus::BAD_SESSION
+                            || status == EStatus::SESSION_EXPIRED || status == EStatus::SESSION_BUSY;
                         if (!result.IsSuccess() && queue->ErrorSamples->fetch_add(1, std::memory_order_relaxed) < 5) {
                             completion.Error = result.GetIssues().ToString().c_str();
                         }
@@ -525,6 +533,7 @@ private:
                     stats.SessionFailures += completion.ReplaceSession;
                 });
                 if (completion.ReplaceSession) {
+                    // Close returns a future; do not wait for it while holding StatsMutex_.
                     slot.Session->Close(TCloseSessionSettings().ClientTimeout(TDuration::Seconds(5)));
                     slot.Session.reset();
                     if (replace) {
@@ -603,20 +612,18 @@ public:
         }
         Start_ = TClock::now();
         EmitConfig();
-        int64_t phaseStart = 0;
         for (size_t phase = 0; phase < Options_.Phases.size() && !StopRequested; ++phase) {
             const auto& spec = Options_.Phases[phase];
             std::cerr << "Phase " << spec.Name << ": long=" << spec.Rates[Long]
                 << "/s short=" << spec.Rates[Short] << "/s threads=" << Options_.Threads << '\n';
-            Emit("phase_start", spec.Name, phase);
-            RunWorkers(spec.Name, [&](TWorker& worker) {
+            RunWorkers(spec.Name, [&](TWorker& worker, int64_t phaseStart) {
                 worker.RunPhase(Start_, phase, phaseStart);
-            });
+            }, phase);
             Emit("phase_end", spec.Name, phase);
-            phaseStart += spec.DurationUs;
         }
-        const int64_t drainEnd = SinceUs(Start_) + Options_.DrainTimeoutUs;
-        RunWorkers("drain", [&](TWorker& worker) { worker.Drain(Start_, drainEnd); });
+        RunWorkers("drain", [&](TWorker& worker, int64_t drainStart) {
+            worker.Drain(Start_, drainStart + Options_.DrainTimeoutUs);
+        });
         const auto final = Emit("final", "drain");
         const auto outstanding = Outstanding(final);
         if (outstanding) {
@@ -633,11 +640,12 @@ public:
 
 private:
     template <typename F>
-    void RunWorkers(const std::string& phase, F&& work) {
+    void RunWorkers(const std::string& phase, F&& work, std::optional<size_t> origin = {}) {
         std::mutex mutex;
         std::condition_variable done;
         size_t remaining = Workers_.size();
         std::exception_ptr error;
+        TPhaseStartGate startGate(Workers_.size());
         // A phase's threads are joined before the next phase starts, so phase
         // reports never include arrivals launched by the following phase.
         std::vector<std::jthread> threads;
@@ -645,7 +653,10 @@ private:
             for (auto& worker : Workers_) {
                 threads.emplace_back([&, worker = worker.get()] {
                     try {
-                        work(*worker);
+                        const int64_t phaseStart = startGate.ArriveAndWait();
+                        if (!Abort_) {
+                            work(*worker, phaseStart);
+                        }
                     } catch (...) {
                         Abort_ = true;
                         std::lock_guard lock(mutex);
@@ -660,6 +671,14 @@ private:
                     done.notify_one();
                 });
             }
+            startGate.WaitForWorkers();
+            // Capture phase_start before releasing workers, but serialize and
+            // write it after release so reporting cannot consume phase time.
+            if (origin) {
+                Emit("phase_start", phase, origin, &startGate);
+            } else {
+                startGate.Start(SinceUs(Start_));
+            }
             std::unique_lock lock(mutex);
             while (remaining) {
                 const auto delay = std::clamp<int64_t>(ReportClock_.NextUs() - SinceUs(Start_), 0, 100000);
@@ -670,6 +689,7 @@ private:
             }
         } catch (...) {
             Abort_ = true;
+            startGate.Fail(std::current_exception());
             throw;
         }
         threads.clear();
@@ -694,12 +714,17 @@ private:
         return json;
     }
 
-    TSnapshot Emit(const std::string& kind, const std::string& phase, std::optional<size_t> origin = {}) {
+    TSnapshot Emit(const std::string& kind, const std::string& phase, std::optional<size_t> origin = {},
+        TPhaseStartGate* startGate = nullptr)
+    {
         TSnapshot snapshot(Options_.Phases.size());
         for (auto& worker : Workers_) {
             worker->Collect(snapshot, kind == "interval");
         }
         const int64_t collectedUs = SinceUs(Start_);
+        if (startGate) {
+            startGate->Start(collectedUs);
+        }
         TJson json(NJson::JSON_MAP);
         json["kind"] = kind;
         json["phase"] = phase;
@@ -797,7 +822,7 @@ int main(int argc, char** argv) {
             .RetrySettings(NYdb::NTable::TRetryOperationSettings().MaxRetries(0)));
         int result = 0;
         if (options.Command == "init") {
-            Init(client, options);
+            Init(driver, client, options);
         } else {
             TRunner runner(client, options);
             result = runner.Run();

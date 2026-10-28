@@ -1,7 +1,11 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <future>
+#include <latch>
 #include <string>
 #include <vector>
 
@@ -42,6 +46,23 @@ TOptions ParseOptions(int argc, char** argv);
 // Rates and caps are process-wide. Sessions are divided among workers;
 // their clocks interleave arrivals from the original population schedule.
 std::array<uint64_t, PopulationCount> WorkerCaps(const TOptions& options, uint64_t worker);
+
+// All workers wait until setup/reporting is finished, then receive the same
+// actual phase start. Failure must release workers already waiting at the gate.
+class TPhaseStartGate {
+public:
+    explicit TPhaseStartGate(size_t workers);
+    int64_t ArriveAndWait();
+    void WaitForWorkers();
+    void Start(int64_t startUs);
+    void Fail(std::exception_ptr error);
+
+private:
+    std::latch Ready_;
+    std::promise<int64_t> Start_;
+    std::shared_future<int64_t> StartFuture_;
+    bool Released_ = false; // Accessed only by the coordinator.
+};
 
 // Record interval boundaries after statistics collection, using the same
 // timestamp as elapsed_s. Collection delays must not overlap later intervals.

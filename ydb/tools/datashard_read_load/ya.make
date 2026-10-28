@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/histogram/hdr
     library/cpp/json/writer
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
 )
 

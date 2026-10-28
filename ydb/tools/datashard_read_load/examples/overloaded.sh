@@ -5,7 +5,7 @@
 # OVERLOADED to read requests and very little actual work (that could help get out of the
 # overloaded state) gets done, even after the burst subsides and the load returns to normal.
 
-ydb/tools/datashard_read_load/datashard_read_load run \
+./ydb/tools/datashard_read_load/datashard_read_load run \
     --endpoint localhost:2135 \
     --database /local/testdb --table /local/testdb/mailbox_load \
     --threads 4 \

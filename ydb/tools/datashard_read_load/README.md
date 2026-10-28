@@ -74,10 +74,18 @@ are never retained for later dispatch. An occupied or unavailable session also
 causes a counted skip. Batch dispatch stops at phase end or interruption. SDK query
 retries are disabled; normal KQP iterator retries remain part of server behavior.
 Broken sessions are replaced asynchronously, with failures and replacements
-reported separately. Failed replacements are retried at most once per reporting
-interval.
+reported separately. Failed replacements are retried at most once per second,
+independently of the reporting interval.
 
 Phase changes preserve outstanding requests, including their original deadlines.
+Each phase starts its arrival clocks from a shared timestamp after its dispatch
+threads are ready and its `phase_start` snapshot has been collected. Workers are
+released before that record is serialized and written, using the record's
+`elapsed_s` as their common start. Each phase receives its full configured
+duration. Joining workers and writing phase-end reports creates arrival-free
+gaps between phases and can extend total wall time beyond the sum of phase
+durations.
+
 After the final phase, arrivals stop and existing requests drain for up to
 `--drain-timeout` (default 70s). SIGINT/SIGTERM stop arrivals and use the same bounded
 drain. Probe arrivals continue during zero-rate phases, but stop during final

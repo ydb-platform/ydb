@@ -34,6 +34,32 @@ int64_t Duration(const std::string& text) {
 
 } // namespace
 
+TPhaseStartGate::TPhaseStartGate(size_t workers)
+    : Ready_(static_cast<std::ptrdiff_t>(workers))
+    , StartFuture_(Start_.get_future().share())
+{}
+
+int64_t TPhaseStartGate::ArriveAndWait() {
+    Ready_.count_down();
+    return StartFuture_.get();
+}
+
+void TPhaseStartGate::WaitForWorkers() {
+    Ready_.wait();
+}
+
+void TPhaseStartGate::Start(int64_t startUs) {
+    Start_.set_value(startUs);
+    Released_ = true;
+}
+
+void TPhaseStartGate::Fail(std::exception_ptr error) {
+    if (!Released_) {
+        Start_.set_exception(error);
+        Released_ = true;
+    }
+}
+
 TOptions ParseOptions(int argc, char** argv) {
     TOptions result;
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
@@ -166,7 +192,7 @@ TArrivalClock::TArrivalClock(uint64_t rate, int64_t startUs, int64_t endUs,
     uint64_t partition, uint64_t partitions)
     : Rate_(rate), StartUs_(startUs), EndUs_(endUs), Partition_(partition), Partitions_(partitions)
 {
-    if (rate > MaxRate || startUs < 0 || endUs <= startUs || endUs > MaxDurationUs
+    if (rate > MaxRate || startUs < 0 || endUs <= startUs || endUs - startUs > MaxDurationUs
         || !partitions || partition >= partitions) {
         throw std::invalid_argument("invalid arrival clock bounds or rate");
     }

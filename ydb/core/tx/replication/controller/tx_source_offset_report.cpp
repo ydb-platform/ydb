@@ -76,7 +76,9 @@ public:
                 savedOffset->PersistedNextOffset = Max(savedOffset->PersistedNextOffset.GetOrElse(0), *PersistedNextOffset);
             }
         }
-        if (!Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId())) {
+        if (Self->HasWorkerSession(Id, Event->Sender.NodeId())
+            && !Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId()))
+        {
             ctx.Send(Event->Sender, new TEvService::TEvSourceOffsetResult(), 0, Event->Cookie);
         }
     }

@@ -8,15 +8,18 @@ class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
     const bool SourceOffsetMismatch;
+    const TMaybe<ui64> SourceCommittedOffset;
+    TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
     bool RemoveStoppedWorker = false;
 
 public:
-    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch)
+    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset)
         : TTxBase("TxWorkerError", self)
         , WorkerId(id)
         , Error(error)
         , SourceOffsetMismatch(sourceOffsetMismatch)
+        , SourceCommittedOffset(sourceCommittedOffset)
     {
     }
 
@@ -66,6 +69,13 @@ public:
         }
 
         if (SourceOffsetMismatch && Self->TracksSourceOffsets(WorkerId)) {
+            const auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(WorkerId);
+            if (!savedOffset || (SourceCommittedOffset && *SourceCommittedOffset <= savedOffset->NextOffset)) {
+                if (const auto* worker = Self->Workers.FindPtr(WorkerId); worker && worker->HasSession()) {
+                    RestartWorkerNode = worker->GetSession();
+                }
+                return true;
+            }
             NIceDb::TNiceDb db(txc.DB);
             replication->SetState(TReplication::EState::Error, TStringBuilder() << Error << " Worker " << WorkerId << ".");
             Self->ReplicationsWithSourceOffsetMismatch.insert(WorkerId.ReplicationId());
@@ -106,6 +116,11 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
+        if (RestartWorkerNode && Self->HasWorkerSession(WorkerId, *RestartWorkerNode)) {
+            Self->StopQueue.emplace(WorkerId, *RestartWorkerNode);
+            Self->ScheduleProcessQueues();
+            return;
+        }
         if (StopWorkers) {
             Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
             return;
@@ -130,8 +145,8 @@ public:
 
 }; // TTxWorkerError
 
-void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch) {
-    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch), ctx);
+void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset) {
+    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch, sourceCommittedOffset), ctx);
 }
 
 }

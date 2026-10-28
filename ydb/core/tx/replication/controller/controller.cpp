@@ -619,7 +619,8 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         if (!session.HasWorker(id) || ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
             StopQueue.emplace(id, nodeId);
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_SOURCE_OFFSET_MISMATCH) {
-            RunTxWorkerError(id, record.GetErrorDescription(), ctx, true);
+            RunTxWorkerError(id, record.GetErrorDescription(), ctx, true,
+                record.HasSourceCommittedOffset() ? TMaybe<ui64>(record.GetSourceCommittedOffset()) : Nothing());
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
             UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
@@ -636,11 +637,12 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                 RunTxWorkerError(id, record.GetErrorDescription(), ctx);
             } else {
                 session.DetachWorker(id);
-                if (auto* worker = Workers.FindPtr(id)) {
-                    if (worker->HasSession() && worker->GetSession() == nodeId) {
-                        worker->ClearSession();
+                const auto worker = Workers.find(id);
+                if (worker != Workers.end()) {
+                    if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
+                        worker->second.ClearSession();
                     }
-                    if (IsValidWorker(id) && !worker->HasSession() && worker->HasCommand()) {
+                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -774,8 +776,13 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
 }
 
 bool TController::HasWorkerSession(const TWorkerId& id, ui32 nodeId) const {
-    const auto* worker = Workers.FindPtr(id);
-    return worker && worker->HasSession() && worker->GetSession() == nodeId;
+    const auto it = Workers.find(id);
+    if (it == Workers.end()) {
+        return false;
+    }
+
+    return it->second.HasSession()
+        && it->second.GetSession() == nodeId;
 }
 
 TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {

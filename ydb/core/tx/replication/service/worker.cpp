@@ -265,10 +265,28 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void PollSource(bool skipCommit = false) {
+        if (TrackSourceOffsets) {
+            if (!Reader || !IsReaderValidated() || ReadRequested || InFlightData || TerminateWriter || PendingSchemaChange) {
+                return;
+            }
+            if (PendingWriterCheckpoint && TlsActivationContext->Now() - SourceOffsetCommitStarted >= SourceOffsetCommitInterval) {
+                return;
+            }
+            ReadRequested = true;
+            Send(Reader, new TEvWorker::TEvPoll(true));
+            return;
+        }
         AuthorizeSource(skipCommit ? Nothing() : BatchEnd, MakeHolder<TEvWorker::TEvPoll>(skipCommit));
     }
 
+    void AdvanceCompletedSourceOffset(ui64 offset) {
+        if (TrackSourceOffsets) {
+            CompletedSourceOffset = Max(CompletedSourceOffset.GetOrElse(0), offset);
+        }
+    }
+
     void CommitSource(ui64 offset) {
+        AdvanceCompletedSourceOffset(offset);
         AuthorizeSource(offset, MakeHolder<TEvWorker::TEvCommit>(offset));
     }
 
@@ -297,14 +315,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
         {
             ReportRecoveredCompletion();
         }
-        if (CommitPendingSourceOffset()) {
-            return;
-        }
-        if (!InFlightData && !TerminateWriter && !ReadRequested && SourceActions.empty()) {
-            PollSource();
-        } else {
-            ProcessSourceActions();
-        }
+        CommitPendingSourceOffset();
+        ProcessSourceActions();
+        PollSource();
     }
 
     void Handle(TEvService::TEvSourceOffsetResult::TPtr& ev) {
@@ -389,6 +402,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         LastBuildProgress = std::move(PendingBuildProgress);
         Send(ev->Forward(Writer));
         const auto offset = LastBuildProgress->GetOffset();
+        AdvanceCompletedSourceOffset(offset);
         UpdateLag();
         auto& records = InFlightData->Records;
         const auto firstNew = FindIf(records, [offset](const auto& record) { return record.GetOffset() >= offset; });
@@ -421,6 +435,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
         // the writer must never drop that retained suffix.
         Y_ABORT_UNLESS(!PendingSchemaChange);
 
+        if (BatchEnd && !ev->Get()->SkipCommit) {
+            AdvanceCompletedSourceOffset(*BatchEnd);
+        }
         InFlightData.Reset();
         TerminateWriter.Reset();
         if (Reader) {
@@ -441,6 +458,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         const auto offset = ev->Get()->Offset;
         if (!PendingWriterCheckpoint || offset > *PendingWriterCheckpoint) {
             PendingWriterCheckpoint = offset;
+            SourceOffsetCommitStarted = TlsActivationContext->Now();
         }
 
         if (Reader) {
@@ -504,12 +522,22 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
+        const auto offset = ev->Get()->Offset;
+        const bool writerCheckpointCommitted = PendingWriterCheckpoint && offset >= *PendingWriterCheckpoint;
+        if (writerCheckpointCommitted) {
+            PendingWriterCheckpoint.Clear();
+        }
+        if (TrackSourceOffsets) {
+            ReaderCommittedOffset = Max(ReaderCommittedOffset.GetOrElse(0), offset);
+        }
+
         if (!PendingSchemaChange) {
-            if (PendingWriterCheckpoint && ev->Get()->Offset >= *PendingWriterCheckpoint) {
-                PendingWriterCheckpoint.Clear();
-            } else {
+            if (!writerCheckpointCommitted) {
                 YDB_LOG_WARN("Unexpected writer checkpoint result",
-                    {"offset", ev->Get()->Offset});
+                    {"offset", offset});
+            }
+            if (TrackSourceOffsets) {
+                PollSource();
             }
             return;
         }
@@ -529,9 +557,11 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        if (ev->Get()->Offset != PendingSchemaChange->Offset) {
-            YDB_LOG_WARN("Unexpected schema checkpoint result",
-                {"offset", ev->Get()->Offset});
+        if (offset != PendingSchemaChange->Offset) {
+            if (!writerCheckpointCommitted) {
+                YDB_LOG_WARN("Unexpected schema checkpoint result",
+                    {"offset", offset});
+            }
             return;
         }
 
@@ -928,12 +958,29 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void ScheduleLagReport() {
         const auto random = TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
-        Schedule(LagReportInterval + random, new TEvents::TEvWakeup());
+        Schedule(LagReportInterval + random, new TEvents::TEvWakeup(LagReportWakeupTag));
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == LagReportWakeupTag) {
+            return ReportLag();
+        }
+        AFL_VERIFY(ev->Get()->Tag == SourceOffsetCommitWakeupTag);
+        Schedule(SourceOffsetCommitInterval, new TEvents::TEvWakeup(SourceOffsetCommitWakeupTag));
+        if (!IsReaderValidated() || PendingSchemaChange || PendingWriterCheckpoint
+            || !CompletedSourceOffset || *CompletedSourceOffset <= ReaderCommittedOffset.GetOrElse(0))
+        {
+            return;
+        }
+        PendingWriterCheckpoint = CompletedSourceOffset;
+        SourceOffsetCommitStarted = TlsActivationContext->Now();
+        CommitSource(*PendingWriterCheckpoint);
     }
 
     void ReportSourceOffsetMismatch() {
         auto status = MakeHolder<TEvWorker::TEvStatus>(TDuration::Zero());
         status->SourceOffsetMismatch = SourceOffsetMismatch;
+        status->SourceCommittedOffset = ReaderCommittedOffset;
         Send(Parent, std::move(status));
     }
 
@@ -1020,6 +1067,14 @@ public:
 
         Become(&TThis::StateWork);
         ScheduleLagReport();
+        if (TrackSourceOffsets) {
+            auto intervalMs = AppData()->ReplicationConfig.GetSourceOffsetCommitIntervalMilliSeconds();
+            if (!intervalMs) {
+                intervalMs = NKikimrReplication::TReplicationDefaults::default_instance().GetSourceOffsetCommitIntervalMilliSeconds();
+            }
+            SourceOffsetCommitInterval = TDuration::MilliSeconds(intervalMs);
+            Schedule(SourceOffsetCommitInterval, new TEvents::TEvWakeup(SourceOffsetCommitWakeupTag));
+        }
     }
 
     STATEFN(StateWork) {
@@ -1044,7 +1099,7 @@ public:
             hFunc(TEvService::TEvIndexBuildProgress, Handle);
             hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
-            sFunc(TEvents::TEvWakeup, ReportLag);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -1052,6 +1107,8 @@ public:
 private:
     static constexpr ui32 MaxAttempts = 3;
     static constexpr TDuration LagReportInterval = TDuration::Seconds(7);
+    static constexpr ui64 LagReportWakeupTag = 0;
+    static constexpr ui64 SourceOffsetCommitWakeupTag = 1;
 
     struct TSourceAction {
         TMaybe<ui64> Offset;
@@ -1088,6 +1145,9 @@ private:
     ui64 SourceOffsetReportId = 0;
     TMaybe<ui64> AuthorizedSourceOffset;
     TMaybe<ui64> BatchEnd;
+    TMaybe<ui64> CompletedSourceOffset;
+    TDuration SourceOffsetCommitInterval;
+    TInstant SourceOffsetCommitStarted;
     TDeque<TSourceAction> SourceActions;
     TString SourceOffsetMismatch;
     THolder<NKikimrReplication::TEvSourceOffsetReport> SourceOffsetReport;

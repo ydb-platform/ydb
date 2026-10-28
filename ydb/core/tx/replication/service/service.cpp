@@ -799,7 +799,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
-        bool autoCommit = true;
+        bool autoCommit = !cmd.GetTrackSourceOffsets();
         bool reportStats = false;
         ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
@@ -1076,7 +1076,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 session->SendWorkerStatus(this, workerId,
                     NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING,
                     NKikimrReplication::TEvWorkerStatus::REASON_SOURCE_OFFSET_MISMATCH,
-                    ev->Get()->SourceOffsetMismatch);
+                    ev->Get()->SourceOffsetMismatch, ev->Get()->SourceCommittedOffset);
             } else if (ev->Get()->DetailedStats) {
                 session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
             } else {

@@ -136,6 +136,7 @@ struct TEvWorker {
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
         TString SourceOffsetMismatch;
+        TMaybe<ui64> SourceCommittedOffset;
         std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);

@@ -15,9 +15,15 @@ struct TMovingPartitionEnv {
     bool BlockWrites = false;
     size_t SnapshotWrites = 0;
 
-    TMovingPartitionEnv() {
+    explicit TMovingPartitionEnv(bool kafka = false) {
         Context.Prepare();
         Context.Runtime->SetScheduledLimit(10000);
+        if (kafka) {
+            for (ui32 node = 0; node < Context.Runtime->GetNodeCount(); ++node) {
+                Context.Runtime->GetAppData(node).FeatureFlags.SetEnableTopicMessagesBatching(true);
+                Context.Runtime->GetAppData(node).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+            }
+        }
         PQTabletPrepare({}, {{"client", false}, {"second", false}}, Context);
         Context.Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType) {
@@ -91,7 +97,7 @@ struct TMovingPartitionEnv {
     void Fill(bool kafka) {
         if (kafka) {
             CmdWriteBatched(0, "source", 1, "small", 1, Context);
-            CmdWriteBatched(0, "source", 2, TString(600_KB, 'x'), 2, Context, 10);
+            CmdWriteBatched(0, "source", 2, TString(600_KB, 'x'), 2, Context, 10, false, 3);
         } else {
             CmdWrite(0, "source", {{1, "small"}}, Context);
             CmdWrite(0, "source", {{2, TString(600_KB, 'x')}, {3, "last"}}, Context,
@@ -101,7 +107,7 @@ struct TMovingPartitionEnv {
 };
 
 void CheckDurableImport(bool kafka) {
-    TMovingPartitionEnv env;
+    TMovingPartitionEnv env(kafka);
     env.Fill(kafka);
     const auto offsets = env.MakeOffsets();
     env.BlockWrites = true;

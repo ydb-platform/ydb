@@ -288,7 +288,20 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
-                if (ev->Status != NKikimrProto::OK) {
+                if (ev->Status != NKikimrProto::OK && std::holds_alternative<TGetState>(State) && !MustRestoreFirst &&
+                        !IsRestoring && !DataIsTrustedInPile(pile)) {
+                    // the pile not holding everything (e.g. one being synced) doesn't fail the read the trusted pile can
+                    // answer; its blobs are taken for failed ones, so their absence remains unproven, unless some pile
+                    // has them
+                    auto& get = static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest);
+                    auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, get.QuerySize, self.GroupId);
+                    for (ui32 i = 0; i < get.QuerySize; ++i) {
+                        res->Responses[i].Id = get.Queries[i].Id;
+                        res->Responses[i].Status = NKikimrProto::ERROR;
+                    }
+                    res->BlockedGeneration = ev->BlockedGeneration;
+                    ev = std::move(res);
+                } else if (ev->Status != NKikimrProto::OK) {
                     return std::visit(TOverloaded{
                         [&](TGetState&) -> std::unique_ptr<IEventBase> {
                             return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(

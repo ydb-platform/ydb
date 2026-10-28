@@ -314,17 +314,24 @@ namespace NKikimr::NBsController {
 
         const bool reasonOngoingCommit = CommitInProgress || (ClientId && ClientId != ev->Sender);
         if (!ConsolePipe || reasonOngoingCommit || (!Self.EnableConfigV2 && !record.GetSwitchEnableConfigV2())) {
-            // reply to newly came query
-            const TActorId temp = std::exchange(ClientId, ev->Sender);
+            // reply to newly came query; the state of the request going on, if any, stays as it is
+            auto reject = [&](NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status, TString errorReason,
+                    bool disabledConfigV2 = false) {
+                auto resp = std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigResponse>(status,
+                    std::move(errorReason));
+                if (disabledConfigV2) {
+                    resp->Record.SetDisabledConfigV2(true);
+                }
+                Self.Send(ev->Sender, resp.release());
+            };
             if (!ConsolePipe) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
                     "connection to Console tablet terminated");
             } else if (reasonOngoingCommit) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
             } else {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
             }
-            ClientId = temp;
             return;
         }
 

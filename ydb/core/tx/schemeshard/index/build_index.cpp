@@ -97,11 +97,6 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind)),
         NIceDb::TUpdate<Schema::IndexBuild::StartTime>(info.StartTime.Seconds())
     );
-    if (info.IsBuildColumns()) {
-        persistedBuildIndex.Update(
-            NIceDb::TUpdate<Schema::IndexBuild::AlterMainTablePayload>(info.AlterMainTablePayload.SerializeAsString())
-        );
-    }
     if (info.UserSID) {
         persistedBuildIndex.Update(
             NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)

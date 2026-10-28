@@ -919,22 +919,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
-    auto* alter = modifyScheme.MutableAlterTable();
-    const TString tableName = alter->GetName();
-    alter->CopyFrom(buildInfo.AlterMainTablePayload);
-    alter->SetName(tableName);
-
-    THashMap<TString, NKikimrSchemeOp::TColumnDescription*> columnsByName;
-    for (auto& column : *alter->MutableColumns()) {
-        columnsByName.emplace(column.GetName(), &column);
-    }
 
     for (const auto& colInfo : buildInfo.BuildColumns) {
-        auto it = columnsByName.find(colInfo.ColumnName);
-        auto* col = it != columnsByName.end() ? it->second : alter->AddColumns();
-        if (it != columnsByName.end()) {
-            columnsByName.erase(it);
-        }
+        auto col = modifyScheme.MutableAlterTable()->AddColumns();
         NScheme::TTypeInfo typeInfo;
         TString typeMod;
         Ydb::StatusIds::StatusCode status;
@@ -1109,19 +1096,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
-
-    // Roll back every addition from this ALTER, while keeping backfill settings DEFAULT-only.
-    auto* settings = columnBuild->MutableSettings();
-    THashSet<TString> columns;
-    for (const auto& column : settings->Getcolumn()) {
-        columns.insert(column.GetColumnName());
-    }
-    for (const auto& column : buildInfo.AlterMainTablePayload.GetColumns()) {
-        // Entries without a type alter existing columns rather than adding them.
-        if (column.HasType() && columns.insert(column.GetName()).second) {
-            settings->add_column()->SetColumnName(column.GetName());
-        }
-    }
 
     AddDropSequencePropose(ss, buildInfo, *propose);
 

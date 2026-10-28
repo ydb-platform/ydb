@@ -49,13 +49,13 @@ void CreateSampleTableWithData(T& t, TTestActorRuntime& runtime, bool& activeZon
     }
 }
 
-enum class EMixedBuildInterruption {
+enum class EDefaultBuildInterruption {
     Restart,
     Cancel,
     Failure,
 };
 
-void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption, bool rebootDuringRollback) {
+void CheckDefaultColumnsAfterPartialBackfill(EDefaultBuildInterruption interruption, bool rebootDuringRollback) {
     TTestBasicRuntime runtime;
     TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
     ui64 txId = 100;
@@ -63,7 +63,7 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
         Name: "Table"
         Columns { Name: "key" Type: "Uint32" }
         Columns { Name: "value" Type: "Utf8" }
-        Columns { Name: "removed" Type: "Uint32" }
+        Columns { Name: "preserved" Type: "Uint32" }
         KeyColumnNames: ["key"]
         UniformPartitionsCount: 2
         PartitionConfig {
@@ -85,7 +85,7 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             TString error;
             const auto status = LocalMiniKQL(runtime, shards[shard], Sprintf(R"((
                 (let key '('('key (Uint32 '%u))))
-                (let row '('('value (Utf8 'original)) '('removed (Uint32 '99))))
+                (let row '('('value (Utf8 'original)) '('preserved (Uint32 '99))))
                 (return (AsList (UpdateRow '__user__Table key row)))
             ))", key), result, error);
             UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
@@ -96,29 +96,22 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
     literal.mutable_value()->set_uint32_value(0);
     const ui64 buildId = ++txId;
-    auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain_value");
+    auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
     auto* settings = request->Record.MutableSettings();
     const TVector<TString> defaultNames{"default_value", "default_two", "default_three"};
-    const TVector<TString> plainNames{"plain_value", "plain_two", "plain_three"};
     auto* builtColumn = settings->mutable_column_build_operation()->mutable_column(0);
     builtColumn->SetNotNull(true);
     builtColumn->SetFamily("cold");
     NKikimrSchemeOp::TModifyScheme payload;
-    UNIT_ASSERT(settings->GetAlterMainTablePayload().UnpackTo(&payload));
+    payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    payload.MutableAlterTable()->SetName("Table");
+    payload.MutableAlterTable()->AddColumns()->SetName(defaultNames[0]);
     for (size_t i = 1; i < defaultNames.size(); ++i) {
         auto* column = settings->mutable_column_build_operation()->add_column();
         column->CopyFrom(settings->column_build_operation().column(0));
         column->SetColumnName(defaultNames[i]);
         column->mutable_default_from_literal()->mutable_value()->set_uint32_value(10 * i);
         payload.MutableAlterTable()->AddColumns()->SetName(defaultNames[i]);
-        auto* plain = payload.MutableAlterTable()->AddColumns();
-        plain->SetName(plainNames[i]);
-        plain->SetType("Uint32");
-    }
-    for (auto& column : *payload.MutableAlterTable()->MutableColumns()) {
-        if (column.GetName().StartsWith("plain_")) {
-            column.SetFamilyName("cold");
-        }
     }
     settings->MutableAlterMainTablePayload()->PackFrom(payload);
     const auto retrySettings = *settings;
@@ -162,7 +155,7 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
         return true;
     });
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
-    runtime.WaitFor("first mixed-column upload", [&] { return !uploads.empty(); });
+    runtime.WaitFor("first default-column upload", [&] { return !uploads.empty(); });
     uploads.Unblock(1);
     runtime.WaitFor("persisted backfill batch", [&] { return completedBatches > 0 && !uploads.empty(); });
     // Process a request after the progress response before restarting SchemeShard.
@@ -174,7 +167,7 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
         if (column.GetName().StartsWith("default_")) {
             UNIT_ASSERT(uploadedColumnIds.contains(column.GetId()));
             UNIT_ASSERT(column.GetIsBuildInProgress());
-        } else if (column.GetName().StartsWith("plain_")) {
+        } else {
             UNIT_ASSERT(!uploadedColumnIds.contains(column.GetId()));
             UNIT_ASSERT(!column.GetIsBuildInProgress());
         }
@@ -185,13 +178,13 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
         return rebootDuringRollback
             && ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild;
     });
-    if (interruption == EMixedBuildInterruption::Restart) {
+    if (interruption == EDefaultBuildInterruption::Restart) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         schemeShardActorId = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
     }
-    if (interruption == EMixedBuildInterruption::Cancel) {
+    if (interruption == EDefaultBuildInterruption::Cancel) {
         TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-    } else if (interruption == EMixedBuildInterruption::Failure) {
+    } else if (interruption == EDefaultBuildInterruption::Failure) {
         injectFailure = true;
         uploads.Unblock(1);
         runtime.WaitFor("failure after a completed batch", [&] { return failureInjected; });
@@ -208,9 +201,9 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     }
     env.TestWaitNotification(runtime, buildId);
     const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-    const auto expectedState = interruption == EMixedBuildInterruption::Restart
+    const auto expectedState = interruption == EDefaultBuildInterruption::Restart
         ? Ydb::Table::IndexBuildState::STATE_DONE
-        : interruption == EMixedBuildInterruption::Cancel
+        : interruption == EDefaultBuildInterruption::Cancel
             ? Ydb::Table::IndexBuildState::STATE_CANCELLED
             : Ydb::Table::IndexBuildState::STATE_REJECTED;
     UNIT_ASSERT_VALUES_EQUAL_C(build.GetIndexBuild().GetState(), expectedState, build.DebugString());
@@ -219,26 +212,23 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
         TSet<TString> dropped;
         if (!hasAddedColumns) {
             dropped.insert(defaultNames.begin(), defaultNames.end());
-            dropped.insert(plainNames.begin(), plainNames.end());
         }
         const auto table = DescribePath(runtime, "/MyRoot/Table");
         TestDescribeResult(table, {
-            NLs::CheckColumns("Table", {"key", "value", "removed", "default_value", "default_two", "default_three",
-                "plain_value", "plain_two", "plain_three"}, dropped, {"key"}, true),
+            NLs::CheckColumns("Table", {"key", "value", "preserved", "default_value", "default_two", "default_three"}, dropped, {"key"}, true),
         });
         for (const auto& column : table.GetPathDescription().GetTable().GetColumns()) {
             UNIT_ASSERT(!column.GetIsBuildInProgress());
-            if (column.GetName().StartsWith("plain_") || column.GetName().StartsWith("default_")) {
+            if (column.GetName().StartsWith("default_")) {
                 UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), column.GetName().StartsWith("default_"));
+                UNIT_ASSERT(column.GetNotNull());
             }
         }
     };
     const auto checkRows = [&](bool hasAddedColumns) {
-        TVector<TString> names{"key", "value", "removed"};
+        TVector<TString> names{"key", "value", "preserved"};
         if (hasAddedColumns) {
             names.insert(names.end(), defaultNames.begin(), defaultNames.end());
-            names.insert(names.end(), plainNames.begin(), plainNames.end());
         }
         for (const auto shard : shards) {
             const auto result = ReadTable(runtime, shard, "Table", {"key"}, names);
@@ -246,11 +236,8 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 4);
             for (size_t i = 0; i < rows.Size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(TString(rows[i]["value"]), "original");
-                UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i]["removed"]), 99);
+                UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i]["preserved"]), 99);
                 if (hasAddedColumns) {
-                    for (const auto& name : plainNames) {
-                        UNIT_ASSERT(rows[i][name].IsNull());
-                    }
                     for (size_t j = 0; j < defaultNames.size(); ++j) {
                         UNIT_ASSERT(rows[i][defaultNames[j]].HaveValue());
                         UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i][defaultNames[j]]), 10 * j);
@@ -259,7 +246,7 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             }
         }
     };
-    const bool hasDefault = interruption == EMixedBuildInterruption::Restart;
+    const bool hasDefault = interruption == EDefaultBuildInterruption::Restart;
     checkSchema(hasDefault);
     checkRows(hasDefault);
     if (!hasDefault) {
@@ -282,16 +269,16 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
 } // namespace
 
 Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
-    Y_UNIT_TEST(MixedColumnsRestartAfterPartialBackfill) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Restart, false);
+    Y_UNIT_TEST(DefaultColumnsRestartAfterPartialBackfill) {
+        CheckDefaultColumnsAfterPartialBackfill(EDefaultBuildInterruption::Restart, false);
     }
 
-    Y_UNIT_TEST_TWIN(MixedColumnsCancelAfterPartialBackfill, RebootDuringRollback) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Cancel, RebootDuringRollback);
+    Y_UNIT_TEST_TWIN(DefaultColumnsCancelAfterPartialBackfill, RebootDuringRollback) {
+        CheckDefaultColumnsAfterPartialBackfill(EDefaultBuildInterruption::Cancel, RebootDuringRollback);
     }
 
-    Y_UNIT_TEST_TWIN(MixedColumnsFailureAfterPartialBackfill, RebootDuringRollback) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Failure, RebootDuringRollback);
+    Y_UNIT_TEST_TWIN(DefaultColumnsFailureAfterPartialBackfill, RebootDuringRollback) {
+        CheckDefaultColumnsAfterPartialBackfill(EDefaultBuildInterruption::Failure, RebootDuringRollback);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
@@ -313,26 +300,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
             }
 
             const TString columnName = "default_value";
-            const TString nonDefaultColumnName = "plain_value";
             Ydb::TypedValue columnDefaultValue;
             columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT32);
             columnDefaultValue.mutable_value()->set_uint32_value(10);
 
-            ui32 scanRequests = 0;
-            THashSet<ui32> uploadedColumnIds;
-            auto scanObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
-                const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
-                UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), columnName);
-                ++scanRequests;
-            });
-            auto uploadObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&](auto& ev) {
-                const auto& rowScheme = ev->Get()->Record.GetRowScheme();
-                UNIT_ASSERT_VALUES_EQUAL(rowScheme.ValueColumnIdsSize(), 1);
-                uploadedColumnIds.insert(rowScheme.GetValueColumnIds(0));
-            });
-
-            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue, nonDefaultColumnName);
+            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -340,21 +312,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                 auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", t.TxId);
                 UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-                auto table = DescribePath(runtime, "/MyRoot/Table");
-                TestDescribeResult(table,
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                                    {NLs::PathExist,
                                     NLs::IndexesCount(0),
                                     NLs::PathVersionEqual(6),
-                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {}, {"key"}, true)});
-                UNIT_ASSERT(scanRequests > 0);
-                UNIT_ASSERT_VALUES_EQUAL(uploadedColumnIds.size(), 1);
-                for (const auto& column : table.GetPathDescription().GetTable().GetColumns()) {
-                    if (column.GetName() == columnName) {
-                        UNIT_ASSERT(uploadedColumnIds.contains(column.GetId()));
-                    } else if (column.GetName() == nonDefaultColumnName) {
-                        UNIT_ASSERT(!uploadedColumnIds.contains(column.GetId()));
-                    }
-                }
+                                    NLs::CheckColumns("Table", {"key", "value", columnName}, {}, {"key"}, true)});
             }
         });
     }
@@ -378,12 +340,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
             }
 
             const TString columnName = "default_value";
-            const TString nonDefaultColumnName = "plain_value";
             Ydb::TypedValue columnDefaultValue;
             columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT32);
             columnDefaultValue.mutable_value()->set_uint32_value(10);
 
-            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue, nonDefaultColumnName);
+            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
 
             ui64 buildIndexId = t.TxId;
             TestCancelBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
@@ -398,7 +359,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                                    {NLs::PathExist,
                                     NLs::IndexesCount(0),
                                     NLs::PathVersionEqual(7),
-                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName, nonDefaultColumnName}, {"key"}, true)});
+                                    NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
             }
         });
     }
@@ -423,12 +384,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
 
             // Set invalid default value to get rejected
             const TString columnName = "default_value";
-            const TString nonDefaultColumnName = "plain_value";
             Ydb::TypedValue columnDefaultValue;
             columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::JSON);
             columnDefaultValue.mutable_value()->set_text_value("{not json]");
 
-            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue, nonDefaultColumnName);
+            AsyncBuildColumn(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", columnName, columnDefaultValue);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -440,7 +400,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                                    {NLs::PathExist,
                                     NLs::IndexesCount(0),
                                     NLs::PathVersionEqual(7),
-                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName, nonDefaultColumnName}, {"key"}, true)});
+                                    NLs::CheckColumns("Table", {"key", "value", columnName}, {columnName}, {"key"}, true)});
             }
         });
     }

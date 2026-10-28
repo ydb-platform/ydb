@@ -6,7 +6,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/library/testlib/helpers.h>
 #include <google/protobuf/text_format.h>
 
 using namespace NKikimr;
@@ -14,155 +13,57 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
-    Y_UNIT_TEST_TWIN(AlterPayloadSurvivesRestart, BeforeAlterMainTable) {
+    Y_UNIT_TEST(NonDefaultAdditionsRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
-        ui64 tenantSchemeShard = 0;
-        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint32" }
-            Columns { Name: "removed" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        UNIT_ASSERT_VALUES_EQUAL(LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets + 6, R"(
-            (
-                (let key '('('key (Uint32 '1))))
-                (let row '('('value (Uint32 '42)) '('removed (Uint32 '99))))
-                (return (AsList (UpdateRow '__user__Table key row)))
-            )
-        )", result, error), NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-
-        const auto blockedOperation = BeforeAlterMainTable
-            ? NKikimrSchemeOp::ESchemeOpAlterTable
-            : NKikimrSchemeOp::ESchemeOpCreateColumnBuild;
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](const auto& ev) {
-            return ev->Get()->Record.GetTransaction(0).GetOperationType() == blockedOperation;
-        });
-        bool buildRequested = false;
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> buildObserver(runtime, [&](const auto& ev) {
-            const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
-            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), "default_value");
-            buildRequested = true;
-            return false;
-        });
-
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(10);
-        const ui64 buildId = ++txId;
-        auto request = CreateBuildColumnRequest(buildId, "/MyRoot/ServerLessDB",
-            "/MyRoot/ServerLessDB/Table", "default_value", literal);
-        NKikimrSchemeOp::TModifyScheme payload;
-        payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-        auto* alter = payload.MutableAlterTable();
-        alter->SetName("Table");
-        for (const TString& name : {TString("default_value"), TString("plain")}) {
-            auto* column = alter->AddColumns();
-            column->SetName(name);
-            column->SetType("Uint32");
-        }
-        request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
-        ForwardToTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor(), request.release());
-
-        runtime.WaitFor("blocked operation", [&] { return !blocker.empty(); });
-        // Discard the old proposal: replaying it would hide a lost persisted payload.
-        blocker.clear();
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
-        runtime.WaitFor("operation proposed after restart", [&] { return !blocker.empty(); });
-        const auto& proposal = blocker.front()->Get()->Record.GetTransaction(0);
-        if (BeforeAlterMainTable) {
-            const auto& columns = proposal.GetAlterTable().GetColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
-            THashMap<TString, bool> building;
-            for (const auto& column : columns) {
-                building.emplace(column.GetName(), column.GetIsBuildInProgress());
-            }
-            UNIT_ASSERT(building.at("default_value"));
-            UNIT_ASSERT(!building.at("plain"));
-            UNIT_ASSERT_VALUES_EQUAL(proposal.GetAlterTable().DropColumnsSize(), 0);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(proposal.GetInitiateColumnBuild().column_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(proposal.GetInitiateColumnBuild().column(0).GetColumnName(), "default_value");
-        }
-        blocker.Stop().Unblock();
-        env.TestWaitNotification(runtime, buildId, tenantSchemeShard);
-        UNIT_ASSERT(buildRequested);
-        auto build = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildId);
-        UNIT_ASSERT_VALUES_EQUAL_C(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, build.DebugString());
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"), {
-            NLs::PathExist,
-            NLs::CheckColumns("Table", {"key", "value", "removed", "default_value", "plain"}, {}, {"key"}, true),
-        });
-    }
-
-    Y_UNIT_TEST_TWIN(AlterPayloadRejectsConflictingColumns, DefaultColumn) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-        ui64 txId = 100;
-        ui64 tenantSchemeShard = 0;
-        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Uint32" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
+        env.TestWaitNotification(runtime, txId);
+        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
+        size_t scans = 0;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
         Ydb::TypedValue literal;
         literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
         literal.mutable_value()->set_uint32_value(10);
-        for (bool duplicate : {false, true}) {
-            const ui64 buildId = ++txId;
-            auto request = CreateBuildColumnRequest(buildId, "/MyRoot/ServerLessDB",
-                "/MyRoot/ServerLessDB/Table", "default_value", literal);
-            NKikimrSchemeOp::TModifyScheme payload;
-            payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            auto* alter = payload.MutableAlterTable();
-            alter->SetName("Table");
-            for (const TString& name : {TString("default_value"), TString("plain")}) {
-                auto* column = alter->AddColumns();
-                column->SetName(name);
-                column->SetType("Uint32");
-            }
-            if (duplicate) {
-                if (DefaultColumn) {
-                    auto* columns = request->Record.MutableSettings()->mutable_column_build_operation();
-                    *columns->add_column() = columns->column(0);
-                } else {
-                    auto* column = alter->AddColumns();
-                    column->SetName("plain");
-                    column->SetType("Uint32");
+        for (ui32 plainCount : {1, 3}) {
+            for (bool plainFirst : {false, true}) {
+                auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
+                NKikimrSchemeOp::TModifyScheme payload;
+                payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+                auto* alter = payload.MutableAlterTable();
+                alter->SetName("Table");
+                const auto addPlainColumns = [&] {
+                    for (ui32 i = 0; i < plainCount; ++i) {
+                        auto* column = alter->AddColumns();
+                        column->SetName(TStringBuilder() << "plain" << i);
+                        column->SetType("Uint32");
+                    }
+                };
+                if (plainFirst) {
+                    addPlainColumns();
                 }
-            } else if (DefaultColumn) {
-                request->Record.MutableSettings()->mutable_column_build_operation()->mutable_column(0)->SetColumnName("value");
-                alter->MutableColumns(0)->SetName("value");
-            } else {
-                alter->MutableColumns(1)->SetName("value");
+                alter->AddColumns()->SetName("default_value");
+                if (!plainFirst) {
+                    addPlainColumns();
+                }
+                request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
+                ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
+                TAutoPtr<IEventHandle> handle;
+                auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+                UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString(), original);
             }
-            request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
-            ForwardToTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor(), request.release());
-            env.TestWaitNotification(runtime, buildId, tenantSchemeShard);
-
-            auto build = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildId);
-            UNIT_ASSERT_VALUES_EQUAL_C(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED, build.DebugString());
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"), {
-                NLs::PathExist,
-                NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
-            });
         }
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
     }
 
-    Y_UNIT_TEST(AlterPayloadOnlyAddColumns) {
+    Y_UNIT_TEST(AlterPayloadOnlyDefaultColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
@@ -181,6 +82,8 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
         literal.mutable_value()->set_uint32_value(10);
         const TVector<TString> forbidden = {
+            R"(Columns { Name: "plain" Type: "Uint32" })",
+            R"(Columns { Name: "default_value" Type: "Uint32" })",
             R"(DropColumns { Name: "value" })",
             R"(DropColumns { Name: "default_value" })",
             R"(DropColumns { Name: "plain" })",
@@ -201,10 +104,12 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             R"(PartitionCount: 0)",
         };
         for (const auto& change : forbidden) {
-            auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain");
+            auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
             auto* settings = request->Record.MutableSettings();
             NKikimrSchemeOp::TModifyScheme payload;
-            UNIT_ASSERT(settings->GetAlterMainTablePayload().UnpackTo(&payload));
+            payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            payload.MutableAlterTable()->SetName("Table");
+            payload.MutableAlterTable()->AddColumns()->SetName("default_value");
             NKikimrSchemeOp::TTableDescription extra;
             UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(change, &extra), change);
             payload.MutableAlterTable()->MergeFrom(extra);
@@ -224,9 +129,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         // KQP's empty settings container is inert, and legacy DEFAULT descriptors have no type.
         const ui64 buildId = ++txId;
-        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain");
+        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
         NKikimrSchemeOp::TModifyScheme payload;
-        UNIT_ASSERT(request->Record.GetSettings().GetAlterMainTablePayload().UnpackTo(&payload));
+        payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        payload.MutableAlterTable()->SetName("Table");
+        payload.MutableAlterTable()->AddColumns()->SetName("default_value");
         payload.MutableAlterTable()->MutablePartitionConfig();
         request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
@@ -237,7 +144,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId).GetIndexBuild().GetState(),
             Ydb::Table::IndexBuildState::STATE_DONE);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::CheckColumns("Table", {"key", "value", "default_value", "plain"}, {}, {"key"}, true),
+            NLs::CheckColumns("Table", {"key", "value", "default_value"}, {}, {"key"}, true),
         });
         UNIT_ASSERT(scans > 0);
     }
@@ -419,8 +326,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
         auto grab = [&delayedUpsertRows, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
             if (enabledCapture && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvUploadRowsRequest::EventType) {
-                const auto& rowScheme = ev->Get<TEvDataShard::TEvUploadRowsRequest>()->Record.GetRowScheme();
-                UNIT_ASSERT_VALUES_EQUAL(rowScheme.ValueColumnIdsSize(), 1);
                 delayedUpsertRows.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -436,12 +341,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         runtime.SetObserverFunc(grab);
 
         const TString columnName = "default_value";
-        const TString nonDefaultColumnName = "plain_value";
         Ydb::TypedValue columnDefaultValue;
         columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
         columnDefaultValue.mutable_value()->set_uint64_value(10);
 
-        AsyncBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue, nonDefaultColumnName);
+        AsyncBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue);
 
         runtime.DispatchEvents(opts);
         UNIT_ASSERT_C(delayedUpsertRows.size() > 0, "not captured several events");
@@ -468,7 +372,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(6),
-                            NLs::CheckColumns("Table", {"key", "index", "value", columnName, nonDefaultColumnName}, {}, {"key"}, true)});
+                            NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {}, {"key"}, true)});
 
         for (ui32 delta = 50; delta < 101; ++delta) {
             UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::FakeHiveTablets + 6, "__user__Table", "key", 1 + delta));
@@ -525,24 +429,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
-        const TString columnName = "default_value";
-        const TString nonDefaultColumnName = "plain_value";
-        ui32 scanRequests = 0;
-        THashSet<ui32> uploadedColumnIds;
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 meteringMessages << msg->MeteringJson;
-            } else if (ev->Type == TEvDataShard::TEvBuildIndexCreateRequest::EventType) {
-                const auto& columns = ev->Get<TEvDataShard::TEvBuildIndexCreateRequest>()->Record.GetColumnBuildSettings();
-                UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), columnName);
-                ++scanRequests;
-            } else if (ev->Type == TEvDataShard::TEvUploadRowsRequest::EventType) {
-                const auto& rowScheme = ev->Get<TEvDataShard::TEvUploadRowsRequest>()->Record.GetRowScheme();
-                UNIT_ASSERT_VALUES_EQUAL(rowScheme.ValueColumnIdsSize(), 1);
-                uploadedColumnIds.insert(rowScheme.GetValueColumnIds(0));
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -550,11 +441,12 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         runtime.SetObserverFunc(grabMeteringMessage);
 
+        const TString columnName = "default_value";
         Ydb::TypedValue columnDefaultValue;
         columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
         columnDefaultValue.mutable_value()->set_uint64_value(10);
 
-        TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue, Ydb::StatusIds::SUCCESS, nonDefaultColumnName);
+        TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue, Ydb::StatusIds::SUCCESS);
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         UNIT_ASSERT_VALUES_EQUAL_C(listing.EntriesSize(), 1, listing.DebugString());
@@ -564,21 +456,11 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL_C(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE, descr.DebugString());
 
-        auto table = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table");
-        TestDescribeResult(table,
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(6),
-                            NLs::CheckColumns("Table", {"key", "index", "value", columnName, nonDefaultColumnName}, {}, {"key"}, true)});
-        UNIT_ASSERT(scanRequests > 0);
-        UNIT_ASSERT_VALUES_EQUAL(uploadedColumnIds.size(), 1);
-        for (const auto& column : table.GetPathDescription().GetTable().GetColumns()) {
-            if (column.GetName() == columnName) {
-                UNIT_ASSERT(uploadedColumnIds.contains(column.GetId()));
-            } else if (column.GetName() == nonDefaultColumnName) {
-                UNIT_ASSERT(!uploadedColumnIds.contains(column.GetId()));
-            }
-        }
+                            NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {}, {"key"}, true)});
 /*
         const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 

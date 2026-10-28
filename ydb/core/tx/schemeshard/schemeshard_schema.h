@@ -1508,9 +1508,6 @@ struct Schema : NIceDb::Schema {
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
         struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
 
-        // Serialized NKikimrSchemeOp::TTableDescription for a column build's ALTER TABLE.
-        struct AlterMainTablePayload : Column<61, NScheme::NTypeIds::String> {};
-
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1572,8 +1569,7 @@ struct Schema : NIceDb::Schema {
             RowIdUniqueBuildId,
             ParentBuildId,
             IsRebuild,
-            RebuildIndexName,
-            AlterMainTablePayload
+            RebuildIndexName
         >;
     };
 

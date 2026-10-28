@@ -297,7 +297,7 @@ public:
                 {
                     return makeReply("invalid ALTER TABLE payload for column build");
                 }
-                // Only the table name and column additions may accompany a column build.
+                // The payload must contain only additions represented in the build settings.
                 auto extraAlter = modifyScheme.GetAlterTable();
                 extraAlter.ClearName();
                 extraAlter.ClearColumns();
@@ -305,22 +305,21 @@ public:
                 if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
                     extraAlter.ClearPartitionConfig();
                 }
-                bool onlyAddColumns = extraAlter.ByteSizeLong() == 0;
+                bool onlyDefaultColumns = extraAlter.ByteSizeLong() == 0;
                 THashSet<TString> columnsToBuild;
                 for (const auto& column : settings.column_build_operation().column()) {
                     columnsToBuild.insert(column.GetColumnName());
                 }
                 for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
-                    // Legacy build descriptors may get their type from the build settings.
-                    if (!column.HasType() && !columnsToBuild.contains(column.GetName())) {
-                        onlyAddColumns = false;
+                    // Also reject repeated descriptors rather than silently ignoring them.
+                    if (!columnsToBuild.erase(column.GetName())) {
+                        onlyDefaultColumns = false;
                         break;
                     }
                 }
-                if (!onlyAddColumns) {
-                    return makeReply("Only ADD COLUMN operations are allowed alongside columns with DEFAULT");
+                if (!onlyDefaultColumns) {
+                    return makeReply("Only ADD COLUMN DEFAULT operations are allowed when building columns with DEFAULT");
                 }
-                buildInfo->AlterMainTablePayload.CopyFrom(modifyScheme.GetAlterTable());
             }
 
             buildInfo->TargetName = tablePath.PathString();

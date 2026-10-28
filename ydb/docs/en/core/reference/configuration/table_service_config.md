@@ -86,7 +86,7 @@ I/O pool threads for spilling are created in addition to threads allocated for t
 
 **Important:** The spilling thread pool is separate from the actor system thread pools.
 
-For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](index.md#actor-system) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
+For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](actor_system_config.md) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
 
 {% endnote %}
 

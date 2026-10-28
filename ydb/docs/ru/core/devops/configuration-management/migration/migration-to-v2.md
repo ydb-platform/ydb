@@ -166,7 +166,7 @@
 
     {% cut "Подробнее" %}
 
-    После загрузки конфигурации кластер {{ ydb-short-name }} будет переведён в режим автоматического управления конфигурацией [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группой](../../../reference/configuration/index.md#blob_storage_config) с помощью механизма распределённой конфигурации.
+    После загрузки конфигурации кластер {{ ydb-short-name }} будет переведён в режим автоматического управления конфигурацией [State Storage](../../../reference/configuration/domains_config.md#domains-state) и [статической группой](../../../reference/configuration/blob_storage_config.md) с помощью механизма распределённой конфигурации.
 
     {% endcut %}
 

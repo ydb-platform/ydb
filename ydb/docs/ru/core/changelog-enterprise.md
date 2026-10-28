@@ -329,7 +329,7 @@
 * Добавлены новые настройки парсинга для `timestamp`, `datetime` при чтении данных из S3.
 * Добавлена поддержка типа `Decimal` в [ключах партиционирования](https://ydb.tech/docs/ru/dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Улучшена диагностика проблем хранилища в HealthCheck.
-* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer.md#cost-based-optimizer) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary.md#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join.md).
+* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer.md#cost-based-optimizer) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary.md#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/select/join.md).
 * **_(Экспериментально)_** Реализована начальная версия [менеджера рабочей нагрузки](./dev/resource-consumption-management), который позволяет создавать пулы ресурсов с ограничениями по процессору, памяти и количеству активных запросов. Реализованы классификаторы ресурсов для отнесения запросов к определенному пулу ресурсов.
 * **_(Экспериментально)_** Реализован [автоматический выбор индекса](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса, который может быть включен администратором кластера с помощью настройки `index_auto_choose_mode` в `table_service_config` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 
@@ -392,7 +392,7 @@
 ### Функциональность
 
 * Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance.md#rolling-restart) задачам обслуживания в [системе управления кластером](./concepts/glossary.md#cms).
-* Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md#node-broker-config) для узлов кластера в рамках тенанта.
+* Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](reference/configuration/auth_config.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary.md#dynamic) по SSL-сертификату.
 * Реализовано удаление неактивных узлов из [Hive](./concepts/glossary.md#hive) без его перезапуска.

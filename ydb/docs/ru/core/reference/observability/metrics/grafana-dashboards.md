@@ -40,7 +40,7 @@
 
 ## CPU {#cpu}
 
-Потребление CPU в [пулах исполнения](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig).
+Потребление CPU в [пулах исполнения](../../../devops/configuration-management/configuration-v2/../../reference/configuration/actor_system_config.md#tuneconfig).
 
 | Name | Description |
 |---|---|

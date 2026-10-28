@@ -2,7 +2,7 @@
 
 In {{ ydb-short-name }}, all schema objects are organized into a hierarchical namespace called the **cluster schema**. This structure determines how databases, directories, and other objects are arranged and named, providing a clear and scalable way to manage data.
 
-## Cluster Schema
+## Cluster Schema {#cluster-scheme}
 
 The cluster schema forms a tree-like hierarchy where:
 

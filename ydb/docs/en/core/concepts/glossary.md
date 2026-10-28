@@ -142,6 +142,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
 
+#### Pile {#pile}
+
+**Pile** is a set of nodes that can fail or be shut down simultaneously while maintaining the operability of other parts of the cluster (pile). A pile can remain operational when other cluster nodes are shut down. Piles are used in [bridge mode](#bridge) to split the cluster into several parts between which synchronous replication is performed. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [piles](#pile). The specifics of the mode are described in [{#T}](topology.md#bridge) and also in [{#T}](bridge.md).
+
 ### Table {#table}
 
 A **table** is a structured piece of information arranged in rows and columns. Each row represents a single record or entry, while each column represents a specific attribute or field with a particular data type.
@@ -254,6 +262,18 @@ A **coordination node** is a schema object that allows client applications to cr
 
 A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
 
+{% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
+
+### Resource pool {#resource-pool}
+
+**Resource pool** is a schema object that describes limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query always runs in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any limits. For more information about using resource pools, see the article [{#T}](../dev/resource-consumption-management.md).
+
+### Resource pool classifier {#resource-pool-classifier}
+
+**Resource pool classifier** is an object designed to manage the distribution of queries among [resource pools](#resource-pool). It describes the rules by which a resource pool is selected for each query. These classifiers are global for the entire [database](#database) and apply to all queries that come to it. For more information about their use, see the article [{#T}](../dev/resource-consumption-management.md).
+
+{% endif %}
+
 ### YQL {#yql}
 
 **YQL ({{ ydb-short-name }} Query Language)** is a high-level language for working with the system. It is a dialect of [ANSI SQL](https://en.wikipedia.org/wiki/SQL). There's a lot of content covering YQL, including a [tutorial](../dev/yql-tutorial/index.md), [reference](../yql/reference/syntax/index.md), and [recipes](../yql/reference/recipes/index.md).
@@ -296,7 +316,7 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 ### Scheme root {#scheme-root}
 
-A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/cluster-namespace.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 

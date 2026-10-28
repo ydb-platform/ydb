@@ -42,7 +42,7 @@ Release date: May 20, 2026.
   * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
   * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
 * Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) to S3 and from S3.
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md) (`VIEW`) to S3 and from S3.
 
 #### Bug Fixes
 
@@ -445,8 +445,8 @@ Release date: August 20, 2024.
 ### Functionality
 
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
-* Added a setting to enable [stable names](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
-* Enabled retrieval of nested groups from the [LDAP server](./concepts/auth#ldap-auth-provider), improved host parsing in the [LDAP-configuration](./reference/configuration/#ldap-auth-config), and added an option to disable built-in authentication via login and password.
+* Added a setting to enable [stable names](./reference/configuration/node_broker_config.md) for cluster nodes within a tenant.
+* Enabled retrieval of nested groups from the [LDAP server](./security/authentication.md#ldap-auth-provider), improved host parsing in the [LDAP-configuration](./reference/configuration/auth_config.md#ldap-auth-config), and added an option to disable built-in authentication via login and password.
 * Added support for authenticating [dynamic nodes](./concepts/glossary.md#dynamic-node) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without a restart.
 * Improved management of inflight pings during Hive restarts in large clusters.

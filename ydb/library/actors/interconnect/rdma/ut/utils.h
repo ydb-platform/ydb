@@ -36,7 +36,8 @@ enum class EReadResult {
     READ_ERR
 };
 
-std::tuple<THolder<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(TString defIp);
+std::tuple<THolder<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(
+    TString defIp, bool useRealThreads = true);
 
 std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnect::NRdma::ECqMode cqMode);
 

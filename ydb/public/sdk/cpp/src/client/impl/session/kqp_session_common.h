@@ -44,6 +44,7 @@ public:
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
     bool MarkBroken();
+    // Returns true for the first close request; idle sessions keep S_IDLE until pool removal.
     bool MarkAsClosing();
     bool MarkActive();
     bool MarkIdle();

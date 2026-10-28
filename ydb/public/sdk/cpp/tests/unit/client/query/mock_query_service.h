@@ -25,6 +25,7 @@ public:
     std::atomic_uint CreateSessionRequests = 0;
     std::atomic_uint ClosedSessions = 0;
     std::function<void(grpc::ServerWriter<Ydb::Query::SessionState>*)> OnAttach;
+    std::string OnAttachSessionId = "fake-query-session-id-1";
     grpc::Status AttachStatus = grpc::Status::OK;
     Ydb::StatusIds::StatusCode TxStatus = Ydb::StatusIds::SUCCESS;
     grpc::StatusCode TxRpcStatus = grpc::StatusCode::OK;
@@ -52,7 +53,7 @@ public:
         Ydb::Query::SessionState state;
         state.set_status(Ydb::StatusIds::SUCCESS);
         writer->Write(state);
-        if (OnAttach && request->session_id() == "fake-query-session-id-1") {
+        if (OnAttach && request->session_id() == OnAttachSessionId) {
             OnAttach(writer);
             if (!AttachStatus.ok()) {
                 return AttachStatus;

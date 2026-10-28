@@ -62,6 +62,7 @@ bool IsSessionCloseRequested(const TStatus& status) {
 }
 
 void TSessionCloseCommand::Execute(TKqpSessionCommon& session, ISessionClient* client) const {
+    // Count each session once; the first close reason wins.
     if (Transition(session) && client && session.IsOwnedBySessionPool()) {
         client->RecordSessionClosed(Reason);
     }
@@ -460,6 +461,7 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
+        // Shutdown records CloseRequested_ without changing the pooled IDLE state.
         Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
         if (session->MarkBroken()) {
             RecordSessionClosed(reason);

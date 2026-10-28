@@ -658,7 +658,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             deletedBegin = 1;
         }
 
-        if (deletedEnd <= deletedBegin) {
+        // the interval is inclusive, so [N; N] holds one deleted path and only end < begin is empty
+        if (deletedEnd < deletedBegin) {
             // if pushing migrated pathes hasn'n finished jet, we do not set up deteled ranges between them
             deletedBegin = 0;
             deletedEnd = 0;

@@ -1,3 +1,4 @@
+* Added recursive removal of Solomon (KeyValue) volumes, resource pools, and backup collections in `ydb scheme rmdir --recursive`.
 * Added `--skip-storage-pool-conversion` option to `ydb admin bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
 * Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.

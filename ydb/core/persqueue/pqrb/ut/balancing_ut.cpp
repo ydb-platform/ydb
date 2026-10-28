@@ -6,6 +6,20 @@ namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TPqrbBalancing) {
 
+Y_UNIT_TEST(FinishOfLeafDoesNotUnlockFutureChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Finish("session-0", 0);
+    env.AssertLocked(0, "session-0");
+
+    const auto [left, right] = env.Split(0);
+    env.AssertNotLocked(left);
+    env.AssertNotLocked(right);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, left, right});
+}
+
 Y_UNIT_TEST(UninitializedPartitionAcceptsFirstCommit) {
     NBalancing::TPartition partition;
     UNIT_ASSERT_VALUES_EQUAL(partition.PartitionGeneration, 0u);

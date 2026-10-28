@@ -92,7 +92,7 @@ public:
         UNIT_ASSERT_C(writer->Close(TDuration::Seconds(30)), path);
     }
 
-    void Read(const TString& path, ui64 first, ui64 count) {
+    void Read(const TString& path, ui64 first, ui64 count, ui64 endOffset) {
         using TEvent = NYdb::NTopic::TReadSessionEvent;
         auto reader = Client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
             .ConsumerName("reader").AppendTopics(NYdb::NTopic::TTopicReadSettings(path)));
@@ -111,6 +111,7 @@ public:
             }
             if (auto* start = std::get_if<TEvent::TStartPartitionSessionEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), first);
+                UNIT_ASSERT_VALUES_EQUAL(start->GetEndOffset(), endOffset);
                 started = true;
                 start->Confirm(std::nullopt, std::nullopt, first + count - 1);
             } else if (auto* data = std::get_if<TEvent::TDataReceivedEvent>(&*event)) {
@@ -204,7 +205,7 @@ Y_UNIT_TEST_SUITE(TTopicMoving) {
         env.Alter(destination, settings);
         UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_is_for_topic_moving"), "true");
 
-        env.Read(source, 0, 500);
+        env.Read(source, 0, 500, 1000);
         settings = env.Describe(source);
         (*settings.mutable_attributes())["finish_replication_in_src_topic"] = "true";
         env.Alter(source, settings);
@@ -222,7 +223,7 @@ Y_UNIT_TEST_SUITE(TTopicMoving) {
         UNIT_ASSERT_VALUES_EQUAL_C(status, "3", "Timed out waiting for MovingDone through PQv1 DescribeTopic");
 
         env.Write(destination, 1000, 100);
-        env.Read(destination, 500, 600);
+        env.Read(destination, 500, 600, 1100);
     }
 }
 

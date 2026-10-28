@@ -1520,8 +1520,12 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     auto& partition = Partitions[partitionId];
 
-    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
-        "Finish of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
+    if (!PartitionHasChildren(GetPartitionGraph(), partitionId)) {
+        // Topic moving can finish a leaf; it has no children to unlock for balancing.
+        LOG_D("Ignore reading finished for a leaf partition", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
 
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {

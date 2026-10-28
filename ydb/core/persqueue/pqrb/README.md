@@ -36,8 +36,10 @@ Implementation:
 
 **Finish** and **Commit** exist only for a partition that has children
 (new messages can no longer land in it). A partition without children cannot
-get these events: `ReadingFinished` and `Commited` are always false. This
-holds even without auto-partitioning: every partition is then a leaf.
+enter these states: `ReadingFinished` and `Commited` are always false. A
+`MOVING` consumer can report Finish for a leaf when its source topic is
+frozen; the balancer ignores this notification. This holds even without
+auto-partitioning: every partition is then a leaf.
 
 A topic may have auto-partitioning on or off. The balancing algorithm does
 not change, but with auto-partitioning off some of its branches are unused.

@@ -1,6 +1,6 @@
 # Prefer a pile with a specific state
 
-Below is example of the code for setting the "prefer pile with a specific state" balancing algorithm in {{ ydb-short-name }} SDK.
+Below is an example of setting the balancing algorithm option that prefers a pile in a given state in the {{ ydb-short-name }} SDK.
 
 If no state is specified when setting the option, the SDK prefers the PRIMARY pile.
 

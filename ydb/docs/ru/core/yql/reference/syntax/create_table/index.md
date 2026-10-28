@@ -36,7 +36,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% if oss == true and backend_name == "YDB" %}
 
-## Параметры запроса
+## Параметры запроса {#query-parameters}
 
 ### table_name
 
@@ -224,7 +224,7 @@ WITH (
   );
   ```
 
-  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 - Создание колоночной таблицы
 

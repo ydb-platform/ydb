@@ -167,7 +167,7 @@ Release date: May 20, 2026.
   * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
   * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
 * Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) to S3 and from S3.
+* Implemented backup and restore (`VIEW`) to S3 and from S3.
 
 #### Bug Fixes
 
@@ -568,7 +568,7 @@ Release date: December 24, 2024.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9377) an invariant violation issue during the initial scan of CDC, leading to an abnormal termination of the `ydbd` server process.
 * [Prohibited](https://github.com/ydb-platform/ydb/pull/9446) schema changes for backup tables.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9509) an issue with an initial scan freezing during CDC when the table is frequently updated.
-* [Excluded](https://github.com/ydb-platform/ydb/pull/9934) deleted indexes from the count against the [maximum index limit](./concepts/limits-ydb#schema-object).
+* [Excluded](https://github.com/ydb-platform/ydb/pull/9934) deleted indexes from the count against the [maximum index limit](./concepts/limits-ydb#scheme-object).
 * Fixed a [bug](https://github.com/ydb-platform/ydb/issues/6985) in the display of the scheduled execution time for a set of transactions (planned step).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9161) a [problem](https://github.com/ydb-platform/ydb/issues/8942) with interruptions in blue–green deployment in large clusters caused by frequent updates to the node list.
 * [Resolved](https://github.com/ydb-platform/ydb/pull/8925) a rare issue that caused transaction order violations.
@@ -587,9 +587,9 @@ Release date: August 20, 2024.
 ### Functionality
 
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
-* Added a setting to enable [stable names](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
-* Enabled retrieval of nested groups from the [LDAP server](./concepts/auth#ldap-auth-provider), improved host parsing in the [LDAP-configuration](./reference/configuration/#ldap-auth-config), and added an option to disable built-in authentication via login and password.
-* Added support for authenticating [dynamic nodes](./concepts/glossary#dynamic) using SSL-certificates.
+* Added a setting to enable [stable names](./reference/configuration/node_broker_config.md#node-broker-config) for cluster nodes within a tenant.
+* Enabled retrieval of nested groups from the [LDAP server](./security/authentication.md#ldap-auth-provider), improved host parsing in the [LDAP-configuration](./reference/configuration/auth_config.md#ldap-auth-config), and added an option to disable built-in authentication via login and password.
+* Added support for authenticating [dynamic nodes](./concepts/glossary.md#dynamic-node) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without a restart.
 * Improved management of inflight pings during Hive restarts in large clusters.
 * Changed the order of establishing connections with nodes during Hive restarts.

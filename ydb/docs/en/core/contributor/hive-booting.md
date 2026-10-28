@@ -50,7 +50,7 @@ There are strict restrictions on which nodes are allowed to start a tablet: not 
 
 1. From all suitable nodes, nodes with maximum priority are selected. Priority is determined based on the data center where the node is located. You can explicitly specify data center priorities in the [`default_tablet_preference`](../reference/configuration/hive.md#boot) subsection in the configuration. For [coordinators](../concepts/glossary.md#coordinator) and [mediators](../concepts/glossary.md#mediator), priorities are determined dynamically to maintain them in the same data center when possible. Additionally, if a tablet terminates with an error on a certain node, the priority of that node is lowered for the next start of this tablet.
 
-1. For nodes with maximum priority, a target metric is calculated, which almost matches the [Node usage](hive.md#node-usage) metric. It differs in that only those resources consumed by this particular tablet are considered, as well as the presence of a penalty for the number of tablets of the same [schema object](../concepts/glossary.md#schema-object).
+1. For nodes with maximum priority, a target metric is calculated, which almost matches the [Node usage](hive.md#node-usage) metric. It differs in that only those resources consumed by this particular tablet are considered, as well as the presence of a penalty for the number of tablets of the same [schema object](../concepts/glossary.md#scheme-object).
 
 1. Finally, based on this metric, a node is selected. The selection algorithm at this stage is determined by the `node_select_strategy` parameter in the configuration. By default, a random node is selected from 7% of nodes with the minimum metric value.
 

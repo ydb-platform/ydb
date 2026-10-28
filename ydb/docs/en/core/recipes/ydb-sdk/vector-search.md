@@ -9,7 +9,7 @@ The following operations are covered in detail:
   - [Creating a table](#create-table)
   - [Inserting vectors](#insert-vectors)
   - [Adding an index](#add-vector-index)
-  - [Search by vector](#search-by-vector)
+  - [Vector search](#search-by-vector)
   - [Full example](#full-example)
 
 This recipe creates a text store with the following structure:

@@ -392,6 +392,10 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 **Cluster schema root** is the root element of the [{{ ydb-short-name }} namespace](datamodel/cluster-namespace.md), whose child elements are [databases](#database).
 
+#### Authentication token {#auth-token}
+
+An **authentication token** or **auth token** is a token used for [authentication](../security/authentication.md) in {{ ydb-short-name }}.
+
 ### Scheme object {#scheme-object}
 
 A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
@@ -447,7 +451,7 @@ The access level for a subject is configured using [access control lists](#acces
 
 In {{ ydb-short-name }}, there are [several such lists](../reference/configuration/security_config.md#security-access-levels) that define who has which [access levels](#access-level).
 
-Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#access-level-lists) section of the authorization documentation.
+Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#access-level) section of the authorization documentation.
 
 ### Owner {#access-owner}
 

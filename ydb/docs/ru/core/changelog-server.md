@@ -167,7 +167,7 @@
   * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
   * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
 * Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
-* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+* Реализован экспорт представлений (`VIEW`) в S3 и из S3.
 
 #### Исправления ошибок
 
@@ -340,7 +340,7 @@
 * [Реализована](https://github.com/ydb-platform/ydb/pull/12689) отмена волатильных транзакций со статусом ABORTED при плавном перезапуске даташардов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить `NOT NULL`-ограничения на столбец в таблице с помощью запроса `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL`.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 000 на число одновременных запросов на создание сессий в сервисе координации.
-* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?version=v25.1#schema-object) с 20 до 30.
+* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?version=v25.1#scheme-object) с 20 до 30.
 * Улучшена диагностика и интроспекция ошибок, связанных с памятью ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).
 * **_(Экспериментально)_** [Добавлен](https://github.com/ydb-platform/ydb/pull/14075) экспериментальный режим работы с более строгими проверками прав доступа. Включается установкой следующих флагов:
   * `enable_strict_acl_check` – не позволять выдавать права несуществующим пользователям и удалять пользователей, если им выданы права;
@@ -531,7 +531,7 @@
 * Добавлены новые настройки парсинга для `timestamp`, `datetime` при чтении данных из S3.
 * Добавлена поддержка типа `Decimal` в [ключах партиционирования](https://ydb.tech/docs/ru/dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Улучшена диагностика проблем хранилища в HealthCheck.
-* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer#stoimostnoj-optimizator-zaprosov) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join).
+* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer.md#cost-based-optimizer) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary.md#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join.md).
 * **_(Экспериментально)_** Реализована начальная версия [менеджера рабочей нагрузки](./dev/resource-consumption-management), который позволяет создавать пулы ресурсов с ограничениями по процессору, памяти и количеству активных запросов. Реализованы классификаторы ресурсов для отнесения запросов к определенному пулу ресурсов.
 * **_(Экспериментально)_** Реализован [автоматический выбор индекса](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса, который может быть включен администратором кластера с помощью настройки `index_auto_choose_mode` в `table_service_config` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 
@@ -569,7 +569,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9377) ошибка нарушения инварианта при первоначальном сканировании CDC, приводившая к аварийному завершению серверного процесса ydbd.
 * [Запрещено](https://github.com/ydb-platform/ydb/pull/9446) изменение схемы таблиц резервного копирования.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/9509) зависание первоначального сканирования CDC при частых обновлениях таблицы.
-* [Исключены](https://github.com/ydb-platform/ydb/pull/9934) удаленные индексы из подсчета лимита на [максимальное количество индексов](https://ydb.tech/docs/ru/concepts/limits-ydb#schema-object).
+* [Исключены](https://github.com/ydb-platform/ydb/pull/9934) удаленные индексы из подсчета лимита на [максимальное количество индексов](https://ydb.tech/docs/ru/concepts/limits-ydb#scheme-object).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/8847) [ошибка](https://github.com/ydb-platform/ydb/issues/6985) в отображении времени, на которое запланировано выполнение набора транзакций (планируемый шаг).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9161) [проблема](https://github.com/ydb-platform/ydb/issues/8942) прерывания blue–green deployment в больших кластерах, возникающая из-за частого обновления списка узлов.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/8925) редко возникающая ошибка, которая приводила к нарушению порядка выполнения транзакций.

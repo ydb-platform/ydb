@@ -1,0 +1,5338 @@
+{
+    "/Root/test/ds/call_center": {
+        "byte_size": 190003,
+        "n_rows": 42,
+        "n_attrs": 31,
+        "key_columns": [
+            "cc_call_center_sk"
+        ],
+        "columns": [
+            {
+                "name": "cc_call_center_id",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QUFBQUFBQUFNQkFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "cc_call_center_sk",
+                "n_unique_vals": 42,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 37,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 42
+            },
+            {
+                "name": "cc_city",
+                "n_unique_vals": 17,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "QW50aW9jaA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 17
+            },
+            {
+                "name": "cc_class",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 16,
+                        "value": "bWVkaXVt",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "cc_closed_date_sk",
+                "n_unique_vals": null,
+                "most_common_value": [],
+                "hyperloglog": null
+            },
+            {
+                "name": "cc_company",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 5,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "cc_company_name",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 10,
+                        "value": "YW50aQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "cc_country",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 42,
+                        "value": "VW5pdGVkIFN0YXRlcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "cc_county",
+                "n_unique_vals": 16,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "TGV2eSBDb3VudHk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 16
+            },
+            {
+                "name": "cc_division",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 12,
+                        "value": 4,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "cc_division_name",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": "ZXNl",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "cc_employees",
+                "n_unique_vals": 30,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 6411932,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 30
+            },
+            {
+                "name": "cc_gmt_offset",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 29,
+                        "value": -5,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "cc_hours",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 31,
+                        "value": "OEFNLTRQTQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "cc_manager",
+                "n_unique_vals": 28,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "TGFycnkgTWNjcmF5",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 28
+            },
+            {
+                "name": "cc_market_manager",
+                "n_unique_vals": 35,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "SmFtZXMgTWNkb25hbGQ=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 35
+            },
+            {
+                "name": "cc_mkt_class",
+                "n_unique_vals": 36,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "Q2l0aXplbnMgY2hhbmdlLiBQYWludGluZ3MgdHJhbnNsYXRl",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 36
+            },
+            {
+                "name": "cc_mkt_desc",
+                "n_unique_vals": 33,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "Q2VydGFpbiBjaGFpcnMgY2FuIHN0YW5kLiBQcmluY2lwbGVzIG11c3QgY2F0Y2ggYWJzb2x1dGVseS4gQWxzbyBmdWxsIHN0dWRpZXMgY291bGQ=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 33
+            },
+            {
+                "name": "cc_mkt_id",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 12,
+                        "value": 2,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "cc_name",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "Tm9ydGggTWlkd2VzdF8y",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "cc_open_date_sk",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 2451102,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "cc_rec_end_date",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": "2000-01-01",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "cc_rec_start_date",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 21,
+                        "value": "1998-01-01",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "cc_sq_ft",
+                "n_unique_vals": 31,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": -133623428,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 31
+            },
+            {
+                "name": "cc_state",
+                "n_unique_vals": 14,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "Rkw=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 14
+            },
+            {
+                "name": "cc_street_name",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "U21pdGgg",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "cc_street_number",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "NjA5",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "cc_street_type",
+                "n_unique_vals": 11,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": "Q3Qu",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 11
+            },
+            {
+                "name": "cc_suite_number",
+                "n_unique_vals": 18,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "U3VpdGUgQg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 18
+            },
+            {
+                "name": "cc_tax_percentage",
+                "n_unique_vals": 12,
+                "most_common_value": [
+                    {
+                        "frequency": 9,
+                        "value": 0.11,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 12
+            },
+            {
+                "name": "cc_zip",
+                "n_unique_vals": 19,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "MTg2MDU=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 19
+            }
+        ]
+    },
+    "/Root/test/ds/catalog_page": {
+        "byte_size": 2883584,
+        "n_rows": 30000,
+        "n_attrs": 9,
+        "key_columns": [
+            "cp_catalog_page_sk"
+        ],
+        "columns": [
+            {
+                "name": "cp_catalog_number",
+                "n_unique_vals": 109,
+                "most_common_value": [
+                    {
+                        "frequency": 275,
+                        "value": 95,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 109
+            },
+            {
+                "name": "cp_catalog_page_id",
+                "n_unique_vals": 30263,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFKREFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 30263
+            },
+            {
+                "name": "cp_catalog_page_number",
+                "n_unique_vals": 277,
+                "most_common_value": [
+                    {
+                        "frequency": 82,
+                        "value": 259,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 277
+            },
+            {
+                "name": "cp_catalog_page_sk",
+                "n_unique_vals": 29515,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 57,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 29515
+            },
+            {
+                "name": "cp_department",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 29711,
+                        "value": "REVQQVJUTUVOVA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "cp_description",
+                "n_unique_vals": 29759,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "RXhwcmVzc2x5IGxvY2FsIGhvcnNlcyBzaGFsbCB1bmRlcnRha2UgcGVyaGFwcyBhYmxlLCBjbw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 29759
+            },
+            {
+                "name": "cp_end_date_sk",
+                "n_unique_vals": 97,
+                "most_common_value": [
+                    {
+                        "frequency": 553,
+                        "value": 2451178,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 97
+            },
+            {
+                "name": "cp_start_date_sk",
+                "n_unique_vals": 91,
+                "most_common_value": [
+                    {
+                        "frequency": 825,
+                        "value": 2450815,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 91
+            },
+            {
+                "name": "cp_type",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 19759,
+                        "value": "bW9udGhseQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            }
+        ]
+    },
+    "/Root/test/ds/catalog_returns": {
+        "byte_size": 17738214932,
+        "n_rows": 143996756,
+        "n_attrs": 27,
+        "key_columns": [
+            "cr_item_sk",
+            "cr_order_number"
+        ],
+        "columns": [
+            {
+                "name": "cr_call_center_sk",
+                "n_unique_vals": 42,
+                "most_common_value": [
+                    {
+                        "frequency": 6727006,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 42
+            },
+            {
+                "name": "cr_catalog_page_sk",
+                "n_unique_vals": 16758,
+                "most_common_value": [
+                    {
+                        "frequency": 6442,
+                        "value": 5521,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 16758
+            },
+            {
+                "name": "cr_fee",
+                "n_unique_vals": 9882,
+                "most_common_value": [
+                    {
+                        "frequency": 959,
+                        "value": 71.63,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9882
+            },
+            {
+                "name": "cr_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 65,
+                        "value": 109843,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "cr_net_loss",
+                "n_unique_vals": 903164,
+                "most_common_value": [
+                    {
+                        "frequency": 215,
+                        "value": 88.97,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 903164
+            },
+            {
+                "name": "cr_order_number",
+                "n_unique_vals": 96535251,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 146428164,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 96535251
+            },
+            {
+                "name": "cr_reason_sk",
+                "n_unique_vals": 65,
+                "most_common_value": [
+                    {
+                        "frequency": 2173378,
+                        "value": 33,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 65
+            },
+            {
+                "name": "cr_refunded_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 3247581,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "cr_refunded_cash",
+                "n_unique_vals": 1093097,
+                "most_common_value": [
+                    {
+                        "frequency": 2786454,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1093097
+            },
+            {
+                "name": "cr_refunded_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 843660,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "cr_refunded_customer_sk",
+                "n_unique_vals": 11733857,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 8005005,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11733857
+            },
+            {
+                "name": "cr_refunded_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 2120,
+                        "value": 4665,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "cr_return_amount",
+                "n_unique_vals": 893061,
+                "most_common_value": [
+                    {
+                        "frequency": 1396600,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 893061
+            },
+            {
+                "name": "cr_return_amt_inc_tax",
+                "n_unique_vals": 1535799,
+                "most_common_value": [
+                    {
+                        "frequency": 1396532,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1535799
+            },
+            {
+                "name": "cr_return_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 7323024,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "cr_return_ship_cost",
+                "n_unique_vals": 480958,
+                "most_common_value": [
+                    {
+                        "frequency": 2769517,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 480958
+            },
+            {
+                "name": "cr_return_tax",
+                "n_unique_vals": 151400,
+                "most_common_value": [
+                    {
+                        "frequency": 15425215,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 151400
+            },
+            {
+                "name": "cr_returned_date_sk",
+                "n_unique_vals": 2101,
+                "most_common_value": [
+                    {
+                        "frequency": 25110,
+                        "value": 2451962,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2101
+            },
+            {
+                "name": "cr_returned_time_sk",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 125,
+                        "value": 68791,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            },
+            {
+                "name": "cr_returning_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 4046143,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "cr_returning_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 9,
+                        "value": 552084,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "cr_returning_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 10939527,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "cr_returning_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 1784,
+                        "value": 895,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "cr_reversed_charge",
+                "n_unique_vals": 793522,
+                "most_common_value": [
+                    {
+                        "frequency": 2849737,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 793522
+            },
+            {
+                "name": "cr_ship_mode_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 7061183,
+                        "value": 9,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "cr_store_credit",
+                "n_unique_vals": 788678,
+                "most_common_value": [
+                    {
+                        "frequency": 4162788,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 788678
+            },
+            {
+                "name": "cr_warehouse_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 7058860,
+                        "value": 2,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            }
+        ]
+    },
+    "/Root/test/ds/catalog_sales": {
+        "byte_size": 223510098083,
+        "n_rows": 1439980416,
+        "n_attrs": 34,
+        "key_columns": [
+            "cs_item_sk",
+            "cs_order_number"
+        ],
+        "columns": [
+            {
+                "name": "cs_bill_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 14,
+                        "value": 4692881,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "cs_bill_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 45,
+                        "value": 1392817,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "cs_bill_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 10452635,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "cs_bill_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 15677,
+                        "value": 3710,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "cs_call_center_sk",
+                "n_unique_vals": 42,
+                "most_common_value": [
+                    {
+                        "frequency": 68262884,
+                        "value": 13,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 42
+            },
+            {
+                "name": "cs_catalog_page_sk",
+                "n_unique_vals": 16758,
+                "most_common_value": [
+                    {
+                        "frequency": 65566,
+                        "value": 10384,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 16758
+            },
+            {
+                "name": "cs_coupon_amt",
+                "n_unique_vals": 1588584,
+                "most_common_value": [
+                    {
+                        "frequency": 1151881310,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1588584
+            },
+            {
+                "name": "cs_ext_discount_amt",
+                "n_unique_vals": 1101809,
+                "most_common_value": [
+                    {
+                        "frequency": 14190075,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1101809
+            },
+            {
+                "name": "cs_ext_list_price",
+                "n_unique_vals": 1157583,
+                "most_common_value": [
+                    {
+                        "frequency": 1524,
+                        "value": 277.2,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1157583
+            },
+            {
+                "name": "cs_ext_sales_price",
+                "n_unique_vals": 1099368,
+                "most_common_value": [
+                    {
+                        "frequency": 14190190,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1099368
+            },
+            {
+                "name": "cs_ext_ship_cost",
+                "n_unique_vals": 569643,
+                "most_common_value": [
+                    {
+                        "frequency": 28098707,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 569643
+            },
+            {
+                "name": "cs_ext_tax",
+                "n_unique_vals": 219282,
+                "most_common_value": [
+                    {
+                        "frequency": 159020685,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 219282
+            },
+            {
+                "name": "cs_ext_wholesale_cost",
+                "n_unique_vals": 389771,
+                "most_common_value": [
+                    {
+                        "frequency": 2573,
+                        "value": 277.2,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 389771
+            },
+            {
+                "name": "cs_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 574,
+                        "value": 108853,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "cs_list_price",
+                "n_unique_vals": 29861,
+                "most_common_value": [
+                    {
+                        "frequency": 5929,
+                        "value": 64.26,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 29861
+            },
+            {
+                "name": "cs_net_paid",
+                "n_unique_vals": 1802377,
+                "most_common_value": [
+                    {
+                        "frequency": 16998103,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1802377
+            },
+            {
+                "name": "cs_net_paid_inc_ship",
+                "n_unique_vals": 2535079,
+                "most_common_value": [
+                    {
+                        "frequency": 228518,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2535079
+            },
+            {
+                "name": "cs_net_paid_inc_ship_tax",
+                "n_unique_vals": 3313038,
+                "most_common_value": [
+                    {
+                        "frequency": 285056,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 3313038
+            },
+            {
+                "name": "cs_net_paid_inc_tax",
+                "n_unique_vals": 2423399,
+                "most_common_value": [
+                    {
+                        "frequency": 16998012,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2423399
+            },
+            {
+                "name": "cs_net_profit",
+                "n_unique_vals": 2075498,
+                "most_common_value": [
+                    {
+                        "frequency": 283209,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2075498
+            },
+            {
+                "name": "cs_order_number",
+                "n_unique_vals": 163244034,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 23958360,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 163244034
+            },
+            {
+                "name": "cs_promo_sk",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 149562,
+                        "value": 771,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "cs_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 14336279,
+                        "value": 86,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "cs_sales_price",
+                "n_unique_vals": 29718,
+                "most_common_value": [
+                    {
+                        "frequency": 14190069,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 29718
+            },
+            {
+                "name": "cs_ship_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 14,
+                        "value": 3633165,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "cs_ship_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 31,
+                        "value": 1042105,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "cs_ship_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 8769626,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "cs_ship_date_sk",
+                "n_unique_vals": 1928,
+                "most_common_value": [
+                    {
+                        "frequency": 324255,
+                        "value": 2451180,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1928
+            },
+            {
+                "name": "cs_ship_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 18797,
+                        "value": 7012,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "cs_ship_mode_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 71648234,
+                        "value": 2,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "cs_sold_date_sk",
+                "n_unique_vals": 1836,
+                "most_common_value": [
+                    {
+                        "frequency": 513489,
+                        "value": 2451515,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1836
+            },
+            {
+                "name": "cs_sold_time_sk",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 1568,
+                        "value": 69624,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            },
+            {
+                "name": "cs_warehouse_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 71648088,
+                        "value": 7,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "cs_wholesale_cost",
+                "n_unique_vals": 9831,
+                "most_common_value": [
+                    {
+                        "frequency": 11446,
+                        "value": 80.33,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9831
+            }
+        ]
+    },
+    "/Root/test/ds/customer": {
+        "byte_size": 1320702443,
+        "n_rows": 12000000,
+        "n_attrs": 18,
+        "key_columns": [
+            "c_customer_sk"
+        ],
+        "columns": [
+            {
+                "name": "c_birth_country",
+                "n_unique_vals": 211,
+                "most_common_value": [
+                    {
+                        "frequency": 35519,
+                        "value": "VVJVR1VBWQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 211
+            },
+            {
+                "name": "c_birth_day",
+                "n_unique_vals": 31,
+                "most_common_value": [
+                    {
+                        "frequency": 381734,
+                        "value": 12,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 31
+            },
+            {
+                "name": "c_birth_month",
+                "n_unique_vals": 12,
+                "most_common_value": [
+                    {
+                        "frequency": 983456,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 12
+            },
+            {
+                "name": "c_birth_year",
+                "n_unique_vals": 69,
+                "most_common_value": [
+                    {
+                        "frequency": 168587,
+                        "value": 1992,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 69
+            },
+            {
+                "name": "c_current_addr_sk",
+                "n_unique_vals": 4918186,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 1940733,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 4918186
+            },
+            {
+                "name": "c_current_cdemo_sk",
+                "n_unique_vals": 1767631,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 1372664,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1767631
+            },
+            {
+                "name": "c_current_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 136,
+                        "value": 6685,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "c_customer_id",
+                "n_unique_vals": 11999106,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFFTEFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 11999106
+            },
+            {
+                "name": "c_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 180,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "c_email_address",
+                "n_unique_vals": 11495570,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "U3V6YW5uZS5XaWxsaWFtc0BTLmVkdQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 11495570
+            },
+            {
+                "name": "c_first_name",
+                "n_unique_vals": 5156,
+                "most_common_value": [
+                    {
+                        "frequency": 228321,
+                        "value": "SmFtZXM=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 5156
+            },
+            {
+                "name": "c_first_sales_date_sk",
+                "n_unique_vals": 3625,
+                "most_common_value": [
+                    {
+                        "frequency": 407,
+                        "value": 2450744,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 3625
+            },
+            {
+                "name": "c_first_shipto_date_sk",
+                "n_unique_vals": 3625,
+                "most_common_value": [
+                    {
+                        "frequency": 370,
+                        "value": 2452381,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 3625
+            },
+            {
+                "name": "c_last_name",
+                "n_unique_vals": 4938,
+                "most_common_value": [
+                    {
+                        "frequency": 183941,
+                        "value": "U21pdGg=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 4938
+            },
+            {
+                "name": "c_last_review_date",
+                "n_unique_vals": 366,
+                "most_common_value": [
+                    {
+                        "frequency": 14920,
+                        "value": "MjQ1MjYyMA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 366
+            },
+            {
+                "name": "c_login",
+                "n_unique_vals": null,
+                "most_common_value": [],
+                "hyperloglog": null
+            },
+            {
+                "name": "c_preferred_cust_flag",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 5905117,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "c_salutation",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 3391179,
+                        "value": "RHIu",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            }
+        ]
+    },
+    "/Root/test/ds/customer_address": {
+        "byte_size": 500999127,
+        "n_rows": 6000000,
+        "n_attrs": 13,
+        "key_columns": [
+            "ca_address_sk"
+        ],
+        "columns": [
+            {
+                "name": "ca_address_id",
+                "n_unique_vals": 5897336,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFERkFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 5897336
+            },
+            {
+                "name": "ca_address_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 83,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "ca_city",
+                "n_unique_vals": 986,
+                "most_common_value": [
+                    {
+                        "frequency": 52866,
+                        "value": "SGlsbGNyZXN0",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 986
+            },
+            {
+                "name": "ca_country",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 5820138,
+                        "value": "VW5pdGVkIFN0YXRlcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "ca_county",
+                "n_unique_vals": 1846,
+                "most_common_value": [
+                    {
+                        "frequency": 56433,
+                        "value": "V2FzaGluZ3RvbiBDb3VudHk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1846
+            },
+            {
+                "name": "ca_gmt_offset",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 2646483,
+                        "value": -6,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "ca_location_type",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 1940659,
+                        "value": "YXBhcnRtZW50",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "ca_state",
+                "n_unique_vals": 51,
+                "most_common_value": [
+                    {
+                        "frequency": 475267,
+                        "value": "VFg=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 51
+            },
+            {
+                "name": "ca_street_name",
+                "n_unique_vals": 8288,
+                "most_common_value": [
+                    {
+                        "frequency": 82766,
+                        "value": "UGFyayA=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 8288
+            },
+            {
+                "name": "ca_street_number",
+                "n_unique_vals": 1000,
+                "most_common_value": [
+                    {
+                        "frequency": 1357,
+                        "value": "ODQ3",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1000
+            },
+            {
+                "name": "ca_street_type",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 291675,
+                        "value": "UkQ=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "ca_suite_number",
+                "n_unique_vals": 75,
+                "most_common_value": [
+                    {
+                        "frequency": 117136,
+                        "value": "U3VpdGUgSQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 75
+            },
+            {
+                "name": "ca_zip",
+                "n_unique_vals": 9323,
+                "most_common_value": [
+                    {
+                        "frequency": 2619,
+                        "value": "Njk1MzI=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 9323
+            }
+        ]
+    },
+    "/Root/test/ds/customer_demographics": {
+        "byte_size": 52680458,
+        "n_rows": 1920800,
+        "n_attrs": 9,
+        "key_columns": [
+            "cd_demo_sk"
+        ],
+        "columns": [
+            {
+                "name": "cd_credit_rating",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 480200,
+                        "value": "R29vZA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "cd_demo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "cd_dep_college_count",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 274400,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "cd_dep_count",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 274400,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "cd_dep_employed_count",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 274400,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "cd_education_status",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 274400,
+                        "value": "UHJpbWFyeQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "cd_gender",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 960400,
+                        "value": "TQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "cd_marital_status",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 384160,
+                        "value": "Uw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "cd_purchase_estimate",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 96040,
+                        "value": 500,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            }
+        ]
+    },
+    "/Root/test/ds/date_dim": {
+        "byte_size": 9720299,
+        "n_rows": 73049,
+        "n_attrs": 28,
+        "key_columns": [
+            "d_date_sk"
+        ],
+        "columns": [
+            {
+                "name": "d_current_day",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 73049,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "d_current_month",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 73018,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_current_quarter",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 72958,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_current_week",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 73049,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "d_current_year",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 72684,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_date",
+                "n_unique_vals": 73217,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "MTkwMC0wNi0wMw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 73217
+            },
+            {
+                "name": "d_date_id",
+                "n_unique_vals": 73242,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFHRUtORUNBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 73242
+            },
+            {
+                "name": "d_date_sk",
+                "n_unique_vals": 71824,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 2415174,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 71824
+            },
+            {
+                "name": "d_day_name",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 10437,
+                        "value": "VGh1cnNkYXk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "d_dom",
+                "n_unique_vals": 31,
+                "most_common_value": [
+                    {
+                        "frequency": 2400,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 31
+            },
+            {
+                "name": "d_dow",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 10437,
+                        "value": 4,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "d_first_dom",
+                "n_unique_vals": 2384,
+                "most_common_value": [
+                    {
+                        "frequency": 17,
+                        "value": 2440861,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2384
+            },
+            {
+                "name": "d_following_holiday",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 72399,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_fy_quarter_seq",
+                "n_unique_vals": 801,
+                "most_common_value": [
+                    {
+                        "frequency": 51,
+                        "value": 359,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 801
+            },
+            {
+                "name": "d_fy_week_seq",
+                "n_unique_vals": 10406,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": 623,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10406
+            },
+            {
+                "name": "d_fy_year",
+                "n_unique_vals": 201,
+                "most_common_value": [
+                    {
+                        "frequency": 286,
+                        "value": 1997,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 201
+            },
+            {
+                "name": "d_holiday",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 72399,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_last_dom",
+                "n_unique_vals": 2390,
+                "most_common_value": [
+                    {
+                        "frequency": 17,
+                        "value": 2441133,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2390
+            },
+            {
+                "name": "d_month_seq",
+                "n_unique_vals": 2401,
+                "most_common_value": [
+                    {
+                        "frequency": 17,
+                        "value": 849,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2401
+            },
+            {
+                "name": "d_moy",
+                "n_unique_vals": 12,
+                "most_common_value": [
+                    {
+                        "frequency": 6200,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 12
+            },
+            {
+                "name": "d_qoy",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 18400,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "d_quarter_name",
+                "n_unique_vals": 801,
+                "most_common_value": [
+                    {
+                        "frequency": 54,
+                        "value": "MTk5OVE0",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 801
+            },
+            {
+                "name": "d_quarter_seq",
+                "n_unique_vals": 801,
+                "most_common_value": [
+                    {
+                        "frequency": 51,
+                        "value": 359,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 801
+            },
+            {
+                "name": "d_same_day_lq",
+                "n_unique_vals": 71562,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": 2419950,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 71562
+            },
+            {
+                "name": "d_same_day_ly",
+                "n_unique_vals": 71846,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": 2460004,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 71846
+            },
+            {
+                "name": "d_week_seq",
+                "n_unique_vals": 10406,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": 623,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10406
+            },
+            {
+                "name": "d_weekend",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 52179,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "d_year",
+                "n_unique_vals": 201,
+                "most_common_value": [
+                    {
+                        "frequency": 286,
+                        "value": 1997,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 201
+            }
+        ]
+    },
+    "/Root/test/ds/household_demographics": {
+        "byte_size": 249108,
+        "n_rows": 7200,
+        "n_attrs": 5,
+        "key_columns": [
+            "hd_demo_sk"
+        ],
+        "columns": [
+            {
+                "name": "hd_buy_potential",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 1200,
+                        "value": "MTAwMS01MDAw",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "hd_demo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 44,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "hd_dep_count",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 720,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "hd_income_band_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 360,
+                        "value": 5,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "hd_vehicle_count",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 1200,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            }
+        ]
+    },
+    "/Root/test/ds/income_band": {
+        "byte_size": 15196,
+        "n_rows": 20,
+        "n_attrs": 3,
+        "key_columns": [
+            "ib_income_band_sk"
+        ],
+        "columns": [
+            {
+                "name": "ib_income_band_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 14,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "ib_lower_bound",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 130001,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "ib_upper_bound",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 140000,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            }
+        ]
+    },
+    "/Root/test/ds/inventory": {
+        "byte_size": 12111807774,
+        "n_rows": 783000000,
+        "n_attrs": 4,
+        "key_columns": [
+            "inv_date_sk",
+            "inv_item_sk",
+            "inv_warehouse_sk"
+        ],
+        "columns": [
+            {
+                "name": "inv_date_sk",
+                "n_unique_vals": 261,
+                "most_common_value": [
+                    {
+                        "frequency": 1457110,
+                        "value": 2452278,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 261
+            },
+            {
+                "name": "inv_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 256,
+                        "value": 37177,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "inv_quantity_on_hand",
+                "n_unique_vals": 1001,
+                "most_common_value": [
+                    {
+                        "frequency": 174325,
+                        "value": 695,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1001
+            },
+            {
+                "name": "inv_warehouse_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 39150000,
+                        "value": 4,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            }
+        ]
+    },
+    "/Root/test/ds/item": {
+        "byte_size": 59517173,
+        "n_rows": 300000,
+        "n_attrs": 22,
+        "key_columns": [
+            "i_item_sk"
+        ],
+        "columns": [
+            {
+                "name": "i_brand",
+                "n_unique_vals": 712,
+                "most_common_value": [
+                    {
+                        "frequency": 3876,
+                        "value": "YW1hbGdleHBvcnRpICMx",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 712
+            },
+            {
+                "name": "i_brand_id",
+                "n_unique_vals": 952,
+                "most_common_value": [
+                    {
+                        "frequency": 4863,
+                        "value": 5004001,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 952
+            },
+            {
+                "name": "i_category",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 30160,
+                        "value": "Q2hpbGRyZW4=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "i_category_id",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 30168,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "i_class",
+                "n_unique_vals": 99,
+                "most_common_value": [
+                    {
+                        "frequency": 9279,
+                        "value": "a2lkcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 99
+            },
+            {
+                "name": "i_class_id",
+                "n_unique_vals": 16,
+                "most_common_value": [
+                    {
+                        "frequency": 47303,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 16
+            },
+            {
+                "name": "i_color",
+                "n_unique_vals": 92,
+                "most_common_value": [
+                    {
+                        "frequency": 6743,
+                        "value": "cm9zZQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 92
+            },
+            {
+                "name": "i_container",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 299236,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "i_current_price",
+                "n_unique_vals": 9630,
+                "most_common_value": [
+                    {
+                        "frequency": 140,
+                        "value": 4.01,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9630
+            },
+            {
+                "name": "i_formulation",
+                "n_unique_vals": 222863,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "NzExMzM5MjA2NHR1cnF1b2lzZTA=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 222863
+            },
+            {
+                "name": "i_item_desc",
+                "n_unique_vals": 218285,
+                "most_common_value": [
+                    {
+                        "frequency": 26,
+                        "value": "Uw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 218285
+            },
+            {
+                "name": "i_item_id",
+                "n_unique_vals": 149042,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QUFBQUFBQUFHQURCQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 149042
+            },
+            {
+                "name": "i_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 50,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "i_manager_id",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 5538,
+                        "value": 31,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "i_manufact",
+                "n_unique_vals": 1000,
+                "most_common_value": [
+                    {
+                        "frequency": 327,
+                        "value": "YWJsZWF0aW9uYWJsZQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1000
+            },
+            {
+                "name": "i_manufact_id",
+                "n_unique_vals": 1000,
+                "most_common_value": [
+                    {
+                        "frequency": 291,
+                        "value": 272,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1000
+            },
+            {
+                "name": "i_product_name",
+                "n_unique_vals": 298617,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "YmFyYW50aQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 298617
+            },
+            {
+                "name": "i_rec_end_date",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 50000,
+                        "value": "2000-10-26",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "i_rec_start_date",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 149623,
+                        "value": "1997-10-27",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "i_size",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 183577,
+                        "value": "Ti9B",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "i_units",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 14480,
+                        "value": "QnVuZGxl",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "i_wholesale_cost",
+                "n_unique_vals": 7173,
+                "most_common_value": [
+                    {
+                        "frequency": 358,
+                        "value": 0.62,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 7173
+            }
+        ]
+    },
+    "/Root/test/ds/promotion": {
+        "byte_size": 503326,
+        "n_rows": 1500,
+        "n_attrs": 19,
+        "key_columns": [
+            "p_promo_sk"
+        ],
+        "columns": [
+            {
+                "name": "p_channel_catalog",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1482,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_demo",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1479,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_details",
+                "n_unique_vals": 1486,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "VmVyeSBwcm9wb3NlZCBwcmVzc3VyZXMgc2hhbGwgbm90IHRha2UgbWFqb3IsIGF2ZXJhZ2UgZg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1486
+            },
+            {
+                "name": "p_channel_dmail",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 769,
+                        "value": "WQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "p_channel_email",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1480,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_event",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1482,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_press",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1481,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_radio",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1479,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_channel_tv",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1481,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_cost",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1482,
+                        "value": 1000,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_discount_active",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1473,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_end_date_sk",
+                "n_unique_vals": 683,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": 2450797,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 683
+            },
+            {
+                "name": "p_item_sk",
+                "n_unique_vals": 1469,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": 171535,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1469
+            },
+            {
+                "name": "p_promo_id",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFHSEFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "p_promo_name",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 150,
+                        "value": "cHJp",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "p_promo_sk",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 118,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "p_purpose",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1482,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_response_target",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1473,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "p_start_date_sk",
+                "n_unique_vals": 685,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 2450900,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 685
+            }
+        ]
+    },
+    "/Root/test/ds/reason": {
+        "byte_size": 36198,
+        "n_rows": 65,
+        "n_attrs": 3,
+        "key_columns": [
+            "r_reason_sk"
+        ],
+        "columns": [
+            {
+                "name": "r_reason_desc",
+                "n_unique_vals": 64,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "cmVhc29uIDMx",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 64
+            },
+            {
+                "name": "r_reason_id",
+                "n_unique_vals": 65,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFEQkFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 65
+            },
+            {
+                "name": "r_reason_sk",
+                "n_unique_vals": 65,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 19,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 65
+            }
+        ]
+    },
+    "/Root/test/ds/ship_mode": {
+        "byte_size": 27115,
+        "n_rows": 20,
+        "n_attrs": 6,
+        "key_columns": [
+            "sm_ship_mode_sk"
+        ],
+        "columns": [
+            {
+                "name": "sm_carrier",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUxMSUFOQ0U=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "sm_code",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "U1VSRkFDRQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "sm_contract",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "T3JEdVZ5Mkg=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "sm_ship_mode_id",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFMQUFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "sm_ship_mode_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 11,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "sm_type",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": "RVhQUkVTUw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            }
+        ]
+    },
+    "/Root/test/ds/store": {
+        "byte_size": 680253,
+        "n_rows": 1002,
+        "n_attrs": 29,
+        "key_columns": [
+            "s_store_sk"
+        ],
+        "columns": [
+            {
+                "name": "s_city",
+                "n_unique_vals": 54,
+                "most_common_value": [
+                    {
+                        "frequency": 29,
+                        "value": "UGluZSBHcm92ZQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 54
+            },
+            {
+                "name": "s_closed_date_sk",
+                "n_unique_vals": 162,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 2451301,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 162
+            },
+            {
+                "name": "s_company_id",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 995,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_company_name",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 995,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_country",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 997,
+                        "value": "VW5pdGVkIFN0YXRlcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_county",
+                "n_unique_vals": 27,
+                "most_common_value": [
+                    {
+                        "frequency": 50,
+                        "value": "WmllYmFjaCBDb3VudHk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 27
+            },
+            {
+                "name": "s_division_id",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 996,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_division_name",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 995,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_floor_space",
+                "n_unique_vals": 754,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 5556921,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 754
+            },
+            {
+                "name": "s_geography_class",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 996,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "s_gmt_offset",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 520,
+                        "value": -5,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "s_hours",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 773,
+                        "value": "OEFNLTRQTQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "s_manager",
+                "n_unique_vals": 742,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "Sm9obm55IEJyb3du",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 742
+            },
+            {
+                "name": "s_market_desc",
+                "n_unique_vals": 764,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "VGhlcmUgb2xkIHdvbWVuIGZpbmlzaCBmb3IgZXhhbXBsZS4gUmVjZW50bHkgcGFsZSBjaGlsZHJlbiBhcHBseQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 764
+            },
+            {
+                "name": "s_market_id",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 119,
+                        "value": 2,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "s_market_manager",
+                "n_unique_vals": 728,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "Q2xpZmZvcmQgTGluaw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 728
+            },
+            {
+                "name": "s_number_employees",
+                "n_unique_vals": 101,
+                "most_common_value": [
+                    {
+                        "frequency": 20,
+                        "value": 234,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 101
+            },
+            {
+                "name": "s_rec_end_date",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 167,
+                        "value": "1999-03-13",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "s_rec_start_date",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 495,
+                        "value": "1997-03-13",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "s_state",
+                "n_unique_vals": 21,
+                "most_common_value": [
+                    {
+                        "frequency": 97,
+                        "value": "TUk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 21
+            },
+            {
+                "name": "s_store_id",
+                "n_unique_vals": 501,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QUFBQUFBQUFLREFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 501
+            },
+            {
+                "name": "s_store_name",
+                "n_unique_vals": 10,
+                "most_common_value": [
+                    {
+                        "frequency": 126,
+                        "value": "ZXNl",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 10
+            },
+            {
+                "name": "s_store_sk",
+                "n_unique_vals": 1002,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 37,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1002
+            },
+            {
+                "name": "s_street_name",
+                "n_unique_vals": 547,
+                "most_common_value": [
+                    {
+                        "frequency": 15,
+                        "value": "UGFyayA=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 547
+            },
+            {
+                "name": "s_street_number",
+                "n_unique_vals": 519,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": "NjY5",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 519
+            },
+            {
+                "name": "s_street_type",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 61,
+                        "value": "Q2lyLg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "s_suite_number",
+                "n_unique_vals": 75,
+                "most_common_value": [
+                    {
+                        "frequency": 28,
+                        "value": "U3VpdGUgUw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 75
+            },
+            {
+                "name": "s_tax_precentage",
+                "n_unique_vals": 12,
+                "most_common_value": [
+                    {
+                        "frequency": 97,
+                        "value": 0.03,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 12
+            },
+            {
+                "name": "s_zip",
+                "n_unique_vals": 353,
+                "most_common_value": [
+                    {
+                        "frequency": 10,
+                        "value": "MzU3NTI=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 353
+            }
+        ]
+    },
+    "/Root/test/ds/store_returns": {
+        "byte_size": 27101243637,
+        "n_rows": 287999764,
+        "n_attrs": 20,
+        "key_columns": [
+            "sr_item_sk",
+            "sr_ticket_number"
+        ],
+        "columns": [
+            {
+                "name": "sr_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": 1856908,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "sr_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 418724,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "sr_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": 1562394,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "sr_fee",
+                "n_unique_vals": 9882,
+                "most_common_value": [
+                    {
+                        "frequency": 1809,
+                        "value": 21.22,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9882
+            },
+            {
+                "name": "sr_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 3122,
+                        "value": 6720,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "sr_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 151,
+                        "value": 10789,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "sr_net_loss",
+                "n_unique_vals": 712239,
+                "most_common_value": [
+                    {
+                        "frequency": 536,
+                        "value": 92.38,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 712239
+            },
+            {
+                "name": "sr_reason_sk",
+                "n_unique_vals": 65,
+                "most_common_value": [
+                    {
+                        "frequency": 4279761,
+                        "value": 6,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 65
+            },
+            {
+                "name": "sr_refunded_cash",
+                "n_unique_vals": 923201,
+                "most_common_value": [
+                    {
+                        "frequency": 5496597,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 923201
+            },
+            {
+                "name": "sr_return_amt",
+                "n_unique_vals": 671898,
+                "most_common_value": [
+                    {
+                        "frequency": 2754648,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 671898
+            },
+            {
+                "name": "sr_return_amt_inc_tax",
+                "n_unique_vals": 1249096,
+                "most_common_value": [
+                    {
+                        "frequency": 2754594,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1249096
+            },
+            {
+                "name": "sr_return_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 14423976,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "sr_return_ship_cost",
+                "n_unique_vals": 354130,
+                "most_common_value": [
+                    {
+                        "frequency": 5451532,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 354130
+            },
+            {
+                "name": "sr_return_tax",
+                "n_unique_vals": 118452,
+                "most_common_value": [
+                    {
+                        "frequency": 30436615,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 118452
+            },
+            {
+                "name": "sr_return_time_sk",
+                "n_unique_vals": 31844,
+                "most_common_value": [
+                    {
+                        "frequency": 555,
+                        "value": 42142,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 31844
+            },
+            {
+                "name": "sr_returned_date_sk",
+                "n_unique_vals": 2003,
+                "most_common_value": [
+                    {
+                        "frequency": 51184,
+                        "value": 2451943,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2003
+            },
+            {
+                "name": "sr_reversed_charge",
+                "n_unique_vals": 696153,
+                "most_common_value": [
+                    {
+                        "frequency": 5658100,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 696153
+            },
+            {
+                "name": "sr_store_credit",
+                "n_unique_vals": 689925,
+                "most_common_value": [
+                    {
+                        "frequency": 8203204,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 689925
+            },
+            {
+                "name": "sr_store_sk",
+                "n_unique_vals": 501,
+                "most_common_value": [
+                    {
+                        "frequency": 225511,
+                        "value": 946,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 501
+            },
+            {
+                "name": "sr_ticket_number",
+                "n_unique_vals": 167510514,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": 191667691,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 167510514
+            }
+        ]
+    },
+    "/Root/test/ds/store_sales": {
+        "byte_size": 299960515952,
+        "n_rows": 2879987999,
+        "n_attrs": 23,
+        "key_columns": [
+            "ss_item_sk",
+            "ss_ticket_number"
+        ],
+        "columns": [
+            {
+                "name": "ss_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 23,
+                        "value": 3798690,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "ss_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 46,
+                        "value": 680675,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "ss_coupon_amt",
+                "n_unique_vals": 1150893,
+                "most_common_value": [
+                    {
+                        "frequency": 2211172702,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1150893
+            },
+            {
+                "name": "ss_customer_sk",
+                "n_unique_vals": 11743762,
+                "most_common_value": [
+                    {
+                        "frequency": 16,
+                        "value": 406009,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11743762
+            },
+            {
+                "name": "ss_ext_discount_amt",
+                "n_unique_vals": 1150893,
+                "most_common_value": [
+                    {
+                        "frequency": 2211172702,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1150893
+            },
+            {
+                "name": "ss_ext_list_price",
+                "n_unique_vals": 774305,
+                "most_common_value": [
+                    {
+                        "frequency": 3228,
+                        "value": 453.6,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 774305
+            },
+            {
+                "name": "ss_ext_sales_price",
+                "n_unique_vals": 758049,
+                "most_common_value": [
+                    {
+                        "frequency": 27243319,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 758049
+            },
+            {
+                "name": "ss_ext_tax",
+                "n_unique_vals": 151741,
+                "most_common_value": [
+                    {
+                        "frequency": 305535369,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 151741
+            },
+            {
+                "name": "ss_ext_wholesale_cost",
+                "n_unique_vals": 389771,
+                "most_common_value": [
+                    {
+                        "frequency": 5530,
+                        "value": 168,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 389771
+            },
+            {
+                "name": "ss_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 36051,
+                        "value": 4576,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "ss_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 1061,
+                        "value": 185197,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "ss_list_price",
+                "n_unique_vals": 19771,
+                "most_common_value": [
+                    {
+                        "frequency": 14028,
+                        "value": 43.18,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 19771
+            },
+            {
+                "name": "ss_net_paid",
+                "n_unique_vals": 1277419,
+                "most_common_value": [
+                    {
+                        "frequency": 32630740,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1277419
+            },
+            {
+                "name": "ss_net_paid_inc_tax",
+                "n_unique_vals": 1689129,
+                "most_common_value": [
+                    {
+                        "frequency": 32631562,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1689129
+            },
+            {
+                "name": "ss_net_profit",
+                "n_unique_vals": 1522037,
+                "most_common_value": [
+                    {
+                        "frequency": 1072205,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1522037
+            },
+            {
+                "name": "ss_promo_sk",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 315927,
+                        "value": 1100,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "ss_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 27517308,
+                        "value": 76,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "ss_sales_price",
+                "n_unique_vals": 19895,
+                "most_common_value": [
+                    {
+                        "frequency": 27241665,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 19895
+            },
+            {
+                "name": "ss_sold_date_sk",
+                "n_unique_vals": 1823,
+                "most_common_value": [
+                    {
+                        "frequency": 1209113,
+                        "value": 2452277,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1823
+            },
+            {
+                "name": "ss_sold_time_sk",
+                "n_unique_vals": 45007,
+                "most_common_value": [
+                    {
+                        "frequency": 4527,
+                        "value": 50681,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 45007
+            },
+            {
+                "name": "ss_store_sk",
+                "n_unique_vals": 501,
+                "most_common_value": [
+                    {
+                        "frequency": 1800183,
+                        "value": 562,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 501
+            },
+            {
+                "name": "ss_ticket_number",
+                "n_unique_vals": 233069538,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 33020368,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 233069538
+            },
+            {
+                "name": "ss_wholesale_cost",
+                "n_unique_vals": 9831,
+                "most_common_value": [
+                    {
+                        "frequency": 21958,
+                        "value": 13.06,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9831
+            }
+        ]
+    },
+    "/Root/test/ds/time_dim": {
+        "byte_size": 3533701,
+        "n_rows": 86400,
+        "n_attrs": 10,
+        "key_columns": [
+            "t_time_sk"
+        ],
+        "columns": [
+            {
+                "name": "t_am_pm",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 43200,
+                        "value": "QU0=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "t_hour",
+                "n_unique_vals": 24,
+                "most_common_value": [
+                    {
+                        "frequency": 3600,
+                        "value": 0,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 24
+            },
+            {
+                "name": "t_meal_time",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 14400,
+                        "value": "YnJlYWtmYXN0",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "t_minute",
+                "n_unique_vals": 60,
+                "most_common_value": [
+                    {
+                        "frequency": 1440,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 60
+            },
+            {
+                "name": "t_second",
+                "n_unique_vals": 60,
+                "most_common_value": [
+                    {
+                        "frequency": 1440,
+                        "value": 7,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 60
+            },
+            {
+                "name": "t_shift",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 28800,
+                        "value": "dGhpcmQ=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "t_sub_shift",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 25200,
+                        "value": "ZXZlbmluZw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "t_time",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 67,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            },
+            {
+                "name": "t_time_id",
+                "n_unique_vals": 85900,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFFRUFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 85900
+            },
+            {
+                "name": "t_time_sk",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 67,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            }
+        ]
+    },
+    "/Root/test/ds/warehouse": {
+        "byte_size": 54906,
+        "n_rows": 20,
+        "n_attrs": 14,
+        "key_columns": [
+            "w_warehouse_sk"
+        ],
+        "columns": [
+            {
+                "name": "w_city",
+                "n_unique_vals": 12,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "Rml2ZSBQb2ludHM=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 12
+            },
+            {
+                "name": "w_country",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 20,
+                        "value": "VW5pdGVkIFN0YXRlcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "w_county",
+                "n_unique_vals": 14,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "WmllYmFjaCBDb3VudHk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 14
+            },
+            {
+                "name": "w_gmt_offset",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": -6,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "w_state",
+                "n_unique_vals": 13,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "U0Q=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 13
+            },
+            {
+                "name": "w_street_name",
+                "n_unique_vals": 19,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "M3JkIA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 19
+            },
+            {
+                "name": "w_street_number",
+                "n_unique_vals": 18,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "MTU=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 18
+            },
+            {
+                "name": "w_street_type",
+                "n_unique_vals": 13,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "QXZlbnVl",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 13
+            },
+            {
+                "name": "w_suite_number",
+                "n_unique_vals": 17,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "U3VpdGUgUA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 17
+            },
+            {
+                "name": "w_warehouse_id",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "QUFBQUFBQUFJQUFBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "w_warehouse_name",
+                "n_unique_vals": 19,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "UGxhaW4sIHJlbHVjdGFudA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 19
+            },
+            {
+                "name": "w_warehouse_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 8,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "w_warehouse_sq_ft",
+                "n_unique_vals": 19,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 514427,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 19
+            },
+            {
+                "name": "w_zip",
+                "n_unique_vals": 18,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "NjM0NTE=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 18
+            }
+        ]
+    },
+    "/Root/test/ds/web_page": {
+        "byte_size": 580556,
+        "n_rows": 3000,
+        "n_attrs": 14,
+        "key_columns": [
+            "wp_web_page_sk"
+        ],
+        "columns": [
+            {
+                "name": "wp_access_date_sk",
+                "n_unique_vals": 101,
+                "most_common_value": [
+                    {
+                        "frequency": 47,
+                        "value": 2452627,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 101
+            },
+            {
+                "name": "wp_autogen_flag",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 2112,
+                        "value": "Tg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "wp_char_count",
+                "n_unique_vals": 1879,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": 3513,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1879
+            },
+            {
+                "name": "wp_creation_date_sk",
+                "n_unique_vals": 199,
+                "most_common_value": [
+                    {
+                        "frequency": 68,
+                        "value": 2450810,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 199
+            },
+            {
+                "name": "wp_customer_sk",
+                "n_unique_vals": 716,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 388227,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 716
+            },
+            {
+                "name": "wp_image_count",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 477,
+                        "value": 7,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "wp_link_count",
+                "n_unique_vals": 24,
+                "most_common_value": [
+                    {
+                        "frequency": 167,
+                        "value": 9,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 24
+            },
+            {
+                "name": "wp_max_ad_count",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 676,
+                        "value": 2,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "wp_rec_end_date",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 500,
+                        "value": "2000-09-02",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "wp_rec_start_date",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 1482,
+                        "value": "1997-09-03",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "wp_type",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 465,
+                        "value": "YWQ=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "wp_url",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 2967,
+                        "value": "aHR0cDovL3d3dy5mb28uY29t",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "wp_web_page_id",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QUFBQUFBQUFJTkhBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "wp_web_page_sk",
+                "n_unique_vals": 2992,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 33,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2992
+            }
+        ]
+    },
+    "/Root/test/ds/web_returns": {
+        "byte_size": 8160437862,
+        "n_rows": 71997522,
+        "n_attrs": 24,
+        "key_columns": [
+            "wr_item_sk",
+            "wr_order_number"
+        ],
+        "columns": [
+            {
+                "name": "wr_account_credit",
+                "n_unique_vals": 674148,
+                "most_common_value": [
+                    {
+                        "frequency": 2028167,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 674148
+            },
+            {
+                "name": "wr_fee",
+                "n_unique_vals": 9882,
+                "most_common_value": [
+                    {
+                        "frequency": 582,
+                        "value": 34.22,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9882
+            },
+            {
+                "name": "wr_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 40,
+                        "value": 135007,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "wr_net_loss",
+                "n_unique_vals": 813378,
+                "most_common_value": [
+                    {
+                        "frequency": 109,
+                        "value": 104.74,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 813378
+            },
+            {
+                "name": "wr_order_number",
+                "n_unique_vals": 43020977,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 39718795,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 43020977
+            },
+            {
+                "name": "wr_reason_sk",
+                "n_unique_vals": 65,
+                "most_common_value": [
+                    {
+                        "frequency": 1060023,
+                        "value": 21,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 65
+            },
+            {
+                "name": "wr_refunded_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 4305484,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "wr_refunded_cash",
+                "n_unique_vals": 955587,
+                "most_common_value": [
+                    {
+                        "frequency": 1357709,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 955587
+            },
+            {
+                "name": "wr_refunded_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": 10819,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "wr_refunded_customer_sk",
+                "n_unique_vals": 11708553,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 6515014,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11708553
+            },
+            {
+                "name": "wr_refunded_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 604,
+                        "value": 4778,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "wr_return_amt",
+                "n_unique_vals": 818555,
+                "most_common_value": [
+                    {
+                        "frequency": 680796,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 818555
+            },
+            {
+                "name": "wr_return_amt_inc_tax",
+                "n_unique_vals": 1360024,
+                "most_common_value": [
+                    {
+                        "frequency": 680853,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1360024
+            },
+            {
+                "name": "wr_return_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 3565536,
+                        "value": 1,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "wr_return_ship_cost",
+                "n_unique_vals": 449103,
+                "most_common_value": [
+                    {
+                        "frequency": 1347703,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 449103
+            },
+            {
+                "name": "wr_return_tax",
+                "n_unique_vals": 137830,
+                "most_common_value": [
+                    {
+                        "frequency": 7514317,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 137830
+            },
+            {
+                "name": "wr_returned_date_sk",
+                "n_unique_vals": 2182,
+                "most_common_value": [
+                    {
+                        "frequency": 8010,
+                        "value": 2451291,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2182
+            },
+            {
+                "name": "wr_returned_time_sk",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 66,
+                        "value": 70873,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            },
+            {
+                "name": "wr_returning_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 3631092,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "wr_returning_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": 1196959,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "wr_returning_customer_sk",
+                "n_unique_vals": 11709331,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 4663646,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11709331
+            },
+            {
+                "name": "wr_returning_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 633,
+                        "value": 6451,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "wr_reversed_charge",
+                "n_unique_vals": 685334,
+                "most_common_value": [
+                    {
+                        "frequency": 1388004,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 685334
+            },
+            {
+                "name": "wr_web_page_sk",
+                "n_unique_vals": 2992,
+                "most_common_value": [
+                    {
+                        "frequency": 11974,
+                        "value": 1783,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2992
+            }
+        ]
+    },
+    "/Root/test/ds/web_sales": {
+        "byte_size": 110939005255,
+        "n_rows": 720000376,
+        "n_attrs": 34,
+        "key_columns": [
+            "ws_item_sk",
+            "ws_order_number"
+        ],
+        "columns": [
+            {
+                "name": "ws_bill_addr_sk",
+                "n_unique_vals": 5652566,
+                "most_common_value": [
+                    {
+                        "frequency": 10,
+                        "value": 2985235,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652566
+            },
+            {
+                "name": "ws_bill_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 19,
+                        "value": 1859497,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "ws_bill_customer_sk",
+                "n_unique_vals": 11671156,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 6518657,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11671156
+            },
+            {
+                "name": "ws_bill_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 6417,
+                        "value": 2901,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "ws_coupon_amt",
+                "n_unique_vals": 1515048,
+                "most_common_value": [
+                    {
+                        "frequency": 578682096,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1515048
+            },
+            {
+                "name": "ws_ext_discount_amt",
+                "n_unique_vals": 1094884,
+                "most_common_value": [
+                    {
+                        "frequency": 7123668,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1094884
+            },
+            {
+                "name": "ws_ext_list_price",
+                "n_unique_vals": 1157383,
+                "most_common_value": [
+                    {
+                        "frequency": 928,
+                        "value": 705.6,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1157383
+            },
+            {
+                "name": "ws_ext_sales_price",
+                "n_unique_vals": 1090176,
+                "most_common_value": [
+                    {
+                        "frequency": 7127294,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1090176
+            },
+            {
+                "name": "ws_ext_ship_cost",
+                "n_unique_vals": 564895,
+                "most_common_value": [
+                    {
+                        "frequency": 14108503,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 564895
+            },
+            {
+                "name": "ws_ext_tax",
+                "n_unique_vals": 216012,
+                "most_common_value": [
+                    {
+                        "frequency": 79881123,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 216012
+            },
+            {
+                "name": "ws_ext_wholesale_cost",
+                "n_unique_vals": 389771,
+                "most_common_value": [
+                    {
+                        "frequency": 1553,
+                        "value": 158.4,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 389771
+            },
+            {
+                "name": "ws_item_sk",
+                "n_unique_vals": 292004,
+                "most_common_value": [
+                    {
+                        "frequency": 315,
+                        "value": 107947,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 292004
+            },
+            {
+                "name": "ws_list_price",
+                "n_unique_vals": 29861,
+                "most_common_value": [
+                    {
+                        "frequency": 4412,
+                        "value": 97.29,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 29861
+            },
+            {
+                "name": "ws_net_paid",
+                "n_unique_vals": 1743825,
+                "most_common_value": [
+                    {
+                        "frequency": 8538458,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1743825
+            },
+            {
+                "name": "ws_net_paid_inc_ship",
+                "n_unique_vals": 2448331,
+                "most_common_value": [
+                    {
+                        "frequency": 94727,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2448331
+            },
+            {
+                "name": "ws_net_paid_inc_ship_tax",
+                "n_unique_vals": 3207041,
+                "most_common_value": [
+                    {
+                        "frequency": 141593,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 3207041
+            },
+            {
+                "name": "ws_net_paid_inc_tax",
+                "n_unique_vals": 2370553,
+                "most_common_value": [
+                    {
+                        "frequency": 8538415,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2370553
+            },
+            {
+                "name": "ws_net_profit",
+                "n_unique_vals": 2023278,
+                "most_common_value": [
+                    {
+                        "frequency": 127665,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 2023278
+            },
+            {
+                "name": "ws_order_number",
+                "n_unique_vals": 61477692,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 54041291,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 61477692
+            },
+            {
+                "name": "ws_promo_sk",
+                "n_unique_vals": 1500,
+                "most_common_value": [
+                    {
+                        "frequency": 82675,
+                        "value": 635,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1500
+            },
+            {
+                "name": "ws_quantity",
+                "n_unique_vals": 100,
+                "most_common_value": [
+                    {
+                        "frequency": 7203405,
+                        "value": 10,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 100
+            },
+            {
+                "name": "ws_sales_price",
+                "n_unique_vals": 29703,
+                "most_common_value": [
+                    {
+                        "frequency": 7127324,
+                        "value": 0,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 29703
+            },
+            {
+                "name": "ws_ship_addr_sk",
+                "n_unique_vals": 5652646,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 5906656,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 5652646
+            },
+            {
+                "name": "ws_ship_cdemo_sk",
+                "n_unique_vals": 1770972,
+                "most_common_value": [
+                    {
+                        "frequency": 25,
+                        "value": 884737,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1770972
+            },
+            {
+                "name": "ws_ship_customer_sk",
+                "n_unique_vals": 11674451,
+                "most_common_value": [
+                    {
+                        "frequency": 9,
+                        "value": 4220468,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 11674451
+            },
+            {
+                "name": "ws_ship_date_sk",
+                "n_unique_vals": 1946,
+                "most_common_value": [
+                    {
+                        "frequency": 150237,
+                        "value": 2451189,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1946
+            },
+            {
+                "name": "ws_ship_hdemo_sk",
+                "n_unique_vals": 7197,
+                "most_common_value": [
+                    {
+                        "frequency": 7882,
+                        "value": 2204,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 7197
+            },
+            {
+                "name": "ws_ship_mode_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 36000428,
+                        "value": 18,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "ws_sold_date_sk",
+                "n_unique_vals": 1823,
+                "most_common_value": [
+                    {
+                        "frequency": 301549,
+                        "value": 2451546,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1823
+            },
+            {
+                "name": "ws_sold_time_sk",
+                "n_unique_vals": 84404,
+                "most_common_value": [
+                    {
+                        "frequency": 549,
+                        "value": 71183,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 84404
+            },
+            {
+                "name": "ws_warehouse_sk",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 35999401,
+                        "value": 5,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "ws_web_page_sk",
+                "n_unique_vals": 2992,
+                "most_common_value": [
+                    {
+                        "frequency": 98136,
+                        "value": 1453,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 2992
+            },
+            {
+                "name": "ws_web_site_sk",
+                "n_unique_vals": 54,
+                "most_common_value": [
+                    {
+                        "frequency": 26669416,
+                        "value": 37,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 54
+            },
+            {
+                "name": "ws_wholesale_cost",
+                "n_unique_vals": 9831,
+                "most_common_value": [
+                    {
+                        "frequency": 4634,
+                        "value": 75.53,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9831
+            }
+        ]
+    },
+    "/Root/test/ds/web_site": {
+        "byte_size": 193996,
+        "n_rows": 54,
+        "n_attrs": 26,
+        "key_columns": [
+            "web_site_sk"
+        ],
+        "columns": [
+            {
+                "name": "web_city",
+                "n_unique_vals": 30,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": "R2xlbndvb2Q=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 30
+            },
+            {
+                "name": "web_class",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 53,
+                        "value": "VW5rbm93bg==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "web_close_date_sk",
+                "n_unique_vals": 18,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 2441299,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 18
+            },
+            {
+                "name": "web_company_id",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 12,
+                        "value": 4,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "web_company_name",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": "YWJsZQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "web_country",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 53,
+                        "value": "VW5pdGVkIFN0YXRlcw==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "web_county",
+                "n_unique_vals": 24,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "R29nZWJpYyBDb3VudHk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 24
+            },
+            {
+                "name": "web_gmt_offset",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 29,
+                        "value": -5,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "web_manager",
+                "n_unique_vals": 39,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "TWFyayBDYXN0ZWVs",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 39
+            },
+            {
+                "name": "web_market_manager",
+                "n_unique_vals": 45,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "SmVmZnJleSBDYW1wYmVsbA==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 45
+            },
+            {
+                "name": "web_mkt_class",
+                "n_unique_vals": 39,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "V2lkZWx5IHRvdGFsIGV4YW1wbGVzIHNob3VsZCBub3Q=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 39
+            },
+            {
+                "name": "web_mkt_desc",
+                "n_unique_vals": 38,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QmFzaWMgb3RoZXJzIHdpbGwgbm90IGFwcHJlY2lhdGUgc28gbGF0ZSwgcG90ZW50aWFsIGNoaWw=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 38
+            },
+            {
+                "name": "web_mkt_id",
+                "n_unique_vals": 6,
+                "most_common_value": [
+                    {
+                        "frequency": 14,
+                        "value": 4,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 6
+            },
+            {
+                "name": "web_name",
+                "n_unique_vals": 9,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "c2l0ZV81",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 9
+            },
+            {
+                "name": "web_open_date_sk",
+                "n_unique_vals": 27,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 2450424,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 27
+            },
+            {
+                "name": "web_rec_end_date",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 9,
+                        "value": "1999-08-16",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "web_rec_start_date",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 25,
+                        "value": "1997-08-16",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "web_site_id",
+                "n_unique_vals": 27,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "QUFBQUFBQUFPQ0FBQUFBQQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 27
+            },
+            {
+                "name": "web_site_sk",
+                "n_unique_vals": 54,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 46,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 54
+            },
+            {
+                "name": "web_state",
+                "n_unique_vals": 18,
+                "most_common_value": [
+                    {
+                        "frequency": 12,
+                        "value": "TUk=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 18
+            },
+            {
+                "name": "web_street_name",
+                "n_unique_vals": 52,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "UGFyayA=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 52
+            },
+            {
+                "name": "web_street_number",
+                "n_unique_vals": 35,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "ODQx",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 35
+            },
+            {
+                "name": "web_street_type",
+                "n_unique_vals": 20,
+                "most_common_value": [
+                    {
+                        "frequency": 6,
+                        "value": "V3k=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 20
+            },
+            {
+                "name": "web_suite_number",
+                "n_unique_vals": 38,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "U3VpdGUgVQ==",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 38
+            },
+            {
+                "name": "web_tax_percentage",
+                "n_unique_vals": 13,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 0.07,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 13
+            },
+            {
+                "name": "web_zip",
+                "n_unique_vals": 32,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": "NDM0NTE=",
+                        "type": "String"
+                    }
+                ],
+                "hyperloglog": 32
+            }
+        ]
+    }
+}

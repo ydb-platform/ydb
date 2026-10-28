@@ -95,6 +95,7 @@ namespace NKikimr::NStorage {
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
+               EvHalt,
             };
 
             struct TEvUpdateBridgeFeatureRequirement
@@ -395,6 +396,7 @@ namespace NKikimr::NStorage {
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
+        bool Halted = false; // the keeper takes no part in distconf anymore, see Halt()
         TBackoffTimer CollectConfigsBackoffTimer{10, 1000};
 
         struct TProposition {
@@ -474,6 +476,7 @@ namespace NKikimr::NStorage {
         void Bootstrap();
         void PassAway() override;
         void Halt(); // cease any distconf activity, unbind and reject any bindings
+        void HandleHalt();
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);

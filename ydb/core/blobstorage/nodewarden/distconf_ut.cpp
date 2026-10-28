@@ -7986,6 +7986,82 @@ selector_config: []
         CheckDurableConfigConverges(fixture, committed);
     }
 
+    // State storage of three single-node rings 1, 2, 3, two of them needed for the quorum. Node 1 is seen bad, and the
+    // allowed nodes 1, 2, 4 make the healthy node 3 move to 4. Replacing the one node disables its ring first, and with
+    // the ring of node 1 out too, only one ring would be left; this must not go the way of replacing the one node.
+    Y_UNIT_TEST(SelfHealDoesNotDisableHealthyRingWithoutQuorum) {
+        TCommitConfirmationFixture fixture(false, 4);
+        fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {1, 2, 4}) {
+            fixture.Config.MutableSelfManagementConfig()->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : nodes) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {1, 2, 4});
+        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 4});
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        std::optional<ui32> reassignedNode; // the node the way of replacing the one node started with
+        bool reconfigured = false; // the full way has proposed the state storage without node 3
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (command.HasReassignStateStorageNode() && !reassignedNode) {
+                    reassignedNode = command.GetReassignStateStorageNode().GetFrom();
+                } else if (command.HasReconfigStateStorage() &&
+                        command.GetReconfigStateStorage().HasStateStorageConfig()) {
+                    const TString config = command.GetReconfigStateStorage().GetStateStorageConfig().ShortDebugString();
+                    reconfigured |= !config.Contains("Node: 3");
+                }
+                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+                }
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 1 ? NKikimr::BAD : NKikimr::GOOD); // node 1 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        SimUntil(runtime, [&] { return reassignedNode || reconfigured; });
+        UNIT_ASSERT_C(reassignedNode != 3u, "the ring of the healthy node 3 is disabled while the ring of node 1 is out");
+        UNIT_ASSERT_C(reassignedNode || reconfigured, "self-heal didn't move the state storage off node 3");
+    }
+
     Y_UNIT_TEST(SelfHealRejectsEmptyGeneratedStateStorageConfig) {
         TCommitConfirmationFixture fixture(false);
         auto *selfManagement = fixture.Config.MutableSelfManagementConfig();

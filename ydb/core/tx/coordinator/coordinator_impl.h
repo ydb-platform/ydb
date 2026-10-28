@@ -199,11 +199,11 @@ do { \
 #else
 #define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
     YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "",   \
-        {"stream", stream})
+        {"stream", TStringStream() << stream})
 #endif
 
 #define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
-#define FLOG_DEBUG_S(actorCtxOrSystem, component, stream)  FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
+#define FLOG_DEBUG_S(actorCtxOrSystem, component, stream) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 
 class TCoordinatorStateActor;
 

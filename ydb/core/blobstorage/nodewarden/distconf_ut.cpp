@@ -8062,6 +8062,87 @@ selector_config: []
         runtime.FilterEnqueue = {};
     }
 
+    // Self-heal replaces the bad node 3 of state storage with node 4, while the board, on nodes 7, 6, 5, only gets
+    // its rings in another order. The board has no node to replace, so the replacement of node 3 must be made in state
+    // storage only.
+    Y_UNIT_TEST(SelfHealReplacesNodeOnlyInItsSubsystem) {
+        TCommitConfirmationFixture fixture(false, 7);
+        fixture.Config = MakeStorageConfig(7, 1, {1});
+        auto *policy = fixture.Config.MutableSelfManagementConfig();
+        policy->SetEnabled(true);
+        policy->SetAutomaticStateStorageManagement(true);
+        policy->SetAutomaticStateStorageBoardManagement(true);
+        policy->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            policy->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        for (ui32 nodeId : {5, 6, 7}) {
+            policy->AddStateStorageBoardSelfHealAllowedNodes(nodeId);
+        }
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : nodes) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {7, 6, 5});
+        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 3});
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policyRef = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        std::vector<std::decay_t<decltype(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot().GetReassignStateStorageNode())>> reassigns;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (command.HasReassignStateStorageNode()) {
+                    reassigns.push_back(command.GetReassignStateStorageNode());
+                }
+                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+                }
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policyRef));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        command->SetPileupReplicas(true);
+        command->SetOverrideRingsCount(3);
+        command->SetOverrideReplicasInRingCount(1);
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD); // node 3 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return !reassigns.empty(); }), "self-heal didn't replace node 3");
+        for (const auto& reassign : reassigns) {
+            UNIT_ASSERT_VALUES_EQUAL(reassign.GetFrom(), 3);
+            UNIT_ASSERT(reassign.GetStateStorage());
+            UNIT_ASSERT_C(!reassign.GetStateStorageBoard(), reassign.ShortDebugString());
+        }
+    }
+
     void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal, bool changePileList = false) {
         TCommitConfirmationFixture fixture(false, 5);
         fixture.Config = MakeTwoPileBridgedConfig("pile0", "pile1");

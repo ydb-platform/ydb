@@ -219,10 +219,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 << "ALTER OBJECT `" << objectPath << "` (TYPE " << objectType << ") SET (ACTION=UPSERT_OPTIONS, " << options << ");")
                 .GetValueSync();
         };
+
         const auto setActualization = [&](const bool enabled) {
             const auto result = alterOptions(TStringBuilder() << "TIERING_NEED_ACTUALIZATION=`" << (enabled ? "true" : "false") << "`");
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
+
         const auto checkOption = [&](const bool expected) {
             auto desc = testHelper.GetKikimr().GetTestClient().Ls(objectPath);
             UNIT_ASSERT(desc);
@@ -231,12 +233,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                                         : path.GetColumnTableDescription().GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetOptions().GetTieringNeedActualization(), expected);
         };
+
         const auto alterPrefix = [&](const TString& prefix) {
             const auto result = testHelper.GetSession().ExecuteSchemeQuery(TStringBuilder()
                 << "ALTER TABLE `" << tablePath << "` SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `"
                 << DEFAULT_TIER_PATH << "`.`" << prefix << "` ON " << DEFAULT_COLUMN_NAME << ";").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
+
         const auto checkRows = [&]() {
             auto client = testHelper.GetKikimr().GetTableClient();
             const auto rows = ExecuteScanQuery(client, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`;");

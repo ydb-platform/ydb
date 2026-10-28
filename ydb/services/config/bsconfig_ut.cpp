@@ -791,6 +791,58 @@ config:
 
 }
 
+// requests going to BSC of an older version, which has no ReplaceConfig of its own and gets generic config commands
+Y_UNIT_TEST_SUITE(ConfigGRPCServiceLegacyBsc) {
+    using namespace NTestSuiteConfigGRPCService;
+
+    // The dry run of a replacement goes to BSC as generic commands; they have to be rolled back, not committed.
+    Y_UNIT_TEST(DryRunIsRolledBack) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        // the generic commands are built from a YAML of the format the older BSC knows, without metadata
+        const TString yamlConfig = Sprintf(R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: %s
+    type: ROT
+hosts:
+- host: ::1
+  port: 12001
+  host_config_id: 1
+)", (runtime.GetTempDir() + "pdisk_1.dat").c_str());
+
+        // BSC answers the query of its interface version as the older one does; the generic commands are recorded
+        ui32 numGenericRequests = 0;
+        ui32 numCommitted = 0;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.GetInterfaceVersion()) {
+                        status.SetInterfaceVersion(0);
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& cmd : request.GetCommand()) {
+                    if (cmd.HasDefineHostConfig()) {
+                        ++numGenericRequests;
+                        numCommitted += !request.GetRollback();
+                        break;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Replace(runtime, server, yamlConfig, /*dryRun=*/ true);
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(numGenericRequests, "the replacement didn't go to BSC as generic commands");
+        UNIT_ASSERT_VALUES_EQUAL_C(numCommitted, 0u, "the dry run was committed");
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
 
     using TServerWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;

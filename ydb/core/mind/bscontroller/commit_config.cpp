@@ -103,9 +103,26 @@ namespace NKikimr::NBsController {
                     /* success = */ true);
             }
 
+            std::optional<ui64> storageApplyCookie;
             if (StorageConfig) {
                 Self->StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*StorageConfig);
-                Self->ApplyStorageConfig(true);
+                if (Handle) {
+                    Self->ApplyStorageConfig(true);
+                } else {
+                    // the replacement made through Console succeeds only if the storage config applies too
+                    const ui64 cookie = Self->NextValidationCookie++;
+                    Self->PendingValidationRequests.emplace(cookie, TConfigValidationInfo{
+                        .Sender = Self->SelfId(),
+                        .Cookie = 0,
+                        .InterconnectSession = {},
+                        .Source = TConfigValidationInfo::ESource::ConsoleInteractionApply,
+                    });
+                    if (Self->ApplyStorageConfig(true, cookie)) {
+                        storageApplyCookie = cookie;
+                    } else {
+                        Self->PendingValidationRequests.erase(cookie);
+                    }
+                }
             }
 
             std::optional<NKikimrBlobStorage::TYamlConfig> update;
@@ -156,7 +173,7 @@ namespace NKikimr::NBsController {
             if (Handle) {
                 TActivationContext::Send(Handle.release());
             } else {
-                Self->ConsoleInteraction->OnConfigCommit(mainConfigChanged);
+                Self->ConsoleInteraction->OnConfigCommit(mainConfigChanged, storageApplyCookie);
             }
 
             if (update) {

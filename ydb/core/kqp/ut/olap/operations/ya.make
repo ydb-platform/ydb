@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     cache_blobs_after_write_ut.cpp
     delete_ut.cpp
+    schema_version_cleaner_ut.cpp
     write_ut.cpp
 )
 

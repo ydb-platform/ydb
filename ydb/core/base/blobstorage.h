@@ -674,6 +674,8 @@ struct TEvBlobStorage {
         // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
         EvDeviceOverestimationSamples,
 
+        EvSyncerLostDataRecoveryStarted,
+
         EvEnd
     };
 

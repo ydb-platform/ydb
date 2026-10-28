@@ -26,6 +26,7 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         const ui64 DbBirthLsn;
+        const bool RecoveringLostData;
 
         using TSessionKey = std::pair<TVDiskID, TVDiskID>; // { SourceVDisk, TargetVDisk }
         THashMap<TSessionKey, TActorId> UnorderedDataFullSyncSessions;
@@ -140,11 +141,21 @@ namespace NKikimr {
                     stage));
         }
 
+        ui64 GetSnapshotLsn() const {
+            if (RecoveringLostData) {
+                // This snapshot can be incomplete; the final DbBirthLsn will force peers to read it again.
+                return 0;
+            }
+            const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForSyncLog();
+            // Recovery imports Hull records without adding them to SyncLog. Once the index is complete,
+            // use at least DbBirthLsn so a peer does not repeatedly full sync at the provisional LSN.
+            return Db->Config->EmergencyRecoveryMode ? Max(confirmedLsn, DbBirthLsn) : confirmedLsn;
+        }
+
         void HandleInitialEventLegacyProtocol(const TEventInfo& evInfo) {
             // this is the first message, so after full sync source node
             // will be synced by lsn obtained from SyncLog
-            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
-                    Db->LsnMngr->GetConfirmedLsnForSyncLog());
+            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(), GetSnapshotLsn());
             CreateActorForLegacyProtocol(evInfo, newSyncState);
         }
 
@@ -154,8 +165,7 @@ namespace NKikimr {
         }
 
         void HandleInitialEventUnorderedDataProtocol(const TEventInfo& evInfo) {
-            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
-                    Db->LsnMngr->GetConfirmedLsnForSyncLog());
+            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(), GetSnapshotLsn());
 
             DeleteUnorderedDataSession(evInfo.SessionKey);
 
@@ -290,7 +300,8 @@ namespace NKikimr {
                           const std::shared_ptr<THull> &hull,
                           const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                           const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
-                          ui64 dbBirthLsn)
+                          ui64 dbBirthLsn,
+                          bool recoveringLostData)
             : TActorBootstrapped<TVSyncFullHandler>()
             , Db(db)
             , HullCtx(hullCtx)
@@ -301,6 +312,7 @@ namespace NKikimr {
             , IFaceMonGroup(ifaceMonGroup)
             , FullSyncGroup(fullSyncGroup)
             , DbBirthLsn(dbBirthLsn)
+            , RecoveringLostData(recoveringLostData)
         {}
     };
 
@@ -318,9 +330,10 @@ namespace NKikimr {
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
-                                      ui64 dbBirthLsn) {
+                                      ui64 dbBirthLsn,
+                                      bool recoveringLostData) {
         return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, syncLogActorId, hull,
-                    ifaceMonGroup, fullSyncGroup, dbBirthLsn);
+                    ifaceMonGroup, fullSyncGroup, dbBirthLsn, recoveringLostData);
     }
 
 

@@ -86,6 +86,7 @@ RECURSE_FOR_TESTS(
     ut_comp_defrag
     ut_ddisk
     ut_donor
+    ut_emergency_recovery
     ut_group_mapping
     ut_huge
     ut_startup_brokers

@@ -8,7 +8,7 @@
                         "StructType";
                         [
                             [
-                                "adaptive_distance";
+                                "default";
                                 [
                                     "OptionalType";
                                     [
@@ -72,7 +72,7 @@
                                 ]
                             ];
                             [
-                                "adaptive_weight";
+                                "log_size";
                                 [
                                     "OptionalType";
                                     [
@@ -136,7 +136,7 @@
                                 ]
                             ];
                             [
-                                "adaptive_ward";
+                                "log_min_max";
                                 [
                                     "OptionalType";
                                     [
@@ -196,154 +196,6 @@
                                                 ]
                                             ]
                                         ]
-                                    ]
-                                ]
-                            ];
-                            [
-                                "block_weight";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "StructType";
-                                        [
-                                            [
-                                                "Bins";
-                                                [
-                                                    "ListType";
-                                                    [
-                                                        "StructType";
-                                                        [
-                                                            [
-                                                                "Frequency";
-                                                                [
-                                                                    "DataType";
-                                                                    "Double"
-                                                                ]
-                                                            ];
-                                                            [
-                                                                "Position";
-                                                                [
-                                                                    "DataType";
-                                                                    "Double"
-                                                                ]
-                                                            ]
-                                                        ]
-                                                    ]
-                                                ]
-                                            ];
-                                            [
-                                                "Kind";
-                                                [
-                                                    "DataType";
-                                                    "String"
-                                                ]
-                                            ];
-                                            [
-                                                "Max";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ];
-                                            [
-                                                "Min";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ];
-                                            [
-                                                "WeightsSum";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ];
-                            [
-                                "block_ward";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "StructType";
-                                        [
-                                            [
-                                                "Bins";
-                                                [
-                                                    "ListType";
-                                                    [
-                                                        "StructType";
-                                                        [
-                                                            [
-                                                                "Frequency";
-                                                                [
-                                                                    "DataType";
-                                                                    "Double"
-                                                                ]
-                                                            ];
-                                                            [
-                                                                "Position";
-                                                                [
-                                                                    "DataType";
-                                                                    "Double"
-                                                                ]
-                                                            ]
-                                                        ]
-                                                    ]
-                                                ]
-                                            ];
-                                            [
-                                                "Kind";
-                                                [
-                                                    "DataType";
-                                                    "String"
-                                                ]
-                                            ];
-                                            [
-                                                "Max";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ];
-                                            [
-                                                "Min";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ];
-                                            [
-                                                "WeightsSum";
-                                                [
-                                                    "DataType";
-                                                    "Double"
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ];
-                            [
-                                "algo_equality_check";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "quality_equality_check";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
                                     ]
                                 ]
                             ]
@@ -356,44 +208,64 @@
                             [
                                 [
                                     [
-                                        "8";
-                                        "2"
+                                        "1";
+                                        "1"
+                                    ];
+                                    [
+                                        "2";
+                                        "10"
                                     ];
                                     [
                                         "3";
-                                        "5"
+                                        "100"
                                     ];
                                     [
-                                        "5";
-                                        "7"
+                                        "9";
+                                        "1000"
                                     ]
                                 ];
-                                "AdaptiveDistance";
-                                "7";
-                                "0";
-                                "16"
+                                "Logarithmic";
+                                "1000";
+                                "1";
+                                "15"
                             ]
                         ];
                         [
                             [
                                 [
                                     [
-                                        "6";
+                                        "1";
                                         "2"
                                     ];
                                     [
-                                        "5";
-                                        "3.799999952316284"
+                                        "1";
+                                        "8"
                                     ];
                                     [
-                                        "5";
-                                        "7"
+                                        "1";
+                                        "32"
+                                    ];
+                                    [
+                                        "1";
+                                        "64"
+                                    ];
+                                    [
+                                        "1";
+                                        "128"
+                                    ];
+                                    [
+                                        "1";
+                                        "512"
+                                    ];
+                                    [
+                                        "9";
+                                        "2048"
                                     ]
                                 ];
-                                "AdaptiveWeight";
-                                "7";
-                                "0";
-                                "16"
+                                "Logarithmic";
+                                "2048";
+                                "2";
+                                "15"
                             ]
                         ];
                         [
@@ -401,76 +273,39 @@
                                 [
                                     [
                                         "2";
-                                        "0.5"
+                                        "10"
                                     ];
                                     [
-                                        "6";
-                                        "2.5"
+                                        "1";
+                                        "32"
                                     ];
                                     [
-                                        "8";
-                                        "6.25"
+                                        "1";
+                                        "64"
+                                    ];
+                                    [
+                                        "1";
+                                        "128"
+                                    ];
+                                    [
+                                        "1";
+                                        "512"
+                                    ];
+                                    [
+                                        "9";
+                                        "2048"
                                     ]
                                 ];
-                                "AdaptiveWard";
-                                "7";
-                                "0";
-                                "16"
+                                "Logarithmic";
+                                "2048";
+                                "10";
+                                "15"
                             ]
-                        ];
-                        [
-                            [
-                                [
-                                    [
-                                        "5";
-                                        "1.399999976158142"
-                                    ];
-                                    [
-                                        "6";
-                                        "4"
-                                    ];
-                                    [
-                                        "5";
-                                        "7"
-                                    ]
-                                ];
-                                "BlockWeight";
-                                "7";
-                                "0";
-                                "16"
-                            ]
-                        ];
-                        [
-                            [
-                                [
-                                    [
-                                        "8";
-                                        "2"
-                                    ];
-                                    [
-                                        "3";
-                                        "5"
-                                    ];
-                                    [
-                                        "5";
-                                        "7"
-                                    ]
-                                ];
-                                "BlockWard";
-                                "7";
-                                "0";
-                                "16"
-                            ]
-                        ];
-                        [
-                            %true
-                        ];
-                        [
-                            %true
                         ]
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

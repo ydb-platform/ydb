@@ -919,6 +919,16 @@ def cmd_reconcile(target, apply, timeout):
         print("dry-run: nothing was changed", flush=True)
         return 0
     by_pool = {pool["_pool"]: pool for pool in pools}
+    # Validate keys for operations that may create a VM before any runner or
+    # VM can be deleted. This catches a malformed reconcile key before
+    # ensure_runner_up() removes an offline runner's old instance.
+    pools_needing_keys = {
+        action["pool"]
+        for action in actions
+        if action["op"] == "create" or action.get("replace")
+    }
+    for pool_name in pools_needing_keys:
+        public_key_lines(by_pool[pool_name])
     taken = taken_names(runners, instances)
     replaced = set()
     for action in actions:

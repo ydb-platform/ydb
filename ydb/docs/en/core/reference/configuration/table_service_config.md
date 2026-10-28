@@ -21,7 +21,7 @@ table_service_config:
 
 ### Directory Configuration
 
-#### local_file_config.root
+#### local_file_config.root {#local-file-config-root}
 
 **Type:** `string`  
 **Default:** `""` (temporary directory)  
@@ -64,7 +64,7 @@ Spilling is only performed on [database nodes](../../concepts/glossary.md#databa
 
 - `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
-#### local_file_config.max_total_size
+#### local_file_config.max_total_size {#local-file-config-max-total-size}
 
 **Type:** `uint64`  
 **Default:** `21474836480` (20 GiB)  
@@ -90,7 +90,7 @@ For information about configuring actor system thread pools and their impact on 
 
 {% endnote %}
 
-#### local_file_config.io_thread_pool.workers_count
+#### local_file_config.io_thread_pool.workers_count {#workerscount}
 
 **Type:** `uint32`  
 **Default:** `2`  
@@ -133,7 +133,7 @@ However, it's important to consider that spilling itself requires memory. If you
 
 {% endnote %}
 
-### File System Requirements
+### File System Requirements {#file-system-requirements}
 
 #### File Descriptors
 
@@ -181,7 +181,7 @@ table_service_config:
 
 The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
 
-##### local_file_config.enable
+##### local_file_config.enable {#local-file-config-enable}
 
 **Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  

@@ -112,6 +112,8 @@ if err != nil {
 }
 ```
 
+{% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
+
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `table.Session.Execute()` method.

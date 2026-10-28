@@ -52,6 +52,8 @@ await command.ExecuteNonQueryAsync();
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
+{% include [steps/06_param_queries.md](steps/06_param_queries.md) %}
+
 Code snippet for data insert/update:
 
 ```c#

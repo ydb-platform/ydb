@@ -889,7 +889,7 @@ Evaluate an expression before the start of the main calculation and input its re
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
 
-* Round the current time to days, weeks, or months and insert it into the query to ensure correct [query caching](../syntax/pragma.md#yt.querycachemode), although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
+* Round the current time to days, weeks, or months and insert it into the query to ensure correct query caching, although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
 * Run a heavy calculation with a small result once per query instead of once per job.
 
 {% if backend_name == "YT" %}

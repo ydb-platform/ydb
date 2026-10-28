@@ -35,7 +35,7 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-### Exporting a database
+### Exporting a database {#db}
 
 With automatic creation of the `backup_...` directory In the current directory:
 

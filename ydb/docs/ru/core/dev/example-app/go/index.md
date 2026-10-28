@@ -116,6 +116,8 @@ if err != nil {
 }
 ```
 
+{% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
+
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `table.Session.Execute()`.

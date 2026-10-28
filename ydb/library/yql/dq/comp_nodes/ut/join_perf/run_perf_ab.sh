@@ -1,68 +1,76 @@
 #!/usr/bin/env bash
-# Interleaved A/B benchmark of the YDB hash join (join_perf), block-hash and scalar-hash.
+# Interleaved A/B benchmark of block and scalar hash join.
 #
-# Usage:
-#   run_perf_ab.sh [options] NAME=SPEC [NAME=SPEC ...]
-#     SPEC is either a path to a prebuilt join_perf binary or a git ref (branch, tag, sha).
-#     The first NAME is the baseline; speedups are reported relative to it.
+# Usage: bash run_perf_ab.sh [options] NAME=SPEC [NAME=SPEC ...]
+# SPEC is an executable join_perf binary or a git ref. The first NAME is the
+# baseline; every speedup is baseline time / variant time.
+#
+# By default, run the 9 original PR cases and all cases from analytic_suite.py,
+# deduplicated (currently 30), for block-hash and scalar-hash. Case definitions,
+# block sizes and presets come from the checkout containing this script.
+# Requires Python 3, Bash and a checkout containing the merged analytic suite.
+# Git refs additionally require git and the repository's ya build tool.
 #
 # Options:
-#   --repo DIR        ydb checkout used to build refs (default: current directory)
-#   --rounds N        interleaved rounds (default 5)
-#   --samples N       samples per join_perf run, median is taken (default 9)
-#   --algos LIST      comma list, default block-hash,scalar-hash
-#   --cases LIST      comma list of case names, or "all" (default: the 4 main cases + a few more)
-#   --cpu N           pin every run to CPU N with taskset (default: no pinning)
-#   --perf-stat       also run each case once per round under `perf stat` and report cycles,
-#                     instructions and cache-misses (needs hardware counters; skipped if unavailable)
-#   --out DIR         work and result directory (default ./hash_join_perf_out)
-#   --ya-flags "..."  extra flags for ya make when building refs (default: none)
-#   --list            print case names and exit
+#   --repo DIR        checkout used to build refs (default: current directory)
+#   --rounds N        interleaved rounds (default: 1)
+#   --samples N       timed samples per invocation (default: 3; plus 1 warmup)
+#   --algos LIST      comma list (default: block-hash,scalar-hash)
+#   --cases LIST      comma list, "default" or "all" (default: default)
+#                     "all" also includes the legacy h_lineitem_orders_f case
+#   --cpu N           pin runs with taskset (default: no pinning)
+#   --perf-stat       additionally collect hardware counters when available
+#   --out DIR         work and result directory (default: hash_join_perf_out)
+#   --ya-flags "..."  extra flags for relwithdebinfo builds
+#   --list            list available case names and exit
 #
-# Examples:
-#   ./run_perf_ab.sh --repo ~/ydb base=origin/main new=hash-join/batched-lookup
-#   ./run_perf_ab.sh --rounds 7 --cpu 3 --perf-stat base=/tmp/jp_main new=/tmp/jp_new
+# Examples (prebuilt binaries or fetched refs):
+#   bash run_perf_ab.sh main=join_perf_main pr=join_perf_pr
+#   bash run_perf_ab.sh --cpu 3 main=upstream/main pr=origin/hash-join/batched-lookup-main
 #
-# Output: markdown table of median CPU ms per algo/case/binary (median over rounds of the per-run
-# median), speedups vs the first binary, and a check that outputRows is identical for all binaries.
-# Exit code is 1 if outputRows differ or a run fails. Results are also saved to OUT/results.json.
-# Refs are built in a git worktree OUT/wt_<name> with: ya make --build release <ya-flags>
-#   ydb/library/yql/dq/comp_nodes/ut/join_perf/bin
+# Output: Markdown table, results.json and per-invocation runs.jsonl.
+# Returns 1 if a benchmark fails or output row counts differ.
+# Ref builds use separate git worktrees and relwithdebinfo, without changing
+# the source checkout. Each benchmark invocation runs sequentially.
 set -euo pipefail
-exec python3 - "$@" <<'PY'
-import sys, os, json, subprocess, statistics, shutil, tempfile, argparse, csv, io
+exec python3 - "$0" "$@" <<'PY'
+import sys, os, json, subprocess, statistics, shutil, tempfile, argparse, csv, io, datetime, runpy, re
 
-BLOCKS = "8192,6000,8192,2048"
-PRESETS = {"AnDim1K": [[1048576, 1024]], "AnDim32K": [[1048576, 32768]], "AnDim512K": [[1048576, 524288]],
-           "AnFactFact": [[1048576, 1048576]], "TpchLineitemSupplier": [[1048576, 16384]],
-           "TpchLineitemOrdersFiltered": [[1048576, 262144]], "TpchOrdersLineitem": [[262144, 1048576]],
-           "TpcdsFactItem": [[1048576, 16384]], "TpcdsFactCustomer": [[1048576, 131072]]}
-CASES = [
- ("fact_fact_inner",      "AnFactFact",                 "inner",     "int",    "narrow", "1:1",     "none"),
- ("h_lineitem_orders_w",  "TpchLineitemOrdersFiltered", "inner",     "int",    "wide",   "1:1",     "none"),
- ("ds_fact_item",         "TpcdsFactItem",              "inner",     "int32",  "tpc",    "1:1",     "none"),
- ("dim1k_inner",          "AnDim1K",                    "inner",     "int",    "narrow", "1:1",     "none"),
- ("dim32k_inner",         "AnDim32K",                   "inner",     "int",    "narrow", "1:1",     "none"),
- ("dim512k_inner",        "AnDim512K",                  "inner",     "int",    "narrow", "1:1",     "none"),
- ("dim512k_inner_wide",   "AnDim512K",                  "inner",     "int",    "wide",   "1:1",     "none"),
- ("sel_01",               "AnDim512K",                  "inner",     "int",    "narrow", "0.001:1", "none"),
- ("dups4_inner",          "AnDim32K",                   "inner",     "int",    "narrow", "1:4",     "none"),
- ("left_dim512k_wide",    "AnDim512K",                  "left",      "int",    "wide",   "0.9:1",   "none"),
- ("str_dim512k",          "AnDim512K",                  "inner",     "string", "narrow", "1:1",     "none"),
- ("h_lineitem_supplier",  "TpchLineitemSupplier",       "inner",     "int",    "tpc",    "1:1",     "none"),
- ("h_lineitem_orders_f",  "TpchLineitemOrdersFiltered", "inner",     "int",    "tpc",    "0.25:1",  "none"),
- ("h_orders_semi",        "TpchOrdersLineitem",         "left-semi", "int",    "tpc",    "0.9:4",   "none"),
- ("ds_fact_customer_n",   "TpcdsFactCustomer",          "inner",     "nint32", "tpc",    "1:1",     "none"),
+here = os.path.dirname(os.path.realpath(sys.argv.pop(1)))
+TARGET_DIR = "ydb/library/yql/dq/comp_nodes/ut/join_perf"
+# Historical cases not defined by the analytic suite.
+PR_CASES = [
+    ('h_lineitem_orders_w', 'TpchLineitemOrdersFiltered', 'inner', 'int', 'wide', '1:1', 'none'),
+    ('ds_fact_item', 'TpcdsFactItem', 'inner', 'int32', 'tpc', '1:1', 'none'),
+    ('h_lineitem_supplier', 'TpchLineitemSupplier', 'inner', 'int', 'tpc', '1:1', 'none'),
+    ('h_lineitem_orders_f', 'TpchLineitemOrdersFiltered', 'inner', 'int', 'tpc', '0.25:1', 'none'),
+    ('h_orders_semi', 'TpchOrdersLineitem', 'left-semi', 'int', 'tpc', '0.9:4', 'none'),
+    ('ds_fact_customer_n', 'TpcdsFactCustomer', 'inner', 'nint32', 'tpc', '1:1', 'none'),
 ]
-DEFAULT = ["fact_fact_inner", "h_lineitem_orders_w", "ds_fact_item", "dim1k_inner", "dim512k_inner_wide",
-           "sel_01", "h_lineitem_supplier", "h_orders_semi", "ds_fact_customer_n"]
+ORIGINAL_DEFAULT = [
+    'fact_fact_inner',
+    'h_lineitem_orders_w',
+    'ds_fact_item',
+    'dim1k_inner',
+    'dim512k_inner_wide',
+    'sel_01',
+    'h_lineitem_supplier',
+    'h_orders_semi',
+    'ds_fact_customer_n',
+]
+
+def positive_int(value):
+    n = int(value)
+    if n <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return n
 
 ap = argparse.ArgumentParser(prog="run_perf_ab.sh", add_help=True)
 ap.add_argument("--repo", default=os.getcwd())
-ap.add_argument("--rounds", type=int, default=5)
-ap.add_argument("--samples", type=int, default=9)
+ap.add_argument("--rounds", type=positive_int, default=1)
+ap.add_argument("--samples", type=positive_int, default=3)
 ap.add_argument("--algos", default="block-hash,scalar-hash")
-ap.add_argument("--cases", default=",".join(DEFAULT))
+ap.add_argument("--cases", default="default")
 ap.add_argument("--cpu", default=None)
 ap.add_argument("--perf-stat", action="store_true")
 ap.add_argument("--out", default="hash_join_perf_out")
@@ -70,17 +78,42 @@ ap.add_argument("--ya-flags", default="")
 ap.add_argument("--list", action="store_true")
 ap.add_argument("specs", nargs="*")
 a = ap.parse_args()
+suite_dir = here
+if not os.path.isfile(os.path.join(suite_dir, "analytic_suite.py")):
+    suite_dir = os.path.join(os.path.abspath(a.repo), TARGET_DIR)
+if not os.path.isfile(os.path.join(suite_dir, "analytic_suite.py")):
+    ap.error("analytic_suite.py is missing; use a checkout containing the merged analytic suite")
+suite = runpy.run_path(os.path.join(suite_dir, "analytic_suite.py"))
+BLOCKS = suite["BLOCKS"]
+byname = {c[0]: tuple(c[:7]) for c in suite["CASES"]}
+for case in PR_CASES:
+    byname.setdefault(case[0], case)
+DEFAULT = ORIGINAL_DEFAULT + [c[0] for c in suite["CASES"] if c[0] not in ORIGINAL_DEFAULT]
+names = DEFAULT + [name for name in byname if name not in DEFAULT]
+with open(os.path.join(suite_dir, "presets.json")) as source:
+    PRESETS = json.load(source)
 if a.list:
-    print("\n".join(c[0] for c in CASES)); sys.exit(0)
+    print("\n".join(names)); sys.exit(0)
 if len(a.specs) < 2:
     ap.error("need at least two NAME=SPEC arguments")
-names = [c[0] for c in CASES]
-cases = names if a.cases == "all" else a.cases.split(",")
+cases = names if a.cases == "all" else DEFAULT if a.cases == "default" else a.cases.split(",")
 for c in cases:
     if c not in names:
         sys.exit("unknown case %s, see --list" % c)
-byname = {c[0]: c for c in CASES}
 algos = a.algos.split(",")
+if any(algo not in ("block-hash", "scalar-hash") for algo in algos):
+    ap.error("--algos must contain block-hash and/or scalar-hash")
+if len(set(cases)) != len(cases) or len(set(algos)) != len(algos):
+    ap.error("duplicate cases or algorithms")
+for spec in a.specs:
+    name, separator, val = spec.partition("=")
+    if not separator or not val or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        ap.error("each binary must be NAME=SPEC; NAME may contain letters, digits, underscores and hyphens")
+if len({spec.split("=", 1)[0] for spec in a.specs}) != len(a.specs):
+    ap.error("binary names must be unique")
+missing = [byname[c][1] for c in cases if byname[c][1] not in PRESETS]
+if missing:
+    ap.error("presets.json is missing presets: " + ", ".join(sorted(set(missing))))
 out = os.path.abspath(a.out); os.makedirs(out, exist_ok=True)
 presets_dir = os.path.join(out, "presets"); os.makedirs(presets_dir, exist_ok=True)
 json.dump(PRESETS, open(os.path.join(presets_dir, "presets.json"), "w"))
@@ -98,8 +131,8 @@ for spec in a.specs:
         subprocess.check_call(["git", "-C", repo, "worktree", "add", "--detach", wt, val])
     else:
         subprocess.check_call(["git", "-C", wt, "checkout", "--detach", val])
-    target = "ydb/library/yql/dq/comp_nodes/ut/join_perf/bin"
-    cmd = ["./ya", "make", "--build", "release"] + a.ya_flags.split() + [target]
+    target = TARGET_DIR + "/bin"
+    cmd = ["./ya", "make", "--build", "relwithdebinfo"] + a.ya_flags.split() + [target]
     print("building %s (%s): %s" % (name, val, " ".join(cmd)), file=sys.stderr)
     subprocess.check_call(cmd, cwd=wt)
     src = os.path.realpath(os.path.join(wt, target, "join_perf"))
@@ -121,7 +154,7 @@ def run(cmd):
     p = subprocess.run(cmd, capture_output=True, text=True)
     lines = [l for l in p.stdout.splitlines() if l.startswith("{")]
     if p.returncode != 0 or not lines:
-        raise RuntimeError("failed: %s\n%s" % (" ".join(cmd), p.stderr[-1500:]))
+        raise RuntimeError("benchmark failed (exit %d):\n%s" % (p.returncode, p.stderr[-1500:]))
     return json.loads(lines[-1])
 
 EVENTS = "cycles,instructions,cache-misses"
@@ -140,12 +173,16 @@ def perf_run(cmd):
             res[row[2].split(":")[0]] = float(row[0])
     return res
 
+# Start a fresh raw log when reusing an output directory.
+open(os.path.join(out, "runs.jsonl"), "w").close()
 times, rows, pstat, fails = {}, {}, {}, []
 for r in range(a.rounds):
     order = bins[r % len(bins):] + bins[:r % len(bins)]
     for algo in algos:
-        for case in cases:
-            for name, b in order:
+        for case_index, case in enumerate(cases):
+            offset = case_index % len(order)
+            case_order = order[offset:] + order[:offset]
+            for name, b in case_order:
                 try:
                     j = run(command(b, algo, case, a.samples))
                 except RuntimeError as e:
@@ -153,6 +190,9 @@ for r in range(a.rounds):
                 k = (algo, case, name)
                 times.setdefault(k, []).append(j["medianCpuUs"] / 1e3)
                 rows.setdefault(k, set()).add(j["outputRows"])
+                with open(os.path.join(out, "runs.jsonl"), "a") as raw:
+                    raw.write(json.dumps({"utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "round": r + 1, "algo": algo, "case": case, "binary": name, "result": j}) + "\n")
+                print("round %d/%d %s %s %s: %.3f ms, outputRows=%d" % (r + 1, a.rounds, algo, case, name, j["medianCpuUs"] / 1e3, j["outputRows"]), file=sys.stderr, flush=True)
                 if perf_ok:
                     pstat.setdefault(k, []).append(perf_run(command(b, algo, case, 3)))
     print("round %d/%d done" % (r + 1, a.rounds), file=sys.stderr)

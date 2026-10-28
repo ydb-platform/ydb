@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     allocator_ut.cpp
     ibv_ut.cpp
+    qp_cache_ut.cpp
     utils.cpp
     rdma_low_ut.cpp
 )

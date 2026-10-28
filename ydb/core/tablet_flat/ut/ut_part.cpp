@@ -60,13 +60,24 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pageId = ResolvePageId(part, location, groupId);
+            Touch(groupId, ResolvePageId(part, location, part->DataSlot(groupId)));
+            return NTest::TTestEnv::TryGetPage(part, location, groupId);
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            // index pages are tracked as pages of their page collection
+            const ui32 slot = part->IndexSlot(groupId);
+            Touch(TGroupId(slot), ResolvePageId(part, location, slot));
+            return NTest::TTestEnv::TryGetIndexPage(part, location, groupId);
+        }
+
+        void Touch(TGroupId groupId, TPageId pageId)
+        {
             if (PrechargePhase) {
                 Precharged[groupId].insert(pageId);
-                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             } else {
                 Y_ENSURE(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
-                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             }
         }
 

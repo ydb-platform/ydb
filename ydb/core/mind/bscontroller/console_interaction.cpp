@@ -603,10 +603,12 @@ namespace NKikimr::NBsController {
         } else if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
             response->Record.SetErrorReason("configuration is locked by distconf");
         } else if (Self.StorageYamlConfig) {
-            if (record.GetDedicatedStorageSection()) {
+            // a request selecting no section, as the fetch of all the configuration does, gets both of them
+            const bool all = !record.GetDedicatedStorageSection() && !record.GetDedicatedClusterSection();
+            if (all || record.GetDedicatedStorageSection()) {
                 response->Record.SetStorageYaml(*Self.StorageYamlConfig);
             }
-            if (record.GetDedicatedClusterSection() && Self.YamlConfig) {
+            if ((all || record.GetDedicatedClusterSection()) && Self.YamlConfig) {
                 const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
                 response->Record.SetClusterYaml(yaml);
             }

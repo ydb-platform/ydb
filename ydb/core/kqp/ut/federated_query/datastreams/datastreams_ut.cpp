@@ -2459,8 +2459,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
     }
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
@@ -2481,7 +2479,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
         ReadTopicMessage(outputTopic, expectedMessage);
     }
->>>>>>> 894eb9eaf91 (YQ-5715 Don't check write message limit (#53441))
 }
 
 } // namespace NKikimr::NKqp

@@ -412,9 +412,52 @@ static ui32 MaxRingsOutOfQuorum(ui32 nToSelect) {
     return nToSelect - (nToSelect / 2 + 1);
 }
 
+// The structure BuildStateStorageInfo relies on; it aborts on a ring group not having it
+static TString ValidateRingGroupStructure(const char* name, const NKikimrConfig::TStateStorageConfig::TRing& rg) {
+    if (rg.RingSize() && rg.NodeSize()) {
+        return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
+    }
+    if (!rg.RingSize() && !rg.NodeSize()) {
+        return TStringBuilder() << name << " empty ring group";
+    }
+    // the bounds the decoder keeps to the replica actor ids it makes
+    if (rg.RingSize() >= 1024 || rg.NodeSize() >= 1024) {
+        return TStringBuilder() << name << " too many rings or nodes in a ring group";
+    }
+    for (const auto& ring : rg.GetRing()) {
+        if (ring.RingSize() > 0) {
+            return TStringBuilder() << name << " too deep nested ring declaration";
+        }
+        if (ring.NodeSize() < 1) {
+            return TStringBuilder() << name << " empty ring";
+        }
+        if (ring.GetUseSingleNodeActorId() && ring.NodeSize() != 1) {
+            return TStringBuilder() << name << " ring with single node actor id must have one node";
+        }
+    }
+    return "";
+}
+
 TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
     if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
         return TStringBuilder() << "New " << name << " configuration is not filled in";
+    }
+    // the configuration-level invariants of the decoder, which aborts on them as well
+    if (newSSConfig.HasRing() && newSSConfig.RingGroupsSize()) {
+        return TStringBuilder() << "New " << name << " configuration has both Ring and RingGroups, use the one of them";
+    }
+    if (newSSConfig.GetSSId() != 1) {
+        return TStringBuilder() << "New " << name << " configuration has SSId other than 1";
+    }
+    if (newSSConfig.HasRing()) {
+        if (TString error = ValidateRingGroupStructure(name, newSSConfig.GetRing()); !error.empty()) {
+            return error;
+        }
+    }
+    for (const auto& rg : newSSConfig.GetRingGroups()) {
+        if (TString error = ValidateRingGroupStructure(name, rg); !error.empty()) {
+            return error;
+        }
     }
     if (!oldSSConfig.HasRing() && oldSSConfig.RingGroupsSize() == 0) {
         auto info = BuildStateStorageInfo(newSSConfig);

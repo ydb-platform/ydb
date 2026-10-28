@@ -10269,6 +10269,46 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         }
     }
 
+    // Three datacenters of different size: 3 bad nodes, 1 good node and 3 good nodes, in each order. The generator
+    // sorts datacenters by the health of their nodes, so the first one is not the smallest one; the rings per
+    // datacenter must fit the smallest one, which has a single node.
+    Y_UNIT_TEST(GenerateConfigUnequalDatacenters) {
+        // (nodes, state of each); the nodes of the first datacenter are worse than good, which sorts it after the others
+        const std::vector<std::pair<ui32, ui32>> datacenters{{3, NKikimr::MAY_BE_GOOD}, {1, NKikimr::GOOD},
+            {3, NKikimr::GOOD}};
+        std::vector<ui32> order{0, 1, 2};
+        do {
+            NKikimrBlobStorage::TStorageConfig config;
+            NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+            ui32 nodeId = 1;
+            std::vector<ui32> firstNodeOfDatacenter;
+            for (ui32 dc : order) {
+                const auto [numNodes, state] = datacenters[dc];
+                firstNodeOfDatacenter.push_back(nodeId);
+                for (ui32 i = 0; i < numNodes; ++i) {
+                    auto *node = config.AddAllNodes();
+                    keeper.SelfHealNodesState[nodeId] = state;
+                    node->SetNodeId(nodeId++);
+                    node->MutableLocation()->SetDataCenter("dc-" + std::to_string(dc));
+                    node->MutableLocation()->SetRack(std::to_string(nodeId));
+                }
+            }
+            NKikimrConfig::TStateStorageConfig oldSS;
+            auto *rg = oldSS.AddRingGroups();
+            rg->SetNToSelect(3);
+            for (ui32 node : firstNodeOfDatacenter) {
+                rg->AddRing()->AddNode(node);
+            }
+            NKikimrConfig::TStateStorageConfig ss;
+            std::unordered_set<ui32> usedNodes;
+            keeper.GenerateStateStorageConfig(&ss, config, usedNodes, {}, &oldSS, true, 0, 0, 1000);
+            UNIT_ASSERT_C(ss.RingGroupsSize(), ss.ShortDebugString());
+            const auto& group = ss.GetRingGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(group.GetNToSelect(), 3, ss.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(group.RingSize(), 3, ss.ShortDebugString());
+        } while (std::next_permutation(order.begin(), order.end()));
+    }
+
     Y_UNIT_TEST(GenerateConfigSimpleCases) {
         CheckStateStorage(GenerateSimpleStateStorage(1), 1, {1});
         CheckStateStorage(GenerateSimpleStateStorage(2), 1, {1, 2});

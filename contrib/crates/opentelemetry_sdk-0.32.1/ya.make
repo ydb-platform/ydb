@@ -1,0 +1,130 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(opentelemetry_sdk)
+
+CRATE_VERSION(0.32.1)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/error.rs
+    src/growable_array.rs
+    src/logs/batch_log_processor.rs
+    src/logs/export.rs
+    src/logs/in_memory_exporter.rs
+    src/logs/log_processor.rs
+    src/logs/log_processor_with_async_runtime.rs
+    src/logs/logger.rs
+    src/logs/logger_provider.rs
+    src/logs/mod.rs
+    src/logs/record.rs
+    src/logs/simple_log_processor.rs
+    src/metrics/aggregation.rs
+    src/metrics/data/mod.rs
+    src/metrics/error.rs
+    src/metrics/exporter.rs
+    src/metrics/in_memory_exporter.rs
+    src/metrics/instrument.rs
+    src/metrics/internal/aggregate.rs
+    src/metrics/internal/exponential_histogram.rs
+    src/metrics/internal/histogram.rs
+    src/metrics/internal/last_value.rs
+    src/metrics/internal/mod.rs
+    src/metrics/internal/precomputed_sum.rs
+    src/metrics/internal/sum.rs
+    src/metrics/manual_reader.rs
+    src/metrics/meter.rs
+    src/metrics/meter_provider.rs
+    src/metrics/mod.rs
+    src/metrics/noop.rs
+    src/metrics/periodic_reader.rs
+    src/metrics/periodic_reader_with_async_runtime.rs
+    src/metrics/pipeline.rs
+    src/metrics/reader.rs
+    src/metrics/view.rs
+    src/propagation/baggage.rs
+    src/propagation/mod.rs
+    src/propagation/trace_context.rs
+    src/resource/attributes.rs
+    src/resource/env.rs
+    src/resource/mod.rs
+    src/resource/telemetry.rs
+    src/runtime.rs
+    src/testing/metrics/metric_reader.rs
+    src/testing/metrics/mod.rs
+    src/testing/mod.rs
+    src/testing/trace/mod.rs
+    src/testing/trace/span_exporters.rs
+    src/trace/config.rs
+    src/trace/events.rs
+    src/trace/export.rs
+    src/trace/id_generator/mod.rs
+    src/trace/in_memory_exporter.rs
+    src/trace/links.rs
+    src/trace/mod.rs
+    src/trace/provider.rs
+    src/trace/runtime_tests.rs
+    src/trace/sampler.rs
+    src/trace/sampler/jaeger_remote/mod.rs
+    src/trace/sampler/jaeger_remote/rate_limit.rs
+    src/trace/sampler/jaeger_remote/remote.rs
+    src/trace/sampler/jaeger_remote/sampler.rs
+    src/trace/sampler/jaeger_remote/sampling_strategy.rs
+    src/trace/span.rs
+    src/trace/span_limit.rs
+    src/trace/span_processor.rs
+    src/trace/span_processor_with_async_runtime.rs
+    src/trace/tracer.rs
+    src/util.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    README.md
+    allowed-external-types.toml
+    src/metrics/test.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    experimental_async_runtime
+    metrics
+    percent-encoding
+    rand
+    rt-tokio
+    spec_unstable_metrics_views
+    tokio
+    tokio-stream
+    trace
+)
+
+PEERDIR(
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-executor-0.3.34
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/opentelemetry-0.32.0
+    contrib/crates/percent-encoding-2.3.2
+    contrib/crates/rand-0.9.5
+    contrib/crates/thiserror-2.0.21
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-stream-0.1.19
+)
+
+LICENSE("Apache-2.0")
+VERSION(0.32.1)
+ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry_sdk/opentelemetry_sdk-0.32.1.crate)
+
+CRATE_PROC_MACROS(
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/zerocopy-derive-0.8.63
+)
+
+END()

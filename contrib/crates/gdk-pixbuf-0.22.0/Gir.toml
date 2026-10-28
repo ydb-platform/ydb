@@ -1,0 +1,178 @@
+[options]
+girs_directories = ["../gir-files"]
+library = "GdkPixbuf"
+version = "2.0"
+min_cfg_version = "2.36.8"
+target_path = "."
+work_mode = "normal"
+use_gi_docgen = true
+single_version_file = true
+deprecate_by_min_version = true
+trust_return_value_nullability = true
+
+generate = [
+    "GdkPixbuf.Colorspace",
+    "GdkPixbuf.InterpType",
+    "GdkPixbuf.PixbufAlphaMode",
+    "GdkPixbuf.PixbufError",
+    "GdkPixbuf.PixbufFormatFlags",
+    "GdkPixbuf.PixbufLoader",
+    "GdkPixbuf.PixbufNonAnim",
+    "GdkPixbuf.PixbufRotation",
+    "GdkPixbuf.PixbufSimpleAnim",
+]
+
+manual = [
+    "GdkPixbuf.PixbufAnimationIter",
+    "Gio.AsyncReadyCallback",
+    "Gio.Cancellable",
+    "Gio.Icon",
+    "Gio.InputStream",
+    "Gio.LoadableIcon",
+    "Gio.OutputStream",
+    "GLib.Bytes",
+    "GLib.Error",
+]
+
+[[object]]
+name = "GdkPixbuf.Pixbuf"
+status = "generate"
+    [[object.function]]
+    name = "get_pixels"
+    #manual array without length
+    manual = true
+    # docs were manually written to include a section on safety
+    generate_doc = false
+    [[object.function]]
+    name = "get_pixels_with_length"
+    #manual as get_pixels
+    ignore = true
+    [[object.function]]
+    name = "read_pixels"
+    #unimplementable, use get_pixels instead
+    ignore = true
+    [[object.function]]
+    name = "new_from_file"
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "new"
+        [object.function.return]
+        nullable = true
+    [[object.function]]
+    name = "new_from_file_at_size"
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "new_from_file_at_scale"
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "new_from_stream_async"
+    # wrong async return
+    manual = true
+    [[object.function]]
+    name = "new_from_stream_at_scale_async"
+    # wrong return and don't generated
+    manual = true
+    [[object.function]]
+    name = "get_file_info"
+    # wrong return
+    manual = true
+    [[object.function]]
+    name = "get_file_info_async"
+    # wrong async return
+    manual = true
+    [[object.function]]
+    name = "save_to_bufferv"
+    # manual complex param
+    manual = true
+    [[object.function]]
+    name = "save_to_streamv"
+    # manual complex param
+    manual = true
+    [[object.function]]
+    name = "savev"
+    # manual complex param
+    manual = true
+    [[object.function]]
+    name = "save_to_streamv_async"
+    # manual complex param
+    manual = true
+    [[object.function]]
+    name = "new_from_resource"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_resource_at_scale"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_stream"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_stream_at_scale"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_xpm_data"
+        [object.function.return]
+        nullable_return_is_error = "Invalid XPM data"
+    [[object.function]]
+    name = "add_alpha"
+        [object.function.return]
+        nullable_return_is_error = "Failed to add alpha channel"
+
+[[object]]
+name = "GdkPixbuf.PixbufAnimation"
+status = "generate"
+manual_traits = ["PixbufAnimationExtManual"]
+    [[object.function]]
+    name = "get_iter"
+    # TimeVal misses memory management functions
+    manual = true
+    [[object.function]]
+    name = "new_from_stream_async"
+    constructor = true
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_file"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_resource"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "new_from_stream"
+        [object.function.return]
+        # see https://gitlab.gnome.org/GNOME/gdk-pixbuf/-/merge_requests/105#note_1277108
+        nullable = false
+    [[object.function]]
+    name = "get_static_image"
+        [object.function.return]
+        nullable = true
+
+[[object]]
+name = "GdkPixbuf.PixbufFormat"
+status = "generate"
+concurrency = "send+sync"
+    [[object.function]]
+    pattern = "get_.+"
+        [[object.function.parameter]]
+        name = "format"
+        const = true
+    [[object.function]]
+    pattern = "is_.+"
+        [[object.function.parameter]]
+        name = "format"
+        const = true

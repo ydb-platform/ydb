@@ -981,6 +981,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         bool UpdateMain;
         bool UpdateStorage;
         bool DeleteStorage;
+        ui64 SaveConfigCookie; // the one of this configuration, a newer configuration makes its retry obsolete
     };
 
     auto saveCtx = std::make_shared<TSaveContext>(TSaveContext{
@@ -992,6 +993,8 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         .UpdateMain = updateMain,
         .UpdateStorage = updateStorage,
         .DeleteStorage = !storageYamlVersion,
+        // every save, whoever asks for it, makes the retries of the earlier ones obsolete
+        .SaveConfigCookie = ++ExpectedSaveConfigCookie,
     });
 
     EnqueueSyncOp([this, saveCtx](const TActorContext&) {
@@ -1090,7 +1093,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             } else {
                 TActivationContext::Schedule(ConfigSaveTimer.Next(), new IEventHandle(
                     SelfId(), {}, new TEvPrivate::TEvRetrySaveConfig(std::move(saveCtx->MainYaml), saveCtx->MainYamlVersion,
-                    std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, ExpectedSaveConfigCookie));
+                    std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, saveCtx->SaveConfigCookie));
             }
         };
     });
@@ -1217,8 +1220,6 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.GetMainConfigVersion(),
             yaml.HasStorageConfig() ? std::make_optional(yaml.GetStorageConfig()) : std::nullopt,
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
-
-        ExpectedSaveConfigCookie++;
     }
 
     if (record.HasControllerGeneration() && record.GetControllerGeneration() < ControllerGeneration) {
@@ -1532,7 +1533,6 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
     if (ev->Cookie == ExpectedSaveConfigCookie) {
         auto *msg = ev->Get();
         PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
-        ExpectedSaveConfigCookie++;
     }
 }
 

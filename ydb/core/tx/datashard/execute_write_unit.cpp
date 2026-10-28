@@ -12,6 +12,70 @@
 namespace NKikimr {
 namespace NDataShard {
 
+// Adds optional Count/Rows/Bytes fields of src on top of dst (both absent in dst stay absent).
+template <typename T>
+static void MergeOpStats(T& dst, const T& src) {
+    if (src.HasCount()) {
+        dst.SetCount(src.GetCount() + (dst.HasCount() ? dst.GetCount() : 0));
+    }
+    if (src.HasRows()) {
+        dst.SetRows(src.GetRows() + (dst.HasRows() ? dst.GetRows() : 0));
+    }
+    if (src.HasBytes()) {
+        dst.SetBytes(src.GetBytes() + (dst.HasBytes() ? dst.GetBytes() : 0));
+    }
+}
+
+// Adds the statistics of already applied (duplicate) operations on top of the fresh
+// statistics of the newly applied operations: the writer never saw the replies of the
+// lost deliveries, so the reply of a partially duplicate batch must report the sum.
+// Duration and CPU time describe the current delivery and are not merged.
+static void MergeDuplicateTxStats(NKikimrQueryStats::TTxStats& dst, const NKikimrQueryStats::TTxStats& src) {
+    Y_ENSURE(src.TableAccessStatsSize() <= 1);
+    if (src.TableAccessStatsSize() == 1) {
+        const auto& srcTable = src.GetTableAccessStats(0);
+        auto* dstTable = dst.MutableTableAccessStats(0);
+        if (srcTable.HasSelectRow()) {
+            MergeOpStats(*dstTable->MutableSelectRow(), srcTable.GetSelectRow());
+        }
+        if (srcTable.HasSelectRange()) {
+            MergeOpStats(*dstTable->MutableSelectRange(), srcTable.GetSelectRange());
+        }
+        if (srcTable.HasUpdateRow()) {
+            MergeOpStats(*dstTable->MutableUpdateRow(), srcTable.GetUpdateRow());
+        }
+        if (srcTable.HasEraseRow()) {
+            MergeOpStats(*dstTable->MutableEraseRow(), srcTable.GetEraseRow());
+        }
+        if (srcTable.HasAffectedRows()) {
+            dstTable->SetAffectedRows(srcTable.GetAffectedRows() + (dstTable->HasAffectedRows() ? dstTable->GetAffectedRows() : 0));
+        }
+    }
+
+    // A write delivery has at most one PerShardStats entry (for this shard); the
+    // fresh reply gets its own entry from FillExecutionStats when it is sent.
+    Y_ENSURE(src.PerShardStatsSize() <= 1);
+    if (src.PerShardStatsSize() == 1 && dst.PerShardStatsSize() == 0) {
+        *dst.AddPerShardStats() = src.GetPerShardStats(0);
+    }
+
+    if (src.HasLocksBrokenAsBreaker()) {
+        dst.SetLocksBrokenAsBreaker(src.GetLocksBrokenAsBreaker() + (dst.HasLocksBrokenAsBreaker() ? dst.GetLocksBrokenAsBreaker() : 0));
+    }
+    if (src.HasLocksBrokenAsVictim()) {
+        dst.SetLocksBrokenAsVictim(src.GetLocksBrokenAsVictim() + (dst.HasLocksBrokenAsVictim() ? dst.GetLocksBrokenAsVictim() : 0));
+    }
+    for (ui64 id : src.GetBreakerQuerySpanIds()) {
+        dst.AddBreakerQuerySpanIds(id);
+    }
+    for (ui64 id : src.GetDeferredBreakerQuerySpanIds()) {
+        dst.AddDeferredBreakerQuerySpanIds(id);
+    }
+    for (ui32 id : src.GetDeferredBreakerNodeIds()) {
+        dst.AddDeferredBreakerNodeIds(id);
+    }
+}
+
 class TExecuteWriteUnit : public TExecutionUnit {
 public:
     TExecuteWriteUnit(TDataShard& self, TPipeline& pipeline)
@@ -117,7 +181,7 @@ public:
         return otherLocksBroken.size();
     }
 
-    // Status, Issues, TxStats — replayed on a duplicate delivery.
+    // Status, Issues, TxStats — stored with the seq num state of the delivery.
     static TString SerializeWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
         NKikimrDataEvents::TEvWriteResult stored;
         stored.SetStatus(record.GetStatus());
@@ -130,30 +194,48 @@ public:
         return serialized;
     }
 
-    // Replay the stored result; STATUS_COMPLETED if missing or corrupt.
-    static void FillDuplicateWriteResult(const TWriteSeqNumState& state, NKikimrDataEvents::TEvWriteResult& record) {
-        NKikimrDataEvents::TEvWriteResult stored;
+    // The stored result describes the last delivery of the chain position. Fatal
+    // errors mean the transaction is already dead: a redelivery must replay the
+    // same error instead of re-executing. Retryable failures and non-errors are
+    // not replayed: the writer retries them with a fresh execution.
+    static bool IsFatalWriteResultStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
+        switch (status) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    // The stored result of a duplicate delivery carries the reply the writer never
+    // saw. Missing or corrupt results degrade to "nothing known".
+    static bool ParseStoredWriteSeqNumResult(
+            const TWriteSeqNumState& state,
+            NKikimrDataEvents::TEvWriteResult& parsed) {
         if (state.SerializedResult.empty()) {
-            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        } else if (stored.ParseFromString(state.SerializedResult)) {
-            record.SetStatus(stored.GetStatus());
-            record.MutableIssues()->Swap(stored.MutableIssues());
-            if (stored.HasTxStats()) {
-                record.MutableTxStats()->Swap(stored.MutableTxStats());
-            }
-        } else {
-            // Only possible via a buggy migration peer; degrade to a bare success.
+            return false;
+        }
+        if (!parsed.ParseFromString(state.SerializedResult)) {
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Failed to parse stored write result for writer " << state.WriterIndex
                 << " seq num " << state.WriteSeqNum);
-            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            return false;
         }
+        return true;
     }
 
     // Validates this write's position in its writer's chain; on success records the new
     // position for ApplyLocks to persist. Returns a status when the operation must stop here.
     std::optional<EExecutionStatus> CheckWriteSeqNum(
             TWriteOperation* writeOp, TSetupSysLocks& guardLocks) {
+        // The op may re-execute after a restart; clear stats collected by a previous
+        // attempt so they aren't appended twice and don't inflate the merged stats.
+        writeOp->DuplicateTxStats.clear();
+
         const auto& operations = writeOp->GetWriteTx()->GetOperations();
 
         // Determine the writer index from the first operation that has a WriteSeqNum.
@@ -188,6 +270,7 @@ public:
         struct TShardSeqNums {
             ui64 MinRequested = 0;
             ui64 MaxRequested = 0;
+            ui64 Current = 0;
             bool isDuplicate = false;
         };
         THashMap<ui64, TShardSeqNums> shard2seqnums;
@@ -215,7 +298,36 @@ public:
         }
 
         // For each shard, determine current seqnum and classify as duplicate/stale/continuation.
-        TMaybe<ui64> duplicateDataShard; // the group to use for the duplicate response (current shard preferred)
+        // Groups with already applied positions remember the stored result of the lost
+        // delivery: its statistics are added to the reply, and a fatal error is replayed
+        // verbatim (the transaction is already dead and must not be re-executed).
+        // Returns true when a fatal stored result was replayed.
+        auto collectStoredResult = [&](ui64 shardKey) -> bool {
+            const TWriteSeqNumState* stored = shardKey == 0
+                ? lock->FindWriteSeqNumState(writerIndex)
+                : lock->FindAncestorWriteSeqNumState(shardKey, writerIndex);
+            Y_ENSURE(stored);
+            NKikimrDataEvents::TEvWriteResult parsed;
+            if (!ParseStoredWriteSeqNumResult(*stored, parsed)) {
+                return false;
+            }
+            if (IsFatalWriteResultStatus(parsed.GetStatus())) {
+                // The previous delivery of this position failed fatally and the
+                // writer never saw the reply: replay the stored error instead of
+                // executing.
+                writeOp->SetError(parsed.GetStatus(), "Replaying the stored result of the previous delivery");
+                auto& record = writeOp->GetWriteResult()->Record;
+                *record.MutableIssues() = parsed.GetIssues();
+                if (parsed.HasTxStats()) {
+                    *record.MutableTxStats() = parsed.GetTxStats();
+                }
+                return true;
+            }
+            if (parsed.HasTxStats()) {
+                writeOp->DuplicateTxStats.push_back(parsed.GetTxStats());
+            }
+            return false;
+        };
 
         for (auto& [shardKey, seqnums] : shard2seqnums) {
             ui64 current = 0;
@@ -254,10 +366,8 @@ public:
             if (seqnums.MaxRequested == current) {
                 // Duplicate
                 seqnums.isDuplicate = true;
-                if (shardKey == 0) {
-                    duplicateDataShard = 0; // prefer current shard
-                } else if (!duplicateDataShard) {
-                    duplicateDataShard = shardKey;
+                if (collectStoredResult(shardKey)) {
+                    return EExecutionStatus::Executed;
                 }
             } else if (seqnums.MaxRequested < current) {
                 // Stale
@@ -266,8 +376,11 @@ public:
                     << " for DataShard " << shardKey << " is already applied, writer is at " << current);
                 return EExecutionStatus::Executed;
             } else {
-                // Continuation: verify no gap
-                if (seqnums.MinRequested != current + 1) {
+                // Continuation: positions up to current were already applied (e.g. a
+                // re-routed batch after a split may mix already applied positions of
+                // the chain with new ones). Such positions are duplicates: their ops
+                // are skipped. The remaining tail must continue without a gap.
+                if (seqnums.MinRequested > current + 1) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
                         TStringBuilder() << "Uncommitted write " << writerIndex << ":" << seqnums.MinRequested
                         << " for DataShard " << shardKey
@@ -275,37 +388,44 @@ public:
                         << ", writer is at " << current);
                     return EExecutionStatus::Executed;
                 }
+                if (seqnums.MinRequested <= current) {
+                    // Mixed group: leading positions are duplicates of a lost delivery;
+                    // remember its stored statistics for the reply. A fatal stored
+                    // result is replayed before any fresh tail operation is applied.
+                    if (collectStoredResult(shardKey)) {
+                        return EExecutionStatus::Executed;
+                    }
+                }
             }
+            seqnums.Current = current;
         }
 
-        if (duplicateDataShard) {
-            // TODO: merge results from different shards with duplicate ops.
-            auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
-            res->Record.SetOrigin(tabletId);
-            res->Record.SetTxId(writeOp->GetTxId());
-            res->Record.SetIsDuplicate(true);
-
-            const TWriteSeqNumState* stored = nullptr;
-            if (*duplicateDataShard == 0) {
-                stored = lock->FindWriteSeqNumState(writerIndex);
-            } else {
-                stored = lock->FindAncestorWriteSeqNumState(*duplicateDataShard, writerIndex);
+        // Mark already applied operations as duplicates so their rows are not
+        // written again: all operations of a fully duplicate group (Max == current)
+        // and leading positions of a mixed group (positions <= current).
+        // The writer acks batches in order and resends only unacknowledged
+        // operations, so already applied operations always form a prefix of the
+        // request: a duplicate after a fresh operation is a writer bug.
+        bool sawFreshOp = false;
+        for (size_t iOp = 0; iOp < operations.size(); ++iOp) {
+            const auto& op = operations[iOp];
+            if (!op.GetWriteSeqNum().WriteSeqNum) {
+                continue;
             }
-            Y_ENSURE(stored);
-            FillDuplicateWriteResult(*stored, res->Record);
-            writeOp->DuplicateOpsResult = std::move(res);
-
-            // mark duplicate operations as such
-            for (size_t iOp = 0; iOp < operations.size(); ++iOp) {
-                const auto& op = operations[iOp];
-                if (!op.GetWriteSeqNum().WriteSeqNum) {
-                    continue;
+            const ui64 shardId = op.GetOriginalShard();
+            const ui64 shardKey = (shardId == 0 || shardId == tabletId) ? 0 : shardId;
+            const auto& seqnums = shard2seqnums.at(shardKey);
+            if (op.GetWriteSeqNum().WriteSeqNum <= seqnums.Current) {
+                if (sawFreshOp) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Uncommitted write " << writerIndex << ":" << op.GetWriteSeqNum().WriteSeqNum
+                        << " for DataShard " << shardKey
+                        << " duplicates a fresh operation: duplicates must form a prefix of the request");
+                    return EExecutionStatus::Executed;
                 }
-                const ui64 shardId = op.GetOriginalShard();
-                const ui64 shardKey = (shardId == 0 || shardId == tabletId) ? 0 : shardId;
-                if (shard2seqnums.at(shardKey).isDuplicate) {
-                    writeOp->DuplicateWriteOpIdxs.insert(iOp);
-                }
+                writeOp->DuplicateWriteOpIdxs.insert(iOp);
+            } else {
+                sawFreshOp = true;
             }
         }
 
@@ -893,6 +1013,13 @@ public:
 
                 KqpEraseLocks(kqpLocks, sysLocks, allowAncestorLocks);
                 auto [_, locksBrokenByTxCleanup] = sysLocks.ApplyLocks();
+                // The chain position has been recorded, but the delivery failed
+                // fatally: store the error result so a redelivery of the same
+                // positions replays it instead of answering with a fresh success.
+                // Unreachable today: seq num writes carry no TKqpLocks, so lock
+                // validation never fails for them, but this must hold if that
+                // ever changes.
+                StoreWriteSeqNumResult(writeOp, guardLocks, &locksDb);
                 HandleBreakerLocks(locksBrokenByTxCleanup, writeOp->GetTxId(), guardLocks.QuerySpanId,
                     sysLocks, writeOp->GetWriteResult()->Record, ctx,
                     "Write transaction aborted, broke other transaction locks during cleanup");
@@ -1032,13 +1159,10 @@ public:
 
             const auto& counters = userDb.GetCounters();
             KqpUpdateDataShardStatCounters(DataShard, counters);
-            if (!writeOp->DuplicateOpsResult) {
-                KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
-            } else {
-                writeResult->Record.SetIsDuplicate(true);
-                // TODO: merge stats from duplicate and non-duplicate ops.
-                writeResult->Record.MutableTxStats()->CopyFrom(
-                    writeOp->DuplicateOpsResult->Record.GetTxStats());
+            auto* txStats = writeResult->Record.MutableTxStats();
+            KqpFillTxStats(DataShard, counters, *txStats);
+            for (const auto& stats : writeOp->DuplicateTxStats) {
+                MergeDuplicateTxStats(*txStats, stats);
             }
 
             StoreWriteSeqNumResult(writeOp, guardLocks, &locksDb);

@@ -642,9 +642,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-// A resent uncommitted write is answered twice: with the original result and, once the
-    // shard has seen it, with IsDuplicate set. KQP does not inspect IsDuplicate: the write
-    // actor drops the second reply as already acknowledged (dedup by message cookie).
+    // A resent uncommitted write may be answered twice: with the original result and,
+    // once the shard has seen it, with IsDuplicate set. DataShard does not set
+    // IsDuplicate anymore (duplicates answer with a plain completed result), so the
+    // duplicate reply is fabricated here. The test checks that KQP does not inspect
+    // the flag: the write actor drops the second reply as already acknowledged
+    // (dedup by message cookie).
     class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -1252,8 +1255,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         // Rows come from the operation payload (0 for the empty re-routed batches that
         // only carry the write chain).
         TVector<std::tuple<ui64, ui64, ui64, ui64>> WriteOps;
-        // Tablets that answered with IsDuplicate=true.
-        THashSet<ui64> DuplicateResponders;
         // Prepare destination -> DataShards of the attached ancestor locks.
         THashMap<ui64, THashSet<ui64>> PrepareAncestorLocks;
         // Prepare destination -> the ReceivingShards list of the prepare message.
@@ -1277,14 +1278,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             TVector<std::tuple<ui64, ui64, ui64, ui64>> result;
             with_lock(Mutex) {
                 result = WriteOps;
-            }
-            return result;
-        }
-
-        THashSet<ui64> DuplicateRespondersSnapshot() const {
-            THashSet<ui64> result;
-            with_lock(Mutex) {
-                result = DuplicateResponders;
             }
             return result;
         }
@@ -1387,11 +1380,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     SuppressedAckCompleted++;
                 }
                 return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (record.GetIsDuplicate()) {
-                with_lock(Mutex) {
-                    DuplicateResponders.insert(origin);
-                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         }
@@ -1871,13 +1859,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             }
             UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 2u,
                 "the split must re-route the batch to exactly two new shards");
-            {
-                const auto duplicates = wire.DuplicateRespondersSnapshot();
-                for (const ui64 dest : rerouteDestinations) {
-                    UNIT_ASSERT_C(duplicates.contains(dest),
-                        "the re-routed batch must be answered as a duplicate of the transferred chain");
-                }
-            }
             {
                 for (const ui64 cookie : wire.ObservedCookiesSnapshot()) {
                     UNIT_ASSERT_C(initialUnaffectedCookies.contains(cookie),
@@ -2380,13 +2361,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_C(lockOnlyShard != 0, "no lock-only shard was found");
             UNIT_ASSERT_C(rerouteDestinations.contains(lockOnlyShard),
                 "the lock-only shard must receive the empty re-routed batch");
-            {
-                const auto duplicates = wire.DuplicateRespondersSnapshot();
-                UNIT_ASSERT_C(duplicates.contains(*dataDestinations.begin()),
-                    "the re-routed batch must be answered as a duplicate of the transferred chain");
-                UNIT_ASSERT_C(duplicates.contains(lockOnlyShard),
-                    "the lock-only shard must answer the empty re-routed batch as a duplicate of the transferred chain");
-            }
 
             // The lock-only shard joins the distributed commit: its prepare carries the
             // ancestor lock of the removed shard, which is validated and cleaned by the
@@ -2548,8 +2522,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     "the merged shard must receive the batch of the first removed shard");
                 UNIT_ASSERT_C(routedOriginalShards.contains(unaffectedShard),
                     "the merged shard must receive the batch of the second removed shard");
-                UNIT_ASSERT_C(wire.DuplicateRespondersSnapshot().contains(mergedShard),
-                    "the re-routed batches must be answered as duplicates of the transferred chains");
             }
 
             // The transaction commits through the merge.

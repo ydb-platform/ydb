@@ -29,7 +29,6 @@ PEERDIR(
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/ydb_external/common
     ydb/library/yql/providers/ydb_external/provider
-    ydb/library/yql/providers/qyt/gateway/clients/message_stream
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/adapters/issue

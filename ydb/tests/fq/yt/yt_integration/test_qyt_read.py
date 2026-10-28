@@ -23,7 +23,7 @@ def yt():
 
 @pytest.fixture(scope="module")
 def kikimr(request, yt):
-    """Start YDB cluster with YT as available external data source.
+    """Start YDB cluster with QYT as available external data source.
 
     The QYT gateway now works in EDS-driven mode: connection parameters
     (endpoint, auth) are taken directly from the EDS properties
@@ -41,10 +41,10 @@ def kikimr(request, yt):
     config = get_ydb_config(request)
     config.yaml_config["feature_flags"]["enable_qyt"] = param.get("enable_qyt", True)
 
-    # Register YT as available external data source.
+    # Register QYT as available external data source.
     # No server-side cluster config is needed — the QYT gateway creates
     # YT clients directly from the EDS LOCATION property.
-    config.yaml_config["query_service_config"]["available_external_data_sources"].append("YT")
+    config.yaml_config["query_service_config"]["available_external_data_sources"].append("QYT")
 
     kikimr = Kikimr(config, enable_discovery=param.get("enable_discovery", True))
     kikimr.qyt_enabled = param.get("enable_qyt", True)
@@ -134,7 +134,7 @@ def test_read_queue_via_federated_sql(
         # directly (bypassing HTTP discovery).
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
-                SOURCE_TYPE = 'YT',
+                SOURCE_TYPE = 'QYT',
                 LOCATION = '{yt.rpc_proxy_address}',
                 AUTH_METHOD = 'NONE'
             );
@@ -146,8 +146,8 @@ def test_read_queue_via_federated_sql(
         # Specify CONSUMER so the QYT read session knows which consumer offset to use.
         # No LIMIT: completion must come from MessageStream snapshot bounds.
         if not kikimr.qyt_enabled:
-            # With QYT disabled, the native table provider rejects queue-specific settings.
-            with pytest.raises(ydb.issues.GenericError, match=r'Unknown setting.*consumer'):
+            # QYT reads require the queue provider feature flag.
+            with pytest.raises(ydb.issues.GenericError, match='QYT reads require EnableQYT'):
                 kikimr.ydb_client.query(f"""
                     SELECT * FROM `{eds_name}`.`{queue_path}`
                     WITH (CONSUMER='{consumer_path}')
@@ -266,7 +266,7 @@ def test_read_queue_with_nullable_and_required_columns(
 
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
-                SOURCE_TYPE = 'YT',
+                SOURCE_TYPE = 'QYT',
                 LOCATION = '{yt.rpc_proxy_address}',
                 AUTH_METHOD = 'NONE'
             );

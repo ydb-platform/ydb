@@ -236,14 +236,6 @@ struct TGetSchemeEntryResult {
 NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
     const TString& endpoint, const TString& database, bool useTls, const TString& structuredTokenJson, const TString& path);
 
-struct TYtEntityTypeResult {
-    bool IsQueue = false;
-    NYql::TIssues Issues;
-};
-
-NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TString& endpoint, const TString& structuredTokenJson, const TString& path);
-
 std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks);
 
 }   // namespace NKikimr::NKqp

@@ -1229,59 +1229,28 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
                                         f(externalDataSourceMetadata);
                                     });
-                            } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType() == NYql::EDatabaseType::YT && externalPath) {
+                            } else if (dataSource.GetDatabaseType() == NYql::EDatabaseType::QYT && externalPath) {
                                 auto locked = ptr.lock();
                                 if (!locked) {
                                     promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
                                     return;
                                 }
-                                const bool enableQyt = locked->Config && locked->Config->FeatureFlags.GetEnableQYT();
-                                if (!enableQyt) {
-                                    loadDynamicMetadata(externalDataSourceMetadata);
-                                } else if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::QytProviderName))) {
-                                    auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
-                                    GetYtEntityType(
-                                        locked->FederatedQuerySetup,
-                                        source.GetLocation(),
-                                        source.ComposeStructuredTokenJson(),
-                                        *externalPath)
-                                        .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise,
-                                            enableQyt] (const NThreading::TFuture<TYtEntityTypeResult>& result) mutable {
-                                            TYtEntityTypeResult value = result.GetValue();
-                                            if (!value.Issues.Empty()) {
-                                                NYql::TIssue rootIssue("Could not determine YT object type");
-                                                for (const auto& issue : value.Issues) {
-                                                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-                                                }
-                                                TTableMetadataResult res;
-                                                res.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
-                                                res.AddIssues({rootIssue});
-                                                promise.SetValue(res);
-                                                return;
-                                            }
-
-                                            if (value.IsQueue && !enableQyt) {
-                                                TTableMetadataResult res;
-                                                res.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
-                                                res.AddIssues({NYql::TIssue("YT message stream reads require EnableQYT")});
-                                                promise.SetValue(res);
-                                                return;
-                                            }
-
-                                            // Resolve the object kind without changing the YT connection type.
-                                            auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
-                                            source.InitObjectKind(value.IsQueue ? NYql::TExternalDataSource::EKind::MessageStream
-                                                : NYql::TExternalDataSource::EKind::Table);
-                                            f(externalDataSourceMetadata);
-                                        });
-                                } else {
+                                if (!locked->Config || !locked->Config->FeatureFlags.GetEnableQYT()) {
                                     TTableMetadataResult result;
                                     result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
-                                    result.AddIssues({NYql::TIssue({},
-                                        "QYT provider is not available")});
+                                    result.AddIssues({NYql::TIssue("QYT reads require EnableQYT")});
                                     promise.SetValue(result);
                                     return;
                                 }
+                                if (!settings.ExternalSourceFactory || !settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::QytProviderName))) {
+                                    TTableMetadataResult result;
+                                    result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                    result.AddIssues({NYql::TIssue("QYT provider is not available")});
+                                    promise.SetValue(result);
+                                    return;
+                                }
+                                externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::MessageStream);
+                                loadDynamicMetadata(externalDataSourceMetadata);
                             } else {
                                 loadDynamicMetadata(externalDataSourceMetadata);
                             }

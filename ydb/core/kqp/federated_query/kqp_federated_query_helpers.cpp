@@ -23,7 +23,6 @@
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/ydb_external/common/read_limits.h>
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
-#include <ydb/library/yql/providers/qyt/gateway/clients/message_stream/yql_yt_client.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -466,28 +465,6 @@ NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(const std::optiona
         return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
     }
 };
-
-NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TString& endpoint, const TString& structuredTokenJson, const TString& path) {
-    try {
-        Y_ENSURE(federatedQuerySetup && federatedQuerySetup->CredentialsFactory, "YT external data source credentials factory is unavailable");
-        auto credentials = federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson)->CreateProvider();
-        auto client = NYql::CreateYtClient(endpoint, TString(credentials->GetAuthInfo()));
-        return NYql::IsYtQueue(client, path).Apply([](const NThreading::TFuture<bool>& future) {
-            TYtEntityTypeResult result;
-            try {
-                result.IsQueue = future.GetValue();
-            } catch (const std::exception& error) {
-                result.Issues.AddIssue(NYql::TIssue(error.what()));
-            }
-            return result;
-        });
-    } catch (const std::exception& error) {
-        TYtEntityTypeResult result;
-        result.Issues.AddIssue(NYql::TIssue(error.what()));
-        return NThreading::MakeFuture(result);
-    }
-}
 
 std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
     std::vector<NKqpProto::TKqpExternalSink> filteredSinks;

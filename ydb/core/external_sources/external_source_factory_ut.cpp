@@ -140,17 +140,30 @@ Y_UNIT_TEST_SUITE(YdbExternalSourceFactory) {
 }
 
 Y_UNIT_TEST_SUITE(QytExternalSourceFactory) {
-    Y_UNIT_TEST(YtConnectionEnablesBothTableAndQueueProviders) {
-        for (const bool enabled : { false, true }) {
-            std::set<NYql::EDatabaseType> available;
-            if (enabled) {
-                available.insert(NYql::EDatabaseType::YT);
-            }
-            const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, false, available);
-            UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::QytProviderName)), enabled);
-            UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YtProviderName)), enabled);
-            if (enabled) {
-                UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::YT)->GetName(), NYql::YtProviderName);
+    Y_UNIT_TEST(YtAndQytCanBeEnabledIndependently) {
+        UNIT_ASSERT(NYql::DatabaseTypeFromString("QYT") == NYql::EDatabaseType::QYT);
+        UNIT_ASSERT(NYql::GetAllExternalDataSourceTypes().contains("QYT"));
+        UNIT_ASSERT(NYql::IsValidAvailableExternalDataSourceType("QYT"));
+        for (const bool yt : { false, true }) {
+            for (const bool qyt : { false, true }) {
+                std::set<NYql::EDatabaseType> available;
+                if (yt) {
+                    available.insert(NYql::EDatabaseType::YT);
+                }
+                if (qyt) {
+                    available.insert(NYql::EDatabaseType::QYT);
+                }
+                const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, false, available);
+                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YtProviderName)), yt);
+                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::QytProviderName)), qyt);
+                for (const auto type : { NYql::EDatabaseType::YT, NYql::EDatabaseType::QYT }) {
+                    if (available.contains(type)) {
+                        const auto provider = type == NYql::EDatabaseType::YT ? NYql::YtProviderName : NYql::QytProviderName;
+                        UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(type)->GetName(), provider);
+                    } else {
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(factory->GetOrCreate(type), TExternalSourceException, "is disabled");
+                    }
+                }
             }
         }
     }

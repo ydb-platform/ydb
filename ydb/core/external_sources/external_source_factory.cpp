@@ -37,9 +37,6 @@ struct TExternalSourceFactory: public IExternalSourceFactory {
             const auto databaseType = NYql::DatabaseTypeFromString(typeStr);
             if (databaseType && AvailableExternalDataSources.contains(*databaseType)) {
                 AvailableProviders.insert(source->GetName());
-                if (*databaseType == NYql::EDatabaseType::YT) {
-                    AvailableProviders.insert(TString(NYql::QytProviderName));
-                }
             }
         }
     }
@@ -141,6 +138,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::YT),
             CreateExternalDataSource(TString{NYql::YtProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::QYT),
+            CreateExternalDataSource(TString{NYql::QytProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Greenplum),

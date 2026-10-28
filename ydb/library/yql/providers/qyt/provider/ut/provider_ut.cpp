@@ -37,8 +37,8 @@ IGraphTransformer::TStatus RunProviderPhase(IGraphTransformer& phase, TExprNode:
 
 TEST(TQytProvider, PreserveFullDataSourcePathsAndCredentials) {
     auto source = CreateQytDataSource(CreateStructuredTokenCredentialsFactory());
-    source->AddCluster("/Root/a/source", { { "source_type", "YT" }, { "location", "host:9013" }, { "token", "first" } });
-    source->AddCluster("/Root/b/source", { { "source_type", "YT" }, { "location", "host:9013" }, { "token", "second" } });
+    source->AddCluster("/Root/a/source", { { "source_type", "QYT" }, { "location", "host:9013" }, { "token", "first" } });
+    source->AddCluster("/Root/b/source", { { "source_type", "QYT" }, { "location", "host:9013" }, { "token", "second" } });
     EXPECT_EQ(source->GetValidClusters().size(), 2u);
     EXPECT_TRUE(source->GetValidClusters().contains("/Root/a/source"));
     EXPECT_TRUE(source->GetValidClusters().contains("/Root/b/source"));
@@ -48,7 +48,9 @@ TEST(TQytProvider, PreserveFullDataSourcePathsAndCredentials) {
 
 TEST(TQytProvider, RejectOtherDatabaseType) {
     auto source = CreateQytDataSource(CreateStructuredTokenCredentialsFactory());
-    EXPECT_ANY_THROW(source->AddCluster("/Root/source", { { "source_type", "Ydb" }, { "location", "host:2135" } }));
+    for (const auto* type : { "Ydb", "YT" }) {
+        EXPECT_ANY_THROW(source->AddCluster("/Root/source", { { "source_type", type }, { "location", "host:2135" } }));
+    }
     EXPECT_TRUE(source->GetValidClusters().empty());
 }
 
@@ -61,7 +63,7 @@ TEST(TQytProvider, ParseKqpReadSettings) {
 
 TEST(TQytProvider, RejectInvalidReadSettings) {
     auto source = CreateQytDataSource(CreateStructuredTokenCredentialsFactory());
-    source->AddCluster("/Root/eds", { { "source_type", "YT" }, { "location", "localhost:1" } });
+    source->AddCluster("/Root/eds", { { "source_type", "QYT" }, { "location", "localhost:1" } });
     {
         TExprContext ctx;
         EXPECT_ANY_THROW(ParseQytReadSettings(*Read(ctx, "", false, "/Root/eds")));
@@ -88,7 +90,7 @@ TEST(TQytProvider, OwnsQueuesWithoutYtTableProvider) {
     TExprContext ctx;
     auto types = MakeIntrusive<TTypeAnnotationContext>();
     auto provider = CreateQytDataSource(CreateStructuredTokenCredentialsFactory());
-    provider->AddCluster("cluster", { { "source_type", "YT" }, { "location", "host:9013" } });
+    provider->AddCluster("cluster", { { "source_type", "QYT" }, { "location", "host:9013" } });
     types->AddDataSource(QytProviderName, provider);
     EXPECT_EQ(provider->GetName(), QytProviderName);
     EXPECT_FALSE(types->DataSourceMap.contains(TString(YtProviderName)));
@@ -175,7 +177,7 @@ TEST(TQytProvider, ReloadsStreamMetadataAfterInitialPassWithoutRewind) {
 TEST(TQytProvider, ResolvesNoAuthMessageStreamSecureParameter) {
     auto credentials = CreateStructuredTokenCredentialsFactory();
     auto provider = CreateQytDataSource(credentials);
-    provider->AddCluster("/Root/eds", { { "source_type", "YT" }, { "location", "host:9013" }, { "authMethod", "NONE" } });
+    provider->AddCluster("/Root/eds", { { "source_type", "QYT" }, { "location", "host:9013" }, { "authMethod", "NONE" } });
     const auto token = provider->ResolveClusterToken("/Root/eds");
     ASSERT_TRUE(token.Defined());
     EXPECT_FALSE(token->empty());

@@ -289,7 +289,7 @@ void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TStri
     TExternalDataSource updated = *this;
     updated.DatabaseType = DatabaseTypeFromString(type);
     if (updated.Kind == EKind::Unknown) {
-        updated.Kind = EKind::Table;
+        updated.Kind = updated.DatabaseType == EDatabaseType::QYT ? EKind::MessageStream : EKind::Table;
     }
     updated.DataSourcePath = dataSourcePath;
     Y_ENSURE(updated.DatabaseType, "TExternalDataSource: unknown source type: " << type);
@@ -298,10 +298,10 @@ void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TStri
 }
 
 void TExternalDataSource::InitObjectKind(EKind kind) {
-    const bool isYt = DatabaseType == EDatabaseType::YT;
-    Y_ENSURE((IsYdb() || isYt) && Kind == EKind::Unknown,
-        "TExternalDataSource: only an unresolved Ydb or YT source can initialize object kind");
-    Y_ENSURE(kind == EKind::Table || kind == EKind::MessageStream,
+    Y_ENSURE(Kind == EKind::Unknown, "TExternalDataSource: object kind can only be initialized once");
+    Y_ENSURE((IsYdb() && (kind == EKind::Table || kind == EKind::MessageStream)) ||
+        (DatabaseType == EDatabaseType::YT && kind == EKind::Table) ||
+        (DatabaseType == EDatabaseType::QYT && kind == EKind::MessageStream),
         "TExternalDataSource: object kind does not match the connection type");
     Kind = kind;
 }
@@ -309,9 +309,11 @@ void TExternalDataSource::InitObjectKind(EKind kind) {
 TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const {
     YQL_ENSURE(externalSourceFactory, "External source factory is null");
     if (IsMessageStream()) {
-        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT,
-            "A message stream must use a Ydb or YT connection");
-        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::QytProviderName};
+        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::QYT,
+            "A message stream must use a Ydb or QYT connection");
+        if (IsYdb()) {
+            return TString{NYql::PqProviderName};
+        }
     }
     YQL_ENSURE(DatabaseType, "Unknown source type for external data source \"" << DataSourcePath << "\"");
     return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();

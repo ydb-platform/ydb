@@ -30,7 +30,7 @@ public:
     }
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
-        Y_ENSURE(properties.Value("source_type", "") == "YT", "Expected YT external data source");
+        Y_ENSURE(properties.Value("source_type", "") == "QYT", "Expected QYT external data source");
         const auto endpoint = properties.Value("location", "");
         Y_ENSURE(!endpoint.empty(), "YT endpoint is missing");
         const auto token = NFq::NMessageStream::ComposeAuthToken(properties, properties.Value("token", ""));

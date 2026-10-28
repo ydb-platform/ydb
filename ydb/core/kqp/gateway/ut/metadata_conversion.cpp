@@ -183,21 +183,24 @@ TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
     const auto factory = NExternalSource::CreateExternalSourceFactory({});
-    auto source = MakeDataSource("YT", auth, "source-path", "yt.example.com");
-    EXPECT_EQ(source.GetProviderName(factory), NYql::YtProviderName);
+    auto source = MakeDataSource("QYT", auth, "source-path", "yt.example.com");
+    EXPECT_EQ(source.GetProviderName(factory), NYql::QytProviderName);
     EXPECT_FALSE(source.IsMessageStream());
     EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Table));
     source.InitObjectKind(EKind::MessageStream);
     EXPECT_TRUE(source.IsMessageStream());
-    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::YT);
-    EXPECT_EQ(source.BuildConnectorProperties().at("source_type"), "YT");
-    EXPECT_EQ(source.MakeExternalSourceMetadata().Type, "YT");
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::QYT);
+    EXPECT_EQ(source.BuildConnectorProperties().at("source_type"), "QYT");
+    EXPECT_EQ(source.MakeExternalSourceMetadata().Type, "QYT");
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
     EXPECT_EQ(source.GetProviderName(factory), TString(NYql::QytProviderName));
     EXPECT_FALSE(source.IsYdb());
     EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
 
     auto table = MakeDataSource("YT", auth);
+    EXPECT_EQ(table.GetProviderName(factory), NYql::YtProviderName);
+    EXPECT_ANY_THROW(table.InitObjectKind(EKind::MessageStream));
     table.InitObjectKind(EKind::Table);
     EXPECT_FALSE(table.IsMessageStream());
     EXPECT_EQ(table.GetProviderName(factory), NYql::YtProviderName);
@@ -209,6 +212,17 @@ TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
     EXPECT_EQ(ydb.GetDatabaseType(), NYql::EDatabaseType::Ydb);
     EXPECT_EQ(ydb.BuildConnectorProperties().at("source_type"), "Ydb");
     EXPECT_EQ(ydb.GetProviderName(factory), NYql::PqProviderName);
+}
+
+TEST(MetadataConversion, InferredQytMetadataKeepsMessageStreamKind) {
+    NKikimrSchemeOp::TAuth auth;
+    auth.MutableNone();
+    auto source = MakeDataSource("QYT", auth, "source-path", "yt.example.com");
+    source.ApplyInferredMetadata("QYT", "inferred-path");
+    EXPECT_TRUE(source.IsMessageStream());
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::QYT);
+    EXPECT_EQ(source.GetDataSourcePath(), "inferred-path");
+    EXPECT_EQ(source.GetProviderName(NExternalSource::CreateExternalSourceFactory({})), NYql::QytProviderName);
 }
 
 TEST(MetadataConversion, SecretsCanOnlyBeSetOnce) {

@@ -397,7 +397,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 | Колонка | Описание |
 |---------|----------|
-| `Sid` | [SID](../concepts/glossary.md#sid) пользователя.<br />Тип: `Utf8`.<br />Ключ: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) пользователя.<br />Тип: `Utf8`.<br />Ключ: `0`. |
 | `IsEnabled` | Указывает, разрешён ли вход данному пользователю; используется для явной блокировки администратором. Независим от `IsLockedOut`.<br />Тип: `Bool`. |
 | `IsLockedOut` | Указывает, что данный пользователь автоматически заблокирован из-за превышения количества неудачных аутентификаций. Независим от `IsEnabled`.<br />Тип: `Bool`. |
 | `CreatedAt` | Время создания пользователя.<br />Тип: `Timestamp`. |
@@ -416,7 +416,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 | Колонка | Описание |
 |---------|----------|
-| `Sid` | [SID](../concepts/glossary.md#sid) группы.<br />Тип: `Utf8`.<br />Ключ: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) группы.<br />Тип: `Utf8`.<br />Ключ: `0`. |
 
 ### Информация о членстве в группах
 

@@ -422,7 +422,7 @@ Release date: October 12, 2023.
 ### Functionality
 
 * Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This functionality also allows multiple modifying operations in one transaction on a table with secondary indexes.
-* Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
+* Added support for [column tables](concepts/datamodel/table.md#column-oriented-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
 * Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
 * YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.
@@ -538,7 +538,7 @@ Release date: August 14, 2023.
   * Storage groups and nodes info are moved from left buttons to tabs on the database page.
 * Query history and saved queries are moved to tabs over the text editor area in query editor.
 * Info tab for scheme objects displays parameters using terms from `CREATE` or `ALTER` statements.
-* Added [column tables](concepts/datamodel/table.md#column-tables) support.
+* Added [column tables](concepts/datamodel/table.md#column-oriented-tables) support.
 
 ### Performance
 
@@ -564,7 +564,7 @@ Release date: August 14, 2023.
 
 ## Version 23.1 {#23-1}
 
-Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### Functionality
 
@@ -590,7 +590,7 @@ Release date: May 5, 2023. To update to version 23.1, select the [Downloads](dow
 
 ## Version 22.5 {#22-5}
 
-Release date: March 7, 2023. To update to version **22.5**, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: March 7, 2023. To update to version **22.5**, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### What's new
 
@@ -609,7 +609,7 @@ Release date: March 7, 2023. To update to version **22.5**, select the [Download
 
 ## Version 22.4 {#22-4}
 
-Release date: October 12, 2022. To update to version **22.4**, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: October 12, 2022. To update to version **22.4**, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### What's new
 

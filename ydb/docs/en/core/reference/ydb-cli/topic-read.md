@@ -26,7 +26,7 @@ Three command modes are supported:
 | `<topic-path>` | Topic path |
 | `-c VAL`, `--consumer VAL` | Topic consumer name.<br/>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br/>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
 
-### Basic optional parameters
+### Basic optional parameters {#basic-optional-parameters}
 
 `--format STR`: Output format.
 

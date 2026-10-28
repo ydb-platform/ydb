@@ -102,6 +102,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ReconcileNodeRole() {
         UpdateQuorums();
+        if (Halted) {
+            return; // the halted keeper neither binds nor takes the scepter
+        }
         if (RootProbe && (HasStaticGroupConfig() || !AllNodeIds.contains(RootProbe->NodeId)
                           || AllBoundNodes.contains(AllNodeIds.at(RootProbe->NodeId)))) {
             AbortRootProbe();

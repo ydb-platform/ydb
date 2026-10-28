@@ -443,12 +443,19 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
+        // a kept child sends its followers again only when they change, so what it has reported goes to the new
+        // tracker; the reports of the children going away do not
+        auto followerTracker = MakeHolder<TFollowerTracker>(replicaSz);
 
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
             bool found = false;
-            for (auto& p : ReplicaGuardians)
-                if (p.first == replica && p.second) {
+            for (ui32 oldIdx : xrange(ReplicaGuardians.size()))
+                if (auto& p = ReplicaGuardians[oldIdx]; p.first == replica && p.second) {
+                    if (FollowerTracker) {
+                        TVector<TActorId> reported = FollowerTracker->GetReported(oldIdx);
+                        followerTracker->Merge(idx, reported);
+                    }
                     updatedReplicaGuardians.emplace_back(p);
                     Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
                     p.second = TActorId();
@@ -470,7 +477,18 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        const bool followersChanged = Info && FollowerTracker
+            && FollowerTracker->GetMerged() != followerTracker->GetMerged();
+        FollowerTracker = std::move(followerTracker);
+        if (followersChanged) {
+            // the followers known only from the children gone are gone too
+            TVector<TActorId> followers;
+            followers.reserve(FollowerTracker->GetMerged().size());
+            for (const auto& xpair : FollowerTracker->GetMerged()) {
+                followers.emplace_back(xpair.first);
+            }
+            Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(followers)));
+        }
 
         Become(&TThis::StateCalm);
     }

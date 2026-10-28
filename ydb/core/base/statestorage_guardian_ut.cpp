@@ -276,6 +276,28 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         UNIT_ASSERT_C(refreshes > refreshesBefore, "the leader didn't get the list again");
         UNIT_ASSERT_C(followerList.empty(), "the follower of the removed child is kept: " << JoinSeq(", ", followerList));
     }
+
+    // One ring group of three replicas. The first reply matches the request's configuration and the second
+    // reports a newer cluster state. Even with two replies out of three, the delete must report an error.
+    Y_UNIT_TEST(DeleteFailsOnConfigMismatch) {
+        TTestBasicRuntime runtime(3);
+        SetupCustomStateStorage(runtime, 3, 3, 1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        ui32 replies = 0;
+        auto rewrite = runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() == tabletId && ++replies == 2) {
+                ev->Get()->Record.SetClusterStateGeneration(Max<ui64>());
+            }
+        });
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
+        auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_GE(replies, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+    }
 }
 
 } // NKikimr

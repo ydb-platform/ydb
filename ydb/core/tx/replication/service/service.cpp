@@ -668,7 +668,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
-        bool autoCommit, bool reportStats
+        bool autoCommit, bool reportStats, bool failOnDataLoss
     ) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
@@ -692,6 +692,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .RetryOnSchemeError(settings.GetRetryOnSchemeError())
             .AutoCommit(autoCommit)
             .ReportStats(reportStats)
+            .FailOnDataLoss(failOnDataLoss)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -810,7 +811,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto actorId = session.RegisterWorker(this, id,
             CreateWorker(
                 SelfId(),
-                ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
+                ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats,
+                    cmd.HasLocalTableWriter() && AppData()->ReplicationConfig.GetEnableDataLossDetection()),
                 std::move(writerFn)),
             poolId,
             cmd.GetReplicationLocation(),
@@ -1081,6 +1083,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         switch (status) {
         case TEvWorker::TEvGone::SCHEME_ERROR:
         case TEvWorker::TEvGone::DATA_ERROR:
+        case TEvWorker::TEvGone::DATA_LOSS:
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;

@@ -679,10 +679,20 @@ namespace NKikimr::NBsController {
             std::optional<TYamlConfig> yamlConfig;
             if (PendingYamlConfig) {
                 parseConfig(*PendingYamlConfig, clusterAppConfig.emplace(), yamlConfigVersion);
-                if (!effectiveConfig && !Self.StorageYamlConfig) {
-                    effectiveConfig = &clusterAppConfig.value(); // use cluster config if we employ single-config mode
-                }
                 yamlConfig.emplace(std::move(*PendingYamlConfig), yamlConfigVersion, record.GetYAML());
+            } else if (PendingStorageYamlConfig && !*PendingStorageYamlConfig && Self.YamlConfig) {
+                // Turning the dedicated section off changes the source of storage settings even when the main YAML
+                // stays byte-for-byte the same. Parse it for storage validation and application without committing it anew.
+                parseConfig(std::get<0>(*Self.YamlConfig), clusterAppConfig.emplace(), yamlConfigVersion);
+            }
+
+            // The mode is the one this replacement leaves: an engaged empty PendingStorageYamlConfig turns the
+            // dedicated storage section off, so the controller goes on with the cluster config only.
+            const bool singleConfigMode = PendingStorageYamlConfig
+                ? !PendingStorageYamlConfig->has_value()
+                : !Self.StorageYamlConfig;
+            if (!effectiveConfig && singleConfigMode && clusterAppConfig) {
+                effectiveConfig = &clusterAppConfig.value(); // use cluster config if we employ single-config mode
             }
 
             // check if we are changing StorageConfig here

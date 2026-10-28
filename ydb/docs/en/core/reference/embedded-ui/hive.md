@@ -70,3 +70,9 @@ Click **Reassign Groups** to open the window with parameters for balancing:
 After specifying all the parameters, click "Query" to get the number of channels moved and unlock the "Reassign" button.
 Clicking this button starts reassigning.
 
+## Settings {#settings}
+
+The **Settings** page lists Hive configuration parameters that you can manage through the interface. For each parameter, three values are shown: the current value, the value from the [{{ ydb-short-name }} configuration](../../reference/configuration/hive_config.md), and the default. Parameters set through the interface are shown in bold. Interface values take priority over configuration values. Changing settings in the interface does not update the configuration file. See [hive_config](../configuration/hive_config.md) for parameter descriptions.
+
+The page also includes a table of tablet types and metric kinds used to control which metrics are tracked for which tablet types.
+

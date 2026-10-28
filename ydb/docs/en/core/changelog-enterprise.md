@@ -2,7 +2,7 @@
 
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.ent.4 {#24-2-1-ent-4}
+### Version 25.2.1.ent.4 {#25-2-1-ent-4}
 
 Release date: February 12, 2026.
 
@@ -46,7 +46,7 @@ Release date: February 12, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.8 {#24-1-4-ent-8}
+### Version 25.1.4.ent.8 {#25-1-4-ent-8}
 
 Release date: February 12, 2026.
 
@@ -55,7 +55,7 @@ Release date: February 12, 2026.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect `VIEW` backup
 * [Fixed](https://github.com/ydb-platform/ydb/commit/c3b025603a6ba71d27ef0f1f66b9f643407643b3) descending sorting not working in queries to system views.
 
-### Version 25.1.4.ent.3 {#24-1-4-ent-3}
+### Version 25.1.4.ent.3 {#25-1-4-ent-3}
 
 Release date: November 25, 2025.
 

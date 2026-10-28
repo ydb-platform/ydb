@@ -1,4 +1,6 @@
-# node_broker_config {#node-broker-config}
+# node_broker_config
+
+## Overview {#node-broker-config}
 
 The `node_broker_config` section configures stable node names for dynamic nodes in {{ ydb-short-name }} clusters. Node names are assigned through the Node Broker, which is a system tablet that registers dynamic nodes in the cluster.
 

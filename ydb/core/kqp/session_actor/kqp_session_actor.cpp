@@ -1252,12 +1252,24 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
+<<<<<<< HEAD
         YDB_LOG_DEBUG("Acquire persistent snapshot",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
         AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
             "SessionActor.AcquirePersistentSnapshot");
+=======
+        AFL_ENSURE(QueryState->UserRequestContext);
+        AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
+        QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
+            QueryState->KqpSessionSpan.GetTraceId(), {
+                .Name = "Acquire persistent snapshot",
+                .Phase = "Snapshot",
+                .ActorType = "TKqpSessionActor",
+                .PeerActorType = "TSnapshotManagerActor",
+            });
+>>>>>>> 8824b2928f0 (Don't lock snapshots and don't collect table locks for STREAMING QUERY (#55580))
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -1335,6 +1347,15 @@ public:
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
+
+        AFL_ENSURE(QueryState->UserRequestContext);
+        if (QueryState->UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned for
+            // their whole lifetime. Reads at the acquired step stay valid via the
+            // datashard KeepSnapshotTimeout grace window and are executed right away;
+            // per-event lookups use inconsistent reads instead of a stale snapshot.
+            QueryState->TxCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();

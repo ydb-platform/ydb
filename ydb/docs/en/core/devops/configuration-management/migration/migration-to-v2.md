@@ -7,8 +7,8 @@ This document contains instructions for migrating from [configuration V1](../../
 
 In configuration V1, there are two different mechanisms for applying configuration files:
 
-- [static configuration](../../configuration-management/configuration-v2/config-overview.md#static-config) manages [storage nodes](../../../concepts/glossary.md#storage-node) of the {{ ydb-short-name }} cluster and requires manual placement of files on each cluster node;
-- [dynamic configuration](../../configuration-management/configuration-v2/config-overview.md#dynamic-config) manages [database nodes](../../../concepts/glossary.md#database-node) of the {{ ydb-short-name }} cluster and is loaded into the cluster centrally using {{ ydb-short-name }} CLI commands.
+- [static configuration](../../configuration-management/configuration-v2/config-overview.md) manages [storage nodes](../../../concepts/glossary.md#storage-node) of the {{ ydb-short-name }} cluster and requires manual placement of files on each cluster node;
+- [dynamic configuration](../../configuration-management/configuration-v2/config-overview.md) manages [database nodes](../../../concepts/glossary.md#database-node) of the {{ ydb-short-name }} cluster and is loaded into the cluster centrally using {{ ydb-short-name }} CLI commands.
 
 In configuration V2, this process is unified: a single configuration file is loaded into the system through {{ ydb-short-name }} CLI commands, automatically delivered to all cluster nodes.
 
@@ -20,7 +20,7 @@ In configuration V2, [automatic configuration](../../configuration-management/co
 Migration to configuration V2 can be performed if the following conditions are met:
 
 1. The {{ ydb-short-name }} cluster has been [updated](../../deployment-options/manual/update-executable.md) to version 25.1 and higher.
-1. The {{ ydb-short-name }} cluster is configured with a [configuration V1](../../configuration-management/configuration-v2/config-overview.md#static-config) file `config.yaml`, located in the node file system and connected through the `ydbd --yaml-config` argument.
+1. The {{ ydb-short-name }} cluster is configured with a [configuration V1](../../configuration-management/configuration-v2/config-overview.md) file `config.yaml`, located in the node file system and connected through the `ydbd --yaml-config` argument.
 1. The cluster configuration file contains the `domains_config` and `blob_storage_config` sections for configuring State Storage and static group respectively.
 
 ## Checking the Current Configuration Version
@@ -33,7 +33,7 @@ You should continue following this instruction only if the nodes are running on 
 
 To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to perform the following steps:
 
-1. Check for the presence of a [dynamic configuration](../../configuration-management/configuration-v2/config-overview.md#dynamic-config) file in the cluster. To do this, run the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
+1. Check for the presence of a [dynamic configuration](../../configuration-management/configuration-v2/config-overview.md) file in the cluster. To do this, run the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
@@ -63,7 +63,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% cut "More details" %}
 
-    Enabling this flag means that the [DS Controller](../../../concepts/glossary.md#ds-controller) tablet, not the [Console](../../../concepts/glossary.md#console) tablet, is now responsible for configuration storage and operations. This switches the main cluster configuration management mechanism.
+    Enabling this flag means that the [DS Controller](../../../concepts/glossary.md#ds-controller) tablet, not the Console tablet, is now responsible for configuration storage and operations. This switches the main cluster configuration management mechanism.
 
     {% endcut %}
 

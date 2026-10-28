@@ -40,7 +40,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 {% endnote %}
 
-YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
+YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by).
 
 ### Examples {#examples}
 

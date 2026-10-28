@@ -1783,6 +1783,7 @@ message TEvInterpilePutResult {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
         optional bool WrittenBeyondBarrier = 3;
+        optional uint32 RacingGeneration = 4; // for RACE: the generation of the group which raced with the put
     }
 
     repeated TItem Items = 1;

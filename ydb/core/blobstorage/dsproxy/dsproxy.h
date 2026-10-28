@@ -359,6 +359,11 @@ private:
 
 protected:
     const bool EnableStorageRetroTraceCollectionSlowRequests = false;
+
+    // the generation of the group a RACE came with from elsewhere, as from the interpile put of another pile
+    void AccountRacingGeneration(ui32 generation) {
+        RacingGeneration = Max(RacingGeneration, generation);
+    }
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

@@ -164,6 +164,10 @@ TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter
     const TString& canonical = Params.Get(parameter);
     if (!original.empty() && !canonical.empty() && path.StartsWith(canonical)
         && (path.size() == canonical.size() || path[canonical.size()] == '/')) {
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()
+            && (parameter == "database" || parameter == "database_path" || parameter == "tenant")) {
+            original = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, original);
+        }
         if (parameter != "path" || original.StartsWith('/')) {
             original = CanonizePath(original);
         }

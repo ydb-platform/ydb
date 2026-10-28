@@ -390,12 +390,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
         settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/Root/folder");
+        rule->SetDst("/Root/resolved_folder");
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
 
         const std::pair<TString, TString> databases[] = {
             {"viewer_relative_database", "Root/viewer_relative_database"},
-            {"folder/viewer_relative_database", "Root/folder/viewer_relative_database"},
+            {"folder/viewer_relative_database", "Root/resolved_folder/viewer_relative_database"},
             {"Root/viewer_relative_database", "Root/Root/viewer_relative_database"},
             {"/Root/viewer_relative_database", "Root/viewer_relative_database"},
         };

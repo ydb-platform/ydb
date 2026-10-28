@@ -22,12 +22,14 @@ const TString Tier2 = NColumnShard::NTiers::TExternalStorageId("/Root/tier2").Ge
 const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
-TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization) {
+TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization,
+    const bool tieringNeedActualization = false) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(version);
     proto.MutableOptions()->SetSchemeNeedActualization(schemeNeedActualization);
+    proto.MutableOptions()->SetTieringNeedActualization(tieringNeedActualization);
 
     auto result = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
     UNIT_ASSERT(result);
@@ -110,6 +112,12 @@ public:
         Actualizer->Refresh(tiering, TAddExternalContext(TestStart, Portions));
     }
 
+    void SetTieringNeedActualization(const bool enabled) {
+        const ui64 version = VersionedIndex.GetLastSchema()->GetVersion() + 1;
+        VersionedIndex.AddIndex(TSnapshot(version, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, version, false, enabled)));
+        Actualizer->RefreshScheme(TAddExternalContext(TestStart, Portions));
+    }
+
     THashMap<TRWAddress, std::vector<TTaskConstructor>> ExtractTasks() {
         auto context = MakeProcessContext();
         TInternalTasksContext internalContext;
@@ -186,6 +194,69 @@ Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
 // ends up under are computed at different instants and need not match. That is why the caller's per-queue check
 // cannot stand in for the check above.
 Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
+    Y_UNIT_TEST(PrefixChangesMoveExistingPortionsWhenActualizationEnabled) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        const std::vector<std::optional<TString>> prefixes = { std::nullopt, TString(), TString("old/data"), TString("new/data") };
+        for (const auto& oldPrefix : prefixes) {
+            for (const auto& newPrefix : prefixes) {
+                TTestEnv env;
+                const TString oldTier = TExternalStorageId(Tier1, oldPrefix).ToString();
+                const TString newTier = TExternalStorageId(Tier1, newPrefix).ToString();
+                env.QueueTieredPortion(oldTier, TDuration::Minutes(90));
+                TTiering tiering;
+                UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId::FromString(newTier), Tier1EvictAfter, "pk", 1)));
+                env.RefreshTiering(tiering);
+                UNIT_ASSERT(env.ExtractTasks().empty());
+
+                env.SetTieringNeedActualization(true);
+                const auto tasks = env.ExtractTasks();
+                if (oldTier == newTier) {
+                    UNIT_ASSERT(tasks.empty());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ oldTier }, { newTier }));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DisablingActualizationRemovesPendingPrefixMigration) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        TTestEnv env;
+        env.QueueTieredPortion(Tier1, TDuration::Minutes(90));
+        TTiering tiering;
+        const TString target = TExternalStorageId(Tier1, TString("new/data")).ToString();
+        UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId::FromString(target), Tier1EvictAfter, "pk", 1)));
+        env.RefreshTiering(tiering);
+        env.SetTieringNeedActualization(true);
+        env.SetTieringNeedActualization(false);
+        UNIT_ASSERT(env.ExtractTasks().empty());
+
+        env.SetTieringNeedActualization(true);
+        const auto tasks = env.ExtractTasks();
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ Tier1 }, { target }));
+    }
+
+    Y_UNIT_TEST(ActualizationPreservesLaterTransitions) {
+        using NColumnShard::NTiers::TExternalStorageId;
+        const TString oldTier = TExternalStorageId(Tier1, TString("old/data")).ToString();
+        for (const bool deleteTier : { false, true }) {
+            TTestEnv env;
+            env.QueueTieredPortion(oldTier, TDuration::Hours(3));
+            TTiering tiering;
+            UNIT_ASSERT(tiering.Add(std::make_shared<TTierInfo>(TExternalStorageId(Tier1, TString("new/data")), Tier1EvictAfter, "pk", 1)));
+            UNIT_ASSERT(tiering.Add(deleteTier ? TTierInfo::MakeTtl(Tier2EvictAfter, "pk", 1)
+                                               : std::make_shared<TTierInfo>(TExternalStorageId(Tier2), Tier2EvictAfter, "pk", 1)));
+            env.RefreshTiering(tiering);
+            env.SetTieringNeedActualization(true);
+            const auto tasks = env.ExtractTasks();
+            UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+            const TString target = deleteTier ? TTierInfo::GetTtlTierName() : Tier2;
+            UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->first, TRWAddress({ oldTier }, { target }));
+        }
+    }
+
     Y_UNIT_TEST(PrefixChangesDoNotMoveExistingPortions) {
         using NColumnShard::NTiers::TExternalStorageId;
         const std::vector<std::optional<TString>> prefixes = { std::nullopt, TString(), TString("old/data"), TString("new/data") };

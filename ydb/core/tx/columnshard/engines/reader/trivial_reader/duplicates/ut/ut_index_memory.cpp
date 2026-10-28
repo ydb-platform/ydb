@@ -84,7 +84,7 @@ TSchemaBundle MakeSchemaWithBloom() {
     auto indexInfo = TIndexInfo::BuildFromProto(1, proto, TTestStoragesManager::GetInstance(), cache);
     UNIT_ASSERT(indexInfo);
     auto indexInfoCache = std::make_shared<TObjectCache<TSchemaVersionId, TIndexInfo>>();
-    auto entry = indexInfoCache->Upsert(TSchemaVersionId(1, 1), std::move(*indexInfo));
+    auto entry = indexInfoCache->GetOrInsert(TSchemaVersionId(1, 1), std::move(*indexInfo));
     auto versionedIndex = std::make_shared<TVersionedIndex>();
     versionedIndex->AddIndex(TSnapshot(1, 1), std::move(entry));
     return TSchemaBundle{ versionedIndex, versionedIndex->GetLastSchema() };

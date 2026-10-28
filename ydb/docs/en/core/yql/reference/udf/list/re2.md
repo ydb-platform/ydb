@@ -46,7 +46,7 @@ SELECT
 
 If you leave out the details of implementation and syntax of regular expressions, those functions are totally similar [to the same-name functions](pire.md#match) from the Pire module. With other things equal and no specific preferences, we recommend that you use `Pire::Grep or Pire::Match`.
 
-You can call the `Re2::Grep` function by using a `REGEXP` expression (see the [basic expression syntax](../../syntax/expressions.md#regexp)).
+You can call the `Re2::Grep` function by using a `REGEXP` expression (see the [basic expression syntax](../../syntax/expressions.md#check-match)).
 
 For example, the following two queries are equivalent (also in terms of computing efficiency):
 

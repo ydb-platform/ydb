@@ -34,7 +34,7 @@ Released on July 28, 2025. To update to version **2.24.1**, select the [Download
 
 ### Bug fixes
 
-* Fixed a bug where the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) silently skipped schema objects of unsupported types and created empty directories for them in the destination folder on the file system.
+* Fixed a bug where the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) silently skipped schema objects of unsupported types and created empty directories for them in the destination folder on the file system.
 
 ## Version 2.24.0 {#2-24-0}
 
@@ -118,8 +118,8 @@ Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads
   * Added the `--partition-size` option to the `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` [commands](./reference/ydb-cli/workload-click-bench.md) to set maximum partition size in megabytes for row tables.
   * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` command to support uniform primary key distribution.
 * Enhanced backup and restore functionality:
-  * Added the `--replace` and `--verify-existence` options to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to control the removal of existing objects that match those in the backup before restoration.
-  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving [replica tables](./concepts/async-replication.md) with ASYNC REPLICATION and their [changefeeds](./concepts/glossary.md#changefeed) to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+  * Added the `--replace` and `--verify-existence` options to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) to control the removal of existing objects that match those in the backup before restoration.
+  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) by not saving [replica tables](./concepts/async-replication.md) with ASYNC REPLICATION and their [changefeeds](./concepts/glossary.md#changefeed) to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Enhanced CLI usability:
   * Detailed help message (`-hh`) now shows the whole subcommand tree.
   * Added automatic pair insertion for brackets in `{{ ydb-cli }}` interactive mode.
@@ -138,7 +138,7 @@ Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads
   * Added support for coordination nodes in recursive removal.
 * Fixed return code of the `{{ ydb-cli }} workload * run --check-canonical` command when results differ from canonical ones.
 * Fixed an issue where CLI was attempting to read parameters from stdin even without available data.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed an authorization error in the `{{ ydb-cli }} admin database restore` [command](./reference/ydb-cli/export-import/tools-restore.md#db) when restoring from a backup containing multiple database administrator accounts.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed an authorization error in the `{{ ydb-cli }} admin database restore` [command](./reference/ydb-cli/export-import/tools-restore.md) when restoring from a backup containing multiple database administrator accounts.
 
 ## Version 2.20.0 {#2-20-0}
 
@@ -157,7 +157,7 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 * **_(Requires server v25.1+)_** Added support for [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize a directory with node configuration files.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` [command](./reference/ydb-cli/commands/configuration/cluster/generate.md) to generate a dynamic configuration file from a cluster static configuration file.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the [command](./reference/ydb-cli/export-import/tools-dump.md#cluster) `{{ ydb-cli }} admin cluster dump` and the [command](./reference/ydb-cli/export-import/tools-restore.md#cluster) `{{ ydb-cli }} admin cluster restore` for dumping all cluster-level data. These dumps contain a list of databases with metadata, users, and groups but do not include schema objects.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the [command](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} admin cluster dump` and the [command](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} admin cluster restore` for dumping all cluster-level data. These dumps contain a list of databases with metadata, users, and groups but do not include schema objects.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. These dumps contain database metadata, schema objects, their data, users, and groups.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `--dedicated-storage-section` and `--dedicated-cluster-section` options to the `{{ ydb-cli }} admin cluster config fetch` command, allowing cluster and storage config sections to be fetched separately.
 

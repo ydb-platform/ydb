@@ -54,6 +54,15 @@ bool TCommandNodeConfigInit::SaveConfig(const TString& config, const TString& co
     }
 }
 
+namespace {
+    // a main config without a storage one replaces both: the node would merge the storage YAML left from an earlier
+    // init into the new config at its next start
+    bool RemoveStaleStorageConfig(const TString& configDirPath) {
+        const TString path = TStringBuilder() << configDirPath << "/" << STORAGE_CONFIG_FILE_NAME;
+        return !NFs::Exists(path) || NFs::Remove(path);
+    }
+}
+
 int TCommandNodeConfigInit::Run(TConfig& config) {
     MakePathIfNotExist(ConfigDirPath.c_str());
     TString configYaml;
@@ -101,6 +110,10 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
 
         if (hasCluster) {
             clusterSaved = SaveConfig(clusterConfig, CONFIG_FILE_NAME, ConfigDirPath);
+            if (clusterSaved && !RemoveStaleStorageConfig(ConfigDirPath)) {
+                Cerr << "Failed to remove the old " << STORAGE_CONFIG_FILE_NAME << " from " << ConfigDirPath << Endl;
+                return EXIT_FAILURE;
+            }
             if (clusterSaved) {
                 Cout << "Initialized config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
@@ -114,7 +127,7 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
     }
 
     configYaml = TFileInput(ConfigYamlPath).ReadAll();
-    if (SaveConfig(configYaml, CONFIG_FILE_NAME, ConfigDirPath)){
+    if (SaveConfig(configYaml, CONFIG_FILE_NAME, ConfigDirPath) && RemoveStaleStorageConfig(ConfigDirPath)) {
         Cout << "Initialized cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
         return EXIT_SUCCESS;
     } else {

@@ -1820,6 +1820,46 @@ config:
         CheckUnchangedYamlDoesNotEnableV2WithChangedConsoleConfig(/*reuseConsoleVersion=*/ true);
     }
 
+    // The YAML is right but its metadata is not: a wrong version and a wrong cluster. Without bypass_checks the
+    // replacement is refused; with it the metadata is replaced with the right one and the YAML applies.
+    Y_UNIT_TEST(BypassChecksReplacesWrongMetadata) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString yaml = R"(
+metadata:
+  kind: MainConfig
+  cluster: "some-other-cluster"
+  version: 7
+config:
+  log_config:
+    cluster_name: bypass-checks
+)" + HostsYaml(*server.GetRuntime());
+        auto replace = [&](bool bypassChecks) {
+            auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+            Ydb::Config::ReplaceConfigRequest request;
+            request.set_replace(yaml);
+            request.set_bypass_checks(bypassChecks);
+            Ydb::Config::ReplaceConfigResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            stub->ReplaceConfig(&ctx, request, &response);
+            Cerr << "response: " << response.operation().DebugString() << Endl;
+            return response.operation();
+        };
+
+        const auto refused = replace(false);
+        UNIT_ASSERT_C(refused.status() != Ydb::StatusIds::SUCCESS, refused.DebugString());
+
+        const auto applied = replace(true);
+        UNIT_ASSERT_CHECK_STATUS(applied, Ydb::StatusIds::SUCCESS);
+        std::optional<TString> mainConfig, storageConfig;
+        FetchConfig(server.GetChannel(), false, false, mainConfig, storageConfig);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT_C(mainConfig->Contains("cluster_name: bypass-checks"), *mainConfig);
+        UNIT_ASSERT_C(!mainConfig->Contains("some-other-cluster"), *mainConfig);
+    }
+
 }
 
 } // NKikimr::NGRpcService

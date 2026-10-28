@@ -75,6 +75,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("consumer")
+            .Decompress(!InternalDecompression)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path("/Root/topic")
                 .AppendPartitionIds(0)

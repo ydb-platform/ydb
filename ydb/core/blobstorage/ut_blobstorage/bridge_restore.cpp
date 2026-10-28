@@ -40,15 +40,17 @@ namespace {
             return actor && TypeName(*actor).Contains("TBridgedBlobStorageProxyActor");
         }
 
-        // the index-only read restoring the blob first, as the uncertainty resolver of BlobDepot does
-        std::unique_ptr<TEvBlobStorage::TEvGetResult> GetRestoringIndexOnly() {
+        // the index-only read restoring the blob first, as the uncertainty resolver of BlobDepot does; returns nullptr
+        // if there is no reply by waitDeadline
+        std::unique_ptr<TEvBlobStorage::TEvGetResult> GetRestoringIndexOnly(TInstant deadline = TInstant::Max(),
+                TInstant waitDeadline = TInstant::Max()) {
             const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
             Env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, GroupId, new TEvBlobStorage::TEvGet(Id, 0, 0, TInstant::Max(),
+                SendToBSProxy(edge, GroupId, new TEvBlobStorage::TEvGet(Id, 0, 0, deadline,
                     NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true, /*isIndexOnly=*/ true));
             });
-            auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-            return std::unique_ptr<TEvBlobStorage::TEvGetResult>(res->Release().Release());
+            auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false, waitDeadline);
+            return res ? std::unique_ptr<TEvBlobStorage::TEvGetResult>(res->Release().Release()) : nullptr;
         }
 
         // the blob failed to be restored, the reply must still name it, as the caller matches replies by the blob
@@ -111,6 +113,33 @@ Y_UNIT_TEST_SUITE(BridgeRestore) {
         t.Env.Runtime->FilterFunction = {};
         UNIT_ASSERT(numFailed);
         t.CheckFailedForBlob(*res);
+    }
+
+    // The VDisks of pile 1 never answer the restore put; the read has to end by its own deadline all the same
+    Y_UNIT_TEST(RestoreEndsByDeadlineOfRead) {
+        TBlobInOnePile t;
+
+        ui32 numDropped = 0;
+        t.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut && ev->HasEvent()) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVPut>()->Record;
+                if (LogoBlobIDFromLogoBlobID(record.GetBlobID()).FullID() == t.Id &&
+                        VDiskIDFromVDiskID(record.GetVDiskID()).GroupID.GetRawId() == t.PileGroups[1]) {
+                    ++numDropped;
+                    return false;
+                }
+            }
+            return true;
+        };
+        // the lower proxy gives up on a VDisk that does not answer by its own timeouts, which are much longer than
+        // the deadline of the read; the reply must come soon after the deadline, not after those timeouts
+        const TInstant deadline = t.Env.Runtime->GetClock() + TDuration::Seconds(10);
+        const auto res = t.GetRestoringIndexOnly(deadline, deadline + TDuration::Seconds(5));
+        t.Env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(numDropped);
+        UNIT_ASSERT_C(res, "no reply to the read soon after its deadline");
+        UNIT_ASSERT_VALUES_EQUAL_C(res->ResponseSz, 1, res->ToString());
+        UNIT_ASSERT_UNEQUAL_C(res->Responses[0].Status, NKikimrProto::OK, res->ToString());
     }
 
 }

@@ -63,9 +63,9 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStoragePerPileGenerator::CalculateRingsParameters() {
-        const ui32 minNodesInGroup = std::ranges::min(NodeGroups, {}, [](const TNodeGroup& group) {
+        const ui32 minNodesInGroup = std::ranges::min_element(NodeGroups, {}, [](const TNodeGroup& group) {
             return group.Nodes.size();
-        }).Nodes.size();
+        })->Nodes.size();
 
         if (NodeGroups.size() == 1) {
             RingsInGroupCount = OverrideRingsCount;

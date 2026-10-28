@@ -1212,6 +1212,9 @@ namespace NKikimr::NBsController {
                 continue;
             }
             if (group->Topology->GetTotalFailRealmsNum() != 3) {
+                if (!group->FailRealmStates && DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
+                    continue; // Preserve larger geometries when realm-state management is not in use.
+                }
                 return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " must have three fail realms");
             }
             const auto existing = Self.GroupMap.find(groupId);
@@ -1220,6 +1223,7 @@ namespace NKikimr::NBsController {
             auto states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
             if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {
                 std::array<std::optional<TFailRealm::EState>, 3> targets;
+                std::array<bool, 3> excludedRealms{};
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
                         break;
@@ -1240,10 +1244,11 @@ namespace NKikimr::NBsController {
                     };
                     const bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
                     const bool excluded = isExcluded(DataCenterStates.Get());
+                    const ui32 realm = slot->RingIdx;
+                    excludedRealms[realm] |= excluded;
                     if (wasExcluded == excluded) {
                         continue;
                     }
-                    const auto realm = slot->RingIdx;
                     const auto target = excluded ? TFailRealm::Excluded : TFailRealm::Recovering;
                     if (targets[realm] && *targets[realm] != target) {
                         return std::unexpected<TString>(TStringBuilder() << "conflicting datacenter transitions for group# " << groupId << " realm# " << realm);
@@ -1253,6 +1258,10 @@ namespace NKikimr::NBsController {
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     if (!targets[realm]) {
                         continue;
+                    }
+                    if (*targets[realm] == TFailRealm::Recovering && excludedRealms[realm]) {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << " still contains an excluded datacenter");
                     }
                     if (*targets[realm] == TFailRealm::Recovering && states[realm] != TFailRealm::Excluded) {
                         // RFC 190 explicitly requires manual repair via DefineFailRealmStates, even with force.

@@ -13,17 +13,34 @@ from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller impor
 )
 
 
+class _Socket:
+    def close(self):
+        self.closed = True
+
+
 class _Node:
     def __init__(self, pid):
         self.pid = pid
         self.kill_calls = 0
+        self.alive = True
+        self.ic_port = pid + 10000
+        self.grpc_port = pid + 11000
+        self.mon_port = pid + 12000
+        self.ydbd_log_file_path = f"log-{pid}"
 
     def kill(self):
         self.kill_calls += 1
         self.pid += 1000
 
     def is_alive(self):
-        return True
+        return self.alive
+
+    def start(self):
+        self.alive = True
+        self.pid += 1000
+
+    def set_log_file_prefix(self, prefix):
+        self.ydbd_log_file_path = f"{prefix}test.log"
 
 
 def _cluster():
@@ -69,7 +86,7 @@ def test_unix_proxy_rejects_unlisted_operation_without_side_effect(tmp_path):
                 json.dumps(
                     {
                         "version": 1,
-                        "operation": "stop",
+                        "operation": "reboot",
                         "node_id": 3,
                     }
                 ).encode("utf-8")
@@ -95,3 +112,30 @@ def test_unix_client_rejects_group_accessible_socket(tmp_path):
             HarnessControlClient(path).kill_and_restart(3)
 
     assert all(node.kill_calls == 0 for node in cluster.nodes.values())
+
+
+def test_unix_proxy_keeps_stop_state_in_the_owner_process(tmp_path, monkeypatch):
+    cluster = _cluster()
+    monkeypatch.setattr(
+        HarnessNodeController,
+        "_kill_without_restart",
+        lambda self, node: setattr(node, "alive", False),
+    )
+    monkeypatch.setattr(
+        HarnessNodeController,
+        "_hold_node_ports",
+        lambda self, node: {node.ic_port: _Socket()},
+    )
+    controller = HarnessNodeController(cluster)
+    path = tmp_path / "control.sock"
+
+    with HarnessControlProxy(path, controller):
+        client = HarnessControlClient(path)
+        stopped = client.stop(3)
+        assert stopped.previous_pid == 103
+        assert controller.stopped_node_ids() == (3,)
+        started = client.start(3)
+        assert started.current_pid == 1103
+        assert controller.stopped_node_ids() == ()
+
+    assert cluster.nodes[3].is_alive() is True

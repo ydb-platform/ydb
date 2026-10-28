@@ -17,6 +17,9 @@ from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
     require_cluster,
     require_external_cluster,
 )
+from ydb.tests.stability.nemesis.internal.nemesis.local_control_proxy import (
+    installed_local_node_controller,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import (
     HarnessNodeController,
 )
@@ -163,8 +166,9 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
                 raise ValueError(
                     "KillSlotDaemonNemesis: local harness target must include slot_idx"
                 )
-            restarted = HarnessNodeController(
-                require_cluster()
+            restarted = (
+                installed_local_node_controller()
+                or HarnessNodeController(require_cluster())
             ).kill_slot_and_restart(slot_idx)
             self._logger.info(
                 "Restarted local harness slot_idx=%d node_id=%d pid=%d->%d",
@@ -289,7 +293,10 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
         self._local_controller: HarnessNodeController | None = None
         self._local_controller_lock = threading.Lock()
 
-    def _controller(self) -> HarnessNodeController:
+    def _controller(self) -> Any:
+        remote = installed_local_node_controller()
+        if remote is not None:
+            return remote
         cluster = require_cluster()
         with self._local_controller_lock:
             if self._local_cluster is cluster and self._local_controller is not None:
@@ -396,7 +403,10 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
         self._local_controller: HarnessNodeController | None = None
         self._local_controller_lock = threading.Lock()
 
-    def _controller(self) -> HarnessNodeController:
+    def _controller(self) -> Any:
+        remote = installed_local_node_controller()
+        if remote is not None:
+            return remote
         cluster = require_cluster()
         with self._local_controller_lock:
             if self._local_cluster is cluster and self._local_controller is not None:

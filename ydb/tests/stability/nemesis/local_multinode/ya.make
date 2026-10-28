@@ -10,6 +10,10 @@ SIZE(MEDIUM)
 
 REQUIREMENTS(ram:12)
 
+DEPENDS(
+    ydb/tests/stability/nemesis
+)
+
 PEERDIR(
     ydb/tests/stability/nemesis
     ydb/tests/library

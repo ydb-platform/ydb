@@ -95,3 +95,33 @@ class LocalClusterView:
             "static_erasure": self.static_erasure,
             "hosts": hosts,
         }
+
+    def control_manifest(self, *, control_socket: str, pdisks_info: list[dict]) -> dict:
+        def node_record(node: LocalNodeView | LocalSlotView) -> dict:
+            return {
+                "node_id": node.node_id,
+                "logical_host": node.logical_host,
+                "connect_host": node.connect_host,
+                "grpc_port": node.grpc_port,
+                "mon_port": node.mon_port,
+                "ic_port": node.ic_port,
+            }
+
+        return {
+            "static_erasure": self.static_erasure,
+            "control_socket": str(control_socket),
+            "nodes": [node_record(node) for node in self.nodes.values()],
+            "slots": [
+                {**node_record(slot), "slot_idx": slot.slot_idx}
+                for slot in self.slots.values()
+            ],
+            "pdisks": [
+                {
+                    "node_id": int(pdisk["node_id"]),
+                    "pdisk_id": int(pdisk["pdisk_id"]),
+                    "pdisk_path": pdisk["pdisk_path"],
+                    "pdisk_user_kind": int(pdisk.get("pdisk_user_kind", 0)),
+                }
+                for pdisk in pdisks_info
+            ],
+        }

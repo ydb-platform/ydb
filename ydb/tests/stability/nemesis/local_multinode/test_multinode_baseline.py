@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+import os
 import random
 import socket
+import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import pytest
+import yatest.common
 import ydb
 import yaml
 
@@ -1470,3 +1474,99 @@ def test_disk_status_break_restores_only_selected_drive_without_process_restart(
         probe.stop()
         reporter.stop_healthchecks()
         driver.stop()
+
+
+def _run_sibling_nemesis(manifest, nemesis_type, action, node_id):
+    completed = subprocess.run(
+        [
+            yatest.common.binary_path("ydb/tests/stability/nemesis/nemesis"),
+            "local-action",
+            "--manifest",
+            str(manifest),
+            "--local-type",
+            nemesis_type,
+            "--action",
+            action,
+            "--node-id",
+            str(node_id),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["ok"] is True
+    assert result["pid"] != os.getpid()
+    return result
+
+
+def test_sibling_process_restarts_and_holds_one_harness_node(
+    local_multinode_cluster,
+    tmp_path,
+):
+    view = LocalClusterView.from_cluster(local_multinode_cluster)
+    controller = HarnessNodeController(local_multinode_cluster)
+    socket_path = tmp_path / "nemesis-control.sock"
+    manifest_path = tmp_path / "manifest.json"
+    node_id = 2
+    pid_before = local_multinode_cluster.nodes[node_id].pid
+    other_pids = {
+        other_id: node.pid
+        for other_id, node in local_multinode_cluster.nodes.items()
+        if other_id != node_id
+    }
+    try:
+        with HarnessControlProxy(
+            socket_path,
+            controller,
+            local_multinode_cluster,
+        ):
+            manifest_path.write_text(
+                json.dumps(
+                    view.control_manifest(
+                        control_socket=str(socket_path),
+                        pdisks_info=local_multinode_cluster.config.pdisks_info,
+                    )
+                ),
+                encoding="utf-8",
+            )
+            _run_sibling_nemesis(
+                manifest_path,
+                "KillNodeNemesis",
+                "inject",
+                node_id,
+            )
+            restarted_pid = local_multinode_cluster.nodes[node_id].pid
+            assert restarted_pid != pid_before
+            assert local_multinode_cluster.nodes[node_id].is_alive()
+
+            _run_sibling_nemesis(
+                manifest_path,
+                "StopStartNodeNemesis",
+                "inject",
+                node_id,
+            )
+            assert local_multinode_cluster.nodes[node_id].is_alive() is False
+            assert set(controller.held_ports(node_id)) >= {
+                local_multinode_cluster.nodes[node_id].ic_port,
+                local_multinode_cluster.nodes[node_id].grpc_port,
+                local_multinode_cluster.nodes[node_id].mon_port,
+            }
+
+            _run_sibling_nemesis(
+                manifest_path,
+                "StopStartNodeNemesis",
+                "extract",
+                node_id,
+            )
+            assert local_multinode_cluster.nodes[node_id].is_alive()
+            assert local_multinode_cluster.nodes[node_id].pid != restarted_pid
+            assert {
+                other_id: node.pid
+                for other_id, node in local_multinode_cluster.nodes.items()
+                if other_id != node_id
+            } == other_pids
+    finally:
+        controller.restore_all()

@@ -189,6 +189,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
     TIntrusiveConstPtr<TGuardedInfo> Info;
 
     ui64 Signature;
+    // the replica sends follower changes to the guardian it has registered; a guardian made in place of a gone one
+    // registers itself even if the record of the leader matches, keeping the step the replica has
+    bool Registered = false;
+    ui32 ProposedStep = 0;
 
     friend class TBaseGuardian;
 
@@ -212,9 +216,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
         ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
         req->Record.SetProposedGeneration(Info->Generation);
-        req->Record.SetProposedStep(0);
+        req->Record.SetProposedStep(std::exchange(ProposedStep, 0));
         req->Record.SetSignature(Signature);
         req->Record.SetIsGuardian(true);
+        Registered = true;
 
         Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateUpdate);
@@ -251,6 +256,9 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
                     return UpdateInfo();
                 } else if (leader != Info->Leader || tabletLeader != Info->TabletLeader) {
                     return Demoted(); // hack around cluster restarts
+                } else if (!Registered) {
+                    ProposedStep = record.GetCurrentStep();
+                    return UpdateInfo();
                 } else {
                     Become(&TThis::StateCalm);
                     Send(Guard, ev->Release().Release());

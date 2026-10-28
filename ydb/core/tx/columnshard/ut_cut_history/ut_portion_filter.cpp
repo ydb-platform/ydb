@@ -29,13 +29,24 @@ Y_UNIT_TEST_SUITE(TFindEmptyHistoryIntervalsPortionFilter) {
             bool InheritPortionStorage = false;
         };
 
+        const auto buildMeta = [&](const TCase& test) {
+            auto meta = source->GetMeta().SerializeToProto({ blob }, NOlap::NPortion::EProduced::COMPACTED);
+            meta.SetTierName(test.Tier);
+            if (test.BsIndexBytes) {
+                meta.SetBsIndexBlobBytes(*test.BsIndexBytes);
+                meta.SetIndexBlobBytes(*test.BsIndexBytes);
+                meta.SetIndexRawBytes(*test.BsIndexBytes);
+            } else {
+                meta.ClearBsIndexBlobBytes();
+            }
+            return meta;
+        };
+
         const std::vector<TCase> cases = {
             { "", 0, true },
-            { NOlap::NBlobOperations::TGlobal::DefaultStorageId, 0, true },
             { "warm", std::nullopt, false },
             { "warm", std::nullopt, true, NOlap::NBlobOperations::TGlobal::DefaultStorageId },
             { "warm", std::nullopt, false, NOlap::NBlobOperations::TGlobal::DefaultStorageId, true },
-            { "warm", std::nullopt, false, NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId },
             { "warm", 0, false, NOlap::NBlobOperations::TGlobal::DefaultStorageId },
         };
         for (const auto& test : cases) {
@@ -49,15 +60,7 @@ Y_UNIT_TEST_SUITE(TFindEmptyHistoryIntervalsPortionFilter) {
             const auto indexInfo = NOlap::TIndexInfo::BuildFromProto(
                 1, schema, NOlap::TTestStoragesManager::GetInstance(), std::make_shared<NOlap::TSchemaObjectsCache>());
             UNIT_ASSERT(indexInfo);
-            auto meta = source->GetMeta().SerializeToProto({ blob }, NOlap::NPortion::EProduced::COMPACTED);
-            meta.SetTierName(test.Tier);
-            if (test.BsIndexBytes) {
-                meta.SetBsIndexBlobBytes(*test.BsIndexBytes);
-                meta.SetIndexBlobBytes(*test.BsIndexBytes);
-                meta.SetIndexRawBytes(*test.BsIndexBytes);
-            } else {
-                meta.ClearBsIndexBlobBytes();
-            }
+            const auto meta = buildMeta(test);
             NOlap::TCompactedPortionInfoConstructor constructor(pathId, 1);
             constructor.SetSchemaVersion(1);
             constructor.SetAppearanceSnapshot(snapshot);

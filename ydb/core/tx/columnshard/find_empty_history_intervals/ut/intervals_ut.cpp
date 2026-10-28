@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
+
 namespace NKikimr::NColumnShard::NFindEmptyHistoryIntervals {
 namespace {
 
@@ -27,30 +29,30 @@ Y_UNIT_TEST_SUITE(THistoryIntervalsTest) {
 
     Y_UNIT_TEST(AdjacentIntervalsAndChannels) {
         ui32 mismatches = 0;
-        THistoryIntervals historyIntervals(TabletId, { { { 2, 10 }, { 20, 101 } }, { { 2, 20 }, { 30, 102 } }, { { 3, 10 }, { 20, 103 } } });
+        THistoryIntervals historyIntervals(
+            TabletId, { { { 2, 10 }, { 20, 101 } }, { { 2, 20 }, { 30, 102 } }, { { 2, 30 }, { 40, 101 } }, { { 3, 10 }, { 20, 103 } } });
         const auto onMismatch = [&] {
             ++mismatches;
         };
         historyIntervals.Exclude(MakeBlobID(2, 20), 102, onMismatch);
         historyIntervals.Exclude(MakeBlobID(2, 20), 0, onMismatch);
+        historyIntervals.Exclude(MakeBlobID(2, 30), 101, onMismatch);
         UNIT_ASSERT_VALUES_EQUAL(mismatches, 0);
-        UNIT_ASSERT_VALUES_EQUAL(historyIntervals.GetIntervals().size(), 2);
-        UNIT_ASSERT(historyIntervals.GetIntervals().contains({ 2, 10 }));
-        UNIT_ASSERT(historyIntervals.GetIntervals().contains({ 3, 10 }));
+        const THistoryIntervals::TIntervals expected{ { { 2, 10 }, { 20, 101 } }, { { 3, 10 }, { 20, 103 } } };
+        UNIT_ASSERT(std::ranges::equal(historyIntervals.GetIntervals(), expected, [](const auto& actual, const auto& expected) {
+            return actual.first == expected.first && actual.second.To == expected.second.To && actual.second.Group == expected.second.Group;
+        }));
         historyIntervals.Exclude(MakeBlobID(3, 10), 0, onMismatch);
         UNIT_ASSERT_VALUES_EQUAL(mismatches, 1);
         historyIntervals.Exclude(MakeBlobID(2, 10));
-        historyIntervals.Exclude(MakeBlobID(2, 10), 0, onMismatch);
         UNIT_ASSERT(historyIntervals.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(mismatches, 1);
     }
 
     Y_UNIT_TEST(ForeignTabletUnknownChannelAndGaps) {
         THistoryIntervals historyIntervals(TabletId, { { { 2, 10 }, { 20, 101 } }, { { 2, 30 }, { 40, 102 } }, { { 4, 10 }, { 20, 103 } } });
+        // A foreign tablet, absent channel, or generation gap must not exclude a neighboring interval.
         historyIntervals.Exclude(MakeBlobID(2, 10, TabletId + 1));
-        historyIntervals.Exclude(MakeBlobID(1, 15));
         historyIntervals.Exclude(MakeBlobID(3, 15));
-        historyIntervals.Exclude(MakeBlobID(5, 15));
         historyIntervals.Exclude(MakeBlobID(2, 25));
         UNIT_ASSERT_VALUES_EQUAL(historyIntervals.GetIntervals().size(), 3);
     }

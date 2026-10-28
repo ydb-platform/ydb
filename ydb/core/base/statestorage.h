@@ -82,6 +82,7 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
+        bool WaitForAllRingGroups = false;
 
         TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
@@ -89,8 +90,8 @@ struct TEvStateStorage {
 
         TString ToString() const {
             switch (SigWaitMode) {
-            case SigNone: return "SigNone";
-            case SigAsync: return "SigAsync";
+            case SigNone: return WaitForAllRingGroups ? "SigNone WaitForAllRingGroups" : "SigNone";
+            case SigAsync: return WaitForAllRingGroups ? "SigAsync WaitForAllRingGroups" : "SigAsync";
             case SigSync: return "SigSync";
             default: return "Unknown";
             }

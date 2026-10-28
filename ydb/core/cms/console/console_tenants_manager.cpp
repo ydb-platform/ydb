@@ -123,6 +123,10 @@ public:
         if (!pool->GetKind()) {
             pool->SetKind(Pool->Kind);
         }
+        if (PoolId) {
+            // the mode of the existing pool is the one resolved at its creation, or set by BSC afterwards
+            pool->ClearBridgeMode();
+        }
 
         YDB_LOG_DEBUG("Send pool request",
             {"logPrefix", LogPrefix},

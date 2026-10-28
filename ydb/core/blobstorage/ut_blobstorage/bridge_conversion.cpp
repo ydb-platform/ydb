@@ -769,6 +769,127 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
     }
 
+    // conversion of existing pools and their groups may be skipped, which activates non-uniform storage along with the
+    // conversion; static groups become inline piles anyway
+    Y_UNIT_TEST(SkipStoragePoolConversion) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        env.CreatePool();
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        std::vector<ui32> groups;
+        const auto initialBaseConfig = env.FetchBaseConfig();
+        for (ui64 storagePoolId : {1, 2}) {
+            for (const auto *group : GetPoolGroups(initialBaseConfig, storagePoolId)) {
+                groups.push_back(group->GetGroupId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        const ui32 staticGroupId = 0;
+
+        TDataChecker checker(env);
+        for (ui32 groupId : {groups[0], groups[1], staticGroupId}) {
+            checker.Write(groupId);
+        }
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(true);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groups.front());
+
+        // the activation can't go along with the conversion of BSC groups
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "only after BSC conversion completes");
+        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+
+        auto getGeneration = [&](ui32 groupId) {
+            return FindGroup(env.FetchBaseConfig(), groupId).GetGroupGeneration();
+        };
+        std::vector<ui32> generations;
+        for (ui32 groupId : groups) {
+            generations.push_back(getGeneration(groupId));
+        }
+
+        res = ConvertToBridge(env, true);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+
+        const auto config = QueryStorageConfig(env);
+        UNIT_ASSERT(config.HasClusterState());
+        UNIT_ASSERT(!config.GetClusterStateDetails().GetBscConversionPending());
+        UNIT_ASSERT(config.GetClusterStateDetails().GetNonUniformStorageEnabled());
+        const auto& staticGroup = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetBridgeProxyGroupId(), staticGroupId);
+
+        // groups of BSC are left intact, pools stay ordinary ones
+        for (size_t i = 0; i < groups.size(); ++i) {
+            const auto info = GetGroupInfo(env, groups[i]);
+            UNIT_ASSERT_C(!info.HasBridgeGroupState() && !info.HasBridgeProxyGroupId(), info.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(getGeneration(groups[i]), generations[i]);
+        }
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *read = request.AddCommand()->MutableReadStoragePool();
+        read->SetBoxId(1);
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 2);
+        for (const auto& pool : response.GetStatus(0).GetStoragePool()) {
+            UNIT_ASSERT_C(pool.HasBridgeMode() && !pool.GetBridgeMode(), pool.ShortDebugString());
+        }
+
+        // new pools are bridged ones unless they are requested to be ordinary
+        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
+        pool.ClearItemConfigGeneration();
+        pool.SetNumGroups(1);
+        for (const auto& [storagePoolId, bridgeMode] : {std::make_pair(3, std::optional<bool>()),
+                std::make_pair(4, std::optional<bool>(false))}) {
+            pool.SetStoragePoolId(storagePoolId);
+            pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
+            pool.SetKind(pool.GetName());
+            if (bridgeMode) {
+                pool.SetBridgeMode(*bridgeMode);
+            } else {
+                pool.ClearBridgeMode();
+            }
+            request.Clear();
+            request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+        env.Sim(TDuration::Seconds(30));
+        const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+        for (const auto& [storagePoolId, numGroups] : {std::make_pair(3, 2), std::make_pair(4, 1)}) {
+            const auto poolGroups = GetPoolGroups(baseConfig, storagePoolId);
+            UNIT_ASSERT_VALUES_EQUAL(poolGroups.size(), numGroups); // bridged one has proxy and part in the pile
+            for (const auto *group : poolGroups) {
+                if (group->GetIsProxyGroup() || numGroups == 1) {
+                    checker.Write(group->GetGroupId());
+                }
+            }
+        }
+
+        auto checkAll = [&](ui32 nodeId) {
+            for (ui32 groupId : {groups[0], groups[1], staticGroupId}) {
+                checker.Write(groupId, nodeId);
+            }
+            checker.CheckAll(nodeId);
+        };
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            checkAll(nodeId);
+        }
+
+        // ordinary groups keep working through disk reassignment and restarts of the converted cluster
+        ReassignOneDisk(env, groups.front());
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(getGeneration(groups.front()), generations.front() + 1);
+        checkAll(1);
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            Cerr << "*** restarting node " << nodeId << " of converted cluster" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            checkAll(nodeId);
+        }
+    }
+
     // YAML config of the converted cluster can't lose its bridge config, as nodes restarted with such config would run
     // without one; the config of this test environment has no bridge config, nodes get it from their startup settings
     Y_UNIT_TEST(BridgeConfigCantBeDropped) {

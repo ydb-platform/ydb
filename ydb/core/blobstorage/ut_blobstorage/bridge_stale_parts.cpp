@@ -284,6 +284,39 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         CheckPileData(env, checker, 1, 9);
     }
 
+    // the pile goes out when no dynamic group has a part to sync in it, so BSC reports it synced right away; the group
+    // created afterwards has a part there, which the pile must get synced before it is SYNCHRONIZED
+    Y_UNIT_TEST(FirstGroupCreatedWhilePileOut) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NKikimrBlobStorage::TStorageConfig config;
+        WaitUntil(env, [&] {
+            config = QueryStorageConfig(env);
+            for (const auto& pss : config.GetClusterStateDetails().GetPileSyncState()) {
+                if (TBridgePileId::FromProto(&pss,
+                        &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                        TBridgePileId::FromPileIndex(1)) {
+                    return !pss.GetUnsyncedBSC();
+                }
+            }
+            return false;
+        }, "BSC report of the pile having nothing to sync", [&] { return config.GetClusterStateDetails().DebugString(); });
+
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto part = GetPart(env, groupId, 1);
+        UNIT_ASSERT_UNEQUAL_C(part.GetStage(), NKikimrBridge::TGroupState::SYNCED, part.DebugString());
+
+        TDataChecker checker(env);
+        checker.Write(groupId); // reaches pile 0 only
+        RejoinPile(env, 1);
+        const auto synced = GetPart(env, groupId, 1);
+        UNIT_ASSERT_EQUAL_C(synced.GetStage(), NKikimrBridge::TGroupState::SYNCED, synced.DebugString());
+        checker.Write(groupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 1, 9);
+    }
+
     // assimilation and integrity checks take the answer of the synchronized pile only, so they go nowhere else: the part
     // of the pile being synced (shown here by the one not reset by BSC yet) may be degraded and fail them otherwise
     Y_UNIT_TEST(AssimilateAndCheckIntegritySkipUnsyncedPile) {

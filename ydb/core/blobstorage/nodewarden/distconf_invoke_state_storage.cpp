@@ -506,6 +506,7 @@ namespace NKikimr::NStorage {
 
             };
             auto *m = (config.*mutableFunc)();
+            const auto oldConfig = *m;
 
             if (m->RingGroupsSize() && m->HasRing()) {
                 throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
@@ -519,6 +520,9 @@ namespace NKikimr::NStorage {
             }
             if (!found) {
                 throw TExError() << name << " From node not found";
+            }
+            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m)) {
+                throw TExError() << error;
             }
         };
 

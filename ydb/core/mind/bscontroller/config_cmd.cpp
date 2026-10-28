@@ -418,6 +418,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
 
                     default: break;
                 }

@@ -5,6 +5,7 @@
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/library/testlib/helpers.h>
 

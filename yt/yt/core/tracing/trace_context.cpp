@@ -18,10 +18,11 @@
 
 #include <yt/yt/library/tracing/tracer.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <library/cpp/yt/misc/immortal.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/format.h>
@@ -58,21 +59,16 @@ constinit const auto Logger = TracingLogger;
 
 struct TGlobalTracerStorage
 {
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
     ITracerPtr Tracer;
 };
 
-// TODO(prime@): Switch constinit global variable, once gcc supports it.
-static TGlobalTracerStorage* GlobalTracerStorage()
-{
-    return LeakySingleton<TGlobalTracerStorage>();
-}
+static constinit TImmortal<TGlobalTracerStorage> GlobalTracerStorage;
 
 ITracerPtr GetGlobalTracer()
 {
-    auto tracerStorage = GlobalTracerStorage();
-    auto guard = Guard(tracerStorage->Lock);
-    return tracerStorage->Tracer;
+    auto guard = Guard(GlobalTracerStorage->Lock);
+    return GlobalTracerStorage->Tracer;
 }
 
 void SetGlobalTracer(const ITracerPtr& tracer)
@@ -80,10 +76,9 @@ void SetGlobalTracer(const ITracerPtr& tracer)
     ITracerPtr oldTracer;
 
     {
-        auto tracerStorage = GlobalTracerStorage();
-        auto guard = Guard(tracerStorage->Lock);
-        oldTracer = tracerStorage->Tracer;
-        tracerStorage->Tracer = tracer;
+        auto guard = Guard(GlobalTracerStorage->Lock);
+        oldTracer = GlobalTracerStorage->Tracer;
+        GlobalTracerStorage->Tracer = tracer;
     }
 
     if (oldTracer) {

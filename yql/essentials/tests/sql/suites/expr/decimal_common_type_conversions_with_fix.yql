@@ -1,5 +1,3 @@
-PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
-
 SELECT
     AsList(CAST(1 as Decimal(4, 3)), CAST(2 as Decimal(5, 4))),
     AsList(CAST(1 as Decimal(4, 3)), CAST(2 as Decimal(9, 2))),

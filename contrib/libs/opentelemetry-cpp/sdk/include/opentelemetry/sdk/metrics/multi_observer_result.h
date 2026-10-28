@@ -27,7 +27,7 @@ public:
   size_t InstrumentCount() const;
   bool HasInstrument(const opentelemetry::metrics::ObservableInstrument *instrument) const;
   void GetInstruments(
-      nostd::function_ref<void(opentelemetry::metrics::ObservableInstrument *)> callback);
+      nostd::function_ref<void(const opentelemetry::metrics::ObservableInstrument *)> callback);
   void Reset();
   void StoreResults(opentelemetry::common::SystemTimestamp collection_ts);
 
@@ -43,7 +43,7 @@ private:
   // This allows us to avoid an unnecessary layer of indirection and a bunch of allocations.
   using ObserverResultDirect =
       nostd::variant<nostd::monostate, ObserverResultT<double>, ObserverResultT<int64_t>>;
-  std::unordered_map<opentelemetry::metrics::ObservableInstrument *, ObserverResultDirect>
+  std::unordered_map<const opentelemetry::metrics::ObservableInstrument *, ObserverResultDirect>
       observer_results_;
 };
 }  // namespace metrics

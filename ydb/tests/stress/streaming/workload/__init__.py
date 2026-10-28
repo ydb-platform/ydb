@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class Workload():
+class Workload:
     def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str):
         self.database = database
         self.endpoint = endpoint
@@ -26,56 +26,45 @@ class Workload():
 
     def create_topics(self):
         logger.info("Workload::create_topics")
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count}, retention_period = Interval('PT1H'));
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name}) WITH (retention_period = Interval('PT12H'));
-            """
-        )
+            """)
 
     def drop_topics(self):
         logger.info("Workload::drop_topics")
 
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 DROP TOPIC  `{self.input_topic}`;
                 DROP TOPIC  `{self.output_topic}`;
-            """
-        )
+            """)
 
     def create_external_data_source(self):
         logger.info("Workload::create_external_data_source")
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE EXTERNAL DATA SOURCE `{self.prefix}/source_name` WITH (
                     SOURCE_TYPE="Ydb",
                     LOCATION="{self.endpoint}",
                     DATABASE_NAME="{self.database}",
                     AUTH_METHOD="NONE");
-            """
-        )
+            """)
 
     def create_table(self):
         logger.info("Workload::create_table")
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE TABLE `{self.prefix}/table_name` (
                     key Utf8,
                     value Utf8,
                     PRIMARY KEY (key)
                 );
-            """
-        )
-        self.pool.execute_with_retries(
-            f"""
+            """)
+        self.pool.execute_with_retries(f"""
                 UPSERT INTO `{self.prefix}/table_name` (key, value) VALUES ('key1', 'value1');
-            """
-        )
+            """)
 
     def create_join_tables(self):
         logger.info("Workload::create_join_tables")
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE TABLE `{self.prefix}/join_row_table` (
                     level Utf8,
                     descr Utf8,
@@ -88,38 +77,30 @@ class Workload():
                 ) WITH (
                     STORE = COLUMN
                 );
-            """
-        )
-        self.pool.execute_with_retries(
-            f"""
+            """)
+        self.pool.execute_with_retries(f"""
                 UPSERT INTO `{self.prefix}/join_row_table` (level, descr) VALUES ('error', 'row-descr');
-            """
-        )
-        self.pool.execute_with_retries(
-            f"""
+            """)
+        self.pool.execute_with_retries(f"""
                 UPSERT INTO `{self.prefix}/join_column_table` (level, descr) VALUES ('error', 'col-descr');
-            """
-        )
+            """)
 
     def create_output_tables(self):
         logger.info("Workload::create_output_tables")
         for suffix in ('ext', 'loc'):
-            self.pool.execute_with_retries(
-                f"""
+            self.pool.execute_with_retries(f"""
                     CREATE TABLE `{self.prefix}/output_table_{suffix}` (
                         ts Utf8 NOT NULL,
                         error_count Uint64,
                         PRIMARY KEY (ts)
                     );
-                """
-            )
+                """)
 
     def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
         source = f"`{self.prefix}/source_name`." if external else ""
         output_table = f"{self.prefix}/output_table_{'ext' if external else 'loc'}"
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
                 $precompute_data = SELECT value FROM `{self.prefix}/table_name` LIMIT 1;
 
@@ -158,11 +139,12 @@ class Workload():
                 UPSERT INTO `{output_table}`
                 SELECT Unwrap(CAST(ts || "{'ext' if external else 'loc'}" AS Utf8)) AS ts, error_count FROM $number_errors;
                 END DO;
-            """
-        )
+            """)
 
     def check_status(self):
-        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'")
+        result_sets = self.pool.execute_with_retries(
+            f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'"
+        )
         assert len(result_sets) == 1
         assert len(result_sets[0].rows) == 2
 
@@ -194,9 +176,7 @@ class Workload():
             direct_level = "error" if random.choice([True, False]) else "warn"
             direct_message = f'{{"time": {int(time.time() * 1000000)}, "level": "{direct_level}"}}'
             try:
-                self.pool.execute_with_retries(
-                    f"INSERT INTO `{self.input_topic}` SELECT @@{direct_message}@@;"
-                )
+                self.pool.execute_with_retries(f"INSERT INTO `{self.input_topic}` SELECT @@{direct_message}@@;")
             except Exception as e:
                 logger.error(f"Failed to write into local topic: {e}")
 

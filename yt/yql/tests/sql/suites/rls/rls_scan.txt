@@ -1,0 +1,5 @@
+{"key"=1;"value"="bad"};
+{"key"=2;"value"="good"};
+{"key"=3;"value"="good"};
+{"key"=4;"value"="bad"};
+{"key"=5;"value"="good"};

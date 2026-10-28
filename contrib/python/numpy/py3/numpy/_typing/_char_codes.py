@@ -182,7 +182,6 @@ _FloatingCodes = Literal[
     _Float16Codes,
     _Float32Codes,
     _Float64Codes,
-    _LongDoubleCodes,
     _HalfCodes,
     _SingleCodes,
     _DoubleCodes,

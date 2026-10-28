@@ -4,13 +4,11 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 namespace NYql {
-    TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig);
+TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig);
 
-    ///
-    /// Fill a select from a TGenSourceSettings
-    ///
-    void FillSelectFromGenSourceSettings(NConnector::NApi::TSelect& select,
-                                         const NNodes::TGenSourceSettings& settings,
-                                         TExprContext& ctx,
-                                         const TGenericState::TTableMeta* tableMeta);
-} // namespace NYql
+///
+/// Fill a select from a TGenSourceSettings
+///
+void FillSelectFromGenSourceSettings(NConnector::NApi::TSelect& select, const NNodes::TGenSourceSettings& settings, TExprContext& ctx,
+    const TGenericState::TTableMeta* tableMeta);
+}   // namespace NYql

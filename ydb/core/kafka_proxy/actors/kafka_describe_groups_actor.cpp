@@ -206,7 +206,7 @@ void TKafkaDescribeGroupsActor::ParseMembersMetadata(const NKqp::TEvKqp::TEvQuer
         groupMember.GroupInstanceId = groupInstanceId;
         groupMember.MemberId = memberId;
         groupMember.MemberAssignmentStr = parserMembers.ColumnParser("assignment").GetOptionalString().value_or("");
-        groupMember.MemberAssignment = TString(groupMember.MemberAssignmentStr);
+        groupMember.MemberAssignment = groupMember.MemberAssignmentStr;
 
         auto& describedGroup = GroupIdToDescription[groupId];
         FillInMemberMetadata(describedGroup, groupMember, protoStr);

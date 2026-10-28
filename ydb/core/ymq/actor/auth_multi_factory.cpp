@@ -127,7 +127,6 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthentication) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
-        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
         hFunc(TEvWakeup, HandleWakeup);
     }
 }
@@ -195,8 +194,7 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
     ScheduleRetry(FolderServiceRequestRetryPeriod_, FOLDER_SERVICE_REQUEST_WAKEUP_TAG);
 }
 
-template <typename TEvResponse>
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvResponse::TPtr& ev) {
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
@@ -237,14 +235,6 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
     }
 
     GetCloudIdAndAuthorize();
-}
-
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
-}
-
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
-    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
 }
 
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthorization) {
@@ -380,45 +370,30 @@ void TBaseCloudAuthRequestProxy::OnFinishedRequest() {
     }
 }
 
-template<typename TSignatureProto>
-void TBaseCloudAuthRequestProxy::FillSignatureProto(TSignatureProto& signature) const {
-    signature.set_access_key_id(AccessKeySignature_->AccessKeyId);
-    signature.set_string_to_sign(AccessKeySignature_->SignedString);
-    signature.set_signature(AccessKeySignature_->Signature);
-
-    auto& v4params = *signature.mutable_v4_parameters();
-    v4params.set_service("sqs");
-    v4params.set_region(AccessKeySignature_->Region);
-
-    const ui64 nanos = AccessKeySignature_->SignedAt.NanoSeconds();
-    const ui64 seconds = nanos / 1000000000ull;
-    const ui64 nanos_left = nanos % 1000000000ull;
-
-    v4params.mutable_signed_at()->set_seconds(seconds);
-    v4params.mutable_signed_at()->set_nanos(nanos_left);
-}
-
 void TBaseCloudAuthRequestProxy::Authenticate() {
     AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
-    if (EnableAccessServiceV2Interface_) {
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
-        request->RequestId = RequestId_;
-        if (AccessKeySignature_) {
-            FillSignatureProto(*request->Request.mutable_signature());
-        } else {
-            request->Request.set_iam_token(IamToken_);
-        }
-        Send(MakeSqsAccessServiceID(), std::move(request));
+    auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+    request->RequestId = RequestId_;
+    if (AccessKeySignature_) {
+        auto& signature = *request->Request.mutable_signature();
+        signature.set_access_key_id(AccessKeySignature_->AccessKeyId);
+        signature.set_string_to_sign(AccessKeySignature_->SignedString);
+        signature.set_signature(AccessKeySignature_->Signature);
+
+        auto& v4params = *signature.mutable_v4_parameters();
+        v4params.set_service("sqs");
+        v4params.set_region(AccessKeySignature_->Region);
+
+        const ui64 nanos = AccessKeySignature_->SignedAt.NanoSeconds();
+        const ui64 seconds = nanos / 1000000000ull;
+        const ui64 nanos_left = nanos % 1000000000ull;
+
+        v4params.mutable_signed_at()->set_seconds(seconds);
+        v4params.mutable_signed_at()->set_nanos(nanos_left);
     } else {
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-        request->RequestId = RequestId_;
-        if (AccessKeySignature_) {
-            FillSignatureProto(*request->Request.mutable_signature());
-        } else {
-            request->Request.set_iam_token(IamToken_);
-        }
-        Send(MakeSqsAccessServiceID(), std::move(request));
+        request->Request.set_iam_token(IamToken_);
     }
+    Send(MakeSqsAccessServiceID(), std::move(request));
 }
 
 
@@ -613,12 +588,9 @@ void TMultiAuthFactory::Initialize(
         return TActorSetupCmd(actor, TMailboxType::HTSwap, executorPoolID);
     };
 
-    EnableAccessServiceV2Interface_ = appData.FeatureFlags.GetEnableAccessServiceV2Interface();
-
     IActor* const accessService = CreateSqsAccessService(
         config.GetYandexCloudAccessServiceAddress(),
-        rootCAPath,
-        EnableAccessServiceV2Interface_);
+        rootCAPath);
 
     services.emplace_back(MakeSqsAccessServiceID(), setupActor(accessService));
 
@@ -668,12 +640,12 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_, requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {
         system.Register(
-            new TCloudAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_),
+            new TCloudAuthRequestProxy(std::move(data), token),
             NActors::TMailboxType::HTSwap,
             poolID);
     }

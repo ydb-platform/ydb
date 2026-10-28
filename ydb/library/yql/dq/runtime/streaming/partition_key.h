@@ -15,15 +15,12 @@ struct TPartitionKey {
     bool operator==(const TPartitionKey&) const = default;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq
 
-template<>
+template <>
 struct THash<NYql::NDq::TPartitionKey> {
-    ui64 operator() (const NYql::NDq::TPartitionKey& pk) const {
-        return CombineHashes<ui64>(
-            std::hash<TString>{} (pk.Cluster),
-            std::hash<ui64>{} (pk.PartitionId)
-        );
+    ui64 operator()(const NYql::NDq::TPartitionKey& pk) const {
+        return CombineHashes<ui64>(std::hash<TString>{}(pk.Cluster), std::hash<ui64>{}(pk.PartitionId));
     }
 };
 
@@ -36,8 +33,8 @@ template <>
     ui64 partitionId;
     GetNext(cluster, '@', partitionId);
 
-    value = NYql::NDq::TPartitionKey {
-        .Cluster = TString{cluster},
+    value = NYql::NDq::TPartitionKey{
+        .Cluster = TString{ cluster },
         .PartitionId = partitionId,
     };
 }

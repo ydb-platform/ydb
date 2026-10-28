@@ -1,4 +1,5 @@
 #include "bridge_test_helpers.h"
+
 #include <yql/essentials/minikql/mkql_terminator.h>
 
 using namespace NKikimr::NUdfStore::NWasm;
@@ -35,7 +36,7 @@ constexpr TStringBuf Objects = R"(
 Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
     Y_UNIT_TEST(ConfiguredContainerCallAndLifecycle) {
         TBridgeEnv env;
-        env.AddModule(Objects, {"create", "call", "destroy", "created", "destroyed"});
+        env.AddModule(Objects, { "create", "call", "destroy", "created", "destroyed" });
         const auto parsed = ParseManifest(R"({"module_name":"Test","module_type":"module","module_kind":"wasm",
           "objects":[{"name":"X","create_export":"create","destroy_export":"destroy","methods":[
             {"name":"Apply","export":"call","argument_types":["List<Int64>"],"result_type":"List<Int64>"}]}]})");
@@ -47,7 +48,7 @@ Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
         builder->Build(&info);
         UNIT_ASSERT(info.Implementation);
         TUnboxedValue function(TUnboxedValuePod(info.Implementation.Release()));
-        TUnboxedValue values[] = {TUnboxedValuePod(i64(7)), TUnboxedValuePod(i64(9))};
+        TUnboxedValue values[] = { TUnboxedValuePod(i64(7)), TUnboxedValuePod(i64(9)) };
         const auto input = env.ValueBuilder.NewList(values, 2);
         for (size_t i = 0; i < 3; ++i) {
             const auto output = function.Run(&env.ValueBuilder, &input);
@@ -66,13 +67,13 @@ Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
 
     Y_UNIT_TEST(GenerationChangeRecreatesObject) {
         TBridgeEnv env;
-        env.AddModule(Objects, {"create", "call", "destroy", "created", "destroyed"});
+        env.AddModule(Objects, { "create", "call", "destroy", "created", "destroyed" });
         TWasmUdfDescriptor desc;
         desc.Name = "Apply";
         desc.CreateExport = "create";
         desc.CallExport = "call";
         desc.DestroyExport = "destroy";
-        desc.ArgTypes = {env.Type("Int64?")};
+        desc.ArgTypes = { env.Type("Int64?") };
         desc.ResultType = env.Type("Int64?");
         auto builder = env.Builder();
         TWasmConfiguredCallable::Register(*builder, false, env.State, desc, "cfg");
@@ -92,13 +93,13 @@ Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
     Y_UNIT_TEST(FailureDestroysObjectAndReleasesBridgeHandles) {
         TBridgeEnv env;
         TOnlyThrowingBindTerminator terminator;
-        env.AddModule(Objects, {"create", "fail", "destroy", "created", "destroyed"});
+        env.AddModule(Objects, { "create", "fail", "destroy", "created", "destroyed" });
         TWasmUdfDescriptor desc;
         desc.Name = "Fail";
         desc.CreateExport = "create";
         desc.CallExport = "fail";
         desc.DestroyExport = "destroy";
-        desc.ArgTypes = {env.Type("Int64")};
+        desc.ArgTypes = { env.Type("Int64") };
         desc.ResultType = env.Type("Int64");
         auto builder = env.Builder();
         TWasmConfiguredCallable::Register(*builder, false, env.State, desc, "cfg");
@@ -113,5 +114,4 @@ Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
         UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 1);
         UNIT_ASSERT_VALUES_EQUAL(env.Query.BridgeNodes->DebugSize(), 0);
     }
-
 }

@@ -1,5 +1,28 @@
 # In-memory metrics ownership
 
+Instrumentation uses `IMetricSystem` from `core/subsystems/metric_system.h` to
+create lines and set common labels. Register a replacement implementation or mock
+under the interface type, then obtain it through `GetMetricSystem`:
+
+```cpp
+setup->RegisterSubSystem<NActors::IMetricSystem>(std::make_unique<TMyMetricSystem>());
+
+if (auto* metrics = NActors::GetMetricSystem(actorSystem)) {
+    auto line = metrics->CreateLine("example.value", {});
+    line.Append(42);
+}
+```
+
+`GetMetricSystem` prefers the registered interface and falls back to the existing
+in-memory registry for setups registered under its concrete type. Implementations
+provide `SetCommonLabels` and `CreateLineWithMeta`, returning an `IMetricLine`
+endpoint (or null to reject the line). `TLine` and its raw/on-change frontends use
+that endpoint without depending on the in-memory backend. The metric system must
+outlive all returned line handles. Snapshot and export APIs remain specific to
+the implementation; they are not part of `IMetricSystem`.
+
+The following ownership and queue rules describe the in-memory implementation.
+
 `TInMemoryMetricsBackend` has one owner: the metrics manager actor. Only that
 owner registers lines, edits labels, builds snapshots, collects statistics,
 maintains line history and chooses chunks for reuse. There are no backend or

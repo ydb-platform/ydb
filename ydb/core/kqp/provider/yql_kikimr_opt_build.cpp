@@ -106,6 +106,7 @@ struct TKiExploreTxResults {
     TVector<TKiQueryBlock> QueryBlocks;
     bool HasExecute;
     bool HasErrors;
+    bool HasKillSession = false;
 
     THashSet<const TExprNode*> GetSyncSet() const {
         THashSet<const TExprNode*> syncSet;
@@ -735,6 +736,16 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (auto maybeKillSession = node.Maybe<TKiKillSession>()) {
+        if (!checkDataSink(maybeKillSession.Cast().DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        txRes.HasKillSession = true;
+        return true;
+    }
+
     if (auto maybeExecQuery = node.Maybe<TKiExecDataQuery>()) {
         auto execQuery = maybeExecQuery.Cast();
         if (!checkDataSink(execQuery.DataSink())) {
@@ -1158,6 +1169,21 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));
         }
         return txExplore.HasErrors ? nullptr : node.Ptr();
+    }
+
+    if (txExplore.HasKillSession) {
+        bool hasData = txExplore.HasExecute;
+        for (const auto& block : txExplore.QueryBlocks) {
+            // Constant SELECTs have results but no table operations.
+            hasData |= !block.Results.empty() || !block.Effects.empty();
+        }
+        if (hasData) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX,
+                "KILL SESSION cannot be combined with data queries in a single compiled query. "
+                "Use separate queries or per-statement execution."));
+            return nullptr;
+        }
+        return MakeSchemeTx(commit, ctx);
     }
 
     if (txExplore.HasExecute) {

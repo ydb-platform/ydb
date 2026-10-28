@@ -1,0 +1,10 @@
+GTEST()
+SRCS(message_stream_ut.cpp)
+PEERDIR(
+    ydb/library/yql/providers/common/message_stream
+    yql/essentials/providers/common/structured_token
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/stub
+)
+YQL_LAST_ABI_VERSION()
+END()

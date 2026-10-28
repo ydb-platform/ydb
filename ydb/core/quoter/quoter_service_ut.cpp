@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
                 {sender},
-                [cookie](const auto& ev) {
+                [cookie](const TEvQuota::TEvClearance::TPtr& ev) {
                     return ev->Cookie == cookie;
                 });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
                 {sender},
-                [cookie](const auto& ev) {
+                [cookie](const TEvQuota::TEvClearance::TPtr& ev) {
                     return ev->Cookie == cookie;
                 });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
             {sender},
-            [](const auto& ev) { return ev->Cookie == 1; });
+            [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
         UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
     }
 
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
             {sender},
-            [](const auto& ev) { return ev->Cookie == 1; });
+            [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
         UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
 
         // A late resolve answer after cleanup must be ignored, not crash.
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 TDuration::Max()), 0, 2));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 2; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
     }
@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 1));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 1; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 2; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
         }
 
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 3));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 3; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 3; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -812,7 +812,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res2", 1)}, TDuration::Max()), 0, 4));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 4; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 4; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
     }

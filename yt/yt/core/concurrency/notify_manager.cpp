@@ -16,7 +16,7 @@ constexpr auto WaitTimeWarningThreshold = TDuration::Seconds(30);
 ////////////////////////////////////////////////////////////////////////////////
 
 TNotifyManager::TNotifyManager(
-    TIntrusivePtr<NThreading::TEventCount> eventCount,
+    TIntrusivePtr<TEventCount> eventCount,
     const NProfiling::TTagSet& tagSet,
     TDuration pollingPeriod)
     : EventCount_(std::move(eventCount))
@@ -103,7 +103,7 @@ void TNotifyManager::NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMin
     }
 }
 
-void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function<bool()> isStopping)
+void TNotifyManager::Wait(TEventCount::TCookie cookie, std::function<bool()> isStopping)
 {
     if (UnlockNotifies()) {
         // We must call either Wait or CancelWait.
@@ -201,7 +201,7 @@ void TNotifyManager::CancelWait()
 #endif
 }
 
-NThreading::TEventCount* TNotifyManager::GetEventCount()
+TEventCount* TNotifyManager::GetEventCount()
 {
     return EventCount_.Get();
 }

@@ -28,8 +28,8 @@ void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
     InitKikimr(initParameters);
-    InitAccessServiceService(initParameters.EnableAccessServiceV2Interface);
-    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic, initParameters.EnableAccessServiceV2Interface);
+    InitAccessServiceService();
+    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region, const TString& service) const {
@@ -522,7 +522,6 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
     }
-    appConfig.MutableFeatureFlags()->SetEnableAccessServiceV2Interface(initParameters.EnableAccessServiceV2Interface);
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(initParameters.YandexCloudMode);
@@ -949,43 +948,35 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     client.Grant("/", "Root", "root@builtin", NACLib::EAccessRights::GenericFull);
 }
 
-void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Interface) {
+void THttpProxyTestMock::InitAccessServiceService() {
     // Service Account Service Mock
     grpc::ServerBuilder builder;
 
-    const auto setupAccessServiceMock = [&](auto& asMock) {
-        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-        asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
+    AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+    AccessServiceMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+    AccessServiceMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+    AccessServiceMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
 
-        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+    AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
 
-        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
 
-        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-    };
+    AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
 
     builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials());
 
-    if (!enableAccessServiceV2Interface) {
-        setupAccessServiceMock(AccessServiceMock);
-        builder.RegisterService(&AccessServiceMock);
-    }
-    // Always set up v2: ticket parser authorization uses BulkAuthorize, which is only available in v2.
-    setupAccessServiceMock(AccessServiceMockV2);
-    builder.RegisterService(&AccessServiceMockV2);
+    builder.RegisterService(&AccessServiceMock);
 
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -1030,10 +1021,10 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams"));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
+    actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams"));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
     actorId = as->Register(CreateIamTokenServiceActor(config, "ydb-http_proxy-datastreams"));

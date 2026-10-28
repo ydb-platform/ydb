@@ -108,7 +108,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Independent seq no for CopyTable, MoveTable and DropTable
+    // Independent seq no for DropTable, CopyTable, MoveTable and TruncateTable
     std::optional<TSchemeShardLocalPathId> targetPathId;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
@@ -119,6 +119,9 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
             targetPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
+            targetPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
             break;
         default:
             break;
@@ -223,6 +226,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             // txs via GetTxs() caused hangs when other long-running transactions existed on the shard
             // (e.g., during export when backup txs are pending on the same shards).
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
+            break;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
@@ -351,6 +359,11 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             }
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            break;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

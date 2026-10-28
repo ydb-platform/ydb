@@ -1,0 +1,13 @@
+/* custom error: Error: Member not found: missing */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+WITHOUT
+    missing
+FROM (
+    VALUES
+        (1)
+) AS input (
+    a
+);

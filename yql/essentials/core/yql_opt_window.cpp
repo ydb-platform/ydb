@@ -3541,7 +3541,7 @@ TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPt
                                                        {lambda->Head().Child(1), extractor}});
 
     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+    auto status = ExpandApplyNoRepeat(traits, traits, ctx, types);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
     // clang-format off

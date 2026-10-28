@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/tx/schemeshard/olap/operations/alter/abstract
@@ -6,7 +6,5 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/operations/alter/in_store
     ydb/core/tx/schemeshard/olap/operations/alter/standalone
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

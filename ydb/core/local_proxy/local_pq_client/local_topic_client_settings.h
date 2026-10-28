@@ -19,4 +19,4 @@ struct TLocalTopicSessionSettings {
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 };
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

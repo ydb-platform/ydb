@@ -16,9 +16,8 @@ namespace NDetail {
 
 // Forward declaration of friends.
 class TTypeRegistry;
-class TTypeSchemaBuilderRegistar;
+class TTypeSchemaBuilderRegistrar;
 class TFieldSchemaRegistrar;
-class TTypeSchemaBuilderRegistar;
 
 } // namespace NDetail
 
@@ -33,7 +32,7 @@ public:
     const TFieldSchemaPtr& GetSchema() const;
 
 private:
-    friend class NDetail::TTypeSchemaBuilderRegistar;
+    friend class NDetail::TTypeSchemaBuilderRegistrar;
     friend class NDetail::TFieldSchemaRegistrar;
 
     std::string Name_;
@@ -64,7 +63,7 @@ public:
 
 private:
     friend class NDetail::TTypeRegistry;
-    friend class NDetail::TTypeSchemaBuilderRegistar;
+    friend class NDetail::TTypeSchemaBuilderRegistrar;
 
     std::string Name_;
     std::vector<const std::type_info*> TypeInfos_;
@@ -88,11 +87,11 @@ public:
     const TUniverseSchemaPtr& GetSchema() const;
     const NYson::TYsonString& GetSchemaYson() const;
 
-    const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
-    const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 

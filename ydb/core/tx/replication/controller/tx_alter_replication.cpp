@@ -252,6 +252,27 @@ public:
         if (ResetFailedSchemaBarriers) {
             RecoverFailedSchemaBarriers(db);
         }
+
+        if (alter && desiredState == TReplication::EState::Done) {
+            for (const auto& [key, build] : Self->IndexBuilds) {
+                if (key.first != Replication->GetId() || build.GetPhase() != NKikimrReplication::TIndexBuildState::CANCELLING) {
+                    continue;
+                }
+
+                auto* target = Replication->FindTarget(key.second);
+                if (target && target->GetDstState() == TReplication::EDstState::Error) {
+                    // An explicit DONE retry must also recover a cancellation
+                    // interrupted by a worker or destination DDL error.
+                    target->SetDstState(TReplication::EDstState::Paused);
+                    target->SetIssue({});
+                    db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                        NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
+                    );
+                }
+            }
+        }
+
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
@@ -270,7 +291,7 @@ public:
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
         const bool recoverReady = ResetFailedSchemaBarriers && desiredState == TReplication::EState::Ready;
-        if (!recoverReady && Self->HasActiveSchemaBarrier(Replication->GetId())) {
+        if (!recoverReady && Self->HasPendingAlter(Replication->GetId())) {
             Self->DeferredAlters.insert(Replication->GetId());
             db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
                 NIceDb::TUpdate<Schema::Replications::DeferredAlter>(true));
@@ -289,8 +310,11 @@ public:
                 continue;
             }
 
-            target->Shutdown(ctx);
-            target->SetDstState(TReplication::EDstState::Alter);
+            // An attachment may already be submitted to SchemeShard; let it finish before DONE.
+            if (target->GetDstState() != TReplication::EDstState::Attaching) {
+                target->Shutdown(ctx);
+                target->SetDstState(TReplication::EDstState::Alter);
+            }
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
             }
@@ -299,6 +323,13 @@ public:
             );
 
             alter = true;
+        }
+
+        if (Replication->CheckAlterDone()) {
+            Replication->SetState(desiredState);
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(desiredState)
+            );
         }
 
         if (alter) {
@@ -327,6 +358,8 @@ public:
         if (Replication) {
             Replication->Progress(ctx);
         }
+
+        Self->RunTxIndexBuild(ctx);
 
         for (const auto& id : BarrierWorkersToRestart) {
             const auto it = Self->Workers.find(id);
@@ -367,7 +400,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto replicationId = Event->Get()->ReplicationId;
-        if (!Self->DeferredAlters.contains(replicationId) || Self->HasActiveSchemaBarrier(replicationId)) {
+        if (!Self->DeferredAlters.contains(replicationId) || Self->HasPendingAlter(replicationId)) {
             return true;
         }
 

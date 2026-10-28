@@ -1,15 +1,15 @@
-#include <library/cpp/colorizer/colors.h>
-#include <library/cpp/getopt/last_getopt.h>
-
-#include <util/datetime/base.h>
-
 #include <ydb/core/blob_depot/mon_main.h>
+
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
+
+#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/getopt/last_getopt.h>
+#include <util/datetime/base.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -93,20 +93,16 @@ struct TExecutionOptions {
 
         const auto executionCase = GetExecutionCase(index);
         const bool isAnalytics = executionCase == EExecutionCase::Analytics || executionCase == EExecutionCase::AsyncAnalytics;
-        return {
-            .Query = sql,
-            .Action = GetQueryAction(index),
+        return { .Query = sql, .Action = GetQueryAction(index),
             .Type = isAnalytics ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
             .QueryId = queryId,
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
-            .FqOptions = {
-                .Scope = GetScope(index)
-            }
-        };
+            .FqOptions = { .Scope = GetScope(index) } };
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled && !runnerOptions.FqSettings.GrpcEnabled && !RunAsDeamon) {
+        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled &&
+            !runnerOptions.FqSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
         ValidateOptionsSizes(runnerOptions);
@@ -118,7 +114,8 @@ private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
         const auto checker = [numberQueries = Queries.size()](size_t checkSize, const TString& optionName) {
             if (checkSize > numberQueries) {
-                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is " << numberQueries;
+                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is "
+                                    << numberQueries;
             }
         };
 
@@ -138,14 +135,16 @@ private:
     }
 
     void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
-        if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncStream) && !HasExecutionCase(EExecutionCase::AsyncAnalytics)) {
+        if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncStream) &&
+            !HasExecutionCase(EExecutionCase::AsyncAnalytics)) {
             ythrow yexception() << "In flight limit cannot be used without async queries";
         }
 
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         const auto numberOfQueries = GetNumberOfQueries();
         if (asyncQueriesSettings.InFlightLimit && asyncQueriesSettings.InFlightLimit > numberOfQueries) {
-            Cout << colors.Red() << "Warning: inflight limit is " << asyncQueriesSettings.InFlightLimit << ", that is larger than max possible number of queries " << numberOfQueries << colors.Default() << Endl;
+            Cout << colors.Red() << "Warning: inflight limit is " << asyncQueriesSettings.InFlightLimit
+                 << ", that is larger than max possible number of queries " << numberOfQueries << colors.Default() << Endl;
         }
     }
 
@@ -192,14 +191,14 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
 
     std::unordered_set<TString> scopes;
     scopes.reserve(executionOptions.Scopes.size());
-    for (size_t i = 0; i < executionOptions.Queries.size(); ++i){
+    for (size_t i = 0; i < executionOptions.Queries.size(); ++i) {
         scopes.emplace(executionOptions.GetScope(i));
     }
 
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
         for (const auto& scope : scopes) {
-            if (!runner.CreateConnections(executionOptions.Connections, {.Scope = scope})) {
+            if (!runner.CreateConnections(executionOptions.Connections, { .Scope = scope })) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections for scope " << scope;
             }
         }
@@ -208,7 +207,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
     if (!executionOptions.Bindings.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating bindings..." << colors.Default() << Endl;
         for (const auto& scope : scopes) {
-            if (!runner.CreateBindings(executionOptions.Bindings, {.Scope = scope})) {
+            if (!runner.CreateBindings(executionOptions.Bindings, { .Scope = scope })) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings for scope " << scope;
             }
         }
@@ -228,7 +227,8 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
 
         const size_t loopId = queryId / numberQueries;
         const auto executionCase = executionOptions.GetExecutionCase(idx);
-        if (executionCase != TExecutionOptions::EExecutionCase::AsyncAnalytics && executionCase != TExecutionOptions::EExecutionCase::AsyncStream) {
+        if (executionCase != TExecutionOptions::EExecutionCase::AsyncAnalytics &&
+            executionCase != TExecutionOptions::EExecutionCase::AsyncStream) {
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing query";
             if (numberQueries > 1) {
                 Cout << " " << idx;
@@ -243,7 +243,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
             RunArgumentQuery(idx, loopId, queryId, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
-                Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
+                Cerr << colors.Red() << CurrentExceptionMessage() << colors.Default() << Endl;
             } else {
                 throw exception;
             }
@@ -255,7 +255,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
         try {
             runner.PrintQueryResults();
         } catch (...) {
-            ythrow yexception() << "Failed to print script results, reason:\n" <<  CurrentExceptionMessage();
+            ythrow yexception() << "Failed to print script results, reason:\n" << CurrentExceptionMessage();
         }
     }
 }
@@ -279,7 +279,7 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
         RunArgumentQueries(executionOptions, runner);
     } catch (const yexception& exception) {
         if (runnerOptions.FqSettings.MonitoringEnabled) {
-            Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
+            Cerr << colors.Red() << CurrentExceptionMessage() << colors.Default() << Endl;
         } else {
             throw exception;
         }
@@ -293,7 +293,7 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of fq runner..." << colors.Default() << Endl;
 }
 
-class TMain : public TMainBase {
+class TMain: public TMainBase {
     using TBase = TMainBase;
     using EVerbosity = TFqSetupSettings::EVerbosity;
 
@@ -311,9 +311,7 @@ protected:
                 ExecutionOptions.Queries.emplace_back(LoadFile(option->CurVal()));
             });
 
-        options.AddLongOption('s', "sql", "Query SQL text to execute")
-            .RequiredArgument("str")
-            .AppendTo(&ExecutionOptions.Queries);
+        options.AddLongOption('s', "sql", "Query SQL text to execute").RequiredArgument("str").AppendTo(&ExecutionOptions.Queries);
 
         options.AddLongOption('c', "connection", "External datasource connection protobuf FederatedQuery::ConnectionContent")
             .RequiredArgument("file")
@@ -323,7 +321,10 @@ protected:
             .RequiredArgument("file")
             .EmplaceTo(&BindingsRaw);
 
-        options.AddLongOption("templates", TStringBuilder() << "Enable templates for connections, bindings and queries, such as ${" << YQL_TOKEN_VARIABLE << "}; only for queries " << TExecutionOptions::QUERY_ID_TEMPLATE << ", " << TExecutionOptions::LOOP_ID_TEMPLATE)
+        options
+            .AddLongOption("templates", TStringBuilder() << "Enable templates for connections, bindings and queries, such as ${"
+                                                         << YQL_TOKEN_VARIABLE << "}; only for queries " << TExecutionOptions::QUERY_ID_TEMPLATE
+                                                         << ", " << TExecutionOptions::LOOP_ID_TEMPLATE)
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
 
@@ -331,16 +332,20 @@ protected:
             .RequiredArgument("file")
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.AppConfig)) {
+                if (!google::protobuf::TextFormat::ParseFromString(
+                        LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.AppConfig)) {
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });
 
-        options.AddLongOption("emulate-s3", "Enable readings by s3 provider from files, `bucket` value in connection - path to folder with files")
+        options
+            .AddLongOption("emulate-s3", "Enable readings by s3 provider from files, `bucket` value in connection - path to folder with files")
             .NoArgument()
             .SetFlag(&RunnerOptions.FqSettings.EmulateS3);
 
-        options.AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can be used in query from cluster `pq`)")
+        options
+            .AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can "
+                                         "be used in query from cluster `pq`)")
             .RequiredArgument("topic@file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TStringBuf topicName, others;
@@ -385,11 +390,8 @@ protected:
             .DefaultValue("-")
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutput, &GetDefaultOutput);
 
-        TChoices<EResultOutputFormat> resultFormat({
-            {"rows", EResultOutputFormat::RowsJson},
-            {"full-json", EResultOutputFormat::FullJson},
-            {"full-proto", EResultOutputFormat::FullProto}
-        });
+        TChoices<EResultOutputFormat> resultFormat({ { "rows", EResultOutputFormat::RowsJson }, { "full-json", EResultOutputFormat::FullJson },
+            { "full-proto", EResultOutputFormat::FullProto } });
         options.AddLongOption('R', "result-format", "Query result format")
             .RequiredArgument("result-format")
             .DefaultValue("rows")
@@ -404,22 +406,19 @@ protected:
             .RequiredArgument("file")
             .EmplaceTo(&RunnerOptions.PlanOutputs);
 
-        options.AddLongOption("stats-file", "File with query statistics")
-            .RequiredArgument("file")
-            .EmplaceTo(&RunnerOptions.StatsOutputs);
+        options.AddLongOption("stats-file", "File with query statistics").RequiredArgument("file").EmplaceTo(&RunnerOptions.StatsOutputs);
 
-        options.AddLongOption("canonical-output", "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
+        options
+            .AddLongOption("canonical-output",
+                "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
             .NoArgument()
             .SetFlag(&RunnerOptions.CanonicalOutput);
 
         // Pipeline settings
 
-        TChoices<TExecutionOptions::EExecutionCase> executionCase({
-            {"stream", TExecutionOptions::EExecutionCase::Stream},
-            {"analytics", TExecutionOptions::EExecutionCase::Analytics},
-            {"async-stream", TExecutionOptions::EExecutionCase::AsyncStream},
-            {"async-analytics", TExecutionOptions::EExecutionCase::AsyncAnalytics}
-        });
+        TChoices<TExecutionOptions::EExecutionCase> executionCase({ { "stream", TExecutionOptions::EExecutionCase::Stream },
+            { "analytics", TExecutionOptions::EExecutionCase::Analytics }, { "async-stream", TExecutionOptions::EExecutionCase::AsyncStream },
+            { "async-analytics", TExecutionOptions::EExecutionCase::AsyncAnalytics } });
         options.AddLongOption('C', "execution-case", "Type of query for -p argument")
             .RequiredArgument("query-type")
             .Choices(executionCase.GetChoices())
@@ -433,17 +432,17 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.FqSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (min level 0, max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
+        options
+            .AddLongOption("verbosity",
+                TStringBuilder() << "Common verbosity level (min level 0, max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
             .RequiredArgument("uint")
             .DefaultValue(static_cast<ui8>(EVerbosity::Info))
             .StoreMappedResultT<ui8>(&RunnerOptions.FqSettings.VerbosityLevel, [](ui8 value) {
                 return static_cast<EVerbosity>(std::min(value, static_cast<ui8>(EVerbosity::Max)));
             });
 
-        TChoices<TAsyncQueriesSettings::EVerbosity> verbosity({
-            {"each-query", TAsyncQueriesSettings::EVerbosity::EachQuery},
-            {"final", TAsyncQueriesSettings::EVerbosity::Final}
-        });
+        TChoices<TAsyncQueriesSettings::EVerbosity> verbosity(
+            { { "each-query", TAsyncQueriesSettings::EVerbosity::EachQuery }, { "final", TAsyncQueriesSettings::EVerbosity::Final } });
         options.AddLongOption("async-verbosity", "Verbosity type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")
@@ -455,14 +454,10 @@ protected:
             .DefaultValue(100)
             .StoreMappedResultT<ui64>(&RunnerOptions.PingPeriod, &TDuration::MilliSeconds<ui64>);
 
-        TChoices<FederatedQuery::ExecuteMode> queryAction({
-            {"save", FederatedQuery::ExecuteMode::SAVE},
-            {"parse", FederatedQuery::ExecuteMode::PARSE},
-            {"compile", FederatedQuery::ExecuteMode::COMPILE},
-            {"validate", FederatedQuery::ExecuteMode::VALIDATE},
-            {"explain", FederatedQuery::ExecuteMode::EXPLAIN},
-            {"run", FederatedQuery::ExecuteMode::RUN}
-        });
+        TChoices<FederatedQuery::ExecuteMode> queryAction(
+            { { "save", FederatedQuery::ExecuteMode::SAVE }, { "parse", FederatedQuery::ExecuteMode::PARSE },
+                { "compile", FederatedQuery::ExecuteMode::COMPILE }, { "validate", FederatedQuery::ExecuteMode::VALIDATE },
+                { "explain", FederatedQuery::ExecuteMode::EXPLAIN }, { "run", FederatedQuery::ExecuteMode::RUN } });
         options.AddLongOption('A', "action", "Query execute action")
             .RequiredArgument("action")
             .Choices(queryAction.GetChoices())
@@ -496,13 +491,13 @@ protected:
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
 
-        options.AddLongOption('S', "scope-id", "Query scope id")
-            .RequiredArgument("scope")
-            .AppendTo(&ExecutionOptions.Scopes);
+        options.AddLongOption('S', "scope-id", "Query scope id").RequiredArgument("scope").AppendTo(&ExecutionOptions.Scopes);
 
         // Cluster settings
 
-        options.AddLongOption("cp-storage-db", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
+        options
+            .AddLongOption("cp-storage-db",
+                "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCpStorage = true;
@@ -511,7 +506,9 @@ protected:
                 }
             });
 
-        options.AddLongOption("checkpoints-db", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
+        options
+            .AddLongOption(
+                "checkpoints-db", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCheckpoints = true;
@@ -520,7 +517,9 @@ protected:
                 }
             });
 
-        options.AddLongOption("quotas-db", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
+        options
+            .AddLongOption("quotas-db",
+                "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableQuotas = true;
@@ -529,7 +528,9 @@ protected:
                 }
             });
 
-        options.AddLongOption("row-dispatcher-db", "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
+        options
+            .AddLongOption("row-dispatcher-db",
+                "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableRemoteRd = true;
@@ -538,26 +539,29 @@ protected:
                 }
             });
 
-        auto& singleComputeOpt = options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
-            .OptionalArgument("database@endpoint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.FqSettings.EnableYdbCompute = true;
-                if (const auto value = option->CurVal()) {
-                    RunnerOptions.FqSettings.SingleComputeDatabase = TExternalDatabase::Parse(value, "YDB_COMPUTE_TOKEN");
-                }
-            });
+        auto& singleComputeOpt = options
+                                     .AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local "
+                                                                         "database by default), token variable YDB_COMPUTE_TOKEN")
+                                     .OptionalArgument("database@endpoint")
+                                     .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                                         RunnerOptions.FqSettings.EnableYdbCompute = true;
+                                         if (const auto value = option->CurVal()) {
+                                             RunnerOptions.FqSettings.SingleComputeDatabase =
+                                                 TExternalDatabase::Parse(value, "YDB_COMPUTE_TOKEN");
+                                         }
+                                     });
 
-        auto& sharedComputeOpt = options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
-            .RequiredArgument("database@endpoint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.FqSettings.EnableYdbCompute = true;
-                RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
-            });
+        auto& sharedComputeOpt =
+            options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
+                .RequiredArgument("database@endpoint")
+                .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                    RunnerOptions.FqSettings.EnableYdbCompute = true;
+                    RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(
+                        TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
+                });
         options.MutuallyExclusiveOpt(singleComputeOpt, sharedComputeOpt);
 
-        options.AddLongOption("hold", "Hold fqrun process after finishing all queries")
-            .NoArgument()
-            .SetFlag(&ExecutionOptions.RunAsDeamon);
+        options.AddLongOption("hold", "Hold fqrun process after finishing all queries").NoArgument().SetFlag(&ExecutionOptions.RunAsDeamon);
 
         RegisterKikimrOptions(options, RunnerOptions.FqSettings);
     }
@@ -587,7 +591,8 @@ protected:
             ReplaceTemplates(sql);
         }
 
-        if (ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) || ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics)) {
+        if (ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) ||
+            ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics)) {
             RunnerOptions.FqSettings.EnableYdbCompute = true;
         }
 
@@ -624,7 +629,7 @@ protected:
             RunnerOptions.FqSettings.PqGatewayFactory = CreatePqFileGatewayFactory(fileGateway);
         }
         if (!TopicsSettings.empty()) {
-            ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin()->first << "'";
+            ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin() -> first << "'";
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
@@ -673,6 +678,7 @@ private:
     struct TTopicSettings {
         bool CancelOnFileFinish = false;
     };
+
     std::unordered_map<TString, TTopicSettings> TopicsSettings;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
 
@@ -683,15 +689,17 @@ private:
         explicit TFileContent(TStringBuf fileName)
             : FileName(fileName)
             , Content(LoadFile(FileName))
-        {}
+        {
+        }
     };
+
     std::vector<TFileContent> ConnectionsRaw;
     std::vector<TFileContent> BindingsRaw;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-}  // namespace NFqRun
+}   // namespace NFqRun
 
 int main(int argc, const char* argv[]) {
     NTestUtils::SetupSignalHandlers();
@@ -701,7 +709,7 @@ int main(int argc, const char* argv[]) {
     } catch (...) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-        Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
+        Cerr << colors.Red() << CurrentExceptionMessage() << colors.Default() << Endl;
         return 1;
     }
 }

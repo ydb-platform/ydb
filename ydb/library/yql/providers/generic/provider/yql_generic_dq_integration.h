@@ -7,6 +7,6 @@
 
 namespace NYql {
 
-    THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state);
+THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state);
 
-} // namespace NYql
+}   // namespace NYql

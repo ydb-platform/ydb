@@ -1,9 +1,10 @@
-#include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_provider_impl.h"
+
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 namespace NYql {
 
@@ -11,8 +12,9 @@ namespace {
 
 using namespace NNodes;
 
-class TPqDataSinkIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TDatabaseDescription>;
+class TPqDataSinkIODiscoveryTransformer: public TGraphTransformerBase {
+    using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TDatabaseDescription>;
+
 public:
     explicit TPqDataSinkIODiscoveryTransformer(TPqState::TPtr state)
         : State_(state)
@@ -22,24 +24,28 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         Y_UNUSED(ctx);
         output = input;
-        if (ctx.Step.IsDone(TExprStep::DiscoveryIO))
+        if (ctx.Step.IsDone(TExprStep::DiscoveryIO)) {
             return TStatus::Ok;
+        }
 
-        if (!State_->DbResolver)
+        if (!State_->DbResolver) {
             return TStatus::Ok;
+        }
 
         THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
         FindYdsDbIdsForResolving(State_, input, ids);
 
-        if (ids.empty())
+        if (ids.empty()) {
             return TStatus::Ok;
+        }
 
         const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
         AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
-        {
-            if (const auto res = response.lock())
-                *res = std::move(future.ExtractValue());
-        });
+            {
+                if (const auto res = response.lock()) {
+                    *res = std::move(future.ExtractValue());
+                }
+            });
         return TStatus::Async;
     }
 
@@ -72,10 +78,10 @@ private:
     TDbId2Endpoint FullResolvedIds_;
     std::shared_ptr<NYql::TDatabaseResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
 };
-}
+}   // namespace
 
 THolder<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state) {
     return THolder(new TPqDataSinkIODiscoveryTransformer(state));
 }
 
-}
+}   // namespace NYql

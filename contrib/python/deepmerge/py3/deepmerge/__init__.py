@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 from .merger import Merger
-from .strategy.core import STRATEGY_END  # noqa
+from .strategy.core import STRATEGY_END
+
+__all__ = [
+    "DEFAULT_TYPE_SPECIFIC_MERGE_STRATEGIES",
+    "STRATEGY_END",
+    "Merger",
+    "always_merger",
+    "conservative_merger",
+    "merge_or_raise",
+]
 
 # some standard mergers available
 

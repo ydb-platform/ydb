@@ -78,6 +78,10 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TBaseConfig BaseConfig;
     };
 
+    struct TEvNodeWardenDynamicConfigSubscribe
+        : TEventPB<TEvNodeWardenDynamicConfigSubscribe, NKikimrBlobStorage::TEvNodeWardenDynamicConfigSubscribe, TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe>
+    {};
+
     struct TEvNodeWardenDynamicConfigPush
         : TEventPB<TEvNodeWardenDynamicConfigPush, NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush, TEvBlobStorage::EvNodeWardenDynamicConfigPush>
     {};

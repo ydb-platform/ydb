@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_table_data_service_server.cpp
@@ -13,8 +13,6 @@ PEERDIR(
     yt/yql/providers/yt/fmr/tvm/interface
     yt/yql/providers/yt/fmr/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

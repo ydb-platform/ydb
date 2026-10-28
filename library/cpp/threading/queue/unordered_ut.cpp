@@ -6,6 +6,8 @@
 
 #include "ut_helpers.h"
 
+#include <memory>
+
 template <typename TQueueType>
 class TTestUnorderedQueue: public TTestBase {
 private:
@@ -120,7 +122,7 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TWorker>> workers;
+        TVector<std::unique_ptr<TWorker>> workers;
         TAtomic pushDone = 0;
 
         for (ui32 i = 0; i < COUNT; ++i) {

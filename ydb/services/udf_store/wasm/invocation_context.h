@@ -18,7 +18,8 @@ struct TWasmUdfInvocationContext {
 
     explicit TWasmUdfInvocationContext(NYdb::NWasm::IWebAssemblyCompartment* compartment)
         : WebAssemblyPool(compartment)
-    {}
+    {
+    }
 };
 
 inline TWasmUdfInvocationContext*& CurrentInvocationContextSlot() {
@@ -61,4 +62,4 @@ private:
     TWasmUdfInvocationContext* Previous_;
 };
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

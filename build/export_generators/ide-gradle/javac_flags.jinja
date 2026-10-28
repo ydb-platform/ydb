@@ -94,7 +94,8 @@ tasks.{{ task }}.configure {
 {%-             else -%}
 {%-                 set javaCompile = 'named<JavaCompile>("compile' + testname|title + 'Java")' %}
 {%-             endif -%}
-{{ JavacFlags(javaCompile, extra_target.javac.flags, extra_target.use_errorprone, with_errorprone or with_test_errorprones|length, jdk_version) }}
+{%-             set extra_target_errorprone = false if disable_errorprone else extra_target.use_errorprone -%}
+{{ JavacFlags(javaCompile, extra_target.javac.flags, extra_target_errorprone, with_errorprone or with_test_errorprones|length, jdk_version) }}
 {%-         endfor -%}
 {%-     else -%}
 {{ JavacFlags('compileTestJava', extra_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_test_errorprones|length, with_errorprone or with_test_errorprones|length, jdk_version) }}

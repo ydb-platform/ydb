@@ -677,9 +677,16 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         mdi->cluster_id = NULL;
         if (ApiVersion >= 2) {
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
-                if (cluster_id.str)
-                        mdi->cluster_id =
-                            rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+                if (!RD_KAFKAP_STR_IS_NULL(&cluster_id)) {
+                        int clen = RD_KAFKAP_STR_LEN(&cluster_id);
+                        if (!(mdi->cluster_id =
+                                  rd_tmpabuf_alloc(&tbuf, clen + 1)))
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "cluster_id: tmpabuf memory shortage");
+                        memcpy(mdi->cluster_id, cluster_id.str, clen);
+                        mdi->cluster_id[clen] = '\0';
+                }
         }
 
         mdi->controller_id = -1;
@@ -951,13 +958,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            md->topics[i].topic,
-                                                           (void *)strcmp));
+                                                           rd_list_cmp_str));
                 if (requested_topic_ids)
                         rd_list_free_cb(
                             missing_topic_ids,
                             rd_list_remove_cmp(missing_topic_ids,
                                                &mdi->topics[i].topic_id,
-                                               (void *)rd_kafka_Uuid_ptr_cmp));
+                                               rd_kafka_Uuid_ptr_cmp));
                 /* Only update cache when not asking
                  * for all topics or cache entry
                  * already exists. */

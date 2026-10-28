@@ -1,7 +1,9 @@
 import os
 import re
+from collections.abc import Iterable
 
 from . import common
+from .exceptions import CliError
 
 
 sd_pattern = r'(sd[a-z]+)\d*'
@@ -45,6 +47,15 @@ class DeviceInfo:
     @staticmethod
     def make_error(path: str, error: str):
         return DeviceInfo(path, None, None, error)
+
+
+def get_data_partlabels(device: common.Device, parts: Iterable[tuple[str, str]]) -> list[str]:
+    labels = [label for part_id, label in parts if part_id != '1' and label]
+    if device.path:
+        return labels
+    if device.partlabel not in labels:
+        raise CliError(f'Partition {device.partlabel} not found')
+    return [device.partlabel]
 
 
 size_pattern = r'[1-9]\d*[\.,]?\d*[kMGT]?B?'

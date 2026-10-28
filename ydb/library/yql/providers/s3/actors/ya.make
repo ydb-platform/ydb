@@ -1,12 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/base
     ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
     ydb/library/yql/udfs/common/clickhouse/client/src
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     yql_arrow_push_down.cpp

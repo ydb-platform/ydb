@@ -17,6 +17,9 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    namespace NPathAliasing {
+        class TPathNormalizer;
+    }
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -211,6 +214,9 @@ struct TAppData {
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
+
+    // Compiled once before actors start; configuration changes require a restart.
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 

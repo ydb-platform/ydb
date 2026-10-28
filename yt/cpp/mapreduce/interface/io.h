@@ -466,6 +466,15 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = TFileReaderOptions()) = 0;
 
+    ///
+    /// @brief Create a reader of file partition
+    ///
+    /// @param cookie Partition cookie received from @ref NYT::IClientBase::GetFilePartitions.
+    /// @param options Additional options.
+    virtual IFileReaderPtr CreateFilePartitionReader(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options = {}) = 0;
+
     /// Create a writer for file at `path`.
     virtual IFileWriterPtr CreateFileWriter(
         const TRichYPath& path,

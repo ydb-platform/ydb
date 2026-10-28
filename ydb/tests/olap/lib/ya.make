@@ -3,9 +3,11 @@ PY3_LIBRARY()
     PY_SRCS (
         allure_utils.py
         compaction.py
+        errors_report.py
         results_processor.py
         remote_execution.py
         tpcc_deviation.py
+        workload_result.py
         ydb_cluster.py
         utils.py
         ydb_cli.py
@@ -24,3 +26,5 @@ PY3_LIBRARY()
     )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

@@ -411,7 +411,12 @@ static constexpr const char *kDbOperationParameter = "db.operation.parameter";
   up with the parameterized placeholders present in @code db.query.text @endcode.
   <p>
   It is RECOMMENDED to capture the value as provided by the application
-  without attempting to do any case normalization.
+  without attempting to do any case normalization or sanitization.
+  <p>
+  Instrumentations SHOULD NOT capture @code db.query.parameter.<key> @endcode by default
+  since values may contain PII or sensitive details.
+  Application operators are expected to enable specific keys depending
+  on their privacy and security considerations.
   <p>
   @code db.query.parameter.<key> @endcode SHOULD NOT be captured on batch operations.
   <p>
@@ -464,7 +469,7 @@ static constexpr const char *kDbQueryText = "db.query.text";
   Deprecated, use @code db.namespace @endcode instead.
 
   @deprecated
-  {"note": "Uncategorized.", "reason": "uncategorized"}
+  {"note": "Replaced by @code db.namespace @endcode (string).", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kDbRedisDatabaseIndex =
     "db.redis.database_index";

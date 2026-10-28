@@ -1,19 +1,19 @@
 #include "arrow_inferencinator.h"
 #include "infer_config.h"
 
-#include <arrow/table.h>
-#include <arrow/csv/options.h>
-#include <arrow/csv/reader.h>
-#include <arrow/json/options.h>
-#include <arrow/json/reader.h>
-#include <parquet/arrow/reader.h>
-
 #include <ydb/core/external_sources/object_storage/events.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
+#include <arrow/csv/options.h>
+#include <arrow/csv/reader.h>
+#include <arrow/json/options.h>
+#include <arrow/json/reader.h>
+#include <arrow/table.h>
+#include <parquet/arrow/reader.h>
 #include <util/string/join.h>
 
 #include <optional>
@@ -40,44 +40,43 @@ bool ShouldBeOptional(const arrow::Field& field, const std::shared_ptr<FormatCon
 
     // For JSON formats, TIMESTAMP is reinterpreted as UTF8 (see MapPrimitiveType),
     // so it should not be wrapped in Optional either.
-    if (type.id() == arrow::Type::TIMESTAMP &&
-        (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList)) {
+    if (type.id() == arrow::Type::TIMESTAMP && (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList)) {
         return false;
     }
 
     switch (type.id()) {
-    case arrow::Type::NA:
-    case arrow::Type::STRING:
-    case arrow::Type::BINARY:
-    case arrow::Type::LARGE_BINARY:
-        return false;
-    default:
-        return true;
+        case arrow::Type::NA:
+        case arrow::Type::STRING:
+        case arrow::Type::BINARY:
+        case arrow::Type::LARGE_BINARY:
+            return false;
+        default:
+            return true;
     }
 }
 
 // Direct, context-free arrow→ydb primitive type mapping. Special cases (formats,
 // non-mappable / unsupported types) are handled in MapPrimitiveType below.
 constexpr std::pair<arrow::Type::type, Ydb::Type::PrimitiveTypeId> kPrimitiveTypeTable[] = {
-    {arrow::Type::NA,                Ydb::Type::UTF8},
-    {arrow::Type::BOOL,              Ydb::Type::BOOL},
-    {arrow::Type::UINT8,             Ydb::Type::UINT8},
-    {arrow::Type::INT8,              Ydb::Type::INT8},
-    {arrow::Type::UINT16,            Ydb::Type::UINT16},
-    {arrow::Type::INT16,             Ydb::Type::INT16},
-    {arrow::Type::UINT32,            Ydb::Type::UINT32},
-    {arrow::Type::INT32,             Ydb::Type::INT32},
-    {arrow::Type::UINT64,            Ydb::Type::UINT64},
-    {arrow::Type::INT64,             Ydb::Type::INT64},
-    {arrow::Type::FLOAT,             Ydb::Type::FLOAT},
-    {arrow::Type::DOUBLE,            Ydb::Type::DOUBLE},
-    {arrow::Type::STRING,            Ydb::Type::UTF8},
-    {arrow::Type::LARGE_STRING,      Ydb::Type::UTF8},
-    {arrow::Type::BINARY,            Ydb::Type::STRING},
-    {arrow::Type::LARGE_BINARY,      Ydb::Type::STRING},
-    {arrow::Type::DATE32,            Ydb::Type::DATE},
-    {arrow::Type::DATE64,            Ydb::Type::DATETIME64},
-    {arrow::Type::DECIMAL128,        Ydb::Type::DOUBLE},
+    { arrow::Type::NA, Ydb::Type::UTF8 },
+    { arrow::Type::BOOL, Ydb::Type::BOOL },
+    { arrow::Type::UINT8, Ydb::Type::UINT8 },
+    { arrow::Type::INT8, Ydb::Type::INT8 },
+    { arrow::Type::UINT16, Ydb::Type::UINT16 },
+    { arrow::Type::INT16, Ydb::Type::INT16 },
+    { arrow::Type::UINT32, Ydb::Type::UINT32 },
+    { arrow::Type::INT32, Ydb::Type::INT32 },
+    { arrow::Type::UINT64, Ydb::Type::UINT64 },
+    { arrow::Type::INT64, Ydb::Type::INT64 },
+    { arrow::Type::FLOAT, Ydb::Type::FLOAT },
+    { arrow::Type::DOUBLE, Ydb::Type::DOUBLE },
+    { arrow::Type::STRING, Ydb::Type::UTF8 },
+    { arrow::Type::LARGE_STRING, Ydb::Type::UTF8 },
+    { arrow::Type::BINARY, Ydb::Type::STRING },
+    { arrow::Type::LARGE_BINARY, Ydb::Type::STRING },
+    { arrow::Type::DATE32, Ydb::Type::DATE },
+    { arrow::Type::DATE64, Ydb::Type::DATETIME64 },
+    { arrow::Type::DECIMAL128, Ydb::Type::DOUBLE },
 };
 
 std::optional<Ydb::Type::PrimitiveTypeId> MapPrimitiveType(const arrow::DataType& type, const FormatConfig& config) {
@@ -103,9 +102,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::Field& field, con
     if (!mapped) {
         return false;
     }
-    auto& resType = ShouldBeOptional(field, config)
-        ? *maybeOptionalType.mutable_optional_type()->mutable_item()
-        : maybeOptionalType;
+    auto& resType = ShouldBeOptional(field, config) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
     resType.set_type_id(*mapped);
     return true;
 }
@@ -114,7 +111,7 @@ TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode
     NYql::TIssues issues;
     issues.AddIssue(std::move(message));
     issues.back().SetCode(code, NYql::TSeverityIds::S_ERROR);
-    return new TEvInferredFileSchema{std::move(path), std::move(issues)};
+    return new TEvInferredFileSchema{ std::move(path), std::move(issues) };
 }
 
 // Common skeleton for arrow CSV / JSON readers: validate file size, build a reader,
@@ -122,9 +119,7 @@ TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode
 // which receives the file size hint and returns an arrow::Result with the reader.
 template <class MakeReader>
 std::variant<ArrowFields, TString> ReadFields(
-    std::shared_ptr<arrow::io::RandomAccessFile> file,
-    std::string_view errorHeader,
-    MakeReader makeReader)
+    std::shared_ptr<arrow::io::RandomAccessFile> file, std::string_view errorHeader, MakeReader makeReader)
 {
     int64_t fileSize = 0;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
@@ -147,30 +142,21 @@ std::variant<ArrowFields, TString> ReadFields(
     return table->fields();
 }
 
-std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const std::shared_ptr<FormatConfig>& config) {
-    return ReadFields(
-        std::move(file),
-        "couldn't open csv/tsv file, check format and compression parameters: "sv,
+std::variant<ArrowFields, TString> InferCsvTypes(
+    std::shared_ptr<arrow::io::RandomAccessFile> file, const std::shared_ptr<FormatConfig>& config) {
+    return ReadFields(std::move(file), "couldn't open csv/tsv file, check format and compression parameters: "sv,
         [&](std::shared_ptr<arrow::io::RandomAccessFile> f, int32_t blockSize) {
-            return arrow::csv::TableReader::Make(
-                arrow::io::default_io_context(),
-                std::move(f),
-                arrow::csv::ReadOptions{.use_threads = false, .block_size = blockSize},
-                config->CsvParseOpts,
-                config->CsvConvOpts);
+            return arrow::csv::TableReader::Make(arrow::io::default_io_context(), std::move(f),
+                arrow::csv::ReadOptions{ .use_threads = false, .block_size = blockSize }, config->CsvParseOpts, config->CsvConvOpts);
         });
 }
 
-std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const std::shared_ptr<FormatConfig>& config) {
-    return ReadFields(
-        std::move(file),
-        "couldn't open json file, check format and compression parameters: "sv,
+std::variant<ArrowFields, TString> InferJsonTypes(
+    std::shared_ptr<arrow::io::RandomAccessFile> file, const std::shared_ptr<FormatConfig>& config) {
+    return ReadFields(std::move(file), "couldn't open json file, check format and compression parameters: "sv,
         [&](std::shared_ptr<arrow::io::RandomAccessFile> f, int32_t blockSize) {
-            return arrow::json::TableReader::Make(
-                arrow::default_memory_pool(),
-                std::move(f),
-                arrow::json::ReadOptions{.use_threads = false, .block_size = blockSize},
-                config->JsonParseOpts);
+            return arrow::json::TableReader::Make(arrow::default_memory_pool(), std::move(f),
+                arrow::json::ReadOptions{ .use_threads = false, .block_size = blockSize }, config->JsonParseOpts);
         });
 }
 
@@ -196,28 +182,29 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
 
 std::variant<ArrowFields, TString> InferType(std::shared_ptr<arrow::io::RandomAccessFile> file, const std::shared_ptr<FormatConfig>& config) {
     switch (config->Format) {
-    case EFileFormat::CsvWithNames:
-    case EFileFormat::TsvWithNames:
-    case EFileFormat::Csv:
-        return InferCsvTypes(std::move(file), config);
-    case EFileFormat::Parquet:
-        return InferParquetTypes(std::move(file));
-    case EFileFormat::JsonEachRow:
-    case EFileFormat::JsonList:
-        return InferJsonTypes(std::move(file), config);
-    case EFileFormat::Undefined:
-    default:
-        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
+        case EFileFormat::CsvWithNames:
+        case EFileFormat::TsvWithNames:
+        case EFileFormat::Csv:
+            return InferCsvTypes(std::move(file), config);
+        case EFileFormat::Parquet:
+            return InferParquetTypes(std::move(file));
+        case EFileFormat::JsonEachRow:
+        case EFileFormat::JsonList:
+            return InferJsonTypes(std::move(file), config);
+        case EFileFormat::Undefined:
+        default:
+            return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
     }
 }
 
-} // namespace
+}   // namespace
 
-class TArrowInferencinator : public NActors::TActorBootstrapped<TArrowInferencinator> {
+class TArrowInferencinator: public NActors::TActorBootstrapped<TArrowInferencinator> {
 public:
     TArrowInferencinator(NActors::TActorId arrowFetcher)
-        : ArrowFetcherId_{arrowFetcher}
-    {}
+        : ArrowFetcherId_{ arrowFetcher }
+    {
+    }
 
     void Bootstrap() {
         Become(&TArrowInferencinator::WorkingState);
@@ -305,6 +292,6 @@ private:
 };
 
 NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher) {
-    return new TArrowInferencinator{arrowFetcher};
+    return new TArrowInferencinator{ arrowFetcher };
 }
-} // namespace NKikimr::NExternalSource::NObjectStorage::NInference
+}   // namespace NKikimr::NExternalSource::NObjectStorage::NInference

@@ -7,6 +7,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow {
 
 namespace {
@@ -78,13 +80,20 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
             fields.emplace_back(field);
             auto srcField = srcBatch->schema()->field(index);
             if (!field->type()->Equals(srcField->type())) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                    "column", field->name())("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_use_incoming_batch"},
+                    {"reason", "invalid_column_type"},
+                    {"column", field->name()},
+                    {"columnType", field->ToString(true)},
+                    {"incomingType", srcField->ToString(true)});
                 return TConclusionStatus::Fail("incompatible column types");
             }
         } else if (!subset) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())(
-                "column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
+            YDB_LOG_ERROR("",
+                {"event", "not_found_column"},
+                {"column", field->name()},
+                {"columnType", field->type()->ToString()},
+                {"columns", JoinSeq(",", srcBatch->schema()->field_names())});
             return TConclusionStatus::Fail("not found column '" + field->name() + "'");
         }
         ++idx;
@@ -233,8 +242,10 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
     const TColumnOperator::ECheckFieldTypesPolicy checkFieldTypesPolicy) {
     AFL_VERIFY(srcBatch);
     if (dstSchema.num_fields() < srcBatch->schema()->num_fields()) {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns set: destination must been wider than source")(
-            "source", srcBatch->schema()->ToString())("destination", dstSchema.ToString());
+        YDB_LOG_ERROR("",
+            {"event", "incorrect columns set: destination must been wider than source"},
+            {"source", srcBatch->schema()->ToString()},
+            {"destination", dstSchema});
         return TConclusionStatus::Fail("incorrect columns set: destination must been wider than source");
     }
     std::set<ui32> fieldIdx;
@@ -248,8 +259,11 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
             if (checkFieldTypesPolicy != TColumnOperator::ECheckFieldTypesPolicy::Ignore && (*itDst)->Equals(*itSrc)) {
                 switch (checkFieldTypesPolicy) {
                     case TColumnOperator::ECheckFieldTypesPolicy::Error: {
-                        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "column_type", (*itDst)->ToString(true))("incoming_type", (*itSrc)->ToString(true));
+                        YDB_LOG_ERROR("",
+                            {"event", "cannot_use_incoming_batch"},
+                            {"reason", "invalid_column_type"},
+                            {"columnType", (*itDst)->ToString(true)},
+                            {"incomingType", (*itSrc)->ToString(true)});
                         return TConclusionStatus::Fail("incompatible column types");
                     }
                     case TColumnOperator::ECheckFieldTypesPolicy::Verify: {
@@ -266,8 +280,10 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
         }
     }
     if (itDst == dstSchema.end() && itSrc != srcBatch->schema()->fields().end()) {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "incorrect columns order in source set")("source", srcBatch->schema()->ToString())(
-            "destination", dstSchema.ToString());
+        YDB_LOG_ERROR("",
+            {"event", "incorrect columns order in source set"},
+            {"source", srcBatch->schema()->ToString()},
+            {"destination", dstSchema});
         return TConclusionStatus::Fail("incorrect columns order in source set");
     }
     return TSchemaSubset(fieldIdx, dstSchema.num_fields());
@@ -306,8 +322,12 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
                     break;
                 case TColumnOperator::ECheckFieldTypesPolicy::Error:
                     if (!dstField->type()->Equals(srcField->type())) {
-                        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "dst_column", dstField->type()->ToString())("src_column", srcField->type()->ToString())("name", srcField->name());
+                        YDB_LOG_ERROR("",
+                            {"event", "cannot_use_incoming_batch"},
+                            {"reason", "invalid_column_type"},
+                            {"dstColumn", dstField->type()->ToString()},
+                            {"srcColumn", srcField->type()->ToString()},
+                            {"name", srcField->name()});
                         return TConclusionStatus::Fail("incompatible column types for '" + dstField->name() + "'");
                     }
                     break;
@@ -323,8 +343,10 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Verify) {
             AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "absent_field")("dst_column", srcField->ToString(true));
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Error) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "absent_field")(
-                "dst_column", srcField->ToString(true));
+            YDB_LOG_ERROR("",
+                {"event", "cannot_use_incoming_batch"},
+                {"reason", "absent_field"},
+                {"dstColumn", srcField->ToString(true)});
             return TConclusionStatus::Fail("not found column '" + srcField->name() + "'");
         } else {
             AFL_VERIFY(false);

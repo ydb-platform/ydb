@@ -109,6 +109,32 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         }
     }
 
+    Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {
+        for (const bool retryOnSchemeError : {false, true}) {
+            TTestActorRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto worker = runtime.AllocateEdgeActor();
+            const auto proxy = runtime.AllocateEdgeActor();
+            const auto session = runtime.AllocateEdgeActor();
+            const auto settings = TEvYdbProxy::TTopicReaderSettings()
+                .RetryOnSchemeError(retryOnSchemeError)
+                .ConsumerName("consumer")
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                    .Path("/Root/table/index/indexImplTable/stream")
+                    .AppendPartitionIds(0));
+            const auto reader = runtime.Register(CreateRemoteTopicReader(proxy, settings));
+            runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
+            runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(proxy);
+            runtime.Send(reader, proxy, new TEvYdbProxy::TEvCreateTopicReaderResponse(session));
+            runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
+            runtime.Send(reader, session,
+                new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, {})));
+            const auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker);
+            UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, retryOnSchemeError
+                ? TEvWorker::TEvGone::UNAVAILABLE : TEvWorker::TEvGone::SCHEME_ERROR);
+        }
+    }
+
     Y_UNIT_TEST(PassAwayOnCreatingReadSession) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

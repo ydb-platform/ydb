@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
@@ -29,9 +30,9 @@ TMaybe<TString> ExtractSetting(const TExprNode& settings, const TString& setting
     return {};
 }
 
-} // namespace
+}   // namespace
 
-class TSolomonLoadTableMetadataTransformer : public TGraphTransformerBase {
+class TSolomonLoadTableMetadataTransformer: public TGraphTransformerBase {
 public:
     TSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state)
         : State_(state)
@@ -76,7 +77,7 @@ public:
                 } else {
                     from = TInstant::ParseIso8601("2010-01-01T00:00:00Z");
                 }
-                
+
                 TInstant to;
                 if (auto time = ExtractSetting(settings, "to")) {
                     if (!TInstant::TryParseIso8601(*time, to)) {
@@ -86,7 +87,7 @@ public:
                 } else {
                     to = TInstant::Now();
                 }
-                
+
                 NSo::TSelectors selectors;
                 if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
                     ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
@@ -104,11 +105,8 @@ public:
                 auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
                 auto listMetricsLabelsFuture = solomonClient->ListMetricsLabels(selectors, from, to);
 
-                LabelNamesRequests_[soReadObject.Raw()] = {
-                    .SolomonClient = solomonClient,
-                    .LabelNamesRequest = labelNamesFuture,
-                    .LabelValuesRequest = listMetricsLabelsFuture
-                };
+                LabelNamesRequests_[soReadObject.Raw()] = { .SolomonClient = solomonClient, .LabelNamesRequest = labelNamesFuture,
+                    .LabelValuesRequest = listMetricsLabelsFuture };
 
                 futures.push_back(labelNamesFuture.IgnoreResult());
                 futures.push_back(listMetricsLabelsFuture.IgnoreResult());
@@ -137,15 +135,15 @@ public:
         for (auto& [node, request] : labelNamesRequests) {
             auto labelNamesValue = request.LabelNamesRequest.GetValue();
             if (labelNamesValue.Status != NSo::EStatus::STATUS_OK) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Failed to get label names, details: " << labelNamesValue.Error));
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to get label names, details: " << labelNamesValue.Error));
                 return TStatus::Error;
             }
 
             auto listMetricLabelsValue = request.LabelValuesRequest.GetValue();
             if (listMetricLabelsValue.Status != NSo::EStatus::STATUS_OK) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricLabelsValue.Error));
+                    TStringBuilder() << "Failed to get total metrics count, details: " << listMetricLabelsValue.Error));
                 return TStatus::Error;
             }
 
@@ -155,6 +153,7 @@ public:
                 labelNames.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(label).Done());
             }
 
+            // clang-format off
             replaces.emplace(node,
                 Build<TSoReadObject>(ctx, read.Pos())
                     .InitFrom(read)
@@ -163,9 +162,10 @@ public:
                         .Build()
                     .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricLabelsValue.Result.TotalCount))
                 .Done().Ptr());
+            // clang-format on
         }
 
-        return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings{nullptr});
+        return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings{ nullptr });
     }
 
     void Rewind() final {
@@ -182,4 +182,4 @@ THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonSta
     return THolder(new TSolomonLoadTableMetadataTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

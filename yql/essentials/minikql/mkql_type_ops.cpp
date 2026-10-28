@@ -4,6 +4,7 @@
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/utils/parse_double.h>
 #include <yql/essentials/utils/swap_bytes.h>
 #include <yql/essentials/utils/utf8.h>
@@ -181,49 +182,6 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
             return bool(value) && NKikimr::NBinaryJson::IsValidBinaryJson(value.AsStringRef());
     }
     MKQL_ENSURE(false, "Incorrect data slot: " << (ui32)type);
-}
-
-bool IsLeapYear(i32 year) {
-    Y_ASSERT(year != 0);
-    if (Y_UNLIKELY(year < 0)) {
-        ++year;
-    }
-    bool isLeap = (year % 4 == 0);
-    if (year % 100 == 0) {
-        isLeap = year % 400 == 0;
-    }
-    return isLeap;
-}
-
-ui32 GetMonthLength(ui32 month, bool isLeap) {
-    switch (month) {
-        case 1:
-            return 31;
-        case 2:
-            return isLeap ? 29 : 28;
-        case 3:
-            return 31;
-        case 4:
-            return 30;
-        case 5:
-            return 31;
-        case 6:
-            return 30;
-        case 7:
-            return 31;
-        case 8:
-            return 31;
-        case 9:
-            return 30;
-        case 10:
-            return 31;
-        case 11:
-            return 30;
-        case 12:
-            return 31;
-        default:
-            ythrow yexception() << "Unknown month: " << month;
-    }
 }
 
 namespace {
@@ -791,7 +749,7 @@ bool SplitDateUncached(ui16 value, ui32& year, ui32& month, ui32& day) {
         --year;
     }
 
-    const bool isLeap = IsLeapYear(year);
+    const bool isLeap = NDateTime::IsLeapYear(year);
     if (remainDays < leapDaysCount) {
         remainDays += isLeap ? 366 : 365;
     }
@@ -801,7 +759,7 @@ bool SplitDateUncached(ui16 value, ui32& year, ui32& month, ui32& day) {
     month = 1;
     day = 1;
     while (remainDays > 0) {
-        ui32 monthLength = GetMonthLength(month, isLeap);
+        ui32 monthLength = NDateTime::GetMonthLength(month, isLeap);
         if (remainDays < monthLength) {
             day = 1 + remainDays;
             break;
@@ -848,8 +806,8 @@ public:
         for (auto month = 1U; month < Months_.size(); ++month) {
             Months_[month] = monthDays;
             LeapMonths_[month] = leapMonthDays;
-            monthDays += GetMonthLength(month, /*isLeap=*/false);
-            leapMonthDays += GetMonthLength(month, /*isLeap=*/true);
+            monthDays += NDateTime::GetMonthLength(month, /*isLeap=*/false);
+            leapMonthDays += NDateTime::GetMonthLength(month, /*isLeap=*/true);
         }
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
@@ -1026,8 +984,8 @@ public:
         {
             return false;
         }
-        auto isLeap = IsLeapYear(year);
-        auto monthLength = GetMonthLength(month, isLeap);
+        auto isLeap = NDateTime::IsLeapYear(year);
+        auto monthLength = NDateTime::GetMonthLength(month, isLeap);
 
         if (Y_UNLIKELY(day < 1 || day > monthLength)) {
             return false;
@@ -1171,7 +1129,7 @@ private:
     std::array<ui16, 13> LeapMonths_;                                    // cumulative days count for months in a leap year
 
     void EnrichMonthDay(i32 year, ui32 dayOfYear, ui32& month, ui32& day) const {
-        auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
+        auto& months = NDateTime::IsLeapYear(year) ? LeapMonths_ : Months_;
         auto m = std::upper_bound(months.cbegin() + 1, months.cend(), dayOfYear) - 1;
         Y_ASSERT(m >= months.cbegin());
         month = std::distance(months.cbegin(), m);
@@ -1196,7 +1154,7 @@ private:
         for (auto yearIdx = 0U; yearIdx < Years_.size(); ++yearIdx) {
             Years_[yearIdx] = date;
             i32 year = yearIdx + NUdf::MIN_YEAR;
-            auto daysInYear = IsLeapYear(year) ? 366U : 365U;
+            auto daysInYear = NDateTime::IsLeapYear(year) ? 366U : 365U;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache{
                 .CumulativeDays = date,

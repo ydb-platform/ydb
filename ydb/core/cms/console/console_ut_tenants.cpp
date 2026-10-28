@@ -1526,6 +1526,73 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 0);
     }
 
+    Y_UNIT_TEST(TestRemoveTenantWithRetryDuringPoolDeletion) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          {{"hdd", 1}, {"hdd-1", 2}});
+
+        RestartTenantPool(runtime);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {});
+
+        // Fail deletion of the first pool to get a retry scheduled while
+        // the second pool is still being deleted. The retry spawns new
+        // pool deletion workers, then the outdated worker of the second
+        // pool reports success.
+        enum {
+            FAIL_FIRST,
+            HOLD_SECOND,
+            WAIT_RETRY,
+            PASS,
+        } step = FAIL_FIRST;
+        TActorId heldWorker;
+        TActorId heldPipe;
+        auto sendResponse = [&](TActorId worker, TActorId pipe, bool success) {
+            auto response = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+            auto* proto = response->Record.MutableResponse();
+            proto->SetSuccess(success);
+            proto->AddStatus()->SetSuccess(success);
+            if (!success) {
+                proto->SetErrorDescription("mock error");
+            }
+            runtime.Send(new IEventHandle(worker, pipe, response.release()), 0);
+        };
+        auto observer = runtime.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](auto&& ev) {
+            const auto& request = ev->Get()->Record.GetRequest();
+            if (request.CommandSize() == 0 || !request.GetCommand(0).HasDeleteStoragePool()) {
+                return;
+            }
+            switch (step) {
+                case FAIL_FIRST:
+                    sendResponse(ev->Sender, ev->Recipient, false);
+                    ev.Reset();
+                    step = HOLD_SECOND;
+                    break;
+                case HOLD_SECOND:
+                    heldWorker = ev->Sender;
+                    heldPipe = ev->Recipient;
+                    ev.Reset();
+                    step = WAIT_RETRY;
+                    break;
+                case WAIT_RETRY:
+                    sendResponse(heldWorker, heldPipe, true);
+                    step = PASS;
+                    break;
+                case PASS:
+                    break;
+            }
+        });
+
+        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_EQUAL(step, PASS);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+    }
+
     Y_UNIT_TEST(TestRemoveTenant) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         RunTestRemoveTenant(runtime);

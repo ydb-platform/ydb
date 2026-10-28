@@ -1,23 +1,22 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/grpc/actor_client/grpc_service_client.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/ycloud/api/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
-class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeDatabasesCacheActor> {
+class TComputeDatabasesCacheActor: public NActors::TActorBootstrapped<TComputeDatabasesCacheActor> {
     struct TCounters {
         ::NMonitoring::TDynamicCounterPtr Counters;
+
         struct TCommonMetrics {
             ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
             ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
@@ -51,7 +50,7 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
         }
 
         static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-            return ::NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
+            return ::NMonitoring::ExplicitHistogram({ 0, 10, 100, 1000, 10000 });
         }
     };
 
@@ -61,14 +60,17 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
     };
 
 public:
-    using TBase =NActors::TActorBootstrapped<TComputeDatabasesCacheActor>;
-    TComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database)
+    using TBase = NActors::TActorBootstrapped<TComputeDatabasesCacheActor>;
+
+    TComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod,
+        const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database)
         : StartCacheReload(TInstant::Now())
         , DatabaseClientActorId(databaseClientActorId)
         , Counters(counters)
         , DatabasesCacheReloadPeriod(GetDuration(databasesCacheReloadPeriod, TDuration::Seconds(30)))
         , Database(database)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASES_CACHE_ACTOR";
 
@@ -96,7 +98,7 @@ public:
             {"path", path},
             {"ready", Ready});
         if (!Ready) {
-            PendingRequests.push_back({startTime, ev});
+            PendingRequests.push_back({ startTime, ev });
             return;
         }
 
@@ -156,12 +158,13 @@ public:
     }
 
     void NotifyPendingRequests(const NYql::TIssues& issues = {}) {
-        for (const auto& item: PendingRequests) {
+        for (const auto& item : PendingRequests) {
             if (issues) {
                 Send(item.Request->Sender, new TEvYdbCompute::TEvCheckDatabaseResponse(issues), 0, item.Request->Cookie);
                 Counters.CheckDatabaseRequest.Error->Inc();
             } else {
-                Send(item.Request->Sender, new TEvYdbCompute::TEvCheckDatabaseResponse(Databases.contains(item.Request.Get()->Get()->Path)), 0, item.Request->Cookie);
+                Send(item.Request->Sender, new TEvYdbCompute::TEvCheckDatabaseResponse(Databases.contains(item.Request.Get()->Get()->Path)), 0,
+                    item.Request->Cookie);
                 Counters.CheckDatabaseRequest.Ok->Inc();
             }
             Counters.CheckDatabaseRequest.InFly->Dec();
@@ -187,8 +190,9 @@ private:
     const TString Database;
 };
 
-std::unique_ptr<NActors::IActor> CreateComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database) {
+std::unique_ptr<NActors::IActor> CreateComputeDatabasesCacheActor(const TActorId& databaseClientActorId,
+    const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database) {
     return std::make_unique<TComputeDatabasesCacheActor>(databaseClientActorId, databasesCacheReloadPeriod, counters, database);
 }
 
-}
+}   // namespace NFq

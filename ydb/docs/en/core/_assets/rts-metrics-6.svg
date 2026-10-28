@@ -1,0 +1,15 @@
+<svg width='800' height='140' xmlns='http://www.w3.org/2000/svg'>
+
+<style type='text/css'>
+  rect { stroke-width:0; fill:#5781B9; }
+  line { stroke-width:10; stroke:#FFDB4D; }
+</style>
+
+<rect x='100' y='40' width='600' height='60' />
+
+<line x1='100' y1='45' x2='700' y2='45' stroke-dasharray='3,3' />
+<line x1='350' y1='40' x2='350' y2='70' />
+<line x1='100' y1='95' x2='700' y2='95' stroke-dasharray='3,3' />
+<line x1='350' y1='100' x2='350' y2='70' />
+
+</svg>

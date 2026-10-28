@@ -11,7 +11,7 @@ namespace NSkiff {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline bool IsSimpleType(EWireType type)
+inline ESchemaKind GetSchemaKind(EWireType type)
 {
     switch (type) {
         case EWireType::Nothing:
@@ -35,9 +35,10 @@ inline bool IsSimpleType(EWireType type)
         case EWireType::String32:
         case EWireType::StringVar:
         case EWireType::Yson32:
-            return true;
+            return ESchemaKind::Simple;
 
         case EWireType::StringFixed:
+            return ESchemaKind::StringFixed;
 
         case EWireType::Tuple:
         case EWireType::Variant8:
@@ -46,7 +47,7 @@ inline bool IsSimpleType(EWireType type)
         case EWireType::RepeatedVariant8:
         case EWireType::RepeatedVariant16:
         case EWireType::RepeatedBlockVar:
-            return false;
+            return ESchemaKind::Complex;
     }
     Y_ABORT();
 }

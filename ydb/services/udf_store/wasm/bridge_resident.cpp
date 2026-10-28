@@ -57,11 +57,9 @@ ui64 BlockSizeFor(ui64 length) {
     return RoundUpTo(length, PowerOfTwoLimit);
 }
 
-} // namespace
+}   // namespace
 
-TCompartmentResidentCache::TCompartmentResidentCache(
-    IWebAssemblyCompartment* compartment,
-    ui64 budgetBytes)
+TCompartmentResidentCache::TCompartmentResidentCache(IWebAssemblyCompartment* compartment, ui64 budgetBytes)
     : Compartment_(compartment)
     , Budget_(budgetBytes)
 {
@@ -89,9 +87,8 @@ void TCompartmentResidentCache::GrowArena(ui64 length) {
     {
         const TGuestCallbackGuard guestCallback;
         if (!Compartment_->ReserveGuestHeapBelow(offset + chunk)) {
-            ythrow yexception()
-                << "Bridge: cannot fence " << chunk << " resident bytes at " << offset
-                << " off the guest heap; the runtime library must export \"sbrk\"";
+            ythrow yexception() << "Bridge: cannot fence " << chunk << " resident bytes at " << offset
+                                << " off the guest heap; the runtime library must export \"sbrk\"";
         }
     }
     // The bump pointer can only live in one chunk, so the tail of the old one
@@ -101,9 +98,7 @@ void TCompartmentResidentCache::GrowArena(ui64 length) {
     // exact size, and a tail carved only into small classes would leave a
     // megabyte-sized request eating into the fresh chunk.
     while (BumpRemaining_ >= MinBlockSize) {
-        const ui64 blockSize = BumpRemaining_ >= TailBlockSize
-            ? TailBlockSize
-            : Min(std::bit_floor(BumpRemaining_), PowerOfTwoLimit);
+        const ui64 blockSize = BumpRemaining_ >= TailBlockSize ? TailBlockSize : Min(std::bit_floor(BumpRemaining_), PowerOfTwoLimit);
         FreeBlocks_[blockSize].push_back(BumpOffset_);
         BumpOffset_ += blockSize;
         BumpRemaining_ -= blockSize;
@@ -146,8 +141,7 @@ void TCompartmentResidentCache::Free(ui64 offset) {
     // offset on a free list twice and hand the same bytes to two owners.
     auto it = Blocks_.find(offset);
     if (it == Blocks_.end()) {
-        ythrow yexception()
-            << "Bridge: resident free of unknown or already freed offset " << offset;
+        ythrow yexception() << "Bridge: resident free of unknown or already freed offset " << offset;
     }
     const ui64 blockSize = it->second;
     Blocks_.erase(it);
@@ -163,15 +157,12 @@ ui64 TCompartmentResidentCache::AllocGuest(ui64 length) {
     // one-byte allocations grow the arena to MinBlockSize times the cap.
     const ui64 charge = BlockSizeFor(length);
     if (charge > Budget_) {
-        ythrow yexception()
-            << "Bridge: BridgeAllocResident of " << length
-            << " bytes is larger than the whole resident budget (" << Budget_ << ")";
+        ythrow yexception() << "Bridge: BridgeAllocResident of " << length << " bytes is larger than the whole resident budget (" << Budget_
+                            << ")";
     }
     if (ResidentBytes() + charge > Budget_) {
-        ythrow yexception()
-            << "Bridge: BridgeAllocResident of " << length
-            << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
+        ythrow yexception() << "Bridge: BridgeAllocResident of " << length << " bytes would exceed the resident budget (" << ResidentBytes()
+                            << " + " << charge << " > " << Budget_ << ")";
     }
     const ui64 offset = Alloc(length);
     if (offset != 0) {
@@ -187,13 +178,10 @@ void TCompartmentResidentCache::FreeGuest(ui64 offset) {
     }
     auto guest = GuestBlocks_.find(offset);
     if (guest == GuestBlocks_.end()) {
-        ythrow yexception()
-            << "Bridge: BridgeFreeResident on offset " << offset
-            << ", which was not returned by BridgeAllocResident";
+        ythrow yexception() << "Bridge: BridgeFreeResident on offset " << offset << ", which was not returned by BridgeAllocResident";
     }
     if (!Blocks_.contains(offset)) {
-        ythrow yexception()
-            << "Bridge: resident free of unknown or already freed offset " << offset;
+        ythrow yexception() << "Bridge: resident free of unknown or already freed offset " << offset;
     }
     Y_ENSURE(GuestBytes_ >= guest->second);
     GuestBytes_ -= guest->second;
@@ -202,10 +190,7 @@ void TCompartmentResidentCache::FreeGuest(ui64 offset) {
 }
 
 void TCompartmentResidentCache::WriteBytes(ui64 offset, TStringRef bytes) {
-    char* destination = PtrFromVM(
-        Compartment_,
-        std::bit_cast<char*>(static_cast<uintptr_t>(offset)),
-        bytes.Size());
+    char* destination = PtrFromVM(Compartment_, std::bit_cast<char*>(static_cast<uintptr_t>(offset)), bytes.Size());
     std::memcpy(destination, bytes.Data(), bytes.Size());
 }
 
@@ -216,9 +201,7 @@ void TCompartmentResidentCache::Touch(const TBridgeIdentity& key, TPin& pin) {
     pin.LruIt = std::prev(Lru_.end());
 }
 
-TList<TBridgeIdentity>::iterator TCompartmentResidentCache::EvictPin(
-    TList<TBridgeIdentity>::iterator it,
-    TPin& pin)
+TList<TBridgeIdentity>::iterator TCompartmentResidentCache::EvictPin(TList<TBridgeIdentity>::iterator it, TPin& pin)
 {
     Free(pin.Offset);
     PinnedBytes_ -= pin.Charge;
@@ -259,10 +242,7 @@ void TCompartmentResidentCache::EvictOversized() {
     }
 }
 
-ui64 TCompartmentResidentCache::Pin(
-    const TBridgeIdentity& key,
-    const TUnboxedValue& owner,
-    TStringRef bytes)
+ui64 TCompartmentResidentCache::Pin(const TBridgeIdentity& key, const TUnboxedValue& owner, TStringRef bytes)
 {
     if (bytes.Size() == 0) {
         return 0;
@@ -290,10 +270,8 @@ ui64 TCompartmentResidentCache::Pin(
         // out of linear memory for the rest of the query.
         EvictOversized();
         if (OversizedBytes_ != 0) {
-            ythrow yexception()
-                << "Bridge: pin of " << length
-                << " bytes is larger than the whole resident budget (" << Budget_
-                << ") and another such pin is still resident";
+            ythrow yexception() << "Bridge: pin of " << length << " bytes is larger than the whole resident budget (" << Budget_
+                                << ") and another such pin is still resident";
         }
     } else {
         EvictFor(charge);
@@ -302,10 +280,8 @@ ui64 TCompartmentResidentCache::Pin(
         // give back and has to be refused here, or the budget would not hold
         // within a row.
         if (ResidentBytes() + charge > Budget_) {
-            ythrow yexception()
-                << "Bridge: pin of " << length
-                << " bytes would exceed the resident budget ("
-                << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
+            ythrow yexception() << "Bridge: pin of " << length << " bytes would exceed the resident budget (" << ResidentBytes() << " + "
+                                << charge << " > " << Budget_ << ")";
         }
     }
 
@@ -335,10 +311,8 @@ ui64 TCompartmentResidentCache::PinScratch(TStringRef bytes) {
     const ui64 length = bytes.Size();
     const ui64 charge = BlockSizeFor(length);
     if (ResidentBytes() + charge > Budget_) {
-        ythrow yexception()
-            << "Bridge: scratch pin of " << length
-            << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
+        ythrow yexception() << "Bridge: scratch pin of " << length << " bytes would exceed the resident budget (" << ResidentBytes() << " + "
+                            << charge << " > " << Budget_ << ")";
     }
     const ui64 offset = AllocBlock(length);
     ScratchBlocks_.push_back(offset);
@@ -352,10 +326,7 @@ ui64 TCompartmentResidentCache::GetUserData(const TBridgeIdentity& key) const {
     return state ? state->Value : 0;
 }
 
-void TCompartmentResidentCache::SetUserData(
-    const TBridgeIdentity& key,
-    const TUnboxedValue& owner,
-    ui64 value)
+void TCompartmentResidentCache::SetUserData(const TBridgeIdentity& key, const TUnboxedValue& owner, ui64 value)
 {
     if (auto* existing = UserStates_.FindPtr(key)) {
         if (existing->Value != value) {
@@ -424,4 +395,4 @@ void TCompartmentResidentCache::BeginRun() {
     ++CurrentRun_;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

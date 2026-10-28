@@ -289,7 +289,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
-    if (tablet.IsAliveOnLocal(Local)) {
+    if (tablet.IsPresentOnLocal(Local)) {
         return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
@@ -436,7 +436,10 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
     Hive.SendReconnect(local);
 }
 
-void TNodeInfo::SetDown(bool down) {
+void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
+    if (Down != down) {
+        Hive.RecordNodeEvent(*this, down ? EHiveEventType::Down : EHiveEventType::Up, reason, std::move(details));
+    }
     Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
     if (Down) {
@@ -447,7 +450,11 @@ void TNodeInfo::SetDown(bool down) {
     }
 }
 
-void TNodeInfo::SetFreeze(bool freeze) {
+void TNodeInfo::SetFreeze(bool freeze, EHiveEventReason reason, TString details) {
+    if (Freeze != freeze) {
+        Hive.RecordNodeEvent(*this, freeze ? EHiveEventType::Frozen : EHiveEventType::Unfrozen, reason,
+            TStringBuilder() << details << (details.empty() ? "" : " ") << "tablets=" << (freeze ? GetTabletsTotal() : FrozenTablets.size()));
+    }
     Hive.UpdateCounterNodesFrozen(static_cast<i64>(freeze) - static_cast<i64>(Freeze));
     Freeze = freeze;
     if (Freeze) {
@@ -496,7 +503,7 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
-    bool alreadyHere = tablet.IsAliveOnLocal(Local);
+    bool alreadyHere = tablet.IsPresentOnLocal(Local);
     auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
@@ -639,6 +646,17 @@ void TNodeInfo::ActualizeNodeStatistics(TInstant now) {
 
 ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
     return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
+}
+
+void TNodeInfo::SetLocation(const TNodeLocation& location, EHiveEventReason reason) {
+    // Location arrives both from Local (RegisterNode) and from NameService and the two may differ in minor details,
+    // so only a data center change is reported: that is what affects tablet placement
+    if (LocationAcquired && Location.GetDataCenterId() != location.GetDataCenterId()) {
+        Hive.RecordNodeEvent(*this, EHiveEventType::LocationChanged, reason,
+            TStringBuilder() << "from=" << GetLocationString(Location) << " to=" << GetLocationString(location));
+    }
+    Location = location;
+    LocationAcquired = true;
 }
 
 TString TNodeInfo::GetLogPrefix() const {

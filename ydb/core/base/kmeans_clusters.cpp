@@ -1145,7 +1145,7 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
     } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(nameLower, value, MinLevels, MaxLevels, error));
     } else if (nameLower == "overlap_clusters") {
-        settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
+        settings.set_overlap_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {

@@ -83,5 +83,12 @@ void TSslContextConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NCrypto
+void TServerSslContextConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("update_period", &TThis::UpdatePeriod)
+        .Default();
+}
 
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NCrypto

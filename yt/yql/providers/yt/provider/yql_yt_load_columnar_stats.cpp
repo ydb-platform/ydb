@@ -90,9 +90,12 @@ private:
                             }
                         }
 
-                        if (!hasStat) {
+                        const auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                        const bool hasRLS = meta && meta->HasRLS;
+                        if (!hasStat || hasRLS) {
+                            const TStringBuf reason = hasRLS ? "row-level security" : "missing stats";
                             YQL_CLOG(INFO, ProviderYt) << "Removing columnar stat from YtSection #" << section.Ref().UniqueId()
-                                                       << " due to missing stats in path #" << idx;
+                                                       << " due to " << reason << " in path #" << idx;
 
                             sectionRewrites[section.Raw()] = Build<TYtSection>(ctx, section.Ref().Pos())
                                 .InitFrom(section)

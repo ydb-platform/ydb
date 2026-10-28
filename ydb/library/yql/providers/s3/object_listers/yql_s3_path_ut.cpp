@@ -51,4 +51,4 @@ Y_UNIT_TEST_SUITE(TPathTests) {
     }
 }
 
-}
+}   // namespace NYql::NS3

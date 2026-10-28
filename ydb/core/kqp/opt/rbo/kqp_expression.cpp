@@ -9,6 +9,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <util/stream/str.h>
+#include <util/string/cast.h>
 
 #include <optional>
 
@@ -19,85 +20,39 @@ namespace {
 using namespace NYql::NNodes;
 using namespace NKikimr;
 
-void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
-    if (!ContainsInfoUnit(ius, iu)) {
-        ius.push_back(iu);
-    }
+bool IsRowMember(const TExprNode& node, const TExprNode& row) {
+    return node.IsCallable("Member") && node.HeadPtr().Get() == &row;
 }
 
-void AddResolvedInfoUnit(
-    const TInfoUnit& iu,
-    TVector<TInfoUnit>& result,
-    const TPlanProps& props,
-    bool withSubplanContext,
-    bool withDependencies)
-{
-    const auto* subplan = props.Subplans.Find(iu);
-    if (!subplan) {
-        result.push_back(iu);
-        return;
-    }
-
-    if (withSubplanContext) {
-        auto subplanIU = iu;
-        subplanIU.SetSubplanContext(true);
-        subplanIU.AddDependencies(subplan->Tuple);
-        subplanIU.AddDependencies(subplan->DependentIUs);
-        result.push_back(std::move(subplanIU));
-    }
-
-    if (withDependencies) {
-        for (const auto& dependency : subplan->Tuple) {
-            AddUniqueInfoUnit(result, dependency);
+// Replace free row arguments by identity. Members of nested structs and locally
+// bound lambda arguments are not column references and must retain their meaning.
+TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
+    TNodeSet bound;
+    TNodeOnNodeOwnedMap replacements;
+    VisitExpr(input, [&](const TExprNode::TPtr& node) {
+        if (node->IsLambda()) {
+            for (const auto& local : node->Head().Children()) {
+                bound.insert(local.Get());
+            }
+        } else if (node->IsArgument()) {
+            replacements.emplace(node.Get(), arg);
         }
-        for (const auto& dependency : subplan->DependentIUs) {
-            AddUniqueInfoUnit(result, dependency);
-        }
+        return true;
+    });
+    for (const auto* local : bound) {
+        replacements.erase(local);
     }
+    return ctx.ReplaceNodes(std::move(input), replacements);
 }
 
-TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        // clang-format off
-        auto res = Build<TCoMember>(ctx, input->Pos())
-            .Struct(arg)
-            .Name(member.Name())
-        .Done().Ptr();
-        // clang-format on
-        res->SetTypeAnn(input->GetTypeAnn());
-        return res;
-    } else if (input->IsCallable()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx));
-        }
-        // clang-format off
-        auto res = ctx.Builder(input->Pos())
-            .Callable(input->Content())
-            .Add(std::move(newChildren))
-            .Seal()
-        .Build();
-        // clang-format on
-        res->SetTypeAnn(input->GetTypeAnn());
-        return res;
-    } else if (input->IsList()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx));
-        }
-        // clang-format off
-        auto res = ctx.Builder(input->Pos())
-            .List()
-            .Add(std::move(newChildren))
-            .Seal()
-        .Build();
-        // clang-format on
-        res->SetTypeAnn(input->GetTypeAnn());
-        return res;
-    } else {
-        return input;
-    }
+// A new row argument drops the old schema and invalidates dependent annotations.
+// Apply replacements simultaneously before rebinding, including new sublink IUs.
+TExprNode::TPtr RewriteRow(TExprNode::TPtr lambda, const TNodeOnNodeOwnedMap& replacements, TExprContext& ctx) {
+    const auto& row = lambda->Head().Head();
+    auto newRow = ctx.NewArgument(row.Pos(), row.Content());
+    auto body = ctx.ReplaceNodes(lambda->ChildPtr(1), replacements);
+    body = ctx.ReplaceNodes(std::move(body), {{&row, newRow}});
+    return ctx.NewLambda(lambda->Pos(), ctx.NewArguments(lambda->Head().Pos(), {newRow}), std::move(body));
 }
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg) {
@@ -224,102 +179,6 @@ std::optional<TExprNode::TPtr> FactorCommonExpressions(TExprNode::TPtr node, TEx
     return MakeConjunct(node->Pos(), std::move(common), ctx);
 }
 
-TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap,
-                              TExprContext &ctx) {
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        auto memberName = member.Name();
-        if (renameMap.contains(TInfoUnit(memberName.StringValue()))) {
-            auto renamed = renameMap.at(TInfoUnit(memberName.StringValue()));
-            // clang-format off
-             memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
-            // clang-format on
-        }
-        // clang-format off
-        return Build<TCoMember>(ctx, input->Pos())
-            .Struct(member.Struct())
-            .Name(memberName)
-        .Done().Ptr();
-        // clang-format on
-    } else if (input->IsCallable()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->ChildrenList()) {
-            newChildren.push_back(RenameMembers(c, renameMap, ctx));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else if (input->IsList()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(RenameMembers(c, renameMap, ctx));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .List()
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else if (input->IsLambda()){
-        auto lambda = TCoLambda(input);
-        return Build<TCoLambda>(ctx, input->Pos())
-            .Args(lambda.Args())
-            .Body(RenameMembers(lambda.Body().Ptr(), renameMap, ctx))
-            .Done().Ptr();
-    } else {
-        return input;
-    }
-}
-
-TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        return member.Struct().Ptr();
-    } else if (input->IsCallable()) {
-        for (auto c : input->ChildrenList()) {
-            if (auto arg = FindMemberArg(c))
-                return arg;
-        }
-    } else if (input->IsList()) {
-        for (auto c : input->ChildrenList()) {
-            if (auto arg = FindMemberArg(c)) {
-                return arg;
-            }
-        }
-    } else if (input->IsLambda()) {
-        return FindMemberArg(input->ChildPtr(1));
-    }
-    return TExprNode::TPtr();
-}
-
-TString FormatInfoUnits(const TVector<TInfoUnit>& infoUnits) {
-    TStringBuilder result;
-    for (size_t i = 0; i < infoUnits.size(); ++i) {
-        if (i != 0) {
-            result << ",";
-        }
-        result << infoUnits[i].GetFullName();
-    }
-    return result;
-}
-
-TVector<TInfoUnit> DeduplicateInfoUnits(const TVector<TInfoUnit>& infoUnits) {
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
-    TVector<TInfoUnit> result;
-    for (const auto& infoUnit : infoUnits) {
-        if (!seen.contains(infoUnit)) {
-            seen.insert(infoUnit);
-            result.push_back(infoUnit);
-        }
-    }
-    return result;
-}
-
 TString QuoteString(TStringBuf value) {
     TStringStream out;
     out << '"';
@@ -328,7 +187,7 @@ TString QuoteString(TStringBuf value) {
     return out.Str();
 }
 
-std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth = 0);
+std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, const TExprNode* row, const TInfoUnitRegistry& registry, ui32 depth = 0);
 
 bool IsBinaryCallable(TStringBuf callable) {
     return callable == "+" || callable == "-" || callable == "*" || callable == "/" || callable == "%" ||
@@ -398,13 +257,13 @@ std::optional<TString> FormatAtomLiteral(TExprNode::TPtr node) {
     return {};
 }
 
-std::optional<TString> FormatSimpleBinary(TExprNode::TPtr node, ui32 depth) {
+std::optional<TString> FormatSimpleBinary(TExprNode::TPtr node, const TExprNode* row, const TInfoUnitRegistry& registry, ui32 depth) {
     if (node->ChildrenSize() != 2) {
         return {};
     }
 
-    auto left = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
-    auto right = FormatSimpleExpression(node->ChildPtr(1), depth + 1);
+    auto left = FormatSimpleExpression(node->ChildPtr(0), row, registry, depth + 1);
+    auto right = FormatSimpleExpression(node->ChildPtr(1), row, registry, depth + 1);
     if (!left || !right) {
         return {};
     }
@@ -419,10 +278,10 @@ std::optional<TString> FormatSimpleBinary(TExprNode::TPtr node, ui32 depth) {
     return TStringBuilder() << *left << " " << GetBinaryOperator(node->Content()) << " " << *right;
 }
 
-std::optional<TString> FormatSimpleLogic(TExprNode::TPtr node, ui32 depth) {
+std::optional<TString> FormatSimpleLogic(TExprNode::TPtr node, const TExprNode* row, const TInfoUnitRegistry& registry, ui32 depth) {
     TVector<TString> parts;
     for (const auto& child : node->Children()) {
-        auto part = FormatSimpleExpression(child, depth + 1);
+        auto part = FormatSimpleExpression(child, row, registry, depth + 1);
         if (!part) {
             return {};
         }
@@ -440,12 +299,12 @@ std::optional<TString> FormatSimpleLogic(TExprNode::TPtr node, ui32 depth) {
     return result;
 }
 
-std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth) {
+std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, const TExprNode* row, const TInfoUnitRegistry& registry, ui32 depth) {
     if (!node || depth > 12) {
         return {};
     }
     if (node->IsLambda()) {
-        return node->ChildrenSize() >= 2 ? FormatSimpleExpression(node->ChildPtr(1), depth + 1) : std::optional<TString>();
+        return node->ChildrenSize() >= 2 ? FormatSimpleExpression(node->ChildPtr(1), row, registry, depth + 1) : std::optional<TString>();
     }
     if (!node->IsCallable()) {
         return {};
@@ -455,35 +314,38 @@ std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth) 
     }
     if (node->IsCallable("Member")) {
         if (node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+            if (node->Child(0) == row) {
+                return registry.GetDisplayName(GetMemberId(*node));
+            }
             return TString(node->Child(1)->Content());
         }
         return {};
     }
-    if (node->IsCallable({"ToPg", "FromPg", "SafeCast", "Just", "Unwrap", "Convert"})) {
-        return node->ChildrenSize() >= 1 ? FormatSimpleExpression(node->ChildPtr(0), depth + 1) : std::optional<TString>();
+    if (node->IsCallable({"SafeCast", "Just", "Unwrap", "Convert"})) {
+        return node->ChildrenSize() >= 1 ? FormatSimpleExpression(node->ChildPtr(0), row, registry, depth + 1) : std::optional<TString>();
     }
     if (node->IsCallable("Coalesce")) {
         if (node->ChildrenSize() != 2) {
             return {};
         }
-        auto value = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
-        auto fallback = FormatSimpleExpression(node->ChildPtr(1), depth + 1);
+        auto value = FormatSimpleExpression(node->ChildPtr(0), row, registry, depth + 1);
+        auto fallback = FormatSimpleExpression(node->ChildPtr(1), row, registry, depth + 1);
         if (!value || !fallback) {
             return {};
         }
         return TStringBuilder() << "Coalesce(" << *value << ", " << *fallback << ")";
     }
     if (IsBinaryCallable(node->Content())) {
-        return FormatSimpleBinary(node, depth);
+        return FormatSimpleBinary(node, row, registry, depth);
     }
     if (node->IsCallable({"And", "Or", "Xor"})) {
-        return FormatSimpleLogic(node, depth);
+        return FormatSimpleLogic(node, row, registry, depth);
     }
     if (node->IsCallable("Not")) {
         if (node->ChildrenSize() != 1) {
             return {};
         }
-        auto value = FormatSimpleExpression(node->ChildPtr(0), depth + 1);
+        auto value = FormatSimpleExpression(node->ChildPtr(0), row, registry, depth + 1);
         if (!value) {
             return {};
         }
@@ -496,27 +358,63 @@ std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth) 
     return {};
 }
 
-TString FormatExpressionDependencies(const TExpression& expr) {
-    TVector<TInfoUnit> deps;
-    try {
-        deps = expr.GetInputIUs(true, true);
-    } catch (...) {
-        GetAllMembers(expr.Node, deps);
-    }
-
-    deps = DeduplicateInfoUnits(deps);
-    if (deps.empty()) {
+TString FormatExpressionDependencies(const TExpression& expr, const TInfoUnitRegistry& registry) {
+    const auto& deps = expr.GetInputIUs(true, true);
+    if (deps.Empty()) {
         return "<expr>";
     }
-    return TStringBuilder() << "<expr depends on: " << FormatInfoUnits(deps) << ">";
+    TStringBuilder text;
+    text << "<expr depends on: ";
+    TStringBuf separator;
+    for (const auto id : deps) {
+        text << separator << registry.GetDisplayName(id);
+        separator = ",";
+    }
+    return text << ">";
 }
 
 } // anonymous namespace
+
+TExpression TExpression::FromExpr(TExprNode::TPtr lambda, const TBindings& bindings,
+    TExprContext& ctx, TPlanProps& props, TNodeOnNodeOwnedMap replacements)
+{
+    Y_ENSURE(lambda && lambda->IsLambda() && lambda->Head().ChildrenSize() == 1, "Expected a single-row lambda");
+    const auto& row = lambda->Head().Head();
+    const auto bind = [&](TStringBuf spelling, TPositionHandle pos) {
+        const auto it = bindings.find(TString(spelling));
+        Y_ENSURE(it != bindings.end(), "Unknown input binding " << spelling);
+        Y_ENSURE(it->second != TUnorderedIUs::InvalidBit, "Invalid input binding ID");
+        return ctx.NewCallable(pos, "Member", {lambda->Head().HeadPtr(), ctx.NewAtom(pos, it->second)});
+    };
+    VisitExpr(lambda->ChildPtr(1), [&](const TExprNode::TPtr& node) {
+        if (replacements.contains(node.Get())) {
+            return false;
+        }
+        if (IsRowMember(*node, row)) {
+            replacements.emplace(node.Get(), bind(node->Tail().Content(), node->Pos()));
+            return false;
+        }
+        if (node.Get() == &row) {
+            // A row used as a value retains its source struct shape. These
+            // field labels are value data, not internal binding-lookup keys.
+            Y_ENSURE(row.GetTypeAnn(), "Whole-row binding requires the source row type");
+            TExprNode::TListType items;
+            for (const auto* item : row.GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
+                items.push_back(ctx.NewList(row.Pos(), {ctx.NewAtom(row.Pos(), item->GetName()), bind(item->GetName(), row.Pos())}));
+            }
+            replacements.emplace(&row, ctx.NewCallable(row.Pos(), "AsStruct", std::move(items)));
+            return false;
+        }
+        return true;
+    });
+    return TExpression(RewriteRow(std::move(lambda), replacements, ctx), &ctx, &props);
+}
 
 TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
     Y_ENSURE(ctx, "Creating an expression with null context");
 
     if (node->IsLambda()) {
+        Y_ENSURE(node->ChildrenSize() == 2 && node->Head().ChildrenSize() == 1, "Expected a single-row lambda");
         Node = node;
     } else {
         auto arg = Build<TCoArgument>(*ctx, node->Pos()).Name("lambda_arg").Done().Ptr();
@@ -561,28 +459,17 @@ TVector<TExpression> TExpression::SplitDisjunct() const {
 
 bool TExpression::IsColumnAccess() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
-    auto body = Node->ChildPtr(1);
-    if (body->IsCallable("FromPg")) {
-        body = body->ChildPtr(0);
-    }
-
-    return body->IsCallable("Member");
+    return IsRowMember(*Node->Child(1), Node->Head().Head());
 }
 
  bool TExpression::IsSingleCallable(const THashSet<TString>& allowedCallables) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
      auto body = Node->ChildPtr(1);
-    if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
+    if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && IsRowMember(body->Head(), Node->Head().Head())) {
         return true;
     } else {
         return false;
     }
- }
-
- bool TExpression::IsCast() const {
-    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
-    auto body = Node->ChildPtr(1);
-    return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
 
 bool TExpression::MaybeEquiJoinCondition() const {
@@ -594,38 +481,18 @@ bool TExpression::MaybeExprEquiJoinCondition() const {
 }
 
 bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const {
-    auto body = Node->ChildPtr(1);
-
-    if (body->IsCallable("FromPg")) {
-        body = body->ChildPtr(0);
+    auto body = GetExpressionBody();
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+    if (!TestAndExtractEqualityPredicate(body, left, right)) {
+        return false;
     }
-
-    TExprNode::TPtr leftArg;
-    TExprNode::TPtr rightArg;
-    if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
-        TVector<TInfoUnit> bodyIUs;
-        GetAllMembers(body, bodyIUs, *PlanProps, true, false);
-
-        if (bodyIUs.size() < 2) {
-            return false;
-        }
-
-        if (!includeExpressions && bodyIUs.size()!= 2) {
-            return false;
-        }
-
-        TVector<TInfoUnit> leftIUs;
-        TVector<TInfoUnit> rightIUs;
-        GetAllMembers(leftArg, leftIUs, *PlanProps, true, false);
-        GetAllMembers(rightArg, rightIUs, *PlanProps, true, false);
-
-        if (!includeExpressions) {
-            return leftIUs.size()==1 && rightIUs.size()==1 && leftArg->IsCallable("Member") && rightArg->IsCallable("Member");
-        } else {
-            return (leftIUs.size() >= 1 && rightIUs.size() >= 1);
-        }
+    if (!includeExpressions) {
+        const auto& row = Node->Head().Head();
+        return IsRowMember(*left, row) && IsRowMember(*right, row);
     }
-    return false;
+    return !TExpression(left, Ctx, PlanProps).GetInputIUs(true, false).Empty()
+        && !TExpression(right, Ctx, PlanProps).GetInputIUs(true, false).Empty();
 }
 
 bool TExpression::MaybeConstantCondition() const {
@@ -639,7 +506,7 @@ bool TExpression::MaybeConstantCondition() const {
         }
 
         auto ius = GetInputIUs(true, false);
-        if (ius.size() != 1) {
+        if (ius.Size() != 1) {
             return false;
         }
 
@@ -659,10 +526,9 @@ TExprNode::TPtr TExpression::GetExpressionBody() const {
     return Node->ChildPtr(1);
 }
 
-const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
-    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+const TUnorderedIUs& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
     const auto& rawInputIUs = GetRawInputIUs();
-    if (rawInputIUs.empty()) {
+    if (rawInputIUs.Empty()) {
         return rawInputIUs;
     }
 
@@ -671,41 +537,64 @@ const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool
         return rawInputIUs;
     }
 
-    bool hasSubplanReference = false;
-    for (const auto& iu : rawInputIUs) {
-        if (PlanProps->Subplans.Contains(iu)) {
-            hasSubplanReference = true;
-            break;
-        }
-    }
-    if (!hasSubplanReference) {
+    const auto calls = PlanProps->Subplans.CallsIn(rawInputIUs);
+    if (calls.Empty()) {
         return rawInputIUs;
     }
 
-    ResolvedInputIUs.clear();
-
-    for (const auto& iu : rawInputIUs) {
-        AddResolvedInfoUnit(iu, ResolvedInputIUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    // Only direct references are cached. Subplan additions/removals and changes
+    // to their dependencies must be visible without changing the expression AST.
+    ResolvedInputIUs = rawInputIUs;
+    if (!includeSubplanVars) {
+        ResolvedInputIUs.Subtract(calls);
+    }
+    if (includeCorrelatedDeps) {
+        for (const auto call : calls) {
+            const auto& subplan = PlanProps->Subplans.At(call);
+            ResolvedInputIUs.UnionWith(subplan.Tuple.Unordered());
+            ResolvedInputIUs.UnionWith(subplan.DependentIUs);
+        }
     }
     return ResolvedInputIUs;
 }
 
-const TVector<TInfoUnit>& TExpression::GetRawInputIUs() const {
-    if (!RawInputIUs || RawInputIUsCacheKey != Node) {
-        if (!RawInputIUs) {
-            RawInputIUs.emplace();
-        } else {
-            RawInputIUs->clear();
-        }
-        GetAllMembers(Node, *RawInputIUs);
+const TUnorderedIUs& TExpression::GetRawInputIUs() const {
+    Y_ENSURE(Node && Node->IsLambda() && Node->Head().ChildrenSize() == 1, "Expected a single-row lambda");
+    if (RawInputIUsCacheKey != Node) {
+        TUnorderedIUs ids;
+        const auto& row = Node->Head().Head();
+        VisitExpr(GetExpressionBody(), [&](const TExprNode::TPtr& node) {
+            if (IsRowMember(*node, row)) {
+                ids.Add(GetMemberId(*node));
+                return false;
+            }
+            Y_ENSURE(node.Get() != &row, "Expected explicit IU references, not a whole-row use");
+            return true;
+        });
+        RawInputIUs = std::move(ids);
         RawInputIUsCacheKey = Node;
     }
-    return *RawInputIUs;
+    return RawInputIUs;
 }
 
-TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {
-    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
-    return TExpression(RenameMembers(Node, renameMap, *Ctx), Ctx, PlanProps);
+TExpression TExpression::ApplyRenames(const TSubstitutions& substitutions) const {
+    Y_ENSURE(Node && Node->IsLambda() && Node->Head().ChildrenSize() == 1, "Expected a single-row lambda");
+    const auto& row = Node->Head().Head();
+    TNodeOnNodeOwnedMap replacements;
+    VisitExpr(GetExpressionBody(), [&](const TExprNode::TPtr& node) {
+        if (!IsRowMember(*node, row)) {
+            return true;
+        }
+        const auto id = GetMemberId(*node);
+        if (const auto replacement = Substitute(id, substitutions); replacement != id) {
+            replacements.emplace(node.Get(), Ctx->ChangeChild(*node, 1, Ctx->NewAtom(node->Tail().Pos(), replacement)));
+        }
+        return false;
+    });
+    if (replacements.empty()) {
+        return *this;
+    }
+    return TExpression(RewriteRow(Node, replacements, *Ctx), Ctx, PlanProps);
 }
 
 TExpression TExpression::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const {
@@ -730,14 +619,20 @@ std::optional<TExpression> TExpression::TryExtractCommonConjuncts() const {
     return TExpression(*newPredicate, Ctx, PlanProps);
 }
 
-TExpression TExpression::PruneCast() const {
-    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
-    auto body = Node->ChildPtr(1);
-    Y_ENSURE(body->IsCallable("ToPg") || body->IsCallable("PgCast"), "Not a cast in prune cast call");
-    return TExpression(body->ChildPtr(0), Ctx, PlanProps);
-}
-
-TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext& ctx, const TInfoUnitRegistry* registry) {
+    if (registry && expr->IsLambda() && expr->Head().ChildrenSize() == 1) {
+        const auto& row = expr->Head().Head();
+        TNodeOnNodeOwnedMap replacements;
+        VisitExpr(expr->TailPtr(), [&](const TExprNode::TPtr& node) {
+            if (IsRowMember(*node, row)) {
+                replacements.emplace(node.Get(), ctx.ChangeChild(*node, 1,
+                    ctx.NewAtom(node->Tail().Pos(), registry->GetDebugName(GetMemberId(*node)))));
+                return false;
+            }
+            return true;
+        });
+        expr = ctx.ReplaceNodes(std::move(expr), replacements);
+    }
     if (expr->IsLambda()) {
         expr = expr->Child(1);
     }
@@ -759,110 +654,71 @@ TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
 }
 
 TString TExpression::ToString() const {
-    return PrintRBOExpression(Node, *Ctx);
+    return PrintRBOExpression(Node, *Ctx, PlanProps ? &PlanProps->InfoUnitRegistry : nullptr);
 }
 
-TString TExpression::ToExplainString() const {
-    if (auto simple = FormatSimpleExpression(Node)) {
+TString TExpression::ToExplainString(const TInfoUnitRegistry& registry) const {
+    const auto* row = Node && Node->IsLambda() && Node->Head().ChildrenSize() == 1 ? &Node->Head().Head() : nullptr;
+    if (auto simple = FormatSimpleExpression(Node, row, registry)) {
         return *simple;
     }
-    return FormatExpressionDependencies(*this);
+    return FormatExpressionDependencies(*this, registry);
 }
 
-TEquiJoinCondition::TEquiJoinCondition(const TExpression& expr) : Expr(expr)
+TEquiJoinCondition::TEquiJoinCondition(const TExpression& expr) : Expr(expr) {
+    auto body = Expr.GetExpressionBody();
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+    if (!TestAndExtractEqualityPredicate(body, left, right)) {
+        Y_ENSURE(body->ChildrenSize() == 2, "Non-binary callable in join condition");
+        left = body->ChildPtr(0);
+        right = body->ChildPtr(1);
+    }
+    LeftIUs = TExpression(left, Expr.Ctx, Expr.PlanProps).GetInputIUs(false, true);
+    RightIUs = TExpression(right, Expr.Ctx, Expr.PlanProps).GetInputIUs(false, true);
+    const auto& row = Expr.Node->Head().Head();
+    IncludesExpressions = !IsRowMember(*left, row) || !IsRowMember(*right, row);
+}
+
+TInfoUnitId TEquiJoinCondition::GetLeftIU() const {
+    Y_ENSURE(LeftIUs.Size() == 1);
+    return *LeftIUs.begin();
+}
+
+TInfoUnitId TEquiJoinCondition::GetRightIU() const {
+    Y_ENSURE(RightIUs.Size() == 1);
+    return *RightIUs.begin();
+}
+
+bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& replacements,
+    TMappedIUs<TExprNode::TPtr>& expressions)
 {
-    auto body = Expr.Node->ChildPtr(1);
-
-    if (body->IsCallable("FromPg")) {
-        body = body->ChildPtr(0);
-    }
-
-    TExprNode::TPtr leftArg;
-    TExprNode::TPtr rightArg;
-    if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
-        TVector<TInfoUnit> bodyIUs;
-        GetAllMembers(body, bodyIUs, *Expr.PlanProps, false, true);
-
-        GetAllMembers(leftArg, LeftIUs, *Expr.PlanProps, false, true);
-        GetAllMembers(rightArg, RightIUs, *Expr.PlanProps, false, true);
-    } else {
-        Y_ENSURE(body->ChildrenSize()==2, "Non-binary callable in join condition");
-
-        GetAllMembers(body->ChildPtr(0), LeftIUs, *Expr.PlanProps, false, true);
-        GetAllMembers(body->ChildPtr(1), RightIUs, *Expr.PlanProps, false, true);
-    }
-
-    if (body->ChildPtr(0)->IsCallable("Member") && body->ChildPtr(1)->IsCallable("Member")) {
-        IncludesExpressions = false;
-    }
-}
-
-TInfoUnit TEquiJoinCondition::GetLeftIU() const {
-    Y_ENSURE(LeftIUs.size()==1);
-
-    return LeftIUs[0];
-}
-
-TInfoUnit TEquiJoinCondition::GetRightIU() const {
-    Y_ENSURE(RightIUs.size()==1);
-
-    return RightIUs[0];
-}
-
-bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
-
     if (!IncludesExpressions) {
         return false;
     }
-
-    auto body = Expr.Node->ChildPtr(1);
-
-    if (body->IsCallable("FromPg")) {
-        body = body->ChildPtr(0);
+    auto body = Expr.GetExpressionBody();
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+    Y_ENSURE(TestAndExtractEqualityPredicate(body, left, right));
+    const auto row = Expr.Node->Head().HeadPtr();
+    for (const auto& side : {left, right}) {
+        if (!IsRowMember(*side, *row)) {
+            const auto id = Expr.PlanProps->InfoUnitRegistry.AddGenerated("join_key");
+            // clang-format off
+            replacements[side.Get()] = Build<TCoMember>(*Expr.Ctx, side->Pos())
+                .Struct(row)
+                .Name().Value(Expr.Ctx->GetIndexAsString(id)).Build()
+                .Done().Ptr();
+            // clang-format on
+            expressions.Add(id, side);
+        }
     }
-
-    TExprNode::TPtr leftArg;
-    TExprNode::TPtr rightArg;
-    TestAndExtractEqualityPredicate(body, leftArg, rightArg);
-    bool expressionExtracted = false;
-
-    if (!leftArg->IsCallable("Member")) {
-        auto memberArg = FindMemberArg(leftArg);
-        TString newName = "_rbo_arg_" + std::to_string(Expr.PlanProps->InternalVarIdx++);
-
-        // clang-format off
-        auto newLeftArg= Build<TCoMember>(*Expr.Ctx, leftArg->Pos())
-            .Struct(memberArg)
-            .Name().Value(newName).Build()
-            .Done().Ptr();
-        // clang-format on
-
-        renameMap[leftArg.Get()] = newLeftArg;
-        exprMap.emplace_back(TInfoUnit(newName), leftArg);
-        expressionExtracted = true;
-    }
-
-    if (!rightArg->IsCallable("Member")) {
-        auto memberArg = FindMemberArg(rightArg);
-        TString newName = "_rbo_arg_" + std::to_string(Expr.PlanProps->InternalVarIdx++);
-
-        // clang-format off
-        auto newRightArg= Build<TCoMember>(*Expr.Ctx, rightArg->Pos())
-            .Struct(memberArg)
-            .Name().Value(newName).Build()
-            .Done().Ptr();
-        // clang-format on
-
-        renameMap[rightArg.Get()] = newRightArg;
-        exprMap.emplace_back(TInfoUnit(newName), rightArg);
-        expressionExtracted = true;
-    }
-    
-    return expressionExtracted;
+    return true;
 }
 
-TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
+TExpression MakeColumnAccess(TInfoUnitId column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
+    Y_ENSURE(column != TUnorderedIUs::InvalidBit, "Invalid IU ID");
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
 
     // clang-format off
@@ -870,10 +726,10 @@ TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExpr
         .Args({lambda_arg})
         .Body<TCoMember>()
             .Struct(lambda_arg)
-            .Name().Value(column.GetFullName()).Build()
+            .Name().Value(ctx->GetIndexAsString(column)).Build()
         .Build()
         .Done().Ptr();
-        // clang-format on
+    // clang-format on
 
     return TExpression(lambda, ctx, props);
 }
@@ -1009,6 +865,12 @@ TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, c
     return TExpression(ensure, ctx, props);
 }
 
+TInfoUnitId GetMemberId(const TExprNode& member) {
+    const auto id = FromString<TInfoUnitId>(member.Tail().Content());
+    Y_ENSURE(id != TUnorderedIUs::InvalidBit, "Invalid IU ID");
+    return id;
+}
+
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
@@ -1018,18 +880,6 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
 
     for (auto c : node->Children()) {
         GetAllMembers(c, IUs);
-    }
-}
-
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        AddResolvedInfoUnit(TInfoUnit(member.Name().StringValue()), IUs, props, withSubplanContext, withDependencies);
-        return;
-    }
-
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
     }
 }
 

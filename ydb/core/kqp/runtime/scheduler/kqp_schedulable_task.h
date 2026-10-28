@@ -32,12 +32,12 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
 
     bool TryIncreaseUsage();
     void IncreaseUsage();
-    void DecreaseUsage(const TDuration& burstUsage, EUsageType usageType);
+    void DecreaseUsage(TDuration burstUsage, EUsageType usageType);
 
     // Returns parent pool's 'fair-share' minus 'usage'
     size_t GetSpareUsage() const;
 
-    void IncreaseBurstThrottle(const TDuration& burstThrottle);
+    void IncreaseBurstThrottle(TDuration burstThrottle);
     void IncreaseThrottle();
     void DecreaseThrottle();
 

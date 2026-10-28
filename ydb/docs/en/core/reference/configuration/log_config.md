@@ -45,6 +45,7 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
 | `entry` | array | [] | Configuration of logging level and/or sampling for specific {{ ydb-short-name }} components, see [{#T}](#entry-objects) below. |
 | `uaclient_config` | object | — | Configuration for the Unified Agent client, see [{#T}](#uaclient-config) below. |
+| `enable_structured_log_in_json` | bool | false | For `format: "json"`: if `false`, `message` includes structured values as `key=value` (for example, `Text (a=1 b=2)`); if `true`, `message` contains only the text, and structured values are emitted as separate JSON string fields (for example, `{"message":"Text","a":"1","b":"2"}`). Reserved field names are prefixed with `_`. |
 
 ### Entry Objects {#entry-objects}
 

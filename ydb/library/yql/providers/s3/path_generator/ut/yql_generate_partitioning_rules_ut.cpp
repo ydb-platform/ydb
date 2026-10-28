@@ -1,7 +1,6 @@
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NYql::NPathGenerator {
@@ -17,7 +16,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,1",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
@@ -43,7 +43,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.interval" : 33,
                 "storage.location.template" : "${city}/${code}"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
@@ -70,7 +71,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.digits" : 5,
                 "storage.location.template" : "/${city}/${code}"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
@@ -97,7 +99,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.digits" : 10000,
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"}), yexception, "Digits cannot exceed 64, but received 10000");
+        )",
+                                           { "city", "code" }), yexception, "Digits cannot exceed 64, but received 10000");
     }
 
     Y_UNIT_TEST(CheckLimit) {
@@ -110,7 +113,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,1",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"}, {}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
+        )",
+                                           { "city", "code" }, {}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
     }
 
     Y_UNIT_TEST(CheckClash) {
@@ -123,11 +127,13 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,00",
                 "storage.location.template" : "/${city}${code}/"
             }
-        )", {"city", "code"}), yexception, "Location path 000/ is composed by different projection value sets { ${city} = 00, ${code} = 0 } and { ${city} = 0, ${code} = 00 }");
+        )",
+                                           { "city", "code" }), yexception,
+            "Location path 000/ is composed by different projection value sets { ${city} = 00, ${code} = 0 } and { ${city} = 0, ${code} = 00 }");
     }
 
     Y_UNIT_TEST(CheckHiveFormat) {
-        auto generator = CreatePathGenerator({}, {"city", "code", "device_id"}, {}, 1);
+        auto generator = CreatePathGenerator({}, { "city", "code", "device_id" }, {}, 1);
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 0);
@@ -148,7 +154,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.unit" : "DAYS",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
@@ -176,7 +183,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.unit" : "DAYS",
                 "storage.location.template" : "//${city}/${code}//"
             }
-        )", {"city", "code"}), yexception, "error in datetime parsing. Input data: 201701");
+        )",
+                                           { "city", "code" }), yexception, "error in datetime parsing. Input data: 201701");
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWithNow) {
@@ -193,7 +201,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.unit" : "DAYS",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
         auto nowBefore = TInstant::Now();
         auto rules = generator->GetRules();
         auto nowAfter = TInstant::Now();
@@ -218,7 +227,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "/yellow_tripdata_${dt}-01/"
             }
-        )", {"dt"});
+        )",
+            { "dt" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
@@ -238,7 +248,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "yellow_tripdata_${dt}-01"
             }
-        )", {"dt"});
+        )",
+            { "dt" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 3);
@@ -262,14 +273,15 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "yellow_tripdata_${dt}-01/"
             }
-        )", {"dt"});
+        )",
+            { "dt" });
 
         auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "yellow_tripdata_asdf asdf 444-01/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 1);
         const auto& columnValue = rules[0].ColumnValues[0];
-        auto result = NKikimr::NMiniKQL::ValueFromString(columnValue.Type, TStringBuf{columnValue.Value});
+        auto result = NKikimr::NMiniKQL::ValueFromString(columnValue.Type, TStringBuf{ columnValue.Value });
         UNIT_ASSERT(result.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(result.Get<ui32>(), 15340);
     }
@@ -286,7 +298,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "yellow_tripdata_${dt}-01/"
             }
-        )", {"dt"}), yexception, "error in datetime parsing. Input data: 1980-1-1");
+        )",
+                                           { "dt" }), yexception, "error in datetime parsing. Input data: 1980-1-1");
     }
 
     Y_UNIT_TEST(EmptyOutput) {
@@ -301,7 +314,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "/yellow_tripdata_${dt}-01/"
             }
-        )", {"dt"}), yexception, "The projection contains an empty set of paths");
+        )",
+                                           { "dt" }), yexception, "The projection contains an empty set of paths");
     }
 
     Y_UNIT_TEST(LocationPathCollision) {
@@ -316,7 +330,10 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.year.format" : "%Y",
                 "projection.year.unit" : "DAYS"
             }
-        )", {"year"}), yexception, "Location path 1971/ is composed by different projection value sets { ${year} = 1971-01-01 } and { ${year} = 1971-01-02 }");;
+        )",
+                                           { "year" }), yexception,
+            "Location path 1971/ is composed by different projection value sets { ${year} = 1971-01-01 } and { ${year} = 1971-01-02 }");
+        ;
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWithNegativeNow) {
@@ -333,7 +350,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.unit" : "DAYS",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
+        )",
+            { "city", "code" });
         auto nowBefore = TInstant::Now();
         auto rules = generator->GetRules();
         auto nowAfter = TInstant::Now();
@@ -345,11 +363,11 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 8);
-        for (const auto& rule: rules) {
+        for (const auto& rule : rules) {
             UNIT_ASSERT(items.contains(rule.Path));
             UNIT_ASSERT_VALUES_EQUAL(rule.ColumnValues.size(), 2);
         }
     }
 }
 
-}
+}   // namespace NYql::NPathGenerator

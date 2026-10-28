@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** sse2 (avx2 fma3) avx512f
- ** neon asimd
- ** vsx2 vsx3
- ** vx vxe
- **/
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -26,7 +19,7 @@
 // Provides the various *_LOOP macros
 #include "fast_loop_macros.h"
 
-#line 30
+#line 23
 #if NPY_SIMD_F32
 NPY_FINLINE npyv_f32
 simd_cabsolute_f32(npyv_f32 re, npyv_f32 im)
@@ -70,7 +63,7 @@ simd_cabsolute_f32(npyv_f32 re, npyv_f32 im)
 }
 #endif // VECTOR
 
-#line 30
+#line 23
 #if NPY_SIMD_F64
 NPY_FINLINE npyv_f64
 simd_cabsolute_f64(npyv_f64 re, npyv_f64 im)
@@ -118,7 +111,7 @@ simd_cabsolute_f64(npyv_f64 re, npyv_f64 im)
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 86
+#line 79
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -173,7 +166,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_absolute)
     }
 }
 
-#line 86
+#line 79
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

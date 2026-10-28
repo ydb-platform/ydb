@@ -6,7 +6,7 @@
 #if defined(HAVE_GSL)
 #  error #include <gsl/gsl>
 #else
-#  include <assert.h>
+#  include <cassert>
 #endif
 #include <cstring>
 #include <limits>

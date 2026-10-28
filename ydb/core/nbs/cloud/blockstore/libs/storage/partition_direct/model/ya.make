@@ -1,5 +1,6 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ddisk_balance.h)
 GENERATE_ENUM_SERIALIZATION(host_roles.h)
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host.h)
@@ -10,6 +11,7 @@ GENERATE_ENUM_SERIALIZATION(vchunk_config.h)
 
 SRCS(
     count_size.cpp
+    ddisk_balance.cpp
     host_health_policy.cpp
     host_mask.cpp
     host_roles.cpp

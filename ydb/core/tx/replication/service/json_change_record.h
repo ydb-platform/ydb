@@ -69,10 +69,7 @@ public:
     template <typename T>
     TSelf& WithBody(T&& body) {
         auto* record = GetRecord();
-        record->JsonParsed = NJson::ReadJsonTree(body, &record->JsonBody);
-        if (!record->JsonParsed) {
-            record->JsonError = "cannot parse JSON";
-        }
+        record->JsonParsed = ParseJsonBody(body, record->JsonBody, record->JsonError);
         return static_cast<TBase*>(this)->WithBody(std::forward<T>(body));
     }
 
@@ -80,6 +77,9 @@ public:
         GetRecord()->Schema = schema;
         return static_cast<TSelf&>(*this);
     }
+
+private:
+    static bool ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error);
 
 }; // TChangeRecordBuilder
 

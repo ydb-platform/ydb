@@ -1,0 +1,4 @@
+/* custom error: Symlink "Missing" does not exist */
+USE plato;
+
+DROP SYMLINK Missing;

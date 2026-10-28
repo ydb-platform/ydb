@@ -1,31 +1,26 @@
 #include "yq_cloud_audit_service.h"
 
-#include <ydb/public/api/client/yc_public/events/yq.pb.h>
-
 #include <ydb/core/fq/libs/audit/events/events.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
-
-#include <ydb/library/folder_service/events.h>
-#include <ydb/library/folder_service/folder_service.h>
-#include <ydb/library/security/util.h>
-
-#include <library/cpp/unified_agent_client/client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <library/cpp/retry/retry_policy.h>
+#include <ydb/library/folder_service/events.h>
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/security/util.h>
+#include <ydb/public/api/client/yc_public/events/yq.pb.h>
 
+#include <contrib/libs/grpc/include/grpcpp/impl/codegen/status_code_enum.h>
+#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/time_util.h>
+#include <library/cpp/retry/retry_policy.h>
+#include <library/cpp/unified_agent_client/client.h>
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/string/builder.h>
-
-#include <contrib/libs/grpc/include/grpcpp/impl/codegen/status_code_enum.h>
-
-#include <google/protobuf/util/json_util.h>
-#include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_AUDIT
 
@@ -40,13 +35,13 @@ TString ParsePeer(TString peerName) {
         res = res.substr(6, pos - 6);
     } else if (res.StartsWith("ipv4:")) {
         size_t pos = res.rfind(':');
-        if (pos == TString::npos) {//no port
+        if (pos == TString::npos) {   //no port
             res = res.substr(5);
         } else {
             res = res.substr(5, pos - 5);
         }
     } else {
-        size_t pos = res.rfind(":"); //port
+        size_t pos = res.rfind(":");   //port
         if (pos != TString::npos) {
             res = res.substr(0, pos);
         }
@@ -56,54 +51,52 @@ TString ParsePeer(TString peerName) {
 
 std::string MapConnectionType(const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) {
     switch (connectionCase) {
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kYdbDatabase:
-        return "YdbDatabase";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kClickhouseCluster:
-        return "ClickhouseCluster";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kDataStreams:
-        return "DataStreams";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kObjectStorage:
-        return "ObjectStorage";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kMonitoring:
-        return "Monitoring";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
-        return "PostgreSQLCluster";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
-        return "GreenplumCluster";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
-        return "MySQLCluster";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kLogging:
-        return "Logging";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::kIceberg:
-        return "Iceberg";
-    case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
-        Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kYdbDatabase:
+            return "YdbDatabase";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kClickhouseCluster:
+            return "ClickhouseCluster";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kDataStreams:
+            return "DataStreams";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kObjectStorage:
+            return "ObjectStorage";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kMonitoring:
+            return "Monitoring";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
+            return "PostgreSQLCluster";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kGreenplumCluster:
+            return "GreenplumCluster";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
+            return "MySQLCluster";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kLogging:
+            return "Logging";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::kIceberg:
+            return "Iceberg";
+        case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
+            Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
 }
 
 std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bindingCase) {
     switch (bindingCase) {
-    case FederatedQuery::BindingSetting::BindingSetting::kDataStreams:
-        return "YdbDataStreams";
-    case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
-        return "ObjectStorage";
-    case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
-        Y_ENSURE(false, "Invalid binding case " << i32(bindingCase));
+        case FederatedQuery::BindingSetting::BindingSetting::kDataStreams:
+            return "YdbDataStreams";
+        case FederatedQuery::BindingSetting::BindingSetting::kObjectStorage:
+            return "ObjectStorage";
+        case FederatedQuery::BindingSetting::BindingSetting::BINDING_NOT_SET:
+            Y_ENSURE(false, "Invalid binding case " << i32(bindingCase));
     }
 }
 
 TString MaybeRemoveSuffix(const TString& token) {
     const TString suffix = "@as";
-    return token.EndsWith(suffix)
-        ? token.substr(0, token.length() - suffix.length())
-        : token;
+    return token.EndsWith(suffix) ? token.substr(0, token.length() - suffix.length()) : token;
 }
 
 ::yandex::cloud::events::Authentication::SubjectType GetCloudSubjectType(const TString& subjectType) {
-    static const TMap<TString, ::yandex::cloud::events::Authentication::SubjectType> Types {
-        {"service_account", ::yandex::cloud::events::Authentication::SERVICE_ACCOUNT},
-        {"federated_account", ::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT},
-        {"user_account", ::yandex::cloud::events::Authentication::YANDEX_PASSPORT_USER_ACCOUNT},
+    static const TMap<TString, ::yandex::cloud::events::Authentication::SubjectType> Types{
+        { "service_account", ::yandex::cloud::events::Authentication::SERVICE_ACCOUNT },
+        { "federated_account", ::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT },
+        { "user_account", ::yandex::cloud::events::Authentication::YANDEX_PASSPORT_USER_ACCOUNT },
     };
     return Types.Value(subjectType, ::yandex::cloud::events::Authentication::SUBJECT_TYPE_UNSPECIFIED);
 }
@@ -116,7 +109,9 @@ void FillAuthentication(::yandex::cloud::events::Authentication& authentication,
 }
 
 void FillAuthorization(::yandex::cloud::events::Authorization& authorization, const NYql::TIssues& issues) {
-    authorization.set_authorized(AllOf(issues, [](const auto& t){ return t.IssueCode != NFq::TIssuesIds::ACCESS_DENIED; }));
+    authorization.set_authorized(AllOf(issues, [](const auto& t) {
+        return t.IssueCode != NFq::TIssuesIds::ACCESS_DENIED;
+    }));
     // for (const auto& permission : ctx.Authorization.Permissions) {
     //     auto* permision = authorization->add_permissions();
     //     permision->set_permission(permission.Permission);
@@ -126,11 +121,9 @@ void FillAuthorization(::yandex::cloud::events::Authorization& authorization, co
     // }
 }
 
-template<typename TRequest>
+template <typename TRequest>
 void FillRequestMetadata(
-    ::yandex::cloud::events::RequestMetadata& metadata,
-    const NFq::TEvAuditService::TExtraInfo& extraInfo,
-    const TRequest& request)
+    ::yandex::cloud::events::RequestMetadata& metadata, const NFq::TEvAuditService::TExtraInfo& extraInfo, const TRequest& request)
 {
     metadata.set_remote_address(ParsePeer(extraInfo.PeerName));
     metadata.set_user_agent(extraInfo.UserAgent);
@@ -138,11 +131,9 @@ void FillRequestMetadata(
     metadata.set_idempotency_id(request.idempotency_key());
 }
 
-template<typename TEvent>
+template <typename TEvent>
 void FillResponse(TEvent& cloudEvent, const NYql::TIssues& issues) {
-    cloudEvent.set_event_status(issues.Empty()
-        ? yandex::cloud::events::EventStatus::DONE
-        : yandex::cloud::events::EventStatus::ERROR);
+    cloudEvent.set_event_status(issues.Empty() ? yandex::cloud::events::EventStatus::DONE : yandex::cloud::events::EventStatus::ERROR);
 
     // response and error fields are mutually exclusive
     // exactly one of them is required
@@ -196,28 +187,21 @@ struct TAuditServiceSensors {
     }
 };
 
-}
+}   // namespace
 
 namespace NFq {
 
-template<class TEvent, class TRequest, class TAuditDetailsObj>
-class TAuditEventSenderActor : public NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>> {
+template <class TEvent, class TRequest, class TAuditDetailsObj>
+class TAuditEventSenderActor: public NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>> {
     using Base = NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>>;
     using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr&>;
 
 public:
-    TAuditEventSenderActor(
-            NUnifiedAgent::TClientSessionPtr& session,
-            std::shared_ptr<TAuditServiceSensors> auditServiceSensors,
-            const std::function<typename TEvent::EventDetails(const TAuditDetails<TAuditDetailsObj>&)>& prepareEventDetails,
-            const std::function<typename TEvent::RequestParameters(const TRequest&)>& prepareRequestParameters,
-            const TString& eventType,
-            const TString& messageName,
-            TEvAuditService::TExtraInfo&& extraInfo,
-            TRequest&& request,
-            NYql::TIssues&& issues,
-            TAuditDetails<TAuditDetailsObj>&& details,
-            std::optional<TString>&& eventId)
+    TAuditEventSenderActor(NUnifiedAgent::TClientSessionPtr& session, std::shared_ptr<TAuditServiceSensors> auditServiceSensors,
+        const std::function<typename TEvent::EventDetails(const TAuditDetails<TAuditDetailsObj>&)>& prepareEventDetails,
+        const std::function<typename TEvent::RequestParameters(const TRequest&)>& prepareRequestParameters, const TString& eventType,
+        const TString& messageName, TEvAuditService::TExtraInfo&& extraInfo, TRequest&& request, NYql::TIssues&& issues,
+        TAuditDetails<TAuditDetailsObj>&& details, std::optional<TString>&& eventId)
         : Session(session)
         , AuditServiceSensors(std::move(auditServiceSensors))
         , PrepareEventDetails(prepareEventDetails)
@@ -229,9 +213,13 @@ public:
         , EventId(eventId ? std::move(eventId) : CreateGuidAsString())
         , EventType(eventType)
         , MessageName(messageName)
-        , RetryState(GetRetryPolicy()->CreateRetryState()) {}
+        , RetryState(GetRetryPolicy()->CreateRetryState())
+    {
+    }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::YQ_AUDIT_EVENT_SENDER_ACTOR; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::YQ_AUDIT_EVENT_SENDER_ACTOR;
+    }
 
     void Bootstrap(const NActors::TActorContext&) {
         YDB_LOG_TRACE("Received",
@@ -295,7 +283,8 @@ private:
                     {"grpcStatusCode", status.GRpcStatusCode},
                     {"statusMessage", status.Msg},
                     {"details", status.Details});
-                NActors::TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), Base::SelfId(), CreateRequest().release()));
+                NActors::TActivationContext::Schedule(
+                    *delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), Base::SelfId(), CreateRequest().release()));
                 return;
             }
             AuditServiceSensors->ReportCloudIdResolvedError();
@@ -370,10 +359,11 @@ private:
     }
 
     static const IRetryPolicy::TPtr& GetRetryPolicy() {
-        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
-            const auto& status = ev->Get()->Status;
-            return !status.Ok() || ev->Get()->CloudId.empty() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
-        }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
+        static IRetryPolicy::TPtr policy =
+            IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
+                const auto& status = ev->Get()->Status;
+                return !status.Ok() || ev->Get()->CloudId.empty() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+            }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
         return policy;
     }
 
@@ -394,16 +384,20 @@ private:
     IRetryPolicy::IRetryState::TPtr RetryState;
 };
 
-class TYqCloudAuditServiceActor : public NActors::TActorBootstrapped<TYqCloudAuditServiceActor> {
+class TYqCloudAuditServiceActor: public NActors::TActorBootstrapped<TYqCloudAuditServiceActor> {
 public:
     using Base = NActors::TActorBootstrapped<TYqCloudAuditServiceActor>;
 
     TYqCloudAuditServiceActor(const NConfig::TAuditConfig& config, const NMonitoring::TDynamicCounterPtr& counters)
         : NActors::TActorBootstrapped<TYqCloudAuditServiceActor>()
         , Config(config)
-        , AuditServiceSensors(std::make_shared<TAuditServiceSensors>(counters)) {}
+        , AuditServiceSensors(std::make_shared<TAuditServiceSensors>(counters))
+    {
+    }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::YQ_AUDIT_ACTOR; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::YQ_AUDIT_ACTOR;
+    }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         Base::Become(&TYqCloudAuditServiceActor::StateFunc);
@@ -422,8 +416,7 @@ public:
             clientParameters.SetSharedSecretKey(sharedKey);
         }
         auto clientPtr = NUnifiedAgent::MakeClient(clientParameters);
-        auto sessionParameters = NUnifiedAgent::TSessionParameters()
-            .SetCounters(AuditServiceSensors->UACounters);
+        auto sessionParameters = NUnifiedAgent::TSessionParameters().SetCounters(AuditServiceSensors->UACounters);
         Session = clientPtr->CreateSession(sessionParameters);
     }
 
@@ -466,19 +459,11 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateBinding, FederatedQuery::CreateBindingRequest, FederatedQuery::Binding>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.CreateBinding",
-            "CreateBinding",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(
+            new TAuditEventSenderActor<yandex::cloud::events::yq::CreateBinding, FederatedQuery::CreateBindingRequest, FederatedQuery::Binding>(
+                Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.CreateBinding",
+                "CreateBinding", std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues),
+                std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::ModifyBindingAuditReport::TPtr& ev) {
@@ -507,19 +492,11 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateBinding, FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.UpdateBinding",
-            "ModifyBinding",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(
+            new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateBinding, FederatedQuery::ModifyBindingRequest, FederatedQuery::Binding>(
+                Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.UpdateBinding",
+                "ModifyBinding", std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues),
+                std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::DeleteBindingAuditReport::TPtr& ev) {
@@ -544,19 +521,11 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteBinding, FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.DeleteBinding",
-            "DeleteBinding",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(
+            new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteBinding, FederatedQuery::DeleteBindingRequest, FederatedQuery::Binding>(
+                Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.DeleteBinding",
+                "DeleteBinding", std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues),
+                std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::CreateConnectionAuditReport::TPtr& ev) {
@@ -582,19 +551,10 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateConnection, FederatedQuery::CreateConnectionRequest, FederatedQuery::Connection>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.CreateConnection",
-            "CreateConnection",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateConnection, FederatedQuery::CreateConnectionRequest,
+            FederatedQuery::Connection>(Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters,
+            "yandex.cloud.events.yq.CreateConnection", "CreateConnection", std::move(auditReport.ExtraInfo), std::move(auditReport.Request),
+            std::move(auditReport.Issues), std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::ModifyConnectionAuditReport::TPtr& ev) {
@@ -621,19 +581,10 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateConnection, FederatedQuery::ModifyConnectionRequest, FederatedQuery::Connection>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.UpdateConnection",
-            "ModifyConnection",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateConnection, FederatedQuery::ModifyConnectionRequest,
+            FederatedQuery::Connection>(Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters,
+            "yandex.cloud.events.yq.UpdateConnection", "ModifyConnection", std::move(auditReport.ExtraInfo), std::move(auditReport.Request),
+            std::move(auditReport.Issues), std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::DeleteConnectionAuditReport::TPtr& ev) {
@@ -657,19 +608,10 @@ private:
             return requestParameters;
         };
 
-        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteConnection, FederatedQuery::DeleteConnectionRequest, FederatedQuery::Connection>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.DeleteConnection",
-            "DeleteConnection",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+        Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteConnection, FederatedQuery::DeleteConnectionRequest,
+            FederatedQuery::Connection>(Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters,
+            "yandex.cloud.events.yq.DeleteConnection", "DeleteConnection", std::move(auditReport.ExtraInfo), std::move(auditReport.Request),
+            std::move(auditReport.Issues), std::move(auditReport.Details), std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::CreateQueryAuditReport::TPtr& ev) {
@@ -701,18 +643,9 @@ private:
         };
 
         Register(new TAuditEventSenderActor<yandex::cloud::events::yq::CreateQuery, FederatedQuery::CreateQueryRequest, FederatedQuery::Query>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.CreateQuery",
-            "CreateQuery",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+            Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.CreateQuery", "CreateQuery",
+            std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues), std::move(auditReport.Details),
+            std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::ControlQueryAuditReport::TPtr& ev) {
@@ -741,18 +674,9 @@ private:
         };
 
         Register(new TAuditEventSenderActor<yandex::cloud::events::yq::ControlQuery, FederatedQuery::ControlQueryRequest, FederatedQuery::Query>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.ControlQuery",
-            "ControlQuery",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+            Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.ControlQuery", "ControlQuery",
+            std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues), std::move(auditReport.Details),
+            std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::ModifyQueryAuditReport::TPtr& ev) {
@@ -786,18 +710,9 @@ private:
         };
 
         Register(new TAuditEventSenderActor<yandex::cloud::events::yq::UpdateQuery, FederatedQuery::ModifyQueryRequest, FederatedQuery::Query>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.UpdateQuery",
-            "ModifyQuery",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+            Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.UpdateQuery", "ModifyQuery",
+            std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues), std::move(auditReport.Details),
+            std::move(auditReport.EventId)));
     }
 
     void Handle(TEvAuditService::DeleteQueryAuditReport::TPtr& ev) {
@@ -825,18 +740,9 @@ private:
         };
 
         Register(new TAuditEventSenderActor<yandex::cloud::events::yq::DeleteQuery, FederatedQuery::DeleteQueryRequest, FederatedQuery::Query>(
-            Session,
-            AuditServiceSensors,
-            prepareEventDetails,
-            prepareRequestParameters,
-            "yandex.cloud.events.yq.DeleteQuery",
-            "DeleteQuery",
-            std::move(auditReport.ExtraInfo),
-            std::move(auditReport.Request),
-            std::move(auditReport.Issues),
-            std::move(auditReport.Details),
-            std::move(auditReport.EventId)
-        ));
+            Session, AuditServiceSensors, prepareEventDetails, prepareRequestParameters, "yandex.cloud.events.yq.DeleteQuery", "DeleteQuery",
+            std::move(auditReport.ExtraInfo), std::move(auditReport.Request), std::move(auditReport.Issues), std::move(auditReport.Details),
+            std::move(auditReport.EventId)));
     }
 
 private:
@@ -850,4 +756,4 @@ NActors::IActor* CreateYqCloudAuditServiceActor(const NConfig::TAuditConfig& con
     return new TYqCloudAuditServiceActor(config, counters);
 }
 
-} // namespace NFq
+}   // namespace NFq

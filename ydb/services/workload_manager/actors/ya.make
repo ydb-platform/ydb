@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cpu_load_actors.cpp
@@ -12,7 +12,5 @@ PEERDIR(
 
     ydb/core/tx/tx_proxy
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

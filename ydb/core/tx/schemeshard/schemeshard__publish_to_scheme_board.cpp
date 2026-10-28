@@ -133,9 +133,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                 TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
                     Self->SelfId(), Self->SelfId(), msg.Release());
 
-                TMemoryChanges memChanges;
                 TStorageChanges dbChanges;
-                TOperationContext context{Self, txc, ctx, SideEffects, memChanges, dbChanges};
+                TOperationContext context{Self, txc, ctx, SideEffects, dbChanges};
 
                 operation->Parts[opId.GetSubTxId()]->HandleReply(personalEv, context);
             }

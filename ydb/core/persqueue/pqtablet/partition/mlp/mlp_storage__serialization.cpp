@@ -437,9 +437,6 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
 void TStorage::BuildAndLinkMessageGroups() {
     AFL_ENSURE(MessageGroups.Groups.empty())("size", MessageGroups.Groups.size()); // multiple calls?
-    if (!KeepMessageOrder) {
-        return;
-    }
     auto linkMessage = [this](ui64 offset, TMessage& message) {
         UpdateMessageGroupForNewMessage(offset, message);
     };

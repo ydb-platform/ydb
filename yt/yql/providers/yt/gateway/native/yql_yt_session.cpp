@@ -28,6 +28,7 @@ TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
     , TxCache_(UserName_)
     , QContext_(options.QContext())
     , FullCapture_(options.FullCapture())
+    , MrJobLabel_(std::move(options.MrJobLabel()))
 {
     InitYtApiOnce(OperationOptions_.AttrsYson);
 

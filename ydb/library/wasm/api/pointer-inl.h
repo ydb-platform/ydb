@@ -5,7 +5,6 @@
 #endif
 
 #include <library/cpp/yt/assert/assert.h>
-
 #include <util/generic/yexception.h>
 #include <util/system/compiler.h>
 
@@ -25,15 +24,14 @@ Y_FORCE_INLINE size_t CheckedElementByteLength(size_t elementSize, size_t length
     return elementSize * length;
 }
 
-} // namespace NDetail
+}   // namespace NDetail
 
 template <typename T>
 T* PtrFromVM(IWebAssemblyCompartment* compartment, T* data, size_t length)
 {
     if (compartment) {
         const size_t byteLength = NDetail::CheckedElementByteLength(sizeof(T), length);
-        return std::bit_cast<T*>(std::bit_cast<uintptr_t>(
-            compartment->GetHostPointer(std::bit_cast<uintptr_t>(data), byteLength)));
+        return std::bit_cast<T*>(std::bit_cast<uintptr_t>(compartment->GetHostPointer(std::bit_cast<uintptr_t>(data), byteLength)));
     }
 
     return data;
@@ -44,8 +42,7 @@ T* PtrToVM(IWebAssemblyCompartment* compartment, T* data, size_t length)
 {
     if (compartment) {
         const size_t byteLength = NDetail::CheckedElementByteLength(sizeof(T), length);
-        const auto offset = compartment->GetCompartmentOffset(
-            std::bit_cast<void*>(std::bit_cast<uintptr_t>(data)));
+        const auto offset = compartment->GetCompartmentOffset(std::bit_cast<void*>(std::bit_cast<uintptr_t>(data)));
         // Validate that [offset, offset + byteLength) lies within linear memory.
         compartment->GetHostPointer(offset, byteLength);
         return std::bit_cast<T*>(offset);
@@ -57,11 +54,7 @@ T* PtrToVM(IWebAssemblyCompartment* compartment, T* data, size_t length)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-Y_FORCE_INLINE T* ConvertPointer(
-    T* offset,
-    EAddressSpace sourceAddressSpace,
-    EAddressSpace destinationAddressSpace,
-    size_t length)
+Y_FORCE_INLINE T* ConvertPointer(T* offset, EAddressSpace sourceAddressSpace, EAddressSpace destinationAddressSpace, size_t length)
 {
     auto* compartment = GetCurrentCompartment();
     if (!compartment) {
@@ -85,4 +78,4 @@ Y_FORCE_INLINE T* ConvertPointer(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

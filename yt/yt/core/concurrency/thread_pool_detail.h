@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -33,7 +33,7 @@ protected:
     std::atomic<bool> StartFlag_ = false;
     std::atomic<bool> ShutdownFlag_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::vector<TSchedulerThreadPtr> Threads_;
 
     void Resize();

@@ -2,10 +2,10 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/string/builder.h>
 #include <util/system/defaults.h>
@@ -18,7 +18,7 @@ namespace {
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvCreateSessionResult = EvBegin,
@@ -29,9 +29,8 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvCreateSessionResult : public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
-        explicit TEvCreateSessionResult(
-            NYdb::NTable::TCreateSessionResult result)
+    struct TEvCreateSessionResult: public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
+        explicit TEvCreateSessionResult(NYdb::NTable::TCreateSessionResult result)
             : Result(std::move(result))
         {
         }
@@ -41,14 +40,10 @@ struct TEvPrivate {
 };
 
 template <class TResponseEvent>
-class TSchemaActorBase : public NActors::TActorBootstrapped<TSchemaActorBase<TResponseEvent>> {
+class TSchemaActorBase: public NActors::TActorBootstrapped<TSchemaActorBase<TResponseEvent>> {
 public:
     TSchemaActorBase(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+        NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : Parent(parent)
         , LogComponent(logComponent)
         , Connection(std::move(connection))
@@ -112,8 +107,7 @@ public:
         CallYdbSdk().Subscribe(
             [actorId = this->SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result) {
                 actorSystem->Send(actorId, new TResponseEvent(result.GetValue()));
-            }
-        );
+            });
     }
 
     void ReplyStatusAndDie(const NYdb::TStatus& status) {
@@ -134,7 +128,7 @@ public:
 
     virtual TString GetEntityName() const = 0;
 
-    virtual TStringBuf GetActionName() const = 0; // "create" or "delete"
+    virtual TStringBuf GetActionName() const = 0;   // "create" or "delete"
 
 protected:
     const NActors::TActorId Parent;
@@ -146,7 +140,7 @@ protected:
     TMaybe<NYdb::NTable::TSession> Session;
 };
 
-class TCreateActorBase : public TSchemaActorBase<TEvents::TEvSchemaCreated> {
+class TCreateActorBase: public TSchemaActorBase<TEvents::TEvSchemaCreated> {
 public:
     using TSchemaActorBase::TSchemaActorBase;
 
@@ -174,7 +168,7 @@ protected:
     }
 };
 
-class TDeleteActorBase : public TSchemaActorBase<TEvents::TEvSchemaDeleted> {
+class TDeleteActorBase: public TSchemaActorBase<TEvents::TEvSchemaDeleted> {
 public:
     using TSchemaActorBase::TSchemaActorBase;
 
@@ -202,7 +196,7 @@ protected:
     }
 };
 
-class TUpdateActorBase : public TSchemaActorBase<TEvents::TEvSchemaUpdated> {
+class TUpdateActorBase: public TSchemaActorBase<TEvents::TEvSchemaUpdated> {
 public:
     using TSchemaActorBase::TSchemaActorBase;
 
@@ -231,7 +225,7 @@ protected:
 };
 
 template <class TRequestDesc, class TBase = TCreateActorBase>
-class TRecursiveCreateActorBase : public TBase {
+class TRecursiveCreateActorBase: public TBase {
 public:
     using TBase::TBase;
 
@@ -248,7 +242,7 @@ protected:
         return CallYdbSdk(RequestsPath[CurrentRequest]);
     }
 
-    virtual bool OnCurrentRequestChanged() { // extra validation
+    virtual bool OnCurrentRequestChanged() {   // extra validation
         return true;
     }
 
@@ -265,7 +259,7 @@ protected:
             return;
         }
         if (CurrentRequest > 0 && IsPathDoesNotExistError(ev->Get()->Result)) {
-            if (!TriedPaths[CurrentRequest - 1]) { // Defence from cycles.
+            if (!TriedPaths[CurrentRequest - 1]) {   // Defence from cycles.
                 --CurrentRequest;
                 if (!OnCurrentRequestChanged()) {
                     return;
@@ -291,12 +285,12 @@ protected:
     virtual NYdb::TAsyncStatus CallYdbSdk(const TRequestDesc& req) = 0;
 
 protected:
-    std::vector<TRequestDesc> RequestsPath; // From parent to leaf. // Must be filled during actor's bootstrap.
+    std::vector<TRequestDesc> RequestsPath;   // From parent to leaf. // Must be filled during actor's bootstrap.
     std::vector<bool> TriedPaths;
     size_t CurrentRequest = 0;
 };
 
-class TCreateActorBaseWithSession : public TCreateActorBase {
+class TCreateActorBaseWithSession: public TCreateActorBase {
 public:
     using TCreateActorBase::TCreateActorBase;
 
@@ -320,11 +314,10 @@ protected:
     }
 
     void CreateSession() {
-        Connection->TableClient.GetSession().Subscribe(
-            [actorId = SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::NTable::TAsyncCreateSessionResult& result) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(result.GetValue()));
-            }
-        );
+        Connection->TableClient.GetSession().Subscribe([actorId = SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](
+                                                           const NYdb::NTable::TAsyncCreateSessionResult& result) {
+            actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(result.GetValue()));
+        });
     }
 
     void CallAndSubscribe() override {
@@ -347,16 +340,10 @@ protected:
     TMaybe<NYdb::NTable::TSession> Session;
 };
 
-class TCreateTableActor : public TCreateActorBaseWithSession {
+class TCreateTableActor: public TCreateActorBaseWithSession {
 public:
-    TCreateTableActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& tablePath,
-        const NYdb::NTable::TTableDescription& tableDesc,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TCreateTableActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection, const TString& tablePath,
+        const NYdb::NTable::TTableDescription& tableDesc, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TCreateActorBaseWithSession(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , TablePath(tablePath)
         , TableDesc(tableDesc)
@@ -379,15 +366,10 @@ private:
     const NYdb::NTable::TTableDescription TableDesc;
 };
 
-class TCreateDirectoryActor : public TCreateActorBase {
+class TCreateDirectoryActor: public TCreateActorBase {
 public:
-    TCreateDirectoryActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& directoryPath,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TCreateDirectoryActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection, const TString& directoryPath,
+        TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TCreateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , DirectoryPath(directoryPath)
     {
@@ -408,15 +390,10 @@ private:
     const TString DirectoryPath;
 };
 
-class TCreateCoordinationNodeActor : public TCreateActorBase {
+class TCreateCoordinationNodeActor: public TCreateActorBase {
 public:
-    TCreateCoordinationNodeActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& coordinationNodePath,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TCreateCoordinationNodeActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection, const TString& coordinationNodePath,
+        TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TCreateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , CoordinationNodePath(coordinationNodePath)
     {
@@ -442,23 +419,14 @@ struct TCreateRateLimiterResourceRequestDesc {
     TMaybe<double> Limit;
 };
 
-class TCreateRateLimiterResourceActor : public TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc> {
+class TCreateRateLimiterResourceActor: public TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc> {
 public:
-    TCreateRateLimiterResourceActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& coordinationNodePath,
-        const TString& resourcePath,
-        const std::vector<TMaybe<double>>& limits, // limits from the very parent resource to the leaf
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TCreateRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+        const TString& coordinationNodePath, const TString& resourcePath, const std::vector<TMaybe<double>>& limits,
+        // limits from the very parent resource to the leaf
+        TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>(
-            parent,
-            logComponent,
-            std::move(connection),
-            std::move(retryPolicy),
-            cookie)
+              parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , CoordinationNodePath(coordinationNodePath)
         , ResourcePath(resourcePath)
         , Limits(limits)
@@ -475,7 +443,8 @@ private:
             YDB_LOG_WARN("Create rate limiter resource without limit",
                 {"entityName", TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()});
             NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");
+            issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path
+                                             << "\" without limit");
             NYdb::TStatus status(NYdb::EStatus::INTERNAL_ERROR, std::move(issues));
             ReplyStatusAndDie(status);
             return false;
@@ -487,20 +456,18 @@ private:
         std::vector<TString> components = NKikimr::SplitPath(ResourcePath);
         desc.resize(components.size());
         Y_ABORT_UNLESS(components.size() == Limits.size(),
-            "Components count and limits size don't match. Components: %lu. Limits: %lu. ResourcePath: \"%s\"",
-            components.size(), Limits.size(), ResourcePath.c_str());
+            "Components count and limits size don't match. Components: %lu. Limits: %lu. ResourcePath: \"%s\"", components.size(), Limits.size(),
+            ResourcePath.c_str());
         for (size_t i = 0; i < components.size(); ++i) {
             desc[i].Limit = Limits[i];
-            desc[i].Path = NKikimr::JoinPath({components.begin(), components.begin() + i + 1});
+            desc[i].Path = NKikimr::JoinPath({ components.begin(), components.begin() + i + 1 });
         }
     }
 
     NYdb::TAsyncStatus CallYdbSdk(const TCreateRateLimiterResourceRequestDesc& req) override {
-        return Connection->RateLimiterClient.CreateResource(
-            CoordinationNodePath,
-            req.Path,
-            NYdb::NRateLimiter::TCreateResourceSettings()
-                .MaxUnitsPerSecond(req.Limit ? std::optional<double>(req.Limit.GetRef()) : std::optional<double>()));
+        return Connection->RateLimiterClient.CreateResource(CoordinationNodePath, req.Path,
+            NYdb::NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(
+                req.Limit ? std::optional<double>(req.Limit.GetRef()) : std::optional<double>()));
     }
 
 private:
@@ -509,16 +476,10 @@ private:
     std::vector<TMaybe<double>> Limits;
 };
 
-class TDeleteRateLimiterResourceActor : public TDeleteActorBase {
+class TDeleteRateLimiterResourceActor: public TDeleteActorBase {
 public:
-    TDeleteRateLimiterResourceActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& coordinationNodePath,
-        const TString& resourcePath,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TDeleteRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+        const TString& coordinationNodePath, const TString& resourcePath, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TDeleteActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , CoordinationNodePath(coordinationNodePath)
         , ResourcePath(resourcePath)
@@ -539,17 +500,10 @@ private:
     const TString ResourcePath;
 };
 
-class TUpdateRateLimiterResourceActor : public TUpdateActorBase {
+class TUpdateRateLimiterResourceActor: public TUpdateActorBase {
 public:
-    TUpdateRateLimiterResourceActor(
-        NActors::TActorId parent,
-        ui64 logComponent,
-        TYdbConnectionPtr connection,
-        const TString& coordinationNodePath,
-        const TString& resourcePath,
-        TMaybe<ui64> limit,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
+    TUpdateRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+        const TString& coordinationNodePath, const TString& resourcePath, TMaybe<ui64> limit, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
         : TUpdateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , CoordinationNodePath(coordinationNodePath)
         , ResourcePath(resourcePath)
@@ -563,12 +517,8 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        return Connection->RateLimiterClient.AlterResource(
-            CoordinationNodePath,
-            ResourcePath,
-            NYdb::NRateLimiter::TAlterResourceSettings()
-                .MaxUnitsPerSecond(Limit ? std::optional<ui64>(Limit.GetRef()) : std::optional<ui64>())
-        );
+        return Connection->RateLimiterClient.AlterResource(CoordinationNodePath, ResourcePath,
+            NYdb::NRateLimiter::TAlterResourceSettings().MaxUnitsPerSecond(Limit ? std::optional<ui64>(Limit.GetRef()) : std::optional<ui64>()));
     }
 
 private:
@@ -577,7 +527,7 @@ private:
     const TMaybe<ui64> Limit;
 };
 
-} // namespace
+}   // namespace
 
 bool IsPathDoesNotExistError(const NYdb::TStatus& status) {
     if (status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
@@ -592,124 +542,45 @@ bool IsPathDoesNotExistError(const NYdb::TStatus& status) {
     return false;
 }
 
-NActors::IActor* MakeCreateTableActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& tablePath,
-    const NYdb::NTable::TTableDescription& tableDesc,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeCreateTableActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection, const TString& tablePath,
+    const NYdb::NTable::TTableDescription& tableDesc, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
-    return new TCreateTableActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        tablePath,
-        tableDesc,
-        std::move(retryPolicy),
-        cookie
-    );
+    return new TCreateTableActor(parent, logComponent, std::move(connection), tablePath, tableDesc, std::move(retryPolicy), cookie);
 }
 
-NActors::IActor* MakeCreateDirectoryActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& directoryPath,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeCreateDirectoryActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+    const TString& directoryPath, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
-    return new TCreateDirectoryActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        directoryPath,
-        std::move(retryPolicy),
-        cookie
-    );
+    return new TCreateDirectoryActor(parent, logComponent, std::move(connection), directoryPath, std::move(retryPolicy), cookie);
 }
 
-NActors::IActor* MakeCreateCoordinationNodeActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& coordinationNodePath,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeCreateCoordinationNodeActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+    const TString& coordinationNodePath, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
-    return new TCreateCoordinationNodeActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        coordinationNodePath,
-        std::move(retryPolicy),
-        cookie
-    );
+    return new TCreateCoordinationNodeActor(parent, logComponent, std::move(connection), coordinationNodePath, std::move(retryPolicy), cookie);
 }
 
-NActors::IActor* MakeCreateRateLimiterResourceActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& coordinationNodePath,
-    const TString& resourcePath,
-    const std::vector<TMaybe<double>>& limits, // limits from the very parent resource to the leaf
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeCreateRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+    const TString& coordinationNodePath, const TString& resourcePath, const std::vector<TMaybe<double>>& limits,
+    // limits from the very parent resource to the leaf
+    TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
     return new TCreateRateLimiterResourceActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        coordinationNodePath,
-        resourcePath,
-        limits,
-        std::move(retryPolicy),
-        cookie
-    );
+        parent, logComponent, std::move(connection), coordinationNodePath, resourcePath, limits, std::move(retryPolicy), cookie);
 }
 
-NActors::IActor* MakeDeleteRateLimiterResourceActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& coordinationNodePath,
-    const TString& resourcePath,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeDeleteRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+    const TString& coordinationNodePath, const TString& resourcePath, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
     return new TDeleteRateLimiterResourceActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        coordinationNodePath,
-        resourcePath,
-        std::move(retryPolicy),
-        cookie
-    );
+        parent, logComponent, std::move(connection), coordinationNodePath, resourcePath, std::move(retryPolicy), cookie);
 }
 
-NActors::IActor* MakeUpdateRateLimiterResourceActor(
-    NActors::TActorId parent,
-    ui64 logComponent,
-    TYdbConnectionPtr connection,
-    const TString& coordinationNodePath,
-    const TString& resourcePath,
-    TMaybe<double> limit,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeUpdateRateLimiterResourceActor(NActors::TActorId parent, ui64 logComponent, TYdbConnectionPtr connection,
+    const TString& coordinationNodePath, const TString& resourcePath, TMaybe<double> limit, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
     return new TUpdateRateLimiterResourceActor(
-        parent,
-        logComponent,
-        std::move(connection),
-        coordinationNodePath,
-        resourcePath,
-        limit,
-        std::move(retryPolicy),
-        cookie
-    );
+        parent, logComponent, std::move(connection), coordinationNodePath, resourcePath, limit, std::move(retryPolicy), cookie);
 }
 
-} // namespace NFq
+}   // namespace NFq

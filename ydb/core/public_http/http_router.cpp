@@ -3,51 +3,51 @@
 namespace NKikimr::NPublicHttp {
 
 namespace {
-    bool MatchPath(TStringBuf pathPattern, TStringBuf path, std::map<TString, TString>& pathParams) {
-        const char delim = '/';
-        pathPattern.SkipPrefix("/"sv);
-        path.SkipPrefix("/"sv);
+bool MatchPath(TStringBuf pathPattern, TStringBuf path, std::map<TString, TString>& pathParams) {
+    const char delim = '/';
+    pathPattern.SkipPrefix("/"sv);
+    path.SkipPrefix("/"sv);
 
-        TStringBuf pathPatternComponent = pathPattern.NextTok(delim);
-        TStringBuf pathComponent = path.NextTok(delim);
-        while (pathPatternComponent && pathComponent) {
-            if (pathPatternComponent.StartsWith('{') && pathPatternComponent.EndsWith('}')) {
-                TStringBuf paramName = pathPatternComponent.SubString(1, pathPatternComponent.size() - 2);
-                pathParams.emplace(paramName, pathComponent);
-            } else {
-                if (pathPatternComponent != pathComponent) {
-                    return false;
-                }
+    TStringBuf pathPatternComponent = pathPattern.NextTok(delim);
+    TStringBuf pathComponent = path.NextTok(delim);
+    while (pathPatternComponent && pathComponent) {
+        if (pathPatternComponent.StartsWith('{') && pathPatternComponent.EndsWith('}')) {
+            TStringBuf paramName = pathPatternComponent.SubString(1, pathPatternComponent.size() - 2);
+            pathParams.emplace(paramName, pathComponent);
+        } else {
+            if (pathPatternComponent != pathComponent) {
+                return false;
             }
-            pathPatternComponent = pathPattern.NextTok(delim);
-            pathComponent = path.NextTok(delim);
         }
-
-        return !pathPattern && !path && !pathPatternComponent && !pathComponent;
+        pathPatternComponent = pathPattern.NextTok(delim);
+        pathComponent = path.NextTok(delim);
     }
 
-    HTTP_METHOD ParseMethod(TStringBuf method) {
-        if (method == "GET"sv) {
-            return HTTP_METHOD_GET;
-        }
-        if (method == "POST"sv) {
-            return HTTP_METHOD_POST;
-        }
-        if (method == "PUT"sv) {
-            return HTTP_METHOD_PUT;
-        }
-        if (method == "DELETE"sv) {
-            return HTTP_METHOD_DELETE;
-        }
-        if (method == "OPTIONS"sv) {
-            return HTTP_METHOD_OPTIONS;
-        }
-        if (method == "HEAD"sv) {
-            return HTTP_METHOD_HEAD;
-        }
-        return HTTP_METHOD_UNDEFINED;
-    }
+    return !pathPattern && !path && !pathPatternComponent && !pathComponent;
 }
+
+HTTP_METHOD ParseMethod(TStringBuf method) {
+    if (method == "GET"sv) {
+        return HTTP_METHOD_GET;
+    }
+    if (method == "POST"sv) {
+        return HTTP_METHOD_POST;
+    }
+    if (method == "PUT"sv) {
+        return HTTP_METHOD_PUT;
+    }
+    if (method == "DELETE"sv) {
+        return HTTP_METHOD_DELETE;
+    }
+    if (method == "OPTIONS"sv) {
+        return HTTP_METHOD_OPTIONS;
+    }
+    if (method == "HEAD"sv) {
+        return HTTP_METHOD_HEAD;
+    }
+    return HTTP_METHOD_UNDEFINED;
+}
+}   // namespace
 
 void THttpRequestRouter::RegisterHandler(TStringBuf method, const TString& pathPattern, THttpHandler handler) {
     RegisterHandler(ParseMethod(method), pathPattern, handler);
@@ -67,7 +67,7 @@ std::optional<THandlerWithParams> THttpRequestRouter::ResolveHandler(HTTP_METHOD
         return THandlerWithParams(it->first.second, it->second, {});
     }
 
-    for (const auto& [k ,v] : Data) {
+    for (const auto& [k, v] : Data) {
         if (k.first != method) {
             continue;
         }
@@ -83,4 +83,4 @@ size_t THttpRequestRouter::GetSize() const {
     return Data.size();
 }
 
-} // namespace NKikimr::NPublicHttp
+}   // namespace NKikimr::NPublicHttp

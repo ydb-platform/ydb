@@ -74,7 +74,7 @@ namespace NKiwiAggr {
     }
 
     void TFixedBinHistogram::Clear() {
-        TrainingSet.Destroy();
+        TrainingSet.reset();
         IsInitialized = false;
         IsEmpty = true;
         Sum = 0.0;
@@ -222,7 +222,7 @@ namespace NKiwiAggr {
         if (histo.HasType() && histo.GetType() != HT_FIXED_BIN_HISTOGRAM) {
             ythrow yexception() << "Attempt to parse TFixedBinHistogram from THistogram protobuf record of wrong type = " << (ui32)histo.GetType();
         }
-        TrainingSet.Destroy();
+        TrainingSet.reset();
         IsInitialized = false;
         Sum = 0.0;
 
@@ -488,7 +488,7 @@ namespace NKiwiAggr {
         for (TVector<TWeightedValue>::const_iterator it = TrainingSet->begin(); it != TrainingSet->end(); ++it) {
             Freqs[CalcBin(it->first)] += it->second;
         }
-        TrainingSet.Destroy();
+        TrainingSet.reset();
     }
 
     i32 TFixedBinHistogram::CalcBin(double value) {

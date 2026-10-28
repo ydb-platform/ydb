@@ -17,7 +17,7 @@ namespace NYT::NBacktraceIntrospector {
 
 struct TThreadIntrospectionInfo
 {
-    NThreading::TThreadId ThreadId;
+    TThreadId ThreadId;
     NConcurrency::TFiberId FiberId;
     std::string ThreadName;
     NTracing::TTraceId TraceId;
@@ -38,7 +38,7 @@ struct TFiberIntrospectionInfo
     //! Zero if fiber is not waiting.
     TInstant WaitingSince;
     //! |InvalidThreadId| is fiber is not running.
-    NThreading::TThreadId ThreadId;
+    TThreadId ThreadId;
     //! Empty if fiber is not running.
     std::string ThreadName;
     NTracing::TTraceId TraceId;

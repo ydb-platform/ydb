@@ -145,7 +145,7 @@ namespace NKikimr::NSchemeShard {
                 SetState(state);
             }
 
-            THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+            THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
                 YDB_LOG_DEBUG_CTX(context.Ctx, "");
 
                 switch (Action) {
@@ -156,7 +156,7 @@ namespace NKikimr::NSchemeShard {
                 Y_ABORT("unreachable code");
             }
 
-            void AbortPropose(TOperationContext& context) override {
+            void AbortPropose(TProposeContext& context) override {
                 YDB_LOG_NOTICE_CTX(context.Ctx, "");
 
                 Y_ABORT();

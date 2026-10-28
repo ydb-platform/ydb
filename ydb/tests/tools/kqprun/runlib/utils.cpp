@@ -1,29 +1,30 @@
 #include "utils.h"
 
-#include <library/cpp/colorizer/colors.h>
-#include <library/cpp/json/json_reader.h>
-
-#include <util/stream/file.h>
-#include <util/string/builder.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/blob_depot/mon_main.h>
+
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_reader.h>
+#include <util/stream/file.h>
+#include <util/string/builder.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimrRun {
 
 TRequestResult::TRequestResult()
     : Status(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
-{}
+{
+}
 
 TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
     : Status(status)
     , Issues(issues)
-{}
+{
+}
 
 TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues)
     : Status(status)
@@ -42,7 +43,8 @@ TString TRequestResult::ToString() const {
 TStatsPrinter::TStatsPrinter(NYdb::NConsoleClient::EDataFormat planFormat)
     : PlanFormat(planFormat)
     , StatProcessor(NFq::CreateStatProcessor("stat_full"))
-{}
+{
+}
 
 void TStatsPrinter::PrintPlan(const TString& plan, IOutputStream& output) const {
     if (!plan) {
@@ -91,7 +93,8 @@ void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
     output.Write(planVisualizer.PrintSvg());
 }
 
-void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const {
+void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat,
+    const TString& plan, IOutputStream& output) const {
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
@@ -141,7 +144,7 @@ void TStatsPrinter::PrintStatistics(const TString& fullStat, const THashMap<TStr
 }
 
 TString TStatsPrinter::FormatNumber(i64 number) {
-    struct TSeparator : public std::numpunct<char> {
+    struct TSeparator: public std::numpunct<char> {
         char do_thousands_sep() const final {
             return '.';
         }
@@ -160,7 +163,8 @@ TString TStatsPrinter::FormatNumber(i64 number) {
 TCachedPrinter::TCachedPrinter(const TString& output, TPrinter printer)
     : Output(output)
     , Printer(printer)
-{}
+{
+}
 
 void TCachedPrinter::Print(const TString& data, bool allowEmpty) {
     if ((!data && !allowEmpty) || (PrintedData && data == *PrintedData)) {
@@ -190,7 +194,8 @@ NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName) {
     return service;
 }
 
-void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig) {
+void ModifyLogPriorities(
+    std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig) {
     for (auto& entry : *logConfig.MutableEntry()) {
         const auto it = logPriorities.find(GetLogService(entry.GetComponent()));
         if (it != logPriorities.end()) {
@@ -221,16 +226,16 @@ void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestA
 
 TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName) {
     return TChoices<NActors::NLog::EPriority>({
-        {"emerg", NActors::NLog::EPriority::PRI_EMERG},
-        {"alert", NActors::NLog::EPriority::PRI_ALERT},
-        {"crit", NActors::NLog::EPriority::PRI_CRIT},
-        {"error", NActors::NLog::EPriority::PRI_ERROR},
-        {"warn", NActors::NLog::EPriority::PRI_WARN},
-        {"notice", NActors::NLog::EPriority::PRI_NOTICE},
-        {"info", NActors::NLog::EPriority::PRI_INFO},
-        {"debug", NActors::NLog::EPriority::PRI_DEBUG},
-        {"trace", NActors::NLog::EPriority::PRI_TRACE},
-    }, optionName, false);
+                                                  { "emerg", NActors::NLog::EPriority::PRI_EMERG },
+                                                  { "alert", NActors::NLog::EPriority::PRI_ALERT },
+                                                  { "crit", NActors::NLog::EPriority::PRI_CRIT },
+                                                  { "error", NActors::NLog::EPriority::PRI_ERROR },
+                                                  { "warn", NActors::NLog::EPriority::PRI_WARN },
+                                                  { "notice", NActors::NLog::EPriority::PRI_NOTICE },
+                                                  { "info", NActors::NLog::EPriority::PRI_INFO },
+                                                  { "debug", NActors::NLog::EPriority::PRI_DEBUG },
+                                                  { "trace", NActors::NLog::EPriority::PRI_TRACE },
+                                              }, optionName, false);
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {
@@ -265,4 +270,4 @@ void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb
     }
 }
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

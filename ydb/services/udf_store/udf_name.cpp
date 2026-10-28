@@ -12,10 +12,7 @@ bool IsSafeUdfFileName(TStringBuf name) {
     // temporary sibling before the file itself. A name that fits while its
     // sibling does not can never finish loading, so it is not a usable name --
     // do not raise this back to NAME_MAX.
-    if (name.empty()
-        || name.size() + UdfTmpFileSuffix.size() > NAME_MAX
-        || name == "."
-        || name == "..")
+    if (name.empty() || name.size() + UdfTmpFileSuffix.size() > NAME_MAX || name == "." || name == "..")
     {
         return false;
     }
@@ -24,4 +21,4 @@ bool IsSafeUdfFileName(TStringBuf name) {
     });
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

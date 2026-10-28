@@ -6,6 +6,8 @@ PY_SRCS(
     cluster_workload_config.py
     commands.py
     common.py
+    nbs_dbg_like_load.py
+    dstool_cmd_cluster_workload_nbs_dbg_like.py
     grouptool.py
     table.py
 
@@ -45,12 +47,14 @@ PY_SRCS(
 
     dstool_cmd_pool_create_virtual.py
     dstool_cmd_pool_list.py
+    dstool_cmd_pool_set.py
 
     dstool_cmd_box_list.py
 
     dstool_cmd_node_list.py
 
     dstool_cmd_cluster_balance.py
+    dstool_cmd_cluster_reanimate.py
     dstool_cmd_cluster_get.py
     dstool_cmd_cluster_set.py
     dstool_cmd_cluster_workload_run.py

@@ -1,20 +1,17 @@
 #include <ydb/core/base/backtrace.h>
-
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/testlib/common/test_utils.h>
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-
-#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-
 #include <ydb/tests/tools/fqrun/src/fq_setup.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NFq {
 
@@ -25,7 +22,7 @@ using namespace NKikimrRun;
 
 namespace {
 
-class TTestFuxture : public NUnitTest::TBaseFixture {
+class TTestFuxture: public NUnitTest::TBaseFixture {
 protected:
     using TBase = NUnitTest::TBaseFixture;
 
@@ -43,10 +40,8 @@ public:
 
         auto& logConfig = *settings.AppConfig.MutableLogConfig();
         logConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
-        ModifyLogPriorities({
-            {NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG},
-            {NKikimrServices::EServiceKikimr::FQ_RUN_ACTOR, NLog::EPriority::PRI_TRACE}
-        }, logConfig);
+        ModifyLogPriorities({ { NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG },
+                                { NKikimrServices::EServiceKikimr::FQ_RUN_ACTOR, NLog::EPriority::PRI_TRACE } }, logConfig);
 
         auto& fqConfig = *settings.AppConfig.MutableFederatedQueryConfig();
         auto& cpStorageConfig = *fqConfig.MutableControlPlaneStorage();
@@ -90,13 +85,14 @@ public:
             TExecutionMeta meta;
             CheckSuccess(FqSetup->DescribeQuery(queryId, {}, meta));
 
-            if (!IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, meta.Status)) {
+            if (!IsIn({ EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM }, meta.Status)) {
                 Cerr << "Wait query execution " << TInstant::Now() - start << ": " << EStatus::ComputeStatus_Name(meta.Status) << "\n";
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
 
-            UNIT_ASSERT_C(meta.Status == EStatus::COMPLETED, "issues: " << meta.Issues.ToOneLineString() << ", transient issues: " << meta.TransientIssues.ToOneLineString());
+            UNIT_ASSERT_C(meta.Status == EStatus::COMPLETED,
+                "issues: " << meta.Issues.ToOneLineString() << ", transient issues: " << meta.TransientIssues.ToOneLineString());
             return meta;
         }
 
@@ -108,7 +104,7 @@ public:
     std::unique_ptr<TFqSetup> FqSetup;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
     void CheckQueryResults(const TTestFuxture& ctx, const TString& queryId) {
@@ -130,25 +126,19 @@ Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
 
     Y_UNIT_TEST_F(ExecuteSimpleStreamQuery, TTestFuxture) {
         TString queryId;
-        CheckSuccess(FqSetup->QueryRequest({
-            .Query = "SELECT 42 AS result_value",
-            .Action = FederatedQuery::ExecuteMode::RUN,
-            .Type = FederatedQuery::QueryContent::STREAMING
-        }, queryId));
+        CheckSuccess(FqSetup->QueryRequest({ .Query = "SELECT 42 AS result_value", .Action = FederatedQuery::ExecuteMode::RUN,
+                                               .Type = FederatedQuery::QueryContent::STREAMING }, queryId));
 
         CheckQueryResults(*this, queryId);
     }
 
     Y_UNIT_TEST_F(ExecuteSimpleAnalyticsQuery, TTestFuxture) {
         TString queryId;
-        CheckSuccess(FqSetup->QueryRequest({
-            .Query = "SELECT 42 AS result_value",
-            .Action = FederatedQuery::ExecuteMode::RUN,
-            .Type = FederatedQuery::QueryContent::ANALYTICS
-        }, queryId));
+        CheckSuccess(FqSetup->QueryRequest({ .Query = "SELECT 42 AS result_value", .Action = FederatedQuery::ExecuteMode::RUN,
+                                               .Type = FederatedQuery::QueryContent::ANALYTICS }, queryId));
 
         CheckQueryResults(*this, queryId);
     }
 }
 
-} // NFq
+}   // namespace NFq

@@ -262,6 +262,9 @@ private:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
         return std::nullopt;
     }
+    virtual std::optional<bool> DoHasNulls() const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -354,8 +357,20 @@ public:
         return true;
     }
 
+    // nullopt: no check available; false: has more than one value; true: all rows have one value.
+    // Only on true the value is defined: it is non-null and may be an Arrow NULL scalar.
+    // NULL is considered a distinct value.
     std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-        return DoCheckOneValueAccessor(value);
+        const auto result = DoCheckOneValueAccessor(value);
+        if (result && *result) {
+            AFL_VERIFY(value);
+        }
+        return result;
+    }
+
+    // nullopt: cannot cheaply determine, unknown; false: no null values; true: at least one null
+    std::optional<bool> HasNulls() const {
+        return DoHasNulls();
     }
 
     virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {

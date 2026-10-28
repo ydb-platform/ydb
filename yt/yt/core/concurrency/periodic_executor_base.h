@@ -131,7 +131,7 @@ private:
     const IInvokerPtr Invoker_;
     const TPeriodicCallback Callback_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     bool Started_ = false;
     bool Busy_ = false;
     bool OutOfBandScheduled_ = false;
@@ -142,7 +142,7 @@ private:
     TPromise<void> ExecutedPromise_;
     TPromise<void> FirstExecutedEventPromise_;
 
-    void DoStop(TGuard<NThreading::TSpinLock>& guard);
+    void DoStop(TGuard<TSpinLock>& guard);
 
     static TError MakeStoppedError();
 

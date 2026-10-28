@@ -41,13 +41,14 @@ inline void CommitTableChangesCommon(
     params.StatsCollector->AddWriterCommitTxEvent(params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
 }
 
-template <class TOnNotCommitting>
+template <class TOnNotCommitting, class TReadyToCommit>
 inline void TryCommitTxCommon(
     const TTopicWorkloadWriterParams& params,
     std::optional<TTransactionSupport>& txSupport,
     TInstant& commitTime,
     bool& waitForCommitTx,
-    TOnNotCommitting onNotCommitting
+    TOnNotCommitting onNotCommitting,
+    TReadyToCommit readyToCommit
 ) {
     Y_ABORT_UNLESS(txSupport);
     const auto now = Now();
@@ -59,10 +60,30 @@ inline void TryCommitTxCommon(
         return;
     }
 
+    // IProducer::Write only queues the message. Commit must wait until that write has been
+    // acknowledged, otherwise it races with TrySubscribeOnTransactionCommit on the same transaction.
+    if (!readyToCommit()) {
+        waitForCommitTx = true;
+        return;
+    }
+
     CommitTableChangesCommon(params, txSupport);
 
     commitTime += TDuration::MilliSeconds(params.CommitIntervalMs);
     waitForCommitTx = false;
+}
+
+template <class TOnNotCommitting>
+inline void TryCommitTxCommon(
+    const TTopicWorkloadWriterParams& params,
+    std::optional<TTransactionSupport>& txSupport,
+    TInstant& commitTime,
+    bool& waitForCommitTx,
+    TOnNotCommitting onNotCommitting
+) {
+    TryCommitTxCommon(params, txSupport, commitTime, waitForCommitTx, onNotCommitting, [] {
+        return true;
+    });
 }
 
 template <class TProducer>
@@ -200,12 +221,12 @@ inline void ProcessWriterLoopCommon(
             // Локальный счётчик в рамках текущего окна лимита скорости.
             bytesWrittenInWindow += params.MessageSize;
 
-            std::optional<NYdb::NTable::TTransaction> transaction;
+            NYdb::NTable::TTransaction* transaction = nullptr;
             if (txSupport && !txSupport->Transaction) {
                 txSupport->BeginTx();
             }
-            if (txSupport) {
-                transaction = *txSupport->Transaction;
+            if (txSupport && txSupport->Transaction) {
+                transaction = &*txSupport->Transaction;
             }
 
             const TInstant createTimestamp = getCreateTs();

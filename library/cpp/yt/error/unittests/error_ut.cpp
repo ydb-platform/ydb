@@ -10,6 +10,7 @@
 
 #include <array>
 #include <list>
+#include <thread>
 
 namespace NYT {
 namespace {
@@ -1154,6 +1155,44 @@ TEST(TErrorOrConstructionTraitsTest, FromDifferentSpecialization)
     static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, TErrorOr<int>&&>);
     static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, const TErrorOr<std::string>&>);
     static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, TErrorOr<std::string>&&>);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TErrorExceptionTest, ConcurrentWhat)
+{
+    auto ex = TErrorException() <<= TError("ConcurrentWhat");
+    auto expected = ToString(ex.Error());
+
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < 4; ++threadIndex) {
+        threads.emplace_back([&] {
+            for (int iteration = 0; iteration < 1000; ++iteration) {
+                EXPECT_EQ(ex.what(), expected);
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+}
+
+TEST(TErrorExceptionTest, CopyAndAssign)
+{
+    auto ex1 = TErrorException() <<= TError("E1");
+    auto ex2 = TErrorException() <<= TError("E2");
+    auto what1 = std::string(ex1.what());
+    auto what2 = std::string(ex2.what());
+    EXPECT_NE(what1, what2);
+
+    auto copy = ex1;
+    EXPECT_EQ(copy.what(), what1);
+
+    copy = ex2;
+    EXPECT_EQ(copy.what(), what2);
+
+    copy = std::move(ex1);
+    EXPECT_EQ(copy.what(), what1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

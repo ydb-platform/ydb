@@ -306,6 +306,12 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
+            // Pool identity remains available even when a DDisk or its node is down.
+            if (!group.GetStoragePoolName().empty()) {
+                for (const auto& slot : group.GetVSlotId()) {
+                    Info->SetDDiskPoolName(slot.GetNodeId(), slot.GetPDiskId(), slot.GetVSlotId(), group.GetStoragePoolName());
+                }
+            }
             if (!group.GetIsProxyGroup()) {
                 Info->AddBSGroup(group);
             }
@@ -345,7 +351,9 @@ void TInfoCollector::SendNodeRequests(ui32 nodeId) {
     const TActorId whiteBoardId = MakeNodeWhiteboardServiceId(nodeId);
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvSystemStateRequest(), TEvWhiteboard::EvSystemStateResponse);
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvTabletStateRequest(), TEvWhiteboard::EvTabletStateResponse);
-    SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvPDiskStateRequest(), TEvWhiteboard::EvPDiskStateResponse);
+    auto* pdiskRequest = new TEvWhiteboard::TEvPDiskStateRequest();
+    pdiskRequest->Record.SetIncludeDDiskState(true);
+    SendNodeEvent(nodeId, whiteBoardId, pdiskRequest, TEvWhiteboard::EvPDiskStateResponse);
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvVDiskStateRequest(), TEvWhiteboard::EvVDiskStateResponse);
 
     if (AppData()->DomainsInfo->Domain) {
@@ -441,6 +449,10 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         auto* info = record.MutablePDiskStateInfo(i);
         const auto id = TPDiskID(nodeId, info->GetPDiskId());
         PDiskInfo[id].Swap(info);
+    }
+
+    for (const auto& info : record.GetDDiskStateInfo()) {
+        Info->UpdateDDiskState(nodeId, info);
     }
 
     ResponseProcessed(nodeId, ev->Type);

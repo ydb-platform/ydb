@@ -76,6 +76,8 @@ private:
 }; // TCdcStreamScanFinalizer
 
 struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchemeShard> {
+    static constexpr auto AbortedRetryInterval = TDuration::Seconds(1);
+
     // params
     TEvPrivate::TEvRunCdcStreamScan::TPtr RunCdcStreamScan = nullptr;
     TEvDataShard::TEvCdcStreamScanResponse::TPtr CdcStreamScanResponse = nullptr;
@@ -88,6 +90,7 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
     // side effects
     TDeque<std::tuple<TPathId, TTabletId, THolder<IEventBase>>> ScanRequests;
     TPathId StreamToProgress;
+    TDuration ProgressDelay;
     THolder<NMetering::TEvMetering::TEvWriteMeteringJson> Metering;
     THolder<TEvSchemeShard::TEvModifySchemeTransaction> Finalize;
 
@@ -131,7 +134,9 @@ public:
             Self->CdcStreamScanPipes.Send(streamPathId, tabletId, std::move(ev), ctx);
         }
 
-        if (StreamToProgress) {
+        if (StreamToProgress && ProgressDelay) {
+            ctx.Schedule(ProgressDelay, new TEvPrivate::TEvRunCdcStreamScan(StreamToProgress));
+        } else if (StreamToProgress) {
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvRunCdcStreamScan(StreamToProgress));
         }
 
@@ -306,6 +311,10 @@ private:
             streamInfo->InProgressShards.erase(shardIdx);
             Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
             StreamToProgress = streamPathId;
+            if (record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED) {
+                // the scan failed (e.g. storage error), do not retry it in a tight loop
+                ProgressDelay = AbortedRetryInterval;
+            }
             break;
 
         case NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST:

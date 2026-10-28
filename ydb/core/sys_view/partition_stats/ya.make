@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     partition_stats.h
@@ -13,8 +13,6 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/sys_view/common
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

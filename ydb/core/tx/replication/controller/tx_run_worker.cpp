@@ -29,10 +29,17 @@ public:
 
         // A zero heartbeat means "registered but has not reported a heartbeat" and
         // is intentionally ignored by the heartbeat quorum on recovery.
+        // RunWorker is repeated (registrar on start, resent DataEnd), keep the existing heartbeat.
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update(
-            NIceDb::TUpdate<Schema::Workers::HeartbeatVersionStep>(0),
-            NIceDb::TUpdate<Schema::Workers::HeartbeatVersionTxId>(0));
+        auto row = db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+        if (!row.IsValid()) {
+            db.Table<Schema::Workers>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update(
+                NIceDb::TUpdate<Schema::Workers::HeartbeatVersionStep>(0),
+                NIceDb::TUpdate<Schema::Workers::HeartbeatVersionTxId>(0));
+        }
         Register = true;
         return true;
     }
@@ -138,6 +145,7 @@ public:
 
         target->RemoveWorker(Id.WorkerId());
         target->Progress(ctx);
+        Self->RunTxIndexBuild(ctx);
     }
 };
 

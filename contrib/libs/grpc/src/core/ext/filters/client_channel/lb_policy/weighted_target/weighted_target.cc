@@ -158,10 +158,10 @@ class WeightedTargetLb : public LoadBalancingPolicy {
 
     void Orphan() override;
 
-    y_absl::Status UpdateLocked(const WeightedTargetLbConfig::ChildConfig& config,
-                              y_absl::StatusOr<EndpointAddressesList> addresses,
-                              const TString& resolution_note,
-                              const ChannelArgs& args);
+    y_absl::Status UpdateLocked(
+        const WeightedTargetLbConfig::ChildConfig& config,
+        y_absl::StatusOr<std::shared_ptr<EndpointAddressesIterator>> addresses,
+        const TString& resolution_note, const ChannelArgs& args);
     void ResetBackoffLocked();
     void DeactivateLocked();
 
@@ -317,7 +317,7 @@ y_absl::Status WeightedTargetLb::UpdateLocked(UpdateArgs args) {
   }
   update_in_progress_ = true;
   // Update config.
-  config_ = std::move(args.config);
+  config_ = args.config.TakeAsSubclass<WeightedTargetLbConfig>();
   // Deactivate the targets not in the new config.
   for (const auto& p : targets_) {
     const TString& name = p.first;
@@ -337,13 +337,15 @@ y_absl::Status WeightedTargetLb::UpdateLocked(UpdateArgs args) {
     // Create child if it does not already exist.
     if (target == nullptr) {
       target = MakeOrphanable<WeightedChild>(
-          Ref(DEBUG_LOCATION, "WeightedChild"), name);
+          RefAsSubclass<WeightedTargetLb>(DEBUG_LOCATION, "WeightedChild"),
+          name);
     }
-    y_absl::StatusOr<EndpointAddressesList> addresses;
+    y_absl::StatusOr<std::shared_ptr<EndpointAddressesIterator>> addresses;
     if (address_map.ok()) {
       auto it = address_map->find(name);
       if (it == address_map->end()) {
-        addresses.emplace();
+        addresses = std::make_shared<EndpointAddressesListIterator>(
+            EndpointAddressesList());
       } else {
         addresses = std::move(it->second);
       }
@@ -590,7 +592,7 @@ WeightedTargetLb::WeightedChild::CreateChildPolicyLocked(
 
 y_absl::Status WeightedTargetLb::WeightedChild::UpdateLocked(
     const WeightedTargetLbConfig::ChildConfig& config,
-    y_absl::StatusOr<EndpointAddressesList> addresses,
+    y_absl::StatusOr<std::shared_ptr<EndpointAddressesIterator>> addresses,
     const TString& resolution_note, const ChannelArgs& args) {
   if (weighted_target_policy_->shutting_down_) return y_absl::OkStatus();
   // Update child weight.

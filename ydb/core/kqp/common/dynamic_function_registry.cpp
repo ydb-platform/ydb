@@ -50,7 +50,6 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
         TUdfModulesMap UdfModules;
         TUdfModulePathsMap SystemModulePaths;
         NUdf::TBackTraceCallback BackTraceCallback = nullptr;
-        bool SupportsSizedAllocators = true;
 
         TSnapshot() = default;
 
@@ -59,7 +58,6 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
             , UdfModules(other.UdfModules)
             , SystemModulePaths(other.SystemModulePaths)
             , BackTraceCallback(other.BackTraceCallback)
-            , SupportsSizedAllocators(other.SupportsSizedAllocators)
         {
         }
     };
@@ -498,10 +496,6 @@ public:
 
         module->GetAllFunctions(sink);
         return sink.Functions;
-    }
-
-    bool SupportsSizedAllocators() const override {
-        return State_.AtomicLoad()->SupportsSizedAllocators;
     }
 
     void PrintInfoTo(IOutputStream& out) const override {

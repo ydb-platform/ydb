@@ -32,11 +32,15 @@ namespace NKikimr {
     }
 
     void TDeferredActorLogBackend::WriteData(const TLogRecord& rec) {
-        NActors::TActorSystem* actorSystem = ActorSystemPtr->load(std::memory_order_relaxed);
-        if (Y_LIKELY(actorSystem)) {
-            LOG_LOG(*actorSystem, GetActorLogPriority(rec.Priority), LogComponent, TString(rec.Data, rec.Len));
-        } else {
-            // Not inited. Temporary write to stderr.
+        bool written = false;
+        ActorSystemPtr->WithActorSystem([&](NActors::TActorSystem* actorSystem) {
+            if (Y_LIKELY(actorSystem)) {
+                LOG_LOG(*actorSystem, GetActorLogPriority(rec.Priority), LogComponent, TString(rec.Data, rec.Len));
+                written = true;
+            }
+        });
+        if (!written) {
+            // Not inited, or already detached on shutdown. Temporary write to stderr.
             TStringBuilder out;
             out << TStringBuf(rec.Data, rec.Len) << Endl;
             Cerr << out;

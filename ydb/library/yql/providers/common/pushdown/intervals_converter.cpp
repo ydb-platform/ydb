@@ -15,16 +15,9 @@ struct TContext {
     TStringBuilder& Err;
 };
 
-bool ConvertPredicate(
-    const TExprBase& predicate,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-);
+bool ConvertPredicate(const TExprBase& predicate, TDisjointIntervalTree<i64>& tree, TContext& ctx);
 
-std::optional<i64> TryConvertExpressionToInt(
-    const TExprBase& expression,
-    TContext& ctx
-) {
+std::optional<i64> TryConvertExpressionToInt(const TExprBase& expression, TContext& ctx) {
     if (auto just = expression.Maybe<TCoJust>()) {
         return TryConvertExpressionToInt(TExprBase(just.Cast().Input()), ctx);
     }
@@ -39,16 +32,14 @@ std::optional<i64> TryConvertExpressionToInt(
             return hasSign ? -(i64)valueAbs : (i64)valueAbs;
         }
     }
-    if (auto atom = expression.Maybe<TCoTimestamp>()) {   
+    if (auto atom = expression.Maybe<TCoTimestamp>()) {
         return FromString<i64>(atom.Cast().Literal().Value());
     }
     ctx.Err << "Unsupported expression: " << expression.Raw()->Content() << ";";
     return std::nullopt;
 }
 
-void IntersectIntervals(
-    TDisjointIntervalTree<i64>& tree,
-    TDisjointIntervalTree<i64>& other)
+void IntersectIntervals(TDisjointIntervalTree<i64>& tree, TDisjointIntervalTree<i64>& other)
 {
     if (tree.GetNumIntervals() < other.GetNumIntervals()) {
         std::swap(tree, other);
@@ -77,9 +68,7 @@ void IntersectIntervals(
     }
 }
 
-void MergeIntervals(
-    TDisjointIntervalTree<i64>& tree,
-    TDisjointIntervalTree<i64>& other)
+void MergeIntervals(TDisjointIntervalTree<i64>& tree, TDisjointIntervalTree<i64>& other)
 {
     if (tree.GetNumIntervals() < other.GetNumIntervals()) {
         std::swap(tree, other);
@@ -99,23 +88,19 @@ void InsertInterval(TDisjointIntervalTree<i64>& tree, i64 begin, i64 end) {
     tree.InsertInterval(begin, end);
 }
 
-bool ConvertComparePredicate(
-    const TCoCompare& compare,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertComparePredicate(const TCoCompare& compare, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     bool leftIsMember = compare.Left().Maybe<TCoMember>().IsValid();
     bool rightIsMember = compare.Right().Maybe<TCoMember>().IsValid();
     if (!(rightIsMember ^ leftIsMember)) {
         return false;
     }
-    
+
     auto valueExpr = compare.Right();
     bool inverted = rightIsMember;
     if (inverted) {
         valueExpr = compare.Left();
     }
-    
+
     auto optValue = TryConvertExpressionToInt(valueExpr, ctx);
     if (!optValue) {
         return false;
@@ -123,7 +108,7 @@ bool ConvertComparePredicate(
     i64 value = *optValue;
     tree.Clear();
 
-    auto inc = [] (i64 value) {
+    auto inc = [](i64 value) {
         return value != Max<i64>() ? value + 1 : value;
     };
     if (compare.Maybe<TCoCmpEqual>()) {
@@ -135,30 +120,30 @@ bool ConvertComparePredicate(
         return true;
     } else if (compare.Maybe<TCoCmpLess>()) {
         if (!inverted) {
-            InsertInterval(tree, Min<i64>(), value);             // a < 100
+            InsertInterval(tree, Min<i64>(), value);   // a < 100
         } else {
-            InsertInterval(tree, inc(value), Max<i64>());         // 100 < a
+            InsertInterval(tree, inc(value), Max<i64>());   // 100 < a
         }
         return true;
     } else if (compare.Maybe<TCoCmpLessOrEqual>()) {
         if (!inverted) {
-            InsertInterval(tree, Min<i64>(), inc(value));         // a <= 100
+            InsertInterval(tree, Min<i64>(), inc(value));   // a <= 100
         } else {
-            InsertInterval(tree, value, Max<i64>());             // 100 <= a
+            InsertInterval(tree, value, Max<i64>());   // 100 <= a
         }
         return true;
     } else if (compare.Maybe<TCoCmpGreater>()) {
         if (!inverted) {
-            InsertInterval(tree, inc(value), Max<i64>());         // a > 100
+            InsertInterval(tree, inc(value), Max<i64>());   // a > 100
         } else {
-            InsertInterval(tree, Min<i64>(), value);             // 100 > a
+            InsertInterval(tree, Min<i64>(), value);   // 100 > a
         }
         return true;
     } else if (compare.Maybe<TCoCmpGreaterOrEqual>()) {
         if (!inverted) {
-            InsertInterval(tree, value, Max<i64>());             // a >= 100
+            InsertInterval(tree, value, Max<i64>());   // a >= 100
         } else {
-            InsertInterval(tree, Min<i64>(), inc(value));         // 100 >= a
+            InsertInterval(tree, Min<i64>(), inc(value));   // 100 >= a
         }
         return true;
     }
@@ -166,11 +151,7 @@ bool ConvertComparePredicate(
     return false;
 }
 
-bool ConvertCoalescePredicate(
-    const TCoCoalesce& coalesce,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertCoalescePredicate(const TCoCoalesce& coalesce, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     auto value = coalesce.Value().Maybe<TCoBool>();
     if (value && TStringBuf(value.Cast().Literal()) == "false"sv) {
         return ConvertPredicate(TExprBase(coalesce.Predicate()), tree, ctx);
@@ -178,11 +159,7 @@ bool ConvertCoalescePredicate(
     return false;
 }
 
-bool ConvertAndPredicate(
-    const TCoAnd& predicate,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertAndPredicate(const TCoAnd& predicate, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     tree.InsertInterval(Min<i64>(), Max<i64>());
     for (const auto& child : predicate.Ptr()->Children()) {
         TDisjointIntervalTree<i64> itemTree;
@@ -194,11 +171,7 @@ bool ConvertAndPredicate(
     return true;
 }
 
-bool ConvertOrPredicate(
-    const TCoOr& predicate,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertOrPredicate(const TCoOr& predicate, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     for (const auto& child : predicate.Ptr()->Children()) {
         TDisjointIntervalTree<i64> itemTree;
         if (!ConvertPredicate(TExprBase(child), itemTree, ctx)) {
@@ -209,11 +182,7 @@ bool ConvertOrPredicate(
     return true;
 }
 
-bool ConvertInPredicate(
-    const TCoSqlIn& sqlIn,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertInPredicate(const TCoSqlIn& sqlIn, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     const TExprBase& expr = sqlIn.Collection();
     const TExprBase& lookup = sqlIn.Lookup();
     bool isMember = lookup.Maybe<TCoMember>().IsValid();
@@ -235,7 +204,7 @@ bool ConvertInPredicate(
     i64 max = Min<i64>();
     for (auto& child : collection->Children()) {
         auto value = TryConvertExpressionToInt(TExprBase(child), ctx);
-        if (!value){
+        if (!value) {
             ctx.Err << "unknown value for in: " << child->Content() << ";";
             return false;
         }
@@ -246,15 +215,11 @@ bool ConvertInPredicate(
         ctx.Err << "TCoSqlIn with empty collection;";
         return false;
     }
-    InsertInterval(tree, min, max != Max<i64>() ? max + 1: max);
+    InsertInterval(tree, min, max != Max<i64>() ? max + 1 : max);
     return true;
 }
 
-bool ConvertPredicate(
-    const TExprBase& predicate,
-    TDisjointIntervalTree<i64>& tree,
-    TContext& ctx
-) {
+bool ConvertPredicate(const TExprBase& predicate, TDisjointIntervalTree<i64>& tree, TContext& ctx) {
     if (auto compare = predicate.Maybe<TCoCompare>()) {
         return ConvertComparePredicate(compare.Cast(), tree, ctx);
     }
@@ -264,7 +229,7 @@ bool ConvertPredicate(
     if (auto andExpr = predicate.Maybe<TCoAnd>()) {
         return ConvertAndPredicate(andExpr.Cast(), tree, ctx);
     }
-    if(auto orExpr = predicate.Maybe<TCoOr>()) {
+    if (auto orExpr = predicate.Maybe<TCoOr>()) {
         return ConvertOrPredicate(orExpr.Cast(), tree, ctx);
     }
     if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
@@ -274,15 +239,11 @@ bool ConvertPredicate(
     return false;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
-bool ConvertPredicateToIntervals(
-    const TExprBase& predicateBody,
-    TDisjointIntervalTree<i64>& tree,
-    TStringBuilder& err
-) {
-    TContext context = {.Err = err};
+bool ConvertPredicateToIntervals(const TExprBase& predicateBody, TDisjointIntervalTree<i64>& tree, TStringBuilder& err) {
+    TContext context = { .Err = err };
     return ConvertPredicate(predicateBody, tree, context);
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

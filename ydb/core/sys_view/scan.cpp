@@ -77,6 +77,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanData, Handle);
             hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanError, ResendToOwnerAndDie);
+            hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanWarning, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, ResendToOwnerAndDie);
@@ -125,6 +126,10 @@ public:
         }
 
         TBase::Send(OwnerId, THolder(data->Release().Release()));
+    }
+
+    void Handle(NKqp::TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+        TBase::Send(OwnerId, ev->Release().Release());
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -215,7 +220,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         *sysViewDescription.MutableSourceObject() = tableId.PathId.ToProto();
     }
 
-    switch (sysViewDescription.GetType()) {
+    const auto sysViewType = sysViewDescription.GetType();
+    switch (sysViewType) {
     case ESysViewType::EPartitionStats:
         return CreatePartitionStatsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ENodes:
@@ -246,6 +252,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     case ESysViewType::ETablets:
          return CreateTabletsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EQueryMetricsOneMinute:
+    case ESysViewType::EQueryMetricsOneHour:
         return CreateQueryMetricsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopPartitionsByCpuOneMinute:
     case ESysViewType::ETopPartitionsByCpuOneHour:
@@ -269,7 +276,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return NAuth::CreateOwnersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthPermissions:
     case ESysViewType::EAuthEffectivePermissions:
-        return NAuth::CreatePermissionsScan(sysViewDescription.GetType() == ESysViewType::EAuthEffectivePermissions,
+        return NAuth::CreatePermissionsScan(sysViewType == ESysViewType::EAuthEffectivePermissions,
                                             ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EShowCreate:
         return CreateShowCreate(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));

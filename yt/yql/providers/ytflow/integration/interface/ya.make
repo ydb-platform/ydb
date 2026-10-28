@@ -1,6 +1,4 @@
-LIBRARY()
-
-YQL_LAST_ABI_VERSION()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/ast

@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_external/common
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/query_data
@@ -20,13 +21,16 @@ PEERDIR(
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
     ydb/core/local_indexes/bloom
+    ydb/core/path_aliasing
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/core/tx/long_tx_service/public
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/generic/provider
+    ydb/library/yql/providers/ydb_external/provider
     ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/s3/expr_nodes
     yql/essentials/core
     yql/essentials/core/services

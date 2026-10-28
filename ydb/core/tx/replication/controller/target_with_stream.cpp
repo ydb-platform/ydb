@@ -217,8 +217,34 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
     return true;
 }
 
+bool TTargetWithStream::CanDetachWithoutStream() const {
+    if (!IsIndexBuild() || GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+        return false;
+    }
+
+    if (GetStreamState() == EStreamState::Removing) {
+        return false;
+    }
+
+    switch (GetDstState()) {
+    case EDstState::Paused:
+    case EDstState::Alter:
+    case EDstState::Done:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
+
+    if (CanDetachWithoutStream()) {
+        // Keep the stream metadata so a later DROP can clean up a stream whose
+        // creation was already submitted when the build was cancelled.
+        TTargetBase::Progress(ctx);
+        return;
+    }
 
     switch (GetStreamState()) {
     case EStreamState::Creating:
@@ -237,6 +263,13 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Ready:
+        if (GetKind() == TReplication::ETargetKind::Table && !GetStreamSchemaChanges().has_value() && !StreamCreator) {
+            // Streams created before capability persistence need one read-only
+            // description. Index workers wait until its result is durable.
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx, true));
+        }
+
+        break;
     case EStreamState::Removed:
     case EStreamState::Error:
         break;

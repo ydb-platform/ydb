@@ -1,5 +1,7 @@
 PY3_PROGRAM(iam_grpc_recipe)
 
+STYLE_PYTHON()
+
 PY_SRCS(__main__.py)
 
 PEERDIR(

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/base/events.h>
+
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/conclusion/status.h>
 
@@ -36,7 +37,6 @@ public:
 
     virtual void OnAlteringProblem(const TString& errorMessage) = 0;
     virtual void OnAlteringFinished() = 0;
-
 };
 
 class IColumnValuesMerger {
@@ -68,7 +68,9 @@ enum EEvents {
     EvFetchDatabaseResponse,
     EvEnd
 };
-static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER)");
-}
 
-}
+static_assert(
+    EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER)");
+}   // namespace NModifications
+
+}   // namespace NKikimr::NMetadata

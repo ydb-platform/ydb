@@ -1,7 +1,8 @@
 #include "yql_solomon_mkql_compiler.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/mkql/parser.h>
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
@@ -12,7 +13,7 @@ namespace {
 template <typename T>
 TRuntimeNode Wrap(T wrapper, NCommon::TMkqlBuildContext& ctx) {
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-                
+
     return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input, {}), [&](TRuntimeNode item) {
         TRuntimeNode::TList fields;
         bool isOptional = false;
@@ -26,16 +27,15 @@ TRuntimeNode Wrap(T wrapper, NCommon::TMkqlBuildContext& ctx) {
         return fields;
     });
 }
-}
+}   // namespace
 
 void RegisterDqSolomonMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
-    compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
-        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
-            if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == SolomonProviderName) {
-                return Wrap(wrapper, ctx);
-            }
-            return TRuntimeNode();
-        });
+    compiler.ChainCallable(TDqSourceWideWrap::CallableName(), [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+        if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == SolomonProviderName) {
+            return Wrap(wrapper, ctx);
+        }
+        return TRuntimeNode();
+    });
 
     // compiler.ChainCallable(TDqSourceWideBlockWrap::CallableName(),
     //     [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
@@ -47,4 +47,4 @@ void RegisterDqSolomonMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler
     // });
 }
 
-}
+}   // namespace NYql

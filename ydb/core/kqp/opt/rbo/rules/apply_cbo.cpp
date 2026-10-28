@@ -54,8 +54,6 @@ bool TOptimizeCBOTreeRule::QuickMatch(const TIntrusivePtr<IOperator>& input) con
  * to run the CBO, and then map them back
  */
 TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::CBOTree) {
         return input;
     }
@@ -75,7 +73,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     const auto leaves = BuildCBOLeaves(*cboTree);
 
     // Check that all inputs have statistics
-    for (auto c : cboTree->Children) {
+    for (auto c : cboTree->GetChildren()) {
         if (!c->Props.Statistics.has_value()) {
             AddCboWarning(ctx, CboMissingStatsMessage);
             ctx.ExprCtx.AddWarning(YqlIssue(
@@ -87,7 +85,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     }
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
-    auto joinTree = ConvertJoinTree(cboTree, ctx.TypeCtx, rels, leaves);
+    auto joinTree = ConvertJoinTree(cboTree, ctx.TypeCtx, props.ColumnLineage, rels, leaves);
 
     bool allRowStorage = std::any_of(
         rels.begin(),
@@ -120,7 +118,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     auto hints = ctx.KqpCtx.GetOptimizerHints();
     auto cboRunTiming = AddCboRunTrace(
         ctx,
-        cboTree,
+        props.InfoUnitRegistry,
         joinTree,
         leaves,
         settings,
@@ -131,7 +129,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         hints,
         shuffleCtx ? shuffleCtx->FSM : nullptr);
 
-    auto providerCtx = NOpt::TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
+    auto providerCtx = NOpt::TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin, props.ColumnLineage);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
         providerCtx, settings, ctx.ExprCtx,
         enableShuffleElimination && canBuildShuffleCtx,

@@ -4,6 +4,10 @@
 
 #include "protobuf_interop_options.h"
 
+#include <library/cpp/yt/yson/consumer.h>
+
+#include <library/cpp/yt/memory/range.h>
+
 #include <library/cpp/yt/mpl/concepts.h>
 #include <library/cpp/yt/mpl/type_traits.h>
 
@@ -146,6 +150,15 @@ const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IProtobufWriter
+    : public virtual IYsonConsumer
+{
+    //! Returns false without consuming the value when YSON events are required.
+    //! Parts are concatenated for a singular message; each part is an element for a repeated field.
+    //! Bytes are copied without parsing or validation.
+    virtual bool TryOnProtobufMessage(TRange<TStringBuf> parts) = 0;
+};
+
 //! Creates a YSON consumer that converts IYsonConsumer calls into
 //! a byte sequence in protobuf wire format.
 /*!
@@ -153,7 +166,7 @@ const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
  *  only at the very end since constructing it involves an additional pass
  *  to compute lengths of nested submessages.
  */
-std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
+std::unique_ptr<IProtobufWriter> CreateProtobufWriter(
     ::google::protobuf::io::ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
     TProtobufWriterOptions options = TProtobufWriterOptions());

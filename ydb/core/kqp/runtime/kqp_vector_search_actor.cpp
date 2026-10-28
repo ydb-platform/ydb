@@ -404,6 +404,7 @@ namespace NKikimr {
                     if (UseLevelCache) {
                         auto cached = LevelsCache->Get(LevelTablePathId, SerializeParentKey(parent));
                         if (cached && !cached->BatchRows.empty()) {
+                            auto& acc = ReadStatsByTable[Settings.GetLevelTable().GetTablePath()];
                             for (TConstArrayRef<TCell> row : cached->BatchRows) {
                                 // Cached row layout: [id (Uint64), centroid (String)].
                                 auto centroid = row[1].AsBuf();
@@ -411,8 +412,11 @@ namespace NKikimr {
                                     RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                                     return;
                                 }
-                                PushLevelCandidate(row[0].AsValue<ui64>(),
-                                                   RankClusters->CalcDistance(centroid, TargetVector));
+                                acc.Rows++;
+                                for (auto & cell: row) {
+                                    acc.Bytes += cell.Size();
+                                }
+                                PushLevelCandidate(row[0].AsValue<ui64>(), RankClusters->CalcDistance(centroid, TargetVector));
                             }
                             continue;
                         }

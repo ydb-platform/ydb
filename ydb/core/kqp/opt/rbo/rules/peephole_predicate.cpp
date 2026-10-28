@@ -6,7 +6,7 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToApplyPeephole(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToApplyPeephole(IOperator* input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -35,7 +35,7 @@ bool TPeepholePredicate::QuickMatch(const TIntrusivePtr<IOperator>& input) const
 
 TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
-    if (!IsSuitableToApplyPeephole(input)) {
+    if (!IsSuitableToApplyPeephole(input.get())) {
         return input;
     }
 

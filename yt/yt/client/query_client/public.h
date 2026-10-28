@@ -14,6 +14,8 @@ class TQueryStatistics;
 
 struct TQueryStatistics;
 
+struct TTableHint;
+
 constexpr i64 DefaultRowsetProcessingBatchSize = 256;
 constexpr i64 DefaultWriteRowsetSize = 256 * DefaultRowsetProcessingBatchSize;
 constexpr i64 DefaultMaxJoinBatchSize = 512 * DefaultRowsetProcessingBatchSize;

@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
 #include <library/cpp/yt/misc/source_location.h>
@@ -113,7 +113,7 @@ private:
         bool operator==(const TKey& other) const;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, SpinLock_);
     std::map<TKey, TRefCountedTypeCookie> KeyToCookie_;
     std::map<TRefCountedTypeKey, size_t> TypeKeyToObjectSize_;
     std::vector<TKey> CookieToKey_;

@@ -277,6 +277,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             NKikimrBlobStorage::TConfigRequest request;
             request.SetIgnoreGroupFailModelChecks(true);
             request.SetIgnoreGroupSanityChecks(true);
+            request.SetIgnoreGroupLayoutChecks(true);
             request.SetIgnoreDegradedGroupsChecks(true);
             request.SetIgnoreDisintegratedGroupsChecks(true);
             for (ui32 i = 0; i < drives; ++i) {

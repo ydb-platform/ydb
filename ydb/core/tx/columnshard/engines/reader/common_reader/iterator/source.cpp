@@ -99,6 +99,18 @@ ui64 IDataSource::DoGetSourceRecordsCount() const {
     }
 }
 
+TConclusionStatus IDataSource::DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) {
+    if (!HasStageData()) {
+        return TConclusionStatus::Success();
+    }
+    auto fetcher = MutableStageData().ExtractFetcherOptional(entityId);
+    if (!fetcher) {
+        return TConclusionStatus::Success();
+    }
+    TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), *this);
+    return fetcher->OnDataCollected(fetchContext);
+}
+
 TConclusion<TExecutionResult> IDataSource::DoStartFetch(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) {
     std::vector<std::shared_ptr<IKernelFetchLogic>> fetchers;

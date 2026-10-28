@@ -2,7 +2,7 @@
 
 #include "cache.h"
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NClient::NCache {
 
@@ -18,7 +18,7 @@ protected:
     virtual NApi::IClientPtr CreateClient(TStringBuf clusterUrl) = 0;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
     THashMap<std::string, NApi::IClientPtr> Clients_;
 };
 

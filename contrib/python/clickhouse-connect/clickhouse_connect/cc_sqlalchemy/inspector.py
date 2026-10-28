@@ -19,15 +19,22 @@ from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import (
 )
 from clickhouse_connect.driver.client import _INTERNAL_QUERY_FORMATS
 
+_INTERNAL_QUERY_OPTION = "ch_internal_query"
+_INTERNAL_QUERY_SENTINEL = object()
+
 
 def with_internal_query_formats(clause: TextClause) -> TextClause:
     """Force String columns to decode as str for driver metadata introspection.
 
     User-configured global read formats such as set_default_formats("String", "bytes")
     must not affect DESCRIBE / system.tables / SHOW TABLES results used by reflection.
-    Mirrors driver.client._INTERNAL_QUERY_FORMATS on the orchestration path.
+    Mirrors driver.client._INTERNAL_QUERY_FORMATS on the orchestration path and marks the
+    statement internal so every native_codec mode decodes it with the Python codec.
     """
-    return clause.execution_options(query_formats=dict(_INTERNAL_QUERY_FORMATS))
+    return clause.execution_options(
+        query_formats=dict(_INTERNAL_QUERY_FORMATS),
+        **{_INTERNAL_QUERY_OPTION: _INTERNAL_QUERY_SENTINEL},
+    )
 
 
 def _database_name(connection, schema: str | None) -> str:

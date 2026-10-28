@@ -174,12 +174,10 @@ npy_ObjectLogicalNot(PyObject *i1)
             return NULL;
         }
         else if (retcode) {
-            Py_INCREF(Py_True);
-            return Py_True;
+            Py_RETURN_TRUE;
         }
         else {
-            Py_INCREF(Py_False);
-            return Py_False;
+            Py_RETURN_FALSE;
         }
     }
 }
@@ -289,7 +287,7 @@ npy_ObjectClip(PyObject *arr, PyObject *min, PyObject *max) {
  * extension that makes use of the UFUNC API
  */
 
-#line 271
+#line 269
 
 static void
 nc_negf(npy_cfloat *a, npy_cfloat *r)
@@ -474,7 +472,7 @@ nc_tanhf(npy_cfloat *x, npy_cfloat *r)
 }
 
 
-#line 271
+#line 269
 
 static void
 nc_neg(npy_cdouble *a, npy_cdouble *r)
@@ -659,7 +657,7 @@ nc_tanh(npy_cdouble *x, npy_cdouble *r)
 }
 
 
-#line 271
+#line 269
 
 static void
 nc_negl(npy_clongdouble *a, npy_clongdouble *r)

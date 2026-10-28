@@ -158,6 +158,26 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
         TestJsonCorpus(std::move(tOpts), std::move(pOpts));
     }
 
+    Y_UNIT_TEST_TWIN(JsonParameters, IsStrict) {
+        TPredicateBuilderOptions pOpts = {
+            .EnableJsonExists = true,
+            .EnableJsonValue = true,
+            .EnableJsonParameters = true,
+            .EnableAndCombinations = true,
+            .EnableOrCombinations = true,
+        };
+
+        TTestJsonCorpusOptions tOpts = {
+            .IsJsonDocument = true,
+            .IsStrict = IsStrict,
+            .RowCount = 1000,
+            .MaxPredicates = 120,
+            .Seed = CorpusSeed(118) + static_cast<ui64>(IsStrict),
+        };
+
+        TestJsonCorpus(std::move(tOpts), std::move(pOpts));
+    }
+
     Y_UNIT_TEST_TWIN(All, IsStrict) {
         TPredicateBuilderOptions pOpts = {
             .EnableJsonExists = true,
@@ -167,6 +187,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesCorpus_JEJV) {
             .EnableJsonPathPredicates = true,
             .EnablePassingVariables = true,
             .EnableSqlParameters = true,
+            .EnableJsonParameters = true,
             .EnableRangeComparisons = true,
             .EnableBetween = true,
             .EnableInList = true,

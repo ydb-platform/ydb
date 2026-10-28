@@ -71,6 +71,8 @@ public:
                 if (NewState != State) {
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(NewState);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::StoppedByTenant>(false);
+                    Self->RecordTabletEvent(*tablet, EHiveEventType::Resumed, EHiveEventReason::OwnerRequest,
+                        TStringBuilder() << "from=" << ETabletStateName(State) << " to=" << ETabletStateName(NewState));
                     tablet->State = NewState;
                     tablet->StoppedByTenant = false;
                 }

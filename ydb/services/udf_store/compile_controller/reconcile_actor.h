@@ -10,9 +10,6 @@ namespace NKikimr::NUdfStore {
 //! `artifacts/{cpu_spec}` and answers with TEvControllerPrivate::
 //! TEvReconcileResult. Runs as a child of the controller so that a slow
 //! metadata read never sits on the tablet's own mailbox.
-NActors::IActor* CreateReconcileActor(
-    const NActors::TActorId& replyTo,
-    const TString& cpuSpec,
-    const TString& artifactTablePath);
+NActors::IActor* CreateReconcileActor(const NActors::TActorId& replyTo, const TString& cpuSpec, const TString& artifactTablePath);
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

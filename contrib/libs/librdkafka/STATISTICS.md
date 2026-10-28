@@ -81,9 +81,9 @@ Per broker statistics.
 
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
-name | string | `"example.com:9092/13"` | Broker hostname, port and broker id
+name | string | `"example.com:9092/13"` | Broker hostname, port and broker id. An IPv6 address is enclosed in brackets per RFC 3986 (`"[::1]:9092/13"`)
 nodeid | int | 13 | Broker id (-1 for bootstraps)
-nodename | string | `"example.com:9092"` | Broker hostname
+nodename | string | `"example.com:9092"` | Broker hostname and port. An IPv6 address is enclosed in brackets per RFC 3986 (`"[::1]:9092"`)
 source | string | `"configured"` | Broker source (learned, configured, internal, logical)
 state | string | `"UP"` | Broker state (INIT, DOWN, CONNECT, AUTH, APIVERSION_QUERY, AUTH_HANDSHAKE, UP, UPDATE)
 stateage | int gauge | | Time since last broker state change (microseconds)

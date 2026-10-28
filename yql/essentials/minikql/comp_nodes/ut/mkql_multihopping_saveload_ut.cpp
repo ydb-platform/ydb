@@ -156,10 +156,11 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
         NTest::ConvertValueToLiteralNode(pgmBuilder, dataWatermarks),
         NTest::ConvertValueToLiteralNode(pgmBuilder, withWatermarks),
-        {}, // SizeLimit
-        {}, // TimeLimit
-        {}, // EarlyPolicy
-        {}  // LatePolicy
+        {},   // SizeLimit
+        {},   // TimeLimit
+        {},   // EarlyPolicy
+        {},   // LatePolicy
+        false // CheckMinWindowStart
     );
 
     auto graph = setup.BuildGraph(pgmReturn, {streamNode});

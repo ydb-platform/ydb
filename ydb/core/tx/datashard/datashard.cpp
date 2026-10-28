@@ -14,6 +14,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -423,6 +424,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        // The initial state comes without follower update notifications
+        SyncSchemeOnFollowerNeeded = true;
+        // Do not rely on a sync queued before the reactivation, an extra one is a no-op
+        SyncSchemeOnFollowerPending = false;
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -4150,6 +4155,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
     // Expected that it's almost always one table here, hence only TableInfos.begin()
     // IsBackup can be filtered out though
     const auto& [localPathId, table] = *TableInfos.begin();
@@ -4172,6 +4179,20 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
+
+    // Followers run periodic tasks only with EnableFollowerStats on. The sync
+    // usually completes right away and is reported below, while a sync that
+    // has to wait is reported on the next tick
+    if (IsFollower() &&
+        AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
+        SyncSchemeOnFollowerNeeded &&
+        !SyncSchemeOnFollowerPending)
+    {
+        SyncSchemeOnFollowerNeeded = false;
+        SyncSchemeOnFollowerPending = true;
+        Execute(CreateTxSyncSchemeOnFollower(), ctx);
+    }
+
     SendTableInfoToCountersAggregator(ctx);
     CollectCpuUsage(ctx);
 
@@ -4715,7 +4736,7 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EStatus,
+void TDataShard::ScanComplete(NTable::EStatus status,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4752,7 +4773,12 @@ void TDataShard::ScanComplete(NTable::EStatus,
                     {"cookie", cookie},
                     {"tabletId", TabletID()});
 
-                CdcStreamScanManager.Complete(cookie);
+                if (status == NTable::EStatus::Done) {
+                    CdcStreamScanManager.Complete(cookie);
+                } else {
+                    // keep the progress, so the retry resumes from the last key
+                    CdcStreamScanManager.Fail(cookie);
+                }
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
                     {"tabletId", TabletID()},

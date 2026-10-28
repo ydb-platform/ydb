@@ -169,9 +169,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kRpcMessageUncompressedSiz
   When the method is not recognized, for example, when the server receives
   a request for a method that is not predefined on the server, or when
   instrumentation is not able to reliably detect if the method is predefined,
-  the attribute MUST be set to @code _OTHER @endcode. In such cases, tracing
-  instrumentations MUST also set @code rpc.method_original @endcode attribute to
-  the original method value.
+  the attribute MUST be set to @code _OTHER @endcode.
   <p>
   If the RPC instrumentation could end up converting valid RPC methods to
   @code _OTHER @endcode, then it SHOULD provide a way to configure the list of recognized

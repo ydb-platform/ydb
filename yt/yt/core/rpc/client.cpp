@@ -877,6 +877,18 @@ TMethodDescriptor& TMethodDescriptor::SetStreamingEnabled(bool value)
     return *this;
 }
 
+TMethodDescriptor& TMethodDescriptor::SetRequestHeavy(bool value)
+{
+    RequestHeavy = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetResponseHeavy(bool value)
+{
+    ResponseHeavy = value;
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TProxyBase::TProxyBase(

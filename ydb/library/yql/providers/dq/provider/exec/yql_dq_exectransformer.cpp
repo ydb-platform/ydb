@@ -139,7 +139,6 @@ public:
         auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
             __LOCATION__,
             NKikimr::TAlignedPagePoolCounters(),
-            State->FunctionRegistry->SupportsSizedAllocators(),
             false);
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
@@ -800,7 +799,7 @@ private:
         }
         // copy-paste }
 
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -1482,7 +1481,7 @@ private:
 
         TString tooBigAttachmentError;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment typeEnv(alloc);
             for (auto& t : tasks) {
                 TUploadList uploadList;
@@ -1556,7 +1555,12 @@ private:
             settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-            MarkProgressFinished(publicIds->AllPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
+            const auto& res = completedFuture.GetValueSync();
+            MarkProgressFinished(
+                publicIds->AllPublicIds,
+                res.Success(),
+                progressWriter,
+                ExtractDqStagesStats(res.Statistics));
         });
         executionPlanner.Destroy();
 
@@ -1769,13 +1773,21 @@ private:
         }
     }
 
-    static void MarkProgressFinished(const THashMap<ui32, ui32>& allPublicIds, bool success, const TOperationProgressWriter& progressWriter) {
+    static void MarkProgressFinished(
+        const THashMap<ui32, ui32>& allPublicIds,
+        bool success,
+        const TOperationProgressWriter& progressWriter,
+        const std::unordered_map<ui64, IDqGateway::TStageStats>& stats)
+    {
         for(const auto& publicId : allPublicIds) {
             auto state = success ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed;
             auto p = TOperationProgress(TString(DqProviderName), publicId.first, state);
             if (publicId.second) {
                 p.Counters.ConstructInPlace();
                 (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second;
+                if (const auto maybeStats = stats.find(publicId.first); maybeStats != stats.end()) {
+                    p.Counters->Custom = maybeStats->second.ToMap();
+                }
             }
             progressWriter(p);
         }
@@ -2040,7 +2052,7 @@ private:
 
             TString tooBigAttachmentError;
             {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 TTypeEnvironment typeEnv(alloc);
                 for (auto& t : tasks) {
                     TUploadList uploadList;
@@ -2093,7 +2105,11 @@ private:
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 const IDqGateway::TResult& res = completedFuture.GetValueSync();
 
-                MarkProgressFinished(publicIds->AllPublicIds, res.Success(), state->ProgressWriter);
+                MarkProgressFinished(
+                    publicIds->AllPublicIds,
+                    res.Success(),
+                    state->ProgressWriter,
+                    ExtractDqStagesStats(res.Statistics));
 
                 auto duration = TInstant::Now() - startTime;
                 YQL_CLOG(INFO, ProviderDq) << "Execution precomputes complete, duration: " << duration;

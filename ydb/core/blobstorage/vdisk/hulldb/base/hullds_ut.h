@@ -8,7 +8,8 @@ namespace NKikimr {
 
     class TTestContexts {
     public:
-        TTestContexts(ui32 chunkSize = 135249920, ui64 compWorthReadSize = (2ul << 20ul))
+        TTestContexts(ui32 chunkSize = 135249920, ui64 compWorthReadSize = (2ul << 20ul),
+                TDuration ratioCalcBudget = TDuration::Seconds(1))
             : ChunkSize(chunkSize)
             , CompWorthReadSize(compWorthReadSize)
             , GroupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4)
@@ -29,7 +30,7 @@ namespace NKikimr {
                         1,      // HullSstSizeInChunksLevel
                         0.5,
                         TDuration::Minutes(5),
-                        TDuration::Seconds(1),
+                        ratioCalcBudget,
                         8u,
                         8u))
             , LevelIndexSettings(

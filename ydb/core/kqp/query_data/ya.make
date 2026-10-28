@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_query_data.cpp
@@ -20,7 +20,5 @@ PEERDIR(
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/result_set_format
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

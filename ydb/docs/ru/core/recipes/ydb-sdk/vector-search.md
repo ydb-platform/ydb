@@ -375,16 +375,10 @@
 
     - Рекомендуемый способ
 
+        Для сериализации вектора используйте `NYdb::NValueHelpers::Embedding` из C++ SDK версии v3.24.0 или новее.
+
         ```cpp
-        std::string ConvertVectorToBytes(const std::vector<float>& vector)
-        {
-            std::string result;
-            for (const auto& value : vector) {
-                const char* bytes = reinterpret_cast<const char*>(&value);
-                result += std::string(bytes, sizeof(float));
-            }
-            return result + "\x01";
-        }
+        #include <ydb-cpp-sdk/client/value/embedding.h>
 
         void InsertItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
@@ -395,7 +389,7 @@
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
-                    embedding: String
+                    embedding: Bytes
                 >>;
                 UPSERT INTO `{0}`
                 (
@@ -418,7 +412,7 @@
                 valueBuilder.BeginStruct();
                 valueBuilder.AddMember("id").Utf8(item.Id);
                 valueBuilder.AddMember("document").Utf8(item.Document);
-                valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+                valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
                 valueBuilder.EndStruct();
             }
             valueBuilder.EndList();
@@ -431,12 +425,6 @@
             std::cout << items.size() << " items inserted" << std::endl;
         }
         ```
-
-        {% note info %}
-
-        В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
-
-        {% endnote %}
 
     - Альтернативный способ
 
@@ -502,22 +490,10 @@
 
 - Go
 
-    Функция конвертирует вектор float32 в бинарное представление и выполняет параметризованный запрос:
+    Для сериализации вектора используйте `sugar.Embedding` из Go SDK версии v3.153.0 или новее. Затем выполните параметризованный запрос:
 
     ```go
-    import (
-        "encoding/binary"
-        "math"
-    )
-
-    func convertVectorToBytes(vector []float32) []byte {
-        buf := make([]byte, len(vector)*4+1)
-        for i, v := range vector {
-        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-        }
-        buf[len(buf)-1] = 0x01
-        return buf
-    }
+    import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
 
     func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
         query := fmt.Sprintf(`
@@ -538,7 +514,7 @@
         rows = append(rows, types.StructValue(
             types.StructFieldValue("id", types.UTF8Value(item.ID)),
             types.StructFieldValue("document", types.UTF8Value(item.Document)),
-            types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+            types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
         ))
         }
 
@@ -720,6 +696,8 @@
 
     - Рекомендуемый способ
 
+        Для сериализации векторов используйте `ydb.convert_floats_to_embedding_bytes` из Python SDK версии 3.33.1 или новее.
+
         Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
 
         Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
@@ -729,13 +707,7 @@
         - Native SDK
 
             ```python
-            import struct
             import ydb
-
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             def insert_items_vector_as_bytes(
                 pool: ydb.QuerySessionPool,
@@ -768,7 +740,7 @@
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -780,12 +752,7 @@
         - Native SDK (Asyncio)
 
             ```python
-            import struct
             import ydb
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             async def insert_items_vector_as_bytes(
                 pool: ydb.aio.QuerySessionPool,
@@ -818,7 +785,7 @@
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 await pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -1345,6 +1312,8 @@
     - Рекомендуемый способ
 
         ```cpp
+        #include <ydb-cpp-sdk/client/value/embedding.h>
+
         std::vector<TResultItem> SearchItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
             const std::string& tableName,
@@ -1359,7 +1328,7 @@
 
             std::string query = std::format(R"(
                 PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-                DECLARE $embedding as String;
+                DECLARE $embedding as Bytes;
                 SELECT
                     id,
                     document,
@@ -1370,9 +1339,7 @@
             )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
             auto params = NYdb::TParamsBuilder()
-                .AddParam("$embedding")
-                    .String(ConvertVectorToBytes(embedding))
-                    .Build()
+                .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
                 .Build();
 
             std::vector<TResultItem> result;
@@ -1500,7 +1467,7 @@
 
         row, err := db.Query().Query(ctx, q,
         query.WithParameters(
-            ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+            ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
         ),
         )
         if err != nil {
@@ -1723,7 +1690,7 @@
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },
@@ -1777,7 +1744,7 @@
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },

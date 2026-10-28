@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/formats/arrow
@@ -14,3 +14,7 @@ SRCS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

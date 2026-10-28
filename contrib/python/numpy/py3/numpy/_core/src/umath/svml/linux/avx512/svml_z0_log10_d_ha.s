@@ -26,6 +26,7 @@
  */
 
 
+	.file   "svml_z0_log10_d_ha.s"
 	.text
 .L_2__routine_start___svml_log108_ha_z0_0:
 

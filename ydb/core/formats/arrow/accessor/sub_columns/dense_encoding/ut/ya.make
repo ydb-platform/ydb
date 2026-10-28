@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/formats/arrow/accessor/sub_columns)
 SIZE(SMALL)
 
 PEERDIR(
+    yql/essentials/types/binary_json
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/accessor/sub_columns/ut_common
     yql/essentials/public/udf/service/stub

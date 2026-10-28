@@ -20,23 +20,24 @@ class TEvRestoreFinished: public TEventLocal<TEvRestoreFinished<TObject>, EvRest
 private:
     YDB_ACCESSOR_DEF(std::vector<TObject>, Objects);
     YDB_READONLY_DEF(TString, TransactionId);
+
 public:
     TEvRestoreFinished(std::vector<TObject>&& objects, const TString& transactionId)
         : Objects(std::move(objects))
         , TransactionId(transactionId)
     {
-
     }
 };
 
 class TEvRestoreProblem: public TEventLocal<TEvRestoreProblem, EvRestoreProblem> {
 private:
     YDB_ACCESSOR_DEF(TString, ErrorMessage);
+
 public:
     TEvRestoreProblem(const TString& errorMessage)
-        : ErrorMessage(errorMessage) {
-
+        : ErrorMessage(errorMessage)
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

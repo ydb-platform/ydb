@@ -1008,6 +1008,51 @@ Y_UNIT_TEST(StatsProfile) {
     UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
 }
 
+// The per node memory history of a profiled query carries what the query holds on the node (Memory + ExternalMemory
+// via the resource manager), reported by the query quota manager of the node service: at least the start prepay of
+// the tasks and the channels. A scan query never runs its tasks locally in the executer, they go to the node service
+Y_UNIT_TEST(NodeMemQueryAllocatedProfile) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+
+    auto it = GetScanStreamIterator(kikimr, ECollectQueryStatsMode::Profile, R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )");
+    auto res = CollectStreamResult(it);
+    UNIT_ASSERT(res.PlanJson);
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+    ui32 histories = 0;
+    std::function<void(const NJson::TJsonValue&)> check = [&](const NJson::TJsonValue& value) {
+        if (value.IsMap()) {
+            for (const auto& [key, child] : value.GetMapSafe()) {
+                if (key == "GlobalMemoryUsageMB") {
+                    const auto& times = child.GetMapSafe().at("TimeMs").GetArraySafe();
+                    const auto& allocated = child.GetMapSafe().at("MemQueryAllocated").GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(allocated.size(), times.size());
+                    ui64 maxAllocated = 0;
+                    for (const auto& mb : allocated) {
+                        maxAllocated = std::max<ui64>(maxAllocated, mb.GetUIntegerSafe());
+                    }
+                    UNIT_ASSERT_GE_C(maxAllocated, 1, *res.PlanJson);
+                    ++histories;
+                } else {
+                    check(child);
+                }
+            }
+        } else if (value.IsArray()) {
+            for (const auto& child : value.GetArraySafe()) {
+                check(child);
+            }
+        }
+    };
+    check(plan);
+    UNIT_ASSERT_GT_C(histories, 0, *res.PlanJson);
+}
+
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);

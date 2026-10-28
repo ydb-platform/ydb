@@ -2,6 +2,8 @@
 
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
@@ -34,6 +36,7 @@ TKqpComputeActor::TKqpComputeActor(
     , Database(database)
 {
     ComputeCtx.SetQueryContext(Database, UserToken);
+    ComputeCtx.SetCheckpointContext(CheckpointContext);
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
@@ -42,6 +45,9 @@ TKqpComputeActor::TKqpComputeActor(
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
         YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewInfo());
     }
+
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpComputeActor"));
 }
 
 void TKqpComputeActor::DoBootstrap() {
@@ -193,6 +199,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
+            hFunc(TEvKqpCompute::TEvScanWarning, HandleExecute);
             default:
                 BaseStateFuncBody(ev);
         }
@@ -237,6 +244,10 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
+    }
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 
@@ -361,6 +372,12 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
+}
+
+void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "Got system view scan warning",
+        {"logPrefix", this->LogPrefix},
+        {"issues", ev->Get()->Issues.ToOneLineString()});
 }
 
 ui64 TKqpComputeActor::CalculateFreeSpace() const {

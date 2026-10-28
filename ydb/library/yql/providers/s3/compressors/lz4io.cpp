@@ -1,19 +1,20 @@
 #include "lz4io.h"
 #include "output_queue_impl.h"
 
-#include <contrib/libs/lz4/lz4.h>
-#include <contrib/libs/lz4/lz4hc.h>
-
-#include <util/generic/scope.h>
-#include <util/generic/size_literals.h>
-
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/core/util/exceptions.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <contrib/libs/lz4/lz4.h>
+#include <contrib/libs/lz4/lz4hc.h>
+#include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #define LZ4F_STATIC_LINKING_ONLY
 #include <contrib/libs/lz4/lz4frame.h>
+
+#undef NO_SANITIZE_THREAD
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
@@ -21,8 +22,8 @@ namespace NYql::NLz4 {
 
 namespace {
 
-constexpr ui32 MagicNumberSize  = 4U;
-constexpr ui32 Lz4ioMagicNumber =  0x184D2204U;
+constexpr ui32 MagicNumberSize = 4U;
+constexpr ui32 Lz4ioMagicNumber = 0x184D2204U;
 constexpr ui32 LegacyMagicNumber = 0x184C2102U;
 
 constexpr size_t LegacyBlockSize = 8_MB;
@@ -40,7 +41,7 @@ void WriteLE32(void* p, ui32 value32)
 ui32 ReadLE32(const void* s) {
     const auto srcPtr = static_cast<const unsigned char*>(s);
     ui32 value32 = srcPtr[0];
-    value32 += (ui32)srcPtr[1] <<  8U;
+    value32 += (ui32)srcPtr[1] << 8U;
     value32 += (ui32)srcPtr[2] << 16U;
     value32 += (ui32)srcPtr[3] << 24U;
     return value32;
@@ -69,10 +70,11 @@ EStreamType CheckMagic(NDB::ReadBuffer& input) {
     return CheckMagic(data);
 }
 
-class TReadBuffer : public NDB::ReadBuffer {
+class TReadBuffer: public NDB::ReadBuffer {
 public:
     TReadBuffer(NDB::ReadBuffer& source);
     ~TReadBuffer();
+
 private:
     bool nextImpl() final;
 
@@ -89,7 +91,11 @@ private:
 };
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
-    : NDB::ReadBuffer(nullptr, 0ULL), Source(source), StreamType(CheckMagic(Source)), Pos(0ULL), Remaining(0ULL)
+    : NDB::ReadBuffer(nullptr, 0ULL)
+    , Source(source)
+    , StreamType(CheckMagic(Source))
+    , Pos(0ULL)
+    , Remaining(0ULL)
 {
     Y_ENSURE_CODELINE(StreamType != EStreamType::Unknown, NYql::NDqProto::StatusIds::BAD_REQUEST, "Wrong magic.");
     if (StreamType == EStreamType::Frame) {
@@ -118,8 +124,9 @@ TReadBuffer::~TReadBuffer()
 bool TReadBuffer::nextImpl() {
     switch (StreamType) {
         case EStreamType::Frame:
-            if (!NextToLoad)
+            if (!NextToLoad) {
                 return false;
+            }
 
             if (const auto size = DecompressFrame()) {
                 working_buffer = Buffer(OutBuffer.data(), OutBuffer.data() + size);
@@ -149,7 +156,8 @@ size_t TReadBuffer::DecompressFrame() {
         if (Pos >= Remaining) {
             for (auto toRead = NextToLoad; toRead > 0U;) {
                 const auto sizeCheck = Source.read(InBuffer.data() + NextToLoad - toRead, toRead);
-                Y_ENSURE_CODELINE(sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
+                Y_ENSURE_CODELINE(
+                    sizeCheck > 0U && sizeCheck <= toRead, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access compressed block.");
                 toRead -= sizeCheck;
             }
 
@@ -160,15 +168,19 @@ size_t TReadBuffer::DecompressFrame() {
         auto decodedBytes = OutBuffer.size();
         while (Pos < Remaining || (decodedBytes == OutBuffer.size())) {
             decodedBytes = OutBuffer.size();
-            NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
-            Y_ENSURE_CODELINE(!LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompression error: " << LZ4F_getErrorName(NextToLoad));
+            NextToLoad =
+                LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
+            Y_ENSURE_CODELINE(
+                !LZ4F_isError(NextToLoad), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompression error: " << LZ4F_getErrorName(NextToLoad));
             Pos += Remaining;
 
-            if (decodedBytes)
+            if (decodedBytes) {
                 return decodedBytes;
+            }
 
-            if (!NextToLoad)
+            if (!NextToLoad) {
                 return decodedBytes;
+            }
         }
     }
 
@@ -185,8 +197,9 @@ size_t TReadBuffer::DecompressLegacy() {
         Y_ENSURE_CODELINE(sizeCheck == 4U, NYql::NDqProto::StatusIds::BAD_REQUEST, "Cannot access block size.");
         blockSize = ReadLE32(InBuffer.data());
         Y_ENSURE_CODELINE(blockSize <= LZ4_COMPRESSBOUND(LegacyBlockSize), NYql::NDqProto::StatusIds::BAD_REQUEST, "Block size out of bounds.");
-    } else
+    } else {
         return 0ULL;
+    }
 
     for (auto toRead = blockSize; toRead > 0U;) {
         const auto sizeCheck = Source.read(InBuffer.data() + blockSize - toRead, toRead);
@@ -200,10 +213,11 @@ size_t TReadBuffer::DecompressLegacy() {
     return size_t(decodeSize);
 }
 
-class TCompressor : public TOutputQueue<> {
+class TCompressor: public TOutputQueue<> {
 public:
     TCompressor(int level)
-        : OutputBufferSize(LZ4F_compressFrameBound(FrameMaxBlockSize, nullptr)), OutputBuffer(std::make_unique<char[]>(OutputBufferSize))
+        : OutputBufferSize(LZ4F_compressFrameBound(FrameMaxBlockSize, nullptr))
+        , OutputBuffer(std::make_unique<char[]>(OutputBufferSize))
     {
         Prefs.autoFlush = 1;
         Prefs.compressionLevel = level;
@@ -252,11 +266,13 @@ private:
         while (!InputQueue.Empty() || !TOutputQueue::IsSealed()) {
             const auto& pop = InputQueue.Pop();
             const bool done = InputQueue.IsSealed() && InputQueue.Empty();
-            if (pop.empty() && !done)
+            if (pop.empty() && !done) {
                 break;
+            }
 
             if (IsFirstBlock && done) {
-                const auto cSize = LZ4F_compressFrame_usingCDict(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr, &Prefs);
+                const auto cSize =
+                    LZ4F_compressFrame_usingCDict(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr, &Prefs);
                 YQL_ENSURE(!LZ4F_isError(cSize), "Compression failed: " << LZ4F_getErrorName(cSize));
                 TOutputQueue::Push(TString(OutputBuffer.get(), cSize));
                 TOutputQueue::Seal();
@@ -295,7 +311,7 @@ private:
     bool IsFirstBlock = true;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
     return std::make_unique<TReadBuffer>(source);
@@ -305,4 +321,4 @@ IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZ4HC_CLEVEL_DEFAULT));
 }
 
-} // namespace NYql::NLz4
+}   // namespace NYql::NLz4

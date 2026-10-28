@@ -1,6 +1,6 @@
 # Why this file was created
 
-[YDB Python tests](https://github.com/ydb-platform/ydb/tree/main/ydb/tests) import and use symbols from [YDB Python SDK](https://github.com/ydb-platform/ydb-python-sdk) in their source code. YDB Python SDK is availible as pip package, but its sources are also [shipped with YDB](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/python/ydb), so, when the tests are run, the developer is sure that he or she is using the most recent version of SDK.
+[YDB Python tests](https://github.com/ydb-platform/ydb/tree/main/ydb/tests) import and use symbols from [YDB Python SDK](https://github.com/ydb-platform/ydb-python-sdk) in their source code. YDB Python SDK is available as pip package, but its sources are also [shipped with YDB](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/python/ydb), so, when the tests are run, the developer is sure that he or she is using the most recent version of SDK.
 
 When tests are run in YDB developers private infrastructure, some tweaks are applied, and SDK sources are put at top-level, so its symbols should be imported via `import ydb`.
 

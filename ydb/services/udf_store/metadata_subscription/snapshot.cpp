@@ -67,4 +67,4 @@ std::vector<TString> TSnapshot::GetLibraryNames() const {
     return result;
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -10,7 +10,7 @@ class IInitializationBehaviour;
 namespace NModifications {
 class IOptimizationManager;
 class IOperationsManager;
-}
+}   // namespace NModifications
 
 class IClassBehaviour {
 public:
@@ -43,6 +43,7 @@ class TClassBehaviour: public IClassBehaviour {
 private:
 protected:
     virtual std::shared_ptr<NModifications::IOperationsManager> ConstructOperationsManager() const = 0;
+
 public:
     virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const override final {
         static std::shared_ptr<NModifications::IOperationsManager> manager = ConstructOperationsManager();
@@ -50,4 +51,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata

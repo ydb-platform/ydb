@@ -6,6 +6,7 @@
 
 namespace NYql {
 
-IFederatedTopicClient::TPtr CreateFileFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const NYdb::NTopic::TFederatedTopicClientSettings& settings, const TFileTopicClientSettings& fileClientSettings);
+IFederatedTopicClient::TPtr CreateFileFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics,
+    const NYdb::NTopic::TFederatedTopicClientSettings& settings, const TFileTopicClientSettings& fileClientSettings);
 
-} // namespace NYql
+}   // namespace NYql

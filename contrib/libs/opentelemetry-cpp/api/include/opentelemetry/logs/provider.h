@@ -40,11 +40,21 @@ public:
 
   /**
    * Changes the singleton LoggerProvider.
+   *
+   * Passing a nullptr LoggerProvider installs a no-op LoggerProvider, so that
+   * GetLoggerProvider() never returns a nullptr LoggerProvider.
    */
   static void SetLoggerProvider(const nostd::shared_ptr<LoggerProvider> &tp) noexcept
   {
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
-    GetProvider() = tp;
+    if (tp)
+    {
+      GetProvider() = tp;
+    }
+    else
+    {
+      GetProvider() = nostd::shared_ptr<LoggerProvider>(new NoopLoggerProvider);
+    }
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
@@ -64,13 +74,23 @@ public:
 
   /**
    * Changes the singleton EventLoggerProvider.
+   *
+   * Passing a nullptr EventLoggerProvider installs a no-op EventLoggerProvider,
+   * so that GetEventLoggerProvider() never returns a nullptr EventLoggerProvider.
    * @deprecated
    */
   OPENTELEMETRY_DEPRECATED static void SetEventLoggerProvider(
       const nostd::shared_ptr<EventLoggerProvider> &tp) noexcept
   {
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
-    GetEventProvider() = tp;
+    if (tp)
+    {
+      GetEventProvider() = tp;
+    }
+    else
+    {
+      GetEventProvider() = nostd::shared_ptr<EventLoggerProvider>(new NoopEventLoggerProvider);
+    }
   }
 #endif
 

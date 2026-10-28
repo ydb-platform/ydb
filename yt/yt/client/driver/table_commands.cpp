@@ -159,7 +159,8 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
             .With("WrittenSize", writer->GetWrittenSize())
             .With("ReadUncompressedDataSize", dataStatistics.uncompressed_data_size())
             .With("ReadCompressedDataSize", dataStatistics.compressed_data_size())
-            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns());
+            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns())
+            .With("TimingStatistics", reader->GetTimingStatistics());
     });
 
     PipeReaderToWriterByBatches(
@@ -1960,6 +1961,7 @@ void TGetTabletInfosCommand::DoExecute(ICommandContextPtr context)
                         .Item().BeginMap()
                             .Item("total_row_count").Value(tablet.TotalRowCount)
                             .Item("trimmed_row_count").Value(tablet.TrimmedRowCount)
+                            .OptionalItem("flushed_row_count", tablet.FlushedRowCount)
                             .Item("delayed_lockless_row_count").Value(tablet.DelayedLocklessRowCount)
                             .Item("barrier_timestamp").Value(tablet.BarrierTimestamp)
                             .Item("last_write_timestamp").Value(tablet.LastWriteTimestamp)

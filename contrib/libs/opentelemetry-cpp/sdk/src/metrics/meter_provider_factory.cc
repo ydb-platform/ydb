@@ -8,6 +8,7 @@
 #include "opentelemetry/sdk/instrumentationscope/scope_configurator.h"
 #include "opentelemetry/sdk/metrics/meter_config.h"
 #include "opentelemetry/sdk/metrics/meter_context.h"
+#include "opentelemetry/sdk/metrics/meter_context_factory.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
 #include "opentelemetry/sdk/metrics/view/view_registry.h"
@@ -49,10 +50,9 @@ std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider> MeterProviderFactory
     const opentelemetry::sdk::resource::Resource &resource,
     std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>> meter_configurator)
 {
-  std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider> provider(
-      new opentelemetry::sdk::metrics::MeterProvider(std::move(views), resource,
-                                                     std::move(meter_configurator)));
-  return provider;
+  auto context =
+      MeterContextFactory::Create(std::move(views), resource, std::move(meter_configurator));
+  return Create(std::move(context));
 }
 
 std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider> MeterProviderFactory::Create(

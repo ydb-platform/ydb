@@ -10,25 +10,16 @@ namespace NKikimr::NUdfStore::NWasm {
 //! TypeConfig → create(blob) → ui64 handle → call(handle, args…)
 class TWasmConfiguredCallable: public NYql::NUdf::TBoxedValue {
 public:
-    static void Register(
-        NYql::NUdf::IFunctionTypeInfoBuilder& builder,
-        bool typesOnly,
-        TWasmCompartmentStatePtr state,
-        const TWasmUdfDescriptor& descriptor,
-        TString typeConfigBlob);
+    static void Register(NYql::NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly, TWasmCompartmentStatePtr state,
+        const TWasmUdfDescriptor& descriptor, TString typeConfigBlob);
 
     ~TWasmConfiguredCallable() override;
 
 private:
-    TWasmConfiguredCallable(
-        NYql::NUdf::IFunctionTypeInfoBuilder& builder,
-        TWasmCompartmentStatePtr state,
-        const TWasmUdfDescriptor& descriptor,
+    TWasmConfiguredCallable(NYql::NUdf::IFunctionTypeInfoBuilder& builder, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor,
         TString typeConfigBlob);
 
-    NYql::NUdf::TUnboxedValue Run(
-        const NYql::NUdf::IValueBuilder* valueBuilder,
-        const NYql::NUdf::TUnboxedValuePod* args) const override;
+    NYql::NUdf::TUnboxedValue Run(const NYql::NUdf::IValueBuilder* valueBuilder, const NYql::NUdf::TUnboxedValuePod* args) const override;
 
     void EnsureObject(const NYql::NUdf::IValueBuilder* valueBuilder) const;
 
@@ -48,4 +39,4 @@ private:
     mutable ui64 CompartmentGeneration_ = 0;
 };
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

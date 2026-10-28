@@ -1,6 +1,8 @@
+#include "yql_generic_base_actor.h"
 #include "yql_generic_credentials_provider.h"
 #include "yql_generic_lookup_actor.h"
-#include "yql_generic_base_actor.h"
+
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -9,185 +11,174 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
-#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
+
+#include <library/cpp/retry/retry_policy.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
-
-#include <library/cpp/retry/retry_policy.h>
 
 namespace NYql::NDq {
 
-    using namespace NActors;
+using namespace NActors;
 
-    namespace {
-        constexpr ui32 RequestRetriesLimit = 10; // TODO lookup parameters or PRAGMA?
-        constexpr TDuration RequestTimeout = TDuration::Minutes(3); // TODO lookup parameters or PRAGMA?
+namespace {
+constexpr ui32 RequestRetriesLimit = 10;   // TODO lookup parameters or PRAGMA?
+constexpr TDuration RequestTimeout = TDuration::Minutes(3);   // TODO lookup parameters or PRAGMA?
 
-        const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
-            Y_ABORT_UNLESS(t1);
-            Y_ABORT_UNLESS(t2);
-            NKikimr::NMiniKQL::TStructTypeBuilder resultTypeBuilder{env};
-            for (ui32 i = 0; i != t1->GetMembersCount(); ++i) {
-                resultTypeBuilder.Add(t1->GetMemberName(i), t1->GetMemberType(i));
-            }
-            for (ui32 i = 0; i != t2->GetMembersCount(); ++i) {
-                resultTypeBuilder.Add(t2->GetMemberName(i), t2->GetMemberType(i));
-            }
-            return resultTypeBuilder.Build();
-        }
+const NKikimr::NMiniKQL::TStructType* MergeStructTypes(
+    const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
+    Y_ABORT_UNLESS(t1);
+    Y_ABORT_UNLESS(t2);
+    NKikimr::NMiniKQL::TStructTypeBuilder resultTypeBuilder{ env };
+    for (ui32 i = 0; i != t1->GetMembersCount(); ++i) {
+        resultTypeBuilder.Add(t1->GetMemberName(i), t1->GetMemberType(i));
+    }
+    for (ui32 i = 0; i != t2->GetMembersCount(); ++i) {
+        resultTypeBuilder.Add(t2->GetMemberName(i), t2->GetMemberType(i));
+    }
+    return resultTypeBuilder.Build();
+}
 
-        using ILookupRetryPolicy = IRetryPolicy<const NYdbGrpc::TGrpcStatus&>;
-        using ILookupRetryState = ILookupRetryPolicy::IRetryState;
-        struct TLookupState {
-            using TPtr = std::shared_ptr<TLookupState>;
-            std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
-            // ^^^ must not be lock()ed without bound mkql allocator (e.g. in future
-            // handlers)
-            NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator;
-            // ^^^ TODO: consider possible (temporal) circular ownership via Future and lambda capture
-            ILookupRetryState::TPtr RetryState;
-            TInstant SentTime;
-            size_t FullscanLimit = 0;
-            size_t ResultRows = 0;
-        };
-    } // namespace
+using ILookupRetryPolicy = IRetryPolicy<const NYdbGrpc::TGrpcStatus&>;
+using ILookupRetryState = ILookupRetryPolicy::IRetryState;
 
-    class TGenericLookupActor
-        : public NYql::NDq::IDqAsyncLookupSource,
-          public TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr> {
-        using TBase = TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr>;
+struct TLookupState {
+    using TPtr = std::shared_ptr<TLookupState>;
+    std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
+    // ^^^ must not be lock()ed without bound mkql allocator (e.g. in future
+    // handlers)
+    NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator;
+    // ^^^ TODO: consider possible (temporal) circular ownership via Future and lambda capture
+    ILookupRetryState::TPtr RetryState;
+    TInstant SentTime;
+    size_t FullscanLimit = 0;
+    size_t ResultRows = 0;
+};
+}   // namespace
 
-        struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
-            explicit TEvLookupRetry(TLookupState::TPtr state)
-                : State(std::move(state))
-            {}
+class TGenericLookupActor: public NYql::NDq::IDqAsyncLookupSource, public TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr> {
+    using TBase = TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr>;
 
-            TLookupState::TPtr State;
-        };
-
-    public:
-        TGenericLookupActor(
-            NConnector::IClient::TPtr connectorClient,
-            TGenericCredentialsProvider::TPtr credentialsFactory,
-            NActors::TActorId&& parentId,
-            ::NMonitoring::TDynamicCounterPtr taskCounters,
-            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            Generic::TLookupSource&& lookupSource,
-            const NKikimr::NMiniKQL::TStructType* keyType,
-            const NKikimr::NMiniKQL::TStructType* payloadType,
-            const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest,
-            bool isMultiMatches = false)
-            : Connector(connectorClient)
-            , CredentialsProvider(std::move(credentialsFactory))
-            , ParentId(std::move(parentId))
-            , Alloc(alloc)
-            , KeyTypeHelper(keyTypeHelper)
-            , LookupSource(std::move(lookupSource))
-            , KeyType(keyType)
-            , PayloadType(payloadType)
-            , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
-            , HolderFactory(holderFactory)
-            , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
-            , IsMultiMatches(isMultiMatches)
-            , RetryPolicy(
-                    ILookupRetryPolicy::GetExponentialBackoffPolicy(
-                        /* retryClassFunction */
-                        [](const NYdbGrpc::TGrpcStatus& status) {
-                            if (NConnector::GrpcStatusNeedsRetry(status)) {
-                                return ERetryErrorClass::ShortRetry;
-                            }
-                            if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
-                                return ERetryErrorClass::ShortRetry; // TODO LongRetry?
-                            }
-                            return ERetryErrorClass::NoRetry;
-                        },
-                        /* minDelay */ TDuration::MilliSeconds(1),
-                        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
-                        /* maxDelay */ TDuration::Seconds(1),
-                        /* maxRetries */ RequestRetriesLimit,
-                        /* maxTime */ TDuration::Minutes(5),
-                        /* scaleFactor */ 2))
+    struct TEvLookupRetry: NActors::TEventLocal<TEvLookupRetry, EvRetry> {
+        explicit TEvLookupRetry(TLookupState::TPtr state)
+            : State(std::move(state))
         {
-            InitMonCounters(taskCounters);
         }
 
-        ~TGenericLookupActor() {
-            Free();
-        }
+        TLookupState::TPtr State;
+    };
 
-    private:
-        void Free() {
-            auto guard = Guard(*Alloc);
-            if (InFlight) {
-                // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight
-                InFlight->Sub(LocalInFlight);
-            }
-            LocalInFlight = 0;
-            KeyTypeHelper.reset();
-        }
-        void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-            if (!taskCounters) {
-                return;
-            }
-            auto component = taskCounters->GetSubgroup("component", "LookupSrc");
-            Count = component->GetCounter("Reqs", true);
-            Fullscans = component->GetCounter("Fullscans", true);
-            Keys = component->GetCounter("Keys", true);
-            ResultChunks = component->GetCounter("Chunks", true);
-            ResultRows = component->GetCounter("Rows", true);
-            ResultBytes = component->GetCounter("Bytes", true);
-            AnswerTime = component->GetCounter("AnswerMs", true);
-            CpuTime = component->GetCounter("CpuUs", true);
-            InFlight = component->GetCounter("InFlight");
-        }
-    public:
+public:
+    TGenericLookupActor(NConnector::IClient::TPtr connectorClient, TGenericCredentialsProvider::TPtr credentialsFactory,
+        NActors::TActorId&& parentId, ::NMonitoring::TDynamicCounterPtr taskCounters, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper, Generic::TLookupSource&& lookupSource,
+        const NKikimr::NMiniKQL::TStructType* keyType, const NKikimr::NMiniKQL::TStructType* payloadType,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        const size_t maxKeysInRequest, bool isMultiMatches = false)
+        : Connector(connectorClient)
+        , CredentialsProvider(std::move(credentialsFactory))
+        , ParentId(std::move(parentId))
+        , Alloc(alloc)
+        , KeyTypeHelper(keyTypeHelper)
+        , LookupSource(std::move(lookupSource))
+        , KeyType(keyType)
+        , PayloadType(payloadType)
+        , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
+        , HolderFactory(holderFactory)
+        , ColumnDestinations(CreateColumnDestination())
+        , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{ 100 }))
+        , IsMultiMatches(isMultiMatches)
+        , RetryPolicy(ILookupRetryPolicy::GetExponentialBackoffPolicy(
+              /* retryClassFunction */
+              [](const NYdbGrpc::TGrpcStatus& status) {
+                  if (NConnector::GrpcStatusNeedsRetry(status)) {
+                      return ERetryErrorClass::ShortRetry;
+                  }
+                  if (status.GRpcStatusCode == grpc::DEADLINE_EXCEEDED) {
+                      return ERetryErrorClass::ShortRetry;   // TODO LongRetry?
+                  }
+                  return ERetryErrorClass::NoRetry;
+              }, /* minDelay */ TDuration::MilliSeconds(1), /* minLongRetryDelay */ TDuration::MilliSeconds(500),
+              /* maxDelay */ TDuration::Seconds(1), /* maxRetries */ RequestRetriesLimit, /* maxTime */ TDuration::Minutes(5),
+              /* scaleFactor */ 2))
+    {
+        InitMonCounters(taskCounters);
+    }
 
-        void Bootstrap() {
-            const auto& dsi = LookupSource.data_source_instance();
-            YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
-                                            << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
-                                            << ", endpoint=" << dsi.endpoint().ShortDebugString()
-                                            << ", database=" << dsi.database()
-                                            << ", use_tls=" << ToString(dsi.use_tls())
-                                            << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                                            << ", table=" << LookupSource.table();
-            Become(&TGenericLookupActor::StateFunc);
-        }
+    ~TGenericLookupActor() {
+        Free();
+    }
 
-        static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
+private:
+    void Free() {
+        auto guard = Guard(*Alloc);
+        if (InFlight) {
+            // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight
+            InFlight->Sub(LocalInFlight);
+        }
+        LocalInFlight = 0;
+        KeyTypeHelper.reset();
+    }
 
-    private: // IDqAsyncLookupSource
-        size_t GetMaxSupportedKeysInRequest() const override {
-            return MaxKeysInRequest;
+    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+        if (!taskCounters) {
+            return;
         }
-        size_t GetMaxSupportedFullscanRequest() const override {
-            return MaxSupportedFullscanRequest;
-        }
-        void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
-            auto guard = Guard(*Alloc);
-            CreateRequest(request.lock());
-        }
-        void PassAway() override {
-            Free();
-            TBase::PassAway();
-        }
+        auto component = taskCounters->GetSubgroup("component", "LookupSrc");
+        Count = component->GetCounter("Reqs", true);
+        Fullscans = component->GetCounter("Fullscans", true);
+        Keys = component->GetCounter("Keys", true);
+        ResultChunks = component->GetCounter("Chunks", true);
+        ResultRows = component->GetCounter("Rows", true);
+        ResultBytes = component->GetCounter("Bytes", true);
+        AnswerTime = component->GetCounter("AnswerMs", true);
+        CpuTime = component->GetCounter("CpuUs", true);
+        InFlight = component->GetCounter("InFlight");
+    }
 
-    private: // events
-        STRICT_STFUNC_EXC(StateFunc,
+public:
+    void Bootstrap() {
+        const auto& dsi = LookupSource.data_source_instance();
+        YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
+                                        << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
+                                        << ", endpoint=" << dsi.endpoint().ShortDebugString() << ", database=" << dsi.database()
+                                        << ", use_tls=" << ToString(dsi.use_tls())
+                                        << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol()) << ", table=" << LookupSource.table();
+        Become(&TGenericLookupActor::StateFunc);
+    }
+
+    static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
+
+private:   // IDqAsyncLookupSource
+    size_t GetMaxSupportedKeysInRequest() const override {
+        return MaxKeysInRequest;
+    }
+
+    size_t GetMaxSupportedFullscanRequest() const override {
+        return MaxSupportedFullscanRequest;
+    }
+
+    void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
+        auto guard = Guard(*Alloc);
+        CreateRequest(request.lock());
+    }
+
+    void PassAway() override {
+        Free();
+        TBase::PassAway();
+    }
+
+private:   // events
+    STRICT_STFUNC_EXC(StateFunc,
             hFunc(TEvLookupRequest, Handle)
             hFunc(TEvGotCredentials, Handle)
             hFunc(TEvListSplitsIterator, Handle)
@@ -201,49 +192,42 @@ namespace NYql::NDq {
             , ExceptionFunc(std::exception, HandleException)
         )
 
-        void Handle(TEvListSplitsIterator::TPtr ev) {
-            auto& iterator = ev->Get()->Iterator;
-            iterator->ReadNext().Subscribe(
-                [
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId(),
-                    state = std::move(ev->Get()->State)
-                ](const NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse>& asyncResult) {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsResponse from Connector";
-                    auto result = ExtractFromConstFuture(asyncResult);
-                    if (result.Status.Ok()) {
-                        Y_ABORT_UNLESS(result.Response);
-                        auto ev = new TEvListSplitsPart(std::move(*result.Response));
-                        ev->State = std::move(state);
-                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                    } else {
-                        SendRetryOrError(actorSystem, selfId, result.Status, std::move(state));
-                    }
-                });
-        }
+    void Handle(TEvListSplitsIterator::TPtr ev) {
+        auto& iterator = ev->Get()->Iterator;
+        iterator->ReadNext().Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), state = std::move(ev->Get()->State)](
+                                           const NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse>& asyncResult) {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsResponse from Connector";
+            auto result = ExtractFromConstFuture(asyncResult);
+            if (result.Status.Ok()) {
+                Y_ABORT_UNLESS(result.Response);
+                auto ev = new TEvListSplitsPart(std::move(*result.Response));
+                ev->State = std::move(state);
+                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+            } else {
+                SendRetryOrError(actorSystem, selfId, result.Status, std::move(state));
+            }
+        });
+    }
 
-        void Handle(TEvListSplitsPart::TPtr ev) {
-            auto response = std::move(ev->Get()->Response);
-            Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
-            auto& split = response.splits(0);
-            NConnector::NApi::TReadSplitsRequest readRequest;
+    void Handle(TEvListSplitsPart::TPtr ev) {
+        auto response = std::move(ev->Get()->Response);
+        Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
+        auto& split = response.splits(0);
+        NConnector::NApi::TReadSplitsRequest readRequest;
 
-            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            *readRequest.add_splits() = std::move(split);
-            readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
-            readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
-            CredentialsProvider->AsyncCredentials().Apply([
-                    connector = Connector,
-                    readRequest = std::move(readRequest),
-                    requestTimeout = RequestTimeout
-            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+        *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
+        *readRequest.add_splits() = std::move(split);
+        readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
+        readRequest.set_filtering(ev->Get()->State->FullscanLimit > 0 ? NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL
+                                                                      : NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
+        CredentialsProvider->AsyncCredentials()
+            .Apply([connector = Connector, readRequest = std::move(readRequest), requestTimeout = RequestTimeout](
+                       const NThreading::TFuture<TGenericCredentials>& future) mutable {
                 *readRequest.mutable_data_source_instance()->mutable_credentials() = ExtractFromConstFuture(future);
                 return connector->ReadSplits(readRequest, requestTimeout);
-            }).Subscribe([
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId(),
-                    state = std::move(ev->Get()->State)
-            ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
+            })
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), state = std::move(ev->Get()->State)](
+                           const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
                 try {
                     YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
                     auto result = ExtractFromConstFuture(asyncResult);
@@ -258,142 +242,130 @@ namespace NYql::NDq {
                     SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
                 }
             });
-        }
+    }
 
-        void Handle(TEvReadSplitsIterator::TPtr ev) {
-            ev->Get()->State->ReadSplitsIterator = std::move(ev->Get()->Iterator);
-            ReadNextData(std::move(ev->Get()->State));
-        }
+    void Handle(TEvReadSplitsIterator::TPtr ev) {
+        ev->Get()->State->ReadSplitsIterator = std::move(ev->Get()->Iterator);
+        ReadNextData(std::move(ev->Get()->State));
+    }
 
-        void Handle(TEvReadSplitsPart::TPtr ev) {
-            auto state = std::move(ev->Get()->State);
-            Y_DEBUG_ABORT_UNLESS(state->ReadSplitsIterator);
-            ProcessReceivedData(ev->Get()->Response, state);
-            if (state->FullscanLimit > 0 && state->ResultRows == state->FullscanLimit) {
-                FinalizeRequest(std::move(state));
-                return;
+    void Handle(TEvReadSplitsPart::TPtr ev) {
+        auto state = std::move(ev->Get()->State);
+        Y_DEBUG_ABORT_UNLESS(state->ReadSplitsIterator);
+        ProcessReceivedData(ev->Get()->Response, state);
+        if (state->FullscanLimit > 0 && state->ResultRows == state->FullscanLimit) {
+            FinalizeRequest(std::move(state));
+            return;
+        }
+        ReadNextData(std::move(state));
+    }
+
+    void Handle(TEvReadSplitsFinished::TPtr ev) {
+        FinalizeRequest(std::move(ev->Get()->State));
+    }
+
+    void Handle(TEvError::TPtr ev) {
+        const auto& error = ev->Get()->Error;
+        Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
+                           /*inputId=*/-1, /* will be filled by LookupTransform actor */
+                           NConnector::ErrorToIssues(error), NConnector::ErrorToDqStatus(error)));
+    }
+
+    void Handle(TEvLookupRetry::TPtr ev) {
+        if (LocalInFlight == 0) {   // already passed away
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry after PassAway";
+            return;
+        }
+        auto guard = Guard(*Alloc);
+        auto state = std::move(ev->Get()->State);
+        if (state->FullscanLimit > 0) {
+            if (auto request = state->Request.lock()) {
+                request->erase(request->begin(), request->end());
+            } else {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
             }
-            ReadNextData(std::move(state));
-        }
-
-        void Handle(TEvReadSplitsFinished::TPtr ev) {
-            FinalizeRequest(std::move(ev->Get()->State));
-        }
-
-        void Handle(TEvError::TPtr ev) {
-            const auto& error = ev->Get()->Error;
-            Send(ParentId,
-                 new IDqComputeActorAsyncInput::TEvAsyncInputError(
-                     /*inputId=*/-1, /* will be filled by LookupTransform actor */
-                     NConnector::ErrorToIssues(error),
-                     NConnector::ErrorToDqStatus(error)));
-        }
-
-        void Handle(TEvLookupRetry::TPtr ev) {
-            if (LocalInFlight == 0) { // already passed away
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry after PassAway";
-                return;
-            }
-            auto guard = Guard(*Alloc);
-            auto state = std::move(ev->Get()->State);
-            if (state->FullscanLimit > 0) {
-                if (auto request = state->Request.lock()) {
-                    request->erase(request->begin(), request->end());
-                } else {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
+        } else if (IsMultiMatches) {
+            if (auto request = state->Request.lock()) {
+                for (auto& [_, value] : *request) {
+                    value = NUdf::TUnboxedValue();
                 }
-            } else if (IsMultiMatches) {
-                if (auto request = state->Request.lock()) {
-                    for (auto& [_, value]: *request) {
-                        value = NUdf::TUnboxedValue();
-                    }
-                } else {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
-                }
+            } else {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
             }
-            state->ResultRows = 0;
-            SendRequest(std::move(state));
         }
+        state->ResultRows = 0;
+        SendRequest(std::move(state));
+    }
 
-        void Handle(NActors::TEvents::TEvPoison::TPtr) {
-            PassAway();
+    void Handle(NActors::TEvents::TEvPoison::TPtr) {
+        PassAway();
+    }
+
+    void Handle(TEvLookupRequest::TPtr ev) {
+        auto guard = Guard(*Alloc);
+        CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
+    }
+
+    void HandleException(const std::exception& e) {
+        YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+        SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
+    }
+
+private:
+    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
+    }
+
+    void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit = 0) {
+        if (!request) {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " CreateRequest: parent MIA";
+            return;
         }
-
-        void Handle(TEvLookupRequest::TPtr ev) {
-            auto guard = Guard(*Alloc);
-            CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
-        }
-
-        void HandleException(const std::exception& e) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
-            SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
-        }
-
-    private:
-        static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
-            return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
-        }
-
-        void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit = 0) {
-            if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " CreateRequest: parent MIA";
-                return;
+        Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
+        YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+        Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
+        if (Count) {
+            Count->Inc();
+            InFlight->Inc();
+            Keys->Add(request->size());
+            if (fullscanLimit > 0) {
+                Fullscans->Inc();
             }
-            Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
-            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
-            Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
-            if (Count) {
-                Count->Inc();
-                InFlight->Inc();
-                Keys->Add(request->size());
-                if (fullscanLimit > 0) {
-                    Fullscans->Inc();
-                }
-            }
-            ++LocalInFlight;
-
-            auto state = std::make_shared<TLookupState>(TLookupState {
-                .Request = request,
-                .RetryState = RetryPolicy->CreateRetryState(),
-                .SentTime = TInstant::Now(),
-                .FullscanLimit = fullscanLimit
-            });
-            SendRequest(state);
         }
+        ++LocalInFlight;
 
-        void SendRequest(TLookupState::TPtr state) {
-            CredentialsProvider->AsyncCredentials().Subscribe([
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId(),
-                    state = std::move(state)
-            ](const NThreading::TFuture<TGenericCredentials>& future) mutable {
+        auto state = std::make_shared<TLookupState>(TLookupState{
+            .Request = request, .RetryState = RetryPolicy->CreateRetryState(), .SentTime = TInstant::Now(), .FullscanLimit = fullscanLimit });
+        SendRequest(state);
+    }
+
+    void SendRequest(TLookupState::TPtr state) {
+        CredentialsProvider->AsyncCredentials().Subscribe(
+            [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), state = std::move(state)](
+                const NThreading::TFuture<TGenericCredentials>& future) mutable {
                 try {
-                    actorSystem->Send(
-                        selfId,
-                        new TEvGotCredentials(ExtractFromConstFuture(future), std::move(state)));
+                    actorSystem->Send(selfId, new TEvGotCredentials(ExtractFromConstFuture(future), std::move(state)));
                 } catch (std::exception& ex) {
                     SendRetryOrError(actorSystem, selfId, NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, ex.what()), std::move(state));
                 }
             });
+    }
+
+    void Handle(TEvGotCredentials::TPtr ev) {
+        auto startCycleCount = GetCycleCountFast();
+        auto state = std::move(ev->Get()->State);
+        NConnector::NApi::TListSplitsRequest splitRequest;
+
+        auto error = FillSelect(*splitRequest.add_selects(), state, std::move(ev->Get()->Credentials));
+        if (error) {
+            SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
+            return;
         }
 
-        void Handle(TEvGotCredentials::TPtr ev) {
-            auto startCycleCount = GetCycleCountFast();
-            auto state = std::move(ev->Get()->State);
-            NConnector::NApi::TListSplitsRequest splitRequest;
-
-            auto error = FillSelect(*splitRequest.add_selects(), state, std::move(ev->Get()->Credentials));
-            if (error) {
-                SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
-                return;
-            }
-
-            splitRequest.Setmax_split_count(1);
-            Connector->ListSplits(splitRequest, RequestTimeout).Subscribe([
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId(),
-                    state = std::move(state)
-            ](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
+        splitRequest.Setmax_split_count(1);
+        Connector->ListSplits(splitRequest, RequestTimeout)
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), state = std::move(state)](
+                           const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
                     YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsStreamIterator";
@@ -405,299 +377,277 @@ namespace NYql::NDq {
                     SendRetryOrError(actorSystem, selfId, result.Status, std::move(state));
                 }
             });
-            if (CpuTime) {
-                CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
-            }
+        if (CpuTime) {
+            CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
         }
+    }
 
-        void ReadNextData(TLookupState::TPtr state) {
-            if (LocalInFlight == 0) { // PassAway was called
-                return;
-            }
-            state->ReadSplitsIterator->ReadNext().Subscribe(
-                [
-                   actorSystem = TActivationContext::ActorSystem(),
-                   selfId = SelfId(),
-                   state = state
-                ](const NConnector::TAsyncResult<NConnector::NApi::TReadSplitsResponse>& asyncResult) {
-                    auto result = ExtractFromConstFuture(asyncResult);
-                    if (result.Status.Ok()) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got DataChunk";
-                        Y_ABORT_UNLESS(result.Response);
-                        auto& response = *result.Response;
-                        // TODO: retry on some YDB errors
-                        if (NConnector::IsSuccess(response)) {
-                            auto ev = new TEvReadSplitsPart(std::move(response));
-                            ev->State = std::move(state);
-                            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                        } else {
-                            SendError(actorSystem, selfId, response.Geterror());
-                        }
-                    } else if (NConnector::GrpcStatusEndOfStream(result.Status)) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got EOF";
-                        auto ev = new TEvReadSplitsFinished(std::move(result.Status));
-                        ev->State = std::move(state);
-                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                    } else {
-                        SendRetryOrError(actorSystem, selfId, result.Status, std::move(state));
-                    }
-                });
+    void ReadNextData(TLookupState::TPtr state) {
+        if (LocalInFlight == 0) {   // PassAway was called
+            return;
         }
-
-        void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp, TLookupState::TPtr state) {
-            auto startCycleCount = GetCycleCountFast();
-            Y_ENSURE(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
-            if (ResultChunks) {
-                ResultChunks->Inc();
-                if (resp.has_stats()) {
-                    ResultRows->Add(resp.stats().rows());
-                    ResultBytes->Add(resp.stats().bytes());
-                }
-            }
-            auto guard = Guard(*Alloc);
-            auto request = state->Request.lock();
-            if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " ProcessReceivedData: parent MIA";
-                return;
-            }
-            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
-            Y_ENSURE(!resp.arrow_ipc_streaming().empty());
-            const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
-            Y_ENSURE(data.ok(), data.status().ToString());
-            const auto& value = data.ValueOrDie();
-            Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
-            std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
-            for (size_t i = 0; i != columns.size(); ++i) {
-                Y_ENSURE(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
-                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
-            }
-
-            auto height = columns[0].size();
-            Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
-            if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
-                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << SelfId() << " YQ-5124 Workaround for unimplemented LIMIT invoked " << height << " > " << state->FullscanLimit << " - " << state->ResultRows;
-                height = state->FullscanLimit - state->ResultRows;
-            }
-            state->ResultRows += height;
-            for (size_t i = 0; i != height; ++i) {
-                NUdf::TUnboxedValue* keyItems;
-                NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
-                NUdf::TUnboxedValue* outputItems;
-                NUdf::TUnboxedValue output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
-                for (size_t j = 0; j != columns.size(); ++j) {
-                    (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
-                }
-
-                NUdf::TUnboxedValue *v;
-                if (state->FullscanLimit > 0) {
-                    auto [it, _] = request->emplace(key, NUdf::TUnboxedValue{});
-                    v = &(it->second);
-                } else if (auto it = request->find(key); it != request->end()) {
-                    v = &(it->second);
+        state->ReadSplitsIterator->ReadNext().Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), state = state](
+                                                            const NConnector::TAsyncResult<NConnector::NApi::TReadSplitsResponse>& asyncResult) {
+            auto result = ExtractFromConstFuture(asyncResult);
+            if (result.Status.Ok()) {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got DataChunk";
+                Y_ABORT_UNLESS(result.Response);
+                auto& response = *result.Response;
+                // TODO: retry on some YDB errors
+                if (NConnector::IsSuccess(response)) {
+                    auto ev = new TEvReadSplitsPart(std::move(response));
+                    ev->State = std::move(state);
+                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                 } else {
-                    continue;
+                    SendError(actorSystem, selfId, response.Geterror());
                 }
-                if (IsMultiMatches) {
-                    *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
-                } else {
-                    *v = std::move(output); // duplicates will be overwritten
-                }
+            } else if (NConnector::GrpcStatusEndOfStream(result.Status)) {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got EOF";
+                auto ev = new TEvReadSplitsFinished(std::move(result.Status));
+                ev->State = std::move(state);
+                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+            } else {
+                SendRetryOrError(actorSystem, selfId, result.Status, std::move(state));
             }
-            if (CpuTime) {
-                CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
-            }
-        }
+        });
+    }
 
-        void FinalizeRequest(TLookupState::TPtr state) {
-            state->ReadSplitsIterator.reset();
-            if (LocalInFlight == 0) { // PassAway was called
-                return;
-            }
-            --LocalInFlight;
-            auto guard = Guard(*Alloc);
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results with " << state->ResultRows << " rows";
-            if (AnswerTime) {
-                AnswerTime->Add((TInstant::Now() - state->SentTime).MilliSeconds());
-                InFlight->Dec();
-            }
-            auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
-            state.reset();
-            TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
-        }
-
-        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage();
-            actorSystem->Send(
-                selfId,
-                new TEvError(std::move(error)));
-        }
-
-        static void SendRetryOrError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, TLookupState::TPtr state) {
-            state->ReadSplitsIterator.reset();
-            auto nextRetry = state->RetryState->GetNextRetryDelay(status);
-            if (nextRetry) {
-                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-                actorSystem->Schedule(*nextRetry,
-                        new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(state))));
-                return;
-            }
-            SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
-        }
-
-        static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
-            NConnector::NApi::TError dst;
-            *dst.mutable_message() = error;
-            dst.set_status(Ydb::StatusIds::INTERNAL_ERROR);
-            SendError(actorSystem, selfId, std::move(dst));
-        }
-
-    private:
-        enum class EColumnDestination {
-            Key,
-            Output
-        };
-
-        std::vector<std::pair<EColumnDestination, size_t>> CreateColumnDestination() {
-            THashMap<TStringBuf, size_t> keyColumns;
-            for (ui32 i = 0; i != KeyType->GetMembersCount(); ++i) {
-                keyColumns[KeyType->GetMemberName(i)] = i;
-            }
-            THashMap<TStringBuf, size_t> outputColumns;
-            for (ui32 i = 0; i != PayloadType->GetMembersCount(); ++i) {
-                outputColumns[PayloadType->GetMemberName(i)] = i;
-            }
-
-            std::vector<std::pair<EColumnDestination, size_t>> result(SelectResultType->GetMembersCount());
-            for (size_t i = 0; i != result.size(); ++i) {
-                if (const auto* p = keyColumns.FindPtr(SelectResultType->GetMemberName(i))) {
-                    result[i] = {EColumnDestination::Key, *p};
-                } else if (const auto* p = outputColumns.FindPtr(SelectResultType->GetMemberName(i))) {
-                    result[i] = {EColumnDestination::Output, *p};
-                } else {
-                    Y_ABORT();
-                }
-            }
-            return result;
-        }
-
-        void AddClause(NConnector::NApi::TPredicate::TDisjunction &disjunction,
-                       ui32 columnsCount, const NUdf::TUnboxedValue& keys) {
-            NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
-            for (ui32 c = 0; c != columnsCount; ++c) {
-                NConnector::NApi::TPredicate::TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
-                eq.set_operation(NConnector::NApi::TPredicate::TComparison::EOperation::TPredicate_TComparison_EOperation_EQ);
-                eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
-                auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
-                ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
-                ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), *rightTypedValue->mutable_value());
+    void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp, TLookupState::TPtr state) {
+        auto startCycleCount = GetCycleCountFast();
+        Y_ENSURE(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
+        if (ResultChunks) {
+            ResultChunks->Inc();
+            if (resp.has_stats()) {
+                ResultRows->Add(resp.stats().rows());
+                ResultBytes->Add(resp.stats().bytes());
             }
         }
+        auto guard = Guard(*Alloc);
+        auto request = state->Request.lock();
+        if (!request) {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " ProcessReceivedData: parent MIA";
+            return;
+        }
+        NKikimr::NArrow::NSerialization::TSerializerContainer deser =
+            NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();   // todo move to class' member
+        Y_ENSURE(!resp.arrow_ipc_streaming().empty());
+        const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
+        Y_ENSURE(data.ok(), data.status().ToString());
+        const auto& value = data.ValueOrDie();
+        Y_ENSURE(
+            static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
+        std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
+        for (size_t i = 0; i != columns.size(); ++i) {
+            Y_ENSURE(
+                value->column_name(i) ==
+                (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
+            columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
+        }
 
-        TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state, TGenericCredentials&& credentials) {
-            auto dsi = LookupSource.data_source_instance();
-            *dsi.mutable_credentials() = std::move(credentials);
-            *select.mutable_data_source_instance() = std::move(dsi);
-
-            for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
-                auto c = select.mutable_what()->add_items()->mutable_column();
-                c->Setname((TString(SelectResultType->GetMemberName(i))));
-                ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
+        auto height = columns[0].size();
+        Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
+        if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
+            YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << SelfId() << " YQ-5124 Workaround for unimplemented LIMIT invoked " << height
+                                            << " > " << state->FullscanLimit << " - " << state->ResultRows;
+            height = state->FullscanLimit - state->ResultRows;
+        }
+        state->ResultRows += height;
+        for (size_t i = 0; i != height; ++i) {
+            NUdf::TUnboxedValue* keyItems;
+            NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
+            NUdf::TUnboxedValue* outputItems;
+            NUdf::TUnboxedValue output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
+            for (size_t j = 0; j != columns.size(); ++j) {
+                (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
             }
 
-            select.mutable_from()->Settable(LookupSource.table());
-
+            NUdf::TUnboxedValue* v;
             if (state->FullscanLimit > 0) {
-                auto& limit = *select.mutable_limit();
-                limit.set_limit(state->FullscanLimit);
-                limit.set_offset(0);
-                return {};
+                auto [it, _] = request->emplace(key, NUdf::TUnboxedValue{});
+                v = &(it->second);
+            } else if (auto it = request->find(key); it != request->end()) {
+                v = &(it->second);
+            } else {
+                continue;
             }
+            if (IsMultiMatches) {
+                *v = HolderFactory.CreateDirectListHolder(
+                    (*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{})
+                        .Append(std::move(output)));
+            } else {
+                *v = std::move(output);   // duplicates will be overwritten
+            }
+        }
+        if (CpuTime) {
+            CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
+        }
+    }
 
-            NConnector::NApi::TPredicate::TDisjunction disjunction;
-            auto guard = Guard(*Alloc);
-            auto request = state->Request.lock();
-            if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
-                return "Actor destroyed";
+    void FinalizeRequest(TLookupState::TPtr state) {
+        state->ReadSplitsIterator.reset();
+        if (LocalInFlight == 0) {   // PassAway was called
+            return;
+        }
+        --LocalInFlight;
+        auto guard = Guard(*Alloc);
+        YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results with " << state->ResultRows << " rows";
+        if (AnswerTime) {
+            AnswerTime->Add((TInstant::Now() - state->SentTime).MilliSeconds());
+            InFlight->Dec();
+        }
+        auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
+        state.reset();
+        TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
+    }
+
+    static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
+        YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage();
+        actorSystem->Send(selfId, new TEvError(std::move(error)));
+    }
+
+    static void SendRetryOrError(
+        NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NYdbGrpc::TGrpcStatus& status, TLookupState::TPtr state) {
+        state->ReadSplitsIterator.reset();
+        auto nextRetry = state->RetryState->GetNextRetryDelay(status);
+        if (nextRetry) {
+            YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString()
+                                            << ", retry scheduled in " << *nextRetry;
+            actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(state))));
+            return;
+        }
+        SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));
+    }
+
+    static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
+        NConnector::NApi::TError dst;
+        *dst.mutable_message() = error;
+        dst.set_status(Ydb::StatusIds::INTERNAL_ERROR);
+        SendError(actorSystem, selfId, std::move(dst));
+    }
+
+private:
+    enum class EColumnDestination {
+        Key,
+        Output
+    };
+
+    std::vector<std::pair<EColumnDestination, size_t>> CreateColumnDestination() {
+        THashMap<TStringBuf, size_t> keyColumns;
+        for (ui32 i = 0; i != KeyType->GetMembersCount(); ++i) {
+            keyColumns[KeyType->GetMemberName(i)] = i;
+        }
+        THashMap<TStringBuf, size_t> outputColumns;
+        for (ui32 i = 0; i != PayloadType->GetMembersCount(); ++i) {
+            outputColumns[PayloadType->GetMemberName(i)] = i;
+        }
+
+        std::vector<std::pair<EColumnDestination, size_t>> result(SelectResultType->GetMembersCount());
+        for (size_t i = 0; i != result.size(); ++i) {
+            if (const auto* p = keyColumns.FindPtr(SelectResultType->GetMemberName(i))) {
+                result[i] = { EColumnDestination::Key, *p };
+            } else if (const auto* p = outputColumns.FindPtr(SelectResultType->GetMemberName(i))) {
+                result[i] = { EColumnDestination::Output, *p };
+            } else {
+                Y_ABORT();
             }
-            for (const auto& [keys, _] : *request) {
-                // TODO consider skipping already retrieved keys
-                // ... but careful, can we end up with zero? TODO
-                AddClause(disjunction, KeyType->GetMembersCount(), keys);
-            }
-            auto& keys = request->begin()->first; // request is never empty
-            // Pad query with dummy clauses to improve caching
-            for (ui32 nRequests = request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
-                AddClause(disjunction, KeyType->GetMembersCount(), keys);
-            }
-            *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
+        }
+        return result;
+    }
+
+    void AddClause(NConnector::NApi::TPredicate::TDisjunction& disjunction, ui32 columnsCount, const NUdf::TUnboxedValue& keys) {
+        NConnector::NApi::TPredicate::TConjunction& conjunction = *disjunction.mutable_operands()->Add()->mutable_conjunction();
+        for (ui32 c = 0; c != columnsCount; ++c) {
+            NConnector::NApi::TPredicate::TComparison& eq = *conjunction.mutable_operands()->Add()->mutable_comparison();
+            eq.set_operation(NConnector::NApi::TPredicate::TComparison::EOperation::TPredicate_TComparison_EOperation_EQ);
+            eq.mutable_left_value()->set_column(TString(KeyType->GetMemberName(c)));
+            auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+            ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+            ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), *rightTypedValue->mutable_value());
+        }
+    }
+
+    TString FillSelect(NConnector::NApi::TSelect& select, TLookupState::TPtr state, TGenericCredentials&& credentials) {
+        auto dsi = LookupSource.data_source_instance();
+        *dsi.mutable_credentials() = std::move(credentials);
+        *select.mutable_data_source_instance() = std::move(dsi);
+
+        for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
+            auto c = select.mutable_what()->add_items()->mutable_column();
+            c->Setname((TString(SelectResultType->GetMemberName(i))));
+            ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
+        }
+
+        select.mutable_from()->Settable(LookupSource.table());
+
+        if (state->FullscanLimit > 0) {
+            auto& limit = *select.mutable_limit();
+            limit.set_limit(state->FullscanLimit);
+            limit.set_offset(0);
             return {};
         }
 
-    private:
-        NConnector::IClient::TPtr Connector;
-        TGenericCredentialsProvider::TPtr CredentialsProvider;
-        const NActors::TActorId ParentId;
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        const Generic::TLookupSource LookupSource;
-        const NKikimr::NMiniKQL::TStructType* const KeyType;
-        const NKikimr::NMiniKQL::TStructType* const PayloadType;
-        const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
-        const size_t MaxKeysInRequest;
-        const bool IsMultiMatches;
-        ui32 LocalInFlight = 0;
-        ILookupRetryPolicy::TPtr RetryPolicy;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Count;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
-        ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
-        ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
-        ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-        static constexpr size_t MaxSupportedFullscanRequest = 5000; // todo: consider making tweakable
-    };
-
-    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
-        NConnector::IClient::TPtr connectorClient,
-        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        NActors::TActorId parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-        Generic::TLookupSource&& lookupSource,
-        const NKikimr::NMiniKQL::TStructType* keyType,
-        const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams,
-        const bool isMultiMatches
-    )
-    {
-        auto genericCredentials = NYql::NDq::CreateGenericCredentialsProvider(
-            secureParams.Value(lookupSource.GetTokenName(), TString()),
-            credentialsFactory);
-        auto guard = Guard(*alloc);
-        const auto actor = new TGenericLookupActor(
-            connectorClient,
-            std::move(genericCredentials),
-            std::move(parentId),
-            taskCounters,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSource),
-            keyType,
-            payloadType,
-            typeEnv,
-            holderFactory,
-            maxKeysInRequest,
-            isMultiMatches);
-        return {actor, actor};
+        NConnector::NApi::TPredicate::TDisjunction disjunction;
+        auto guard = Guard(*Alloc);
+        auto request = state->Request.lock();
+        if (!request) {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
+            return "Actor destroyed";
+        }
+        for (const auto& [keys, _] : *request) {
+            // TODO consider skipping already retrieved keys
+            // ... but careful, can we end up with zero? TODO
+            AddClause(disjunction, KeyType->GetMembersCount(), keys);
+        }
+        auto& keys = request->begin()->first;   // request is never empty
+        // Pad query with dummy clauses to improve caching
+        for (ui32 nRequests = request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
+            AddClause(disjunction, KeyType->GetMembersCount(), keys);
+        }
+        *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
+        return {};
     }
 
-} // namespace NYql::NDq
+private:
+    NConnector::IClient::TPtr Connector;
+    TGenericCredentialsProvider::TPtr CredentialsProvider;
+    const NActors::TActorId ParentId;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
+    const Generic::TLookupSource LookupSource;
+    const NKikimr::NMiniKQL::TStructType* const KeyType;
+    const NKikimr::NMiniKQL::TStructType* const PayloadType;
+    const NKikimr::NMiniKQL::TStructType* const SelectResultType;   // columns from KeyType + PayloadType
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
+    const size_t MaxKeysInRequest;
+    const bool IsMultiMatches;
+    ui32 LocalInFlight = 0;
+    ILookupRetryPolicy::TPtr RetryPolicy;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Count;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
+    static constexpr size_t MaxSupportedFullscanRequest = 5000;   // todo: consider making tweakable
+};
+
+std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(NConnector::IClient::TPtr connectorClient,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, NActors::TActorId parentId, ::NMonitoring::TDynamicCounterPtr taskCounters,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
+    Generic::TLookupSource&& lookupSource, const NKikimr::NMiniKQL::TStructType* keyType, const NKikimr::NMiniKQL::TStructType* payloadType,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, const size_t maxKeysInRequest,
+    const THashMap<TString, TString>& secureParams, const bool isMultiMatches)
+{
+    auto genericCredentials =
+        NYql::NDq::CreateGenericCredentialsProvider(secureParams.Value(lookupSource.GetTokenName(), TString()), credentialsFactory);
+    auto guard = Guard(*alloc);
+    const auto actor = new TGenericLookupActor(connectorClient, std::move(genericCredentials), std::move(parentId), taskCounters, alloc,
+        keyTypeHelper, std::move(lookupSource), keyType, payloadType, typeEnv, holderFactory, maxKeysInRequest, isMultiMatches);
+    return { actor, actor };
+}
+
+}   // namespace NYql::NDq

@@ -8,6 +8,30 @@
 
 namespace NKikimr {
 
+TString MakeYdbMetricName(TStringBuf protoName, EYdbMetricNameScope scope) {
+    if (scope == EYdbMetricNameScope::Aggregate) {
+        return TString(protoName);
+    }
+
+    // For Partition scope, insert "partition." after the second dot
+    size_t firstDot = protoName.find('.');
+    size_t secondDot = TStringBuf::npos;
+    if (firstDot != TStringBuf::npos) {
+        secondDot = protoName.find('.', firstDot + 1);
+    }
+
+    Y_ABORT_UNLESS(
+        secondDot != TStringBuf::npos && secondDot + 1 < protoName.size(),
+        "metric name %s has fewer than three segments",
+        TString(protoName).c_str());
+
+    return TString::Join(
+        protoName.substr(0, secondDot + 1),
+        "partition.",
+        protoName.substr(secondDot + 1)
+    );
+}
+
 /**
  * The implementation of the mapper from tablet/executor metrics
  * to the corresponding YDB metrics (for example, table.datashard.*).
@@ -33,10 +57,14 @@ public:
      *
      * @param[in] targetCounterGroup The counter group where the target (mapped) counters are created
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] nameScope The scope for the published metric names (Aggregate or Partition)
+     * @param[in] isFollowerSource When true, creates no target for LeaderOnly metrics
      */
     TYdbMetricsMapperImpl(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        EYdbMetricNameScope nameScope,
+        bool isFollowerSource
     )
         : SourceCounterGroup(sourceCounterGroup)
         , SourceCountersFound(false)
@@ -65,7 +93,9 @@ public:
         >(
             this->SimpleCountersOpts(),
             targetCounterGroup,
-            SimpleCounters
+            SimpleCounters,
+            nameScope,
+            isFollowerSource
         );
 
         // Create all target cumulative counters
@@ -82,7 +112,9 @@ public:
         >(
             this->CumulativeCountersOpts(),
             targetCounterGroup,
-            CumulativeCounters
+            CumulativeCounters,
+            nameScope,
+            isFollowerSource
         );
 
         // Create all target percentile counters
@@ -93,7 +125,9 @@ public:
         >(
             this->PercentileCountersOpts(),
             targetCounterGroup,
-            PercentileCounters
+            PercentileCounters,
+            nameScope,
+            isFollowerSource
         );
     }
 
@@ -137,8 +171,9 @@ private:
      * @param[in] counterOptions The parsed enum options for the target counters
      * @param[in] parentCounterGroups The counter groups for the all source counter categories
      * @param[in,out] targetCounters The container where the source counters will be saved
+     * @param[in,out] allFound Cleared if a source counter is missing (looked up again next time)
      *
-     * @return Indicates if all source counters were looked up successfully
+     * @return False if a source category group is not reported yet
      */
     template <
         class TCounterOptions,
@@ -155,9 +190,15 @@ private:
             ESourceCounterCategory,
             NMonitoring::TDynamicCounterPtr
         >& parentCounterGroups,
-        TTargetCounters& targetCounters
+        TTargetCounters& targetCounters,
+        bool& allFound
     ) {
         for (size_t i = 0; i < counterOptions->Size; ++i) {
+            // A follower mapper creates no target for the LeaderOnly metrics
+            if (!targetCounters[i].TargetCounter) {
+                continue;
+            }
+
             const auto& allSourceCounters = counterOptions->GetSourceCounters(i);
 
             targetCounters[i].SourceCounters.clear();
@@ -187,12 +228,12 @@ private:
                 //          and another release to add the high level counter mapped to it.
                 //          This is too strict of a requirement.
                 //
-                //          The lesser of the two evils is to ignore missing source counters
-                //          completely. If this is caused by a configuration error
+                //          The lesser of the two evils is to skip missing source counters
+                //          and look them up again next time. If this is caused by a configuration error
                 //          (for example, a mistake in the source counter name),
                 //          this will not be detected at all and the corresponding
-                //          target counter will always be zero. If this caused by a version
-                //          mismatch, it will be fixed when the process is restarted.
+                //          target counter will always be zero. If this is caused by a version
+                //          mismatch, it is fixed once the source counter appears.
                 //
                 //          The only way to catch configuration errors is to verify each
                 //          counter explicitly in unit tests.
@@ -202,8 +243,9 @@ private:
                 );
 
                 if (!sourceCounter) {
-                    // NOTE: This will ignore this error silently. SourceCountersFound will be set
-                    //       to true and this source counter will never be looked up again.
+                    // NOTE: Not reported yet (empty or partly built category) or misnamed:
+                    //       the found ones are transferred, this one is looked up again next time
+                    allFound = false;
                     continue;
                 }
 
@@ -229,6 +271,11 @@ private:
     >
     void TransferCounterValuesForCounterType(const TTargetCounters& targetCounters) {
         for (const auto& counter : targetCounters) {
+            // A follower mapper creates no target for the LeaderOnly metrics
+            if (!counter.TargetCounter) {
+                continue;
+            }
+
             // NOTE: The destructor will update the target counter value
             TMetricValueAggregator aggregator(counter.TargetCounter);
 
@@ -241,7 +288,7 @@ private:
     /**
      * Look up the source counters for all mapped counters.
      *
-     * @return Indicates if all source counters were looked up successfully
+     * @return False if a source category group is not reported yet
      */
     bool FindSourceCounters() {
         // Do not repeat the look up, if it was already done successfully
@@ -287,10 +334,8 @@ private:
         //          so any errors for missing individual source counters are ignored,
         //          and all target counters are not mapped (until the parent group appears).
         //          However, if all parent groups exist, but the given source counter
-        //          does not exist, the code will assume that this is a configuration
-        //          error and will skip this particular source counter. This check
-        //          is done only once, so only after a restart the code try to look up
-        //          this source counter again.
+        //          does not exist, the code will skip this particular source counter
+        //          and look it up again on every transfer.
         //
         //          Unfortunately, there is no good way to deal with this gracefully.
         //          Using GetNamedCounter() and GetNamedHistogram() may seem like
@@ -303,6 +348,7 @@ private:
         //          If this class creates the missing source counter/histogram,
         //          it will use different parameters and the corresponding metric
         //          values will be distorted.
+        bool allFound = true;
         if (!FindSourceCountersForCounterType<
                 typename TYdbMetricsMapperImpl::TSimpleCountersOpts,
                 decltype(SimpleCounters),
@@ -310,7 +356,8 @@ private:
             >(
                 this->SimpleCountersOpts(),
                 parentCounterGroups,
-                SimpleCounters
+                SimpleCounters,
+                allFound
             )
         ) {
             return false;
@@ -324,7 +371,8 @@ private:
             >(
                 this->CumulativeCountersOpts(),
                 parentCounterGroups,
-                CumulativeCounters
+                CumulativeCounters,
+                allFound
             )
         ) {
             return false;
@@ -338,14 +386,15 @@ private:
             >(
                 this->PercentileCountersOpts(),
                 parentCounterGroups,
-                PercentileCounters
+                PercentileCounters,
+                allFound
             )
         ) {
             return false;
         }
 
-        // All source counters are looked up successfully, do not do it again
-        SourceCountersFound = true;
+        // Stop looking up once every source counter is found
+        SourceCountersFound = allFound;
         return true;
     }
 
@@ -412,7 +461,9 @@ private:
 TYdbMetricsMapperPtr CreateYdbMetricsMapperByTabletType(
     TTabletTypes::EType tabletType,
     NMonitoring::TDynamicCounterPtr targetCounterGroup,
-    NMonitoring::TDynamicCounterPtr sourceCounterGroup
+    NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+    EYdbMetricNameScope nameScope,
+    bool isFollowerSource
 ) {
     switch (tabletType) {
     case TTabletTypes::DataShard:
@@ -422,7 +473,9 @@ TYdbMetricsMapperPtr CreateYdbMetricsMapperByTabletType(
             NDataShard::EPercentileDetailedCounters_descriptor
         >>(
            targetCounterGroup,
-           sourceCounterGroup
+           sourceCounterGroup,
+           nameScope,
+           isFollowerSource
         );
 
     default:

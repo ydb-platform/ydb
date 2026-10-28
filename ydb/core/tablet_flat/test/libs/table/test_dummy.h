@@ -19,7 +19,7 @@ namespace NTable {
             Y_TABLET_ERROR("Dummy env cannot deal with storage");
         }
 
-        const TSharedData* TryGetPage(const TPart*, TPageId, TGroupId) override
+        const TSharedData* TryGetPage(const TPart*, const TPageLocation&, TGroupId) override
         {
              Y_TABLET_ERROR("Dummy env cannot deal with storage");
         }

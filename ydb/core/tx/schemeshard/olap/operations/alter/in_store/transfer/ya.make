@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     update.cpp
@@ -10,7 +10,5 @@ PEERDIR(
     ydb/core/tx/columnshard/data_sharing/protos
     ydb/public/sdk/cpp/src/client/types/credentials
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

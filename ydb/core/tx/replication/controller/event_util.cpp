@@ -8,7 +8,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TReplication::ITarget& target,
         ui64 workerId)
 {
-    return MakeRunWorkerEv(
+    auto ev = MakeRunWorkerEv(
         replication->GetId(),
         target.GetId(),
         target.GetConfig(),
@@ -22,6 +22,10 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetDatabase(),
         replication->GetConfig().GetMetricsConfig().GetLevel(),
         replication->GetLocation());
+    const auto* base = replication->FindBaseTableTarget(target);
+    ev->Record.MutableCommand()->MutableRemoteTopicReader()->SetRetryOnSchemeError(
+        base && base->GetStreamSchemaChanges().value_or(false));
+    return ev;
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(

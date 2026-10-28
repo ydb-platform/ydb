@@ -4,6 +4,8 @@
 
 #include <util/generic/size_literals.h>
 
+#include <array>
+
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
@@ -61,6 +63,24 @@ Y_UNIT_TEST(TestDeallocated) {
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
 }
 
+Y_UNIT_TEST(LargeAllocationsRespectMemoryLimit) {
+    constexpr std::array<size_t, 3> sizes = {MaxPageUserData + 1, 1_MB, 1_MB + 1};
+    for (const size_t size : sizes) {
+        TScopedAlloc alloc(__LOCATION__);
+        const size_t allocatedSize = NUdf::GetSizeToAlloc(size) + sizeof(TAllocState::TListEntry);
+        alloc.SetLimit(allocatedSize);
+
+        void* memory = TWithDefaultMiniKQLAlloc::AllocWithSize(size);
+        UNIT_ASSERT(memory);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetUsed(), allocatedSize);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetAllocated(), allocatedSize);
+
+        TWithDefaultMiniKQLAlloc::FreeWithSize(memory, size);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetUsed(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetAllocated(), 0);
+    }
+}
+
 Y_UNIT_TEST(InitiallyAcquired) {
     {
         TScopedAlloc alloc(__LOCATION__);
@@ -72,7 +92,7 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
     }
     {
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/false, /*initiallyAcquired=*/false);
+        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), /*initiallyAcquired=*/false);
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
         {
             auto guard = Guard(alloc);
@@ -81,6 +101,34 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
     }
 }
+
+Y_UNIT_TEST(ZeroSizeAllocationAtPageEnd) {
+    TScopedAlloc alloc(__LOCATION__);
+    for (const auto memoryPool : {EMemorySubPool::Default, EMemorySubPool::Temporary}) {
+        void* first = MKQLAllocFastWithSize(1, &alloc.Ref(), memoryPool);
+        auto* page = static_cast<TAllocPageHeader*>(TAllocState::GetPageStart(first));
+        const size_t fillerSize = page->Capacity - page->Offset - NYql::NUdf::SANITIZER_EXTRA_ALLOCATION_SPACE - 1;
+        void* filler = MKQLAllocFastWithSize(fillerSize, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(page->Offset, page->Capacity);
+
+        void* empty = MKQLAllocFastWithSize(0, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(TAllocState::GetPageStart(empty), alloc.Ref().CurrentPages[static_cast<TMemorySubPoolIdx>(memoryPool)]);
+        MKQLFreeFastWithSize(empty, 0, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(filler, fillerSize, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(first, 1, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
+    }
+}
+
+Y_UNIT_TEST(ZeroSizeAllocationOnEmptyPool) {
+    TScopedAlloc alloc(__LOCATION__);
+    for (const auto memoryPool : {EMemorySubPool::Default, EMemorySubPool::Temporary}) {
+        void* empty = MKQLAllocFastWithSize(0, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(empty, 0, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
+    }
+}
+
 #if !defined(_asan_enabled_)
 Y_UNIT_TEST(ArrowAllocateZeroSize) {
     // Choose small enough pieces to hit arena (using some internal knowledge)

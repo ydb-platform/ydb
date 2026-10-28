@@ -2,7 +2,7 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-При использовании [конфигурации V2](index.md) механизм [SelfHeal](../../../maintenance/manual/selfheal.md) может автоматически переносить VDisk статической группы с неисправных PDisk и восстанавливать отказоустойчивость группы.
+При использовании [конфигурации V2](index.md) механизм [SelfHeal](../../concepts/selfheal-storage.md) может автоматически переносить VDisk статической группы с неисправных PDisk и восстанавливать отказоустойчивость группы.
 
 {% note warning %}
 
@@ -19,7 +19,7 @@
 Для работы SelfHeal статической группы должны быть включены:
 
 * [распределённая конфигурация](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
-* общий механизм SelfHeal, который [включён по умолчанию](../../../maintenance/manual/selfheal.md#on-off).
+* общий механизм SelfHeal, который [включён по умолчанию](../../concepts/selfheal-storage.md#on-off).
 
 Параметр `self_management_config.enabled` включает саму распределённую конфигурацию. Параметр `self_management_config.automatic_static_group_management` отдельно разрешает автоматический перенос VDisk статической группы.
 

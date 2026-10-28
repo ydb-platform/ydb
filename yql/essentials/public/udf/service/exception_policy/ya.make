@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PROVIDES(YqlServicePolicy)
 
@@ -10,7 +10,5 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

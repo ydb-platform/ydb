@@ -15,4 +15,4 @@ NYql::IStructuredTokenCredentialsFactory::TPtr CreateKikimrStructuredTokenCreden
 NYql::IStructuredTokenCredentialsFactory::TPtr CreateKikimrStructuredTokenCredentialsFactory(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr saFactory);
 
-} // namespace NFq
+}   // namespace NFq

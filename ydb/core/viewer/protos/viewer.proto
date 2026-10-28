@@ -599,6 +599,7 @@ message TNodeInfo {
     repeated TTabletStateInfo Tablets = 53;
     repeated NKikimrWhiteboard.TNodeStateInfo Peers = 54;
     repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
+    repeated NKikimrWhiteboard.TDDiskStateInfo DDisks = 56;
 }
 
 message TNodeBatch {
@@ -879,6 +880,7 @@ message TQueryAutocomplete {
 message TPDiskInfoWhiteboard {
     NKikimrWhiteboard.TPDiskStateInfo PDisk = 1;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 2;
+    repeated NKikimrWhiteboard.TDDiskStateInfo DDisks = 3;
 }
 
 message TPDiskInfoBSC {

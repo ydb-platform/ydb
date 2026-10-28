@@ -1,21 +1,22 @@
-#include "events/events.h"
 #include "probes.h"
-#include "test_connection.h"
 #include "request_validators.h"
+#include "test_connection.h"
 
-#include <ydb/core/mon/mon.h>
+#include "events/events.h"
+
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
+#include <ydb/core/fq/libs/control_plane_storage/config.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
-#include <ydb/core/fq/libs/control_plane_storage/config.h>
-
-#include <ydb/library/security/util.h>
+#include <ydb/core/mon/mon.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/security/util.h>
+
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -27,8 +28,7 @@ LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
 using namespace NActors;
 
-class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionActor> {
-
+class TTestConnectionActor: public NActors::TActorBootstrapped<TTestConnectionActor> {
     enum ERequestTypeScope {
         RTS_TEST_DATA_STREAMS_CONNECTION,
         RTS_TEST_MONITORING_CONNECTION,
@@ -55,25 +55,27 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
 
         ERequestTypeScope ToType(FederatedQuery::ConnectionSetting::ConnectionCase connectionCase) {
             switch (connectionCase) {
-            case FederatedQuery::ConnectionSetting::kDataStreams:
-                return RTS_TEST_DATA_STREAMS_CONNECTION;
-            case FederatedQuery::ConnectionSetting::kObjectStorage:
-                return RTS_TEST_OBJECT_STORAGE_CONNECTION;
-            case FederatedQuery::ConnectionSetting::kMonitoring:
-                return RTS_TEST_MONITORING_CONNECTION;
-            default:
-                return RTS_TEST_UNSUPPORTED_CONNECTION;
+                case FederatedQuery::ConnectionSetting::kDataStreams:
+                    return RTS_TEST_DATA_STREAMS_CONNECTION;
+                case FederatedQuery::ConnectionSetting::kObjectStorage:
+                    return RTS_TEST_OBJECT_STORAGE_CONNECTION;
+                case FederatedQuery::ConnectionSetting::kMonitoring:
+                    return RTS_TEST_MONITORING_CONNECTION;
+                default:
+                    return RTS_TEST_UNSUPPORTED_CONNECTION;
             }
         }
 
     public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
-        {}
+        {
+        }
 
-        TTestConnectionRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, FederatedQuery::ConnectionSetting::ConnectionCase connectionCase) {
+        TTestConnectionRequestCountersPtr GetScopeCounters(
+            const TString& cloudId, const TString& scope, FederatedQuery::ConnectionSetting::ConnectionCase connectionCase) {
             ERequestTypeScope type = ToType(connectionCase);
-            TMetricsScope key{cloudId, scope};
+            TMetricsScope key{ cloudId, scope };
             auto it = ScopeCounters.find(key);
             if (it != ScopeCounters.end()) {
                 return (*it->second)[type];
@@ -86,10 +88,9 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
                 { MakeIntrusive<TTestConnectionRequestCounters>("TestUnsupportedConnection") },
             }));
 
-            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
-                                    ->GetSubgroup("scope", scope);
+            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)->GetSubgroup("scope", scope);
 
-            for (auto& request: *scopeRequests) {
+            for (auto& request : *scopeRequests) {
                 request->Register(scopeCounters);
             }
 
@@ -113,18 +114,11 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
     NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
 
 public:
-    TTestConnectionActor(
-        const NConfig::TTestConnectionConfig& config,
-        const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& commonConfig,
-        const ::NFq::TSigner::TPtr& signer,
-        const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const NYql::IHTTPGateway::TPtr& httpGateway,
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+    TTestConnectionActor(const NConfig::TTestConnectionConfig& config, const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
+        const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& commonConfig, const ::NFq::TSigner::TPtr& signer,
+        const NFq::TYqSharedResources::TPtr& sharedResources, const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
+        const NPq::NConfigurationManager::IConnections::TPtr& cmConnections, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        const NYql::IHTTPGateway::TPtr& httpGateway, const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
         , ControlPlaneStorageConfig(controlPlaneStorageConfig, s3Config, commonConfig, {})
         , CommonConfig(commonConfig)
@@ -136,7 +130,8 @@ public:
         , Signer(signer)
         , HttpGateway(httpGateway)
         , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(commonConfig.GetMdbTransformHost()))
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
@@ -147,11 +142,8 @@ public:
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
         DatabaseResolverActor = Register(NFq::CreateDatabaseResolver(NFq::MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
-        DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
-                        NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
-                        CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(),
-                        MdbEndpointGenerator
-                        );
+        DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
+            CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(), MdbEndpointGenerator);
 
         Become(&TTestConnectionActor::StateFunc);
     }
@@ -162,7 +154,8 @@ public:
     )
 
     void Handle(TEvTestConnection::TEvTestConnectionRequest::TPtr& ev) {
-        NYql::TIssues issues = ValidateTestConnection(ev, ControlPlaneStorageConfig.Proto.GetMaxRequestSize(), ControlPlaneStorageConfig.AvailableConnections, ControlPlaneStorageConfig.Proto.GetDisableCurrentIam());
+        NYql::TIssues issues = ValidateTestConnection(ev, ControlPlaneStorageConfig.Proto.GetMaxRequestSize(),
+            ControlPlaneStorageConfig.AvailableConnections, ControlPlaneStorageConfig.Proto.GetDisableCurrentIam());
         const TString& cloudId = ev->Get()->CloudId;
         const TString& scope = ev->Get()->Scope;
         const TString& user = ev->Get()->User;
@@ -187,31 +180,20 @@ public:
             {"request", request.DebugString()});
         switch (request.setting().connection_case()) {
             case FederatedQuery::ConnectionSetting::kDataStreams: {
-                Register(CreateTestDataStreamsConnectionActor(
-                                *request.mutable_setting()->mutable_data_streams(),
-                                CommonConfig, DbResolver, ev->Sender,
-                                ev->Cookie, SharedResouces,
-                                CredentialsFactory, CmConnections, FunctionRegistry,
-                                scope, user, token,
-                                Signer, requestCounters));
+                Register(CreateTestDataStreamsConnectionActor(*request.mutable_setting()->mutable_data_streams(), CommonConfig, DbResolver,
+                    ev->Sender, ev->Cookie, SharedResouces, CredentialsFactory, CmConnections, FunctionRegistry, scope, user, token, Signer,
+                    requestCounters));
                 break;
             }
             case FederatedQuery::ConnectionSetting::kObjectStorage: {
-                Register(CreateTestObjectStorageConnectionActor(
-                                *request.mutable_setting()->mutable_object_storage(),
-                                CommonConfig, ev->Sender,
-                                ev->Cookie, CredentialsFactory,
-                                HttpGateway, scope, user, token,
-                                Signer, requestCounters));
+                Register(CreateTestObjectStorageConnectionActor(*request.mutable_setting()->mutable_object_storage(), CommonConfig, ev->Sender,
+                    ev->Cookie, CredentialsFactory, HttpGateway, scope, user, token, Signer, requestCounters));
                 break;
             }
             case FederatedQuery::ConnectionSetting::kMonitoring: {
                 TString monitoringEndpoint = CommonConfig.GetMonitoringEndpoint();
-                Register(CreateTestMonitoringConnectionActor(
-                                *request.mutable_setting()->mutable_monitoring(),
-                                ev->Sender, ev->Cookie, monitoringEndpoint,
-                                CredentialsFactory, scope, user, token,
-                                Signer, requestCounters));
+                Register(CreateTestMonitoringConnectionActor(*request.mutable_setting()->mutable_monitoring(), ev->Sender, ev->Cookie,
+                    monitoringEndpoint, CredentialsFactory, scope, user, token, Signer, requestCounters));
                 break;
             }
             default: {
@@ -222,7 +204,8 @@ public:
                     {"user", user},
                     {"ticket", NKikimr::MaskTicket(token)},
                     {"request", request.DebugString()});
-                Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Unimplemented yet")}), 0, ev->Cookie);
+                Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{ MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
+                                     "Unimplemented yet") }), 0, ev->Cookie);
             }
         }
     }
@@ -245,23 +228,14 @@ NActors::TActorId TestConnectionActorId() {
     return NActors::TActorId(0, name);
 }
 
-NActors::IActor* CreateTestConnectionActor(
-        const NConfig::TTestConnectionConfig& config,
-        const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& commonConfig,
-        const ::NFq::TSigner::TPtr& signer,
-        const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const NYql::IHTTPGateway::TPtr& httpGateway,
-        const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return new TTestConnectionActor(config, controlPlaneStorageConfig,
-                                    s3Config, commonConfig,
-                                    signer, sharedResources,
-                                    credentialsFactory, cmConnections,
-                                    functionRegistry, httpGateway, counters);
+NActors::IActor* CreateTestConnectionActor(const NConfig::TTestConnectionConfig& config,
+    const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig, const NYql::TS3GatewayConfig& s3Config,
+    const NConfig::TCommonConfig& commonConfig, const ::NFq::TSigner::TPtr& signer, const NFq::TYqSharedResources::TPtr& sharedResources,
+    const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
+    const NPq::NConfigurationManager::IConnections::TPtr& cmConnections, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const NYql::IHTTPGateway::TPtr& httpGateway, const ::NMonitoring::TDynamicCounterPtr& counters) {
+    return new TTestConnectionActor(config, controlPlaneStorageConfig, s3Config, commonConfig, signer, sharedResources, credentialsFactory,
+        cmConnections, functionRegistry, httpGateway, counters);
 }
 
-} // namespace NFq
+}   // namespace NFq

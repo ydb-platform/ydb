@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 PROVIDES(numpy)
 
-VERSION(2.2.6)
+VERSION(2.3.5)
 
 LICENSE(BSD-3-Clause)
 
@@ -70,6 +70,7 @@ SRCS(
     numpy/_core/src/_simd/_simd.c
     numpy/_core/src/_simd/_simd.dispatch.c
     numpy/_core/src/common/array_assign.c
+    numpy/_core/src/common/blas_utils.c
     numpy/_core/src/common/cblasfuncs.c
     numpy/_core/src/common/gil_utils.c
     numpy/_core/src/common/mem_overlap.c
@@ -81,7 +82,6 @@ SRCS(
     numpy/_core/src/common/npy_longdouble.c
     numpy/_core/src/common/numpyos.c
     # numpy/_core/src/common/python_xerbla.c is defined in blas.
-    numpy/_core/src/common/ucsnarrow.c
     numpy/_core/src/common/ufunc_override.c
     numpy/_core/src/dummymodule.c
     numpy/_core/src/multiarray/_multiarray_tests.c
@@ -142,7 +142,7 @@ SRCS(
     numpy/_core/src/multiarray/sequence.c
     numpy/_core/src/multiarray/shape.c
     numpy/_core/src/multiarray/strfuncs.c
-    numpy/_core/src/multiarray/stringdtype/casts.c
+    numpy/_core/src/multiarray/stringdtype/casts.cpp
     numpy/_core/src/multiarray/stringdtype/dtype.c
     numpy/_core/src/multiarray/stringdtype/static_string.c
     numpy/_core/src/multiarray/stringdtype/utf8_utils.c
@@ -155,6 +155,7 @@ SRCS(
     numpy/_core/src/multiarray/textreading/str_to_int.c
     numpy/_core/src/multiarray/textreading/stream_pyobject.c
     numpy/_core/src/multiarray/textreading/tokenize.cpp
+    numpy/_core/src/multiarray/unique.cpp
     numpy/_core/src/multiarray/usertypes.c
     numpy/_core/src/multiarray/vdot.c
     numpy/_core/src/npymath/arm64_exports.c
@@ -186,8 +187,9 @@ SRCS(
     numpy/_core/src/umath/loops_autovec.dispatch.c
     numpy/_core/src/umath/loops_comparison.dispatch.c
     numpy/_core/src/umath/loops_exponent_log.dispatch.c
-    numpy/_core/src/umath/loops_hyperbolic.dispatch.c
-    numpy/_core/src/umath/loops_logical.dispatch.c
+    numpy/_core/src/umath/loops_half.dispatch.c
+    numpy/_core/src/umath/loops_hyperbolic.dispatch.cpp
+    numpy/_core/src/umath/loops_logical.dispatch.cpp
     numpy/_core/src/umath/loops_minmax.dispatch.c
     numpy/_core/src/umath/loops_modulo.dispatch.c
     numpy/_core/src/umath/loops_trigonometric.dispatch.cpp
@@ -256,10 +258,11 @@ IF (ARCH_X86_64)
     SRC_C_AVX2(numpy/_core/src/umath/loops_exponent_log.dispatch.avx2.c $F16C_FLAGS)
     SRC_C_AVX512(numpy/_core/src/umath/loops_exponent_log.dispatch.avx512_skx.c $F16C_FLAGS)
     SRC_C_AVX512(numpy/_core/src/umath/loops_exponent_log.dispatch.avx512f.c $F16C_FLAGS)
-    SRC_C_AVX2(numpy/_core/src/umath/loops_hyperbolic.dispatch.avx2.c $F16C_FLAGS)
-    SRC_C_AVX512(numpy/_core/src/umath/loops_hyperbolic.dispatch.avx512_skx.c $F16C_FLAGS)
-    SRC_C_AVX2(numpy/_core/src/umath/loops_logical.dispatch.avx2.c $F16C_FLAGS)
-    SRC_C_AVX512(numpy/_core/src/umath/loops_logical.dispatch.avx512_skx.c $F16C_FLAGS)
+    SRC_C_AVX512(numpy/_core/src/umath/loops_half.dispatch.avx512_skx.c $F16C_FLAGS)
+    SRC_C_AVX2(numpy/_core/src/umath/loops_hyperbolic.dispatch.avx2.cpp $F16C_FLAGS)
+    SRC_C_AVX512(numpy/_core/src/umath/loops_hyperbolic.dispatch.avx512_skx.cpp $F16C_FLAGS)
+    SRC_C_AVX2(numpy/_core/src/umath/loops_logical.dispatch.avx2.cpp $F16C_FLAGS)
+    SRC_C_AVX512(numpy/_core/src/umath/loops_logical.dispatch.avx512_skx.cpp $F16C_FLAGS)
     SRC_C_AVX2(numpy/_core/src/umath/loops_minmax.dispatch.avx2.c $F16C_FLAGS)
     SRC_C_AVX512(numpy/_core/src/umath/loops_minmax.dispatch.avx512_skx.c $F16C_FLAGS)
     SRC_C_AVX2(numpy/_core/src/umath/loops_trigonometric.dispatch.avx2.cpp $F16C_FLAGS)
@@ -367,7 +370,6 @@ PY_SRCS(
     numpy/_core/shape_base.pyi
     numpy/_core/strings.py
     numpy/_core/strings.pyi
-    numpy/_core/tests/_natype.py
     numpy/_core/umath.py
     numpy/_core/umath.pyi
     numpy/_distributor_init.py
@@ -385,12 +387,12 @@ PY_SRCS(
     numpy/_typing/__init__.py
     numpy/_typing/_add_docstring.py
     numpy/_typing/_array_like.py
-    numpy/_typing/_callable.pyi
     numpy/_typing/_char_codes.py
     numpy/_typing/_dtype_like.py
     numpy/_typing/_extended_precision.py
     numpy/_typing/_nbit.py
     numpy/_typing/_nbit_base.py
+    numpy/_typing/_nbit_base.pyi
     numpy/_typing/_nested_sequence.py
     numpy/_typing/_scalars.py
     numpy/_typing/_shape.py
@@ -406,8 +408,6 @@ PY_SRCS(
     numpy/_utils/_pep440.pyi
     numpy/char/__init__.py
     numpy/char/__init__.pyi
-    numpy/compat/__init__.py
-    numpy/compat/py3k.py
     numpy/core/__init__.py
     numpy/core/__init__.pyi
     numpy/core/_dtype.py
@@ -431,8 +431,10 @@ PY_SRCS(
     numpy/core/records.py
     numpy/core/shape_base.py
     numpy/core/umath.py
-    numpy/ctypeslib.py
-    numpy/ctypeslib.pyi
+    numpy/ctypeslib/__init__.py
+    numpy/ctypeslib/__init__.pyi
+    numpy/ctypeslib/_ctypeslib.py
+    numpy/ctypeslib/_ctypeslib.pyi
     numpy/distutils/__config__.py
     numpy/distutils/__init__.py
     numpy/distutils/__init__.pyi
@@ -507,25 +509,45 @@ PY_SRCS(
     numpy/f2py/__init__.pyi
     numpy/f2py/__main__.py
     numpy/f2py/__version__.py
+    numpy/f2py/__version__.pyi
     numpy/f2py/_backends/__init__.py
+    numpy/f2py/_backends/__init__.pyi
     numpy/f2py/_backends/_backend.py
+    numpy/f2py/_backends/_backend.pyi
     numpy/f2py/_backends/_distutils.py
+    numpy/f2py/_backends/_distutils.pyi
     numpy/f2py/_backends/_meson.py
+    numpy/f2py/_backends/_meson.pyi
     numpy/f2py/_isocbind.py
+    numpy/f2py/_isocbind.pyi
     numpy/f2py/_src_pyf.py
+    numpy/f2py/_src_pyf.pyi
     numpy/f2py/auxfuncs.py
+    numpy/f2py/auxfuncs.pyi
     numpy/f2py/capi_maps.py
+    numpy/f2py/capi_maps.pyi
     numpy/f2py/cb_rules.py
+    numpy/f2py/cb_rules.pyi
     numpy/f2py/cfuncs.py
+    numpy/f2py/cfuncs.pyi
     numpy/f2py/common_rules.py
+    numpy/f2py/common_rules.pyi
     numpy/f2py/crackfortran.py
+    numpy/f2py/crackfortran.pyi
     numpy/f2py/diagnose.py
+    numpy/f2py/diagnose.pyi
     numpy/f2py/f2py2e.py
+    numpy/f2py/f2py2e.pyi
     numpy/f2py/f90mod_rules.py
+    numpy/f2py/f90mod_rules.pyi
     numpy/f2py/func2subr.py
+    numpy/f2py/func2subr.pyi
     numpy/f2py/rules.py
+    numpy/f2py/rules.pyi
     numpy/f2py/symbolic.py
+    numpy/f2py/symbolic.pyi
     numpy/f2py/use_rules.py
+    numpy/f2py/use_rules.pyi
     numpy/fft/__init__.py
     numpy/fft/__init__.pyi
     numpy/fft/_helper.py
@@ -546,6 +568,8 @@ PY_SRCS(
     numpy/lib/_arrayterator_impl.pyi
     numpy/lib/_datasource.py
     numpy/lib/_datasource.pyi
+    numpy/lib/_format_impl.py
+    numpy/lib/_format_impl.pyi
     numpy/lib/_function_base_impl.py
     numpy/lib/_function_base_impl.pyi
     numpy/lib/_histograms_impl.py
@@ -613,7 +637,6 @@ PY_SRCS(
     numpy/ma/mrecords.py
     numpy/ma/mrecords.pyi
     numpy/ma/testutils.py
-    numpy/ma/timer_comparison.py
     numpy/matlib.py
     numpy/matlib.pyi
     numpy/matrixlib/__init__.py
@@ -641,6 +664,8 @@ PY_SRCS(
     numpy/polynomial/polyutils.pyi
     numpy/random/__init__.py
     numpy/random/__init__.pyi
+    numpy/random/_bounded_integers.pyi
+    numpy/random/_common.pyi
     numpy/random/_generator.pyi
     numpy/random/_mt19937.pyi
     numpy/random/_pcg64.pyi

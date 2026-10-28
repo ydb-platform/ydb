@@ -1,21 +1,19 @@
 #include "util.h"
 
-#include <yql/essentials/public/issue/yql_issue_utils.h>
-#include <regex>
 #include <re2/re2.h>
-
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/subst.h>
+#include <yql/essentials/public/issue/yql_issue_utils.h>
+
+#include <regex>
 
 namespace NFq {
 
 namespace {
 
 TString GetServiceAccountId(const FederatedQuery::IamAuth& auth) {
-    return auth.has_service_account()
-            ? auth.service_account().id()
-            : TString{};
+    return auth.has_service_account() ? auth.service_account().id() : TString{};
 }
 
 EYdbComputeAuth GetIamAuthMethod(const FederatedQuery::IamAuth& auth) {
@@ -48,8 +46,10 @@ EYdbComputeAuth GetBasicAuthMethod(const FederatedQuery::IamAuth& auth) {
 
 class TIssueDatabaseRemover {
 public:
-    explicit TIssueDatabaseRemover(const TString& databasePath) 
-        : DatabasePath(databasePath) {}
+    explicit TIssueDatabaseRemover(const TString& databasePath)
+        : DatabasePath(databasePath)
+    {
+    }
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
         auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
@@ -62,18 +62,16 @@ public:
     }
 
 private:
-    TString DatabasePath; 
+    TString DatabasePath;
 };
 
 void EscapeBackslashes(TString& value) {
     SubstGlobal(value, "\\", "\\\\");
 }
 
-}
+}   // namespace
 
-TString EscapeString(const TString& value,
-                     const TString& enclosingSeq,
-                     const TString& replaceWith) {
+TString EscapeString(const TString& value, const TString& enclosingSeq, const TString& replaceWith) {
     auto escapedValue = value;
     EscapeBackslashes(escapedValue);
     SubstGlobal(escapedValue, enclosingSeq, replaceWith);
@@ -83,73 +81,65 @@ TString EscapeString(const TString& value,
 TString EscapeString(const TString& value, char enclosingChar) {
     auto escapedValue = value;
     EscapeBackslashes(escapedValue);
-    SubstGlobal(escapedValue,
-                TString{enclosingChar},
-                TStringBuilder{} << '\\' << enclosingChar);
+    SubstGlobal(escapedValue, TString{ enclosingChar }, TStringBuilder{} << '\\' << enclosingChar);
     return escapedValue;
 }
 
 TString EncloseAndEscapeString(const TString& value, char enclosingChar) {
-    return TStringBuilder{} << enclosingChar << EscapeString(value, enclosingChar)
-                            << enclosingChar;
+    return TStringBuilder{} << enclosingChar << EscapeString(value, enclosingChar) << enclosingChar;
 }
 
-TString EncloseAndEscapeString(const TString& value,
-                               const TString& enclosingSeq,
-                               const TString& replaceWith) {
-    return TStringBuilder{} << enclosingSeq
-                            << EscapeString(value, enclosingSeq, replaceWith)
-                            << enclosingSeq;
+TString EncloseAndEscapeString(const TString& value, const TString& enclosingSeq, const TString& replaceWith) {
+    return TStringBuilder{} << enclosingSeq << EscapeString(value, enclosingSeq, replaceWith) << enclosingSeq;
 }
 
 static TString SECRET_BEGIN = "/* 51a91b5d91a99eb7 */";
-static TString SECRET_END   = "/* e87c9b191b202354 */";
-static auto SECRET_REGEXP   = std::regex{
-    "\\/\\* 51a91b5d91a99eb7 \\*\\/.*\\/\\* e87c9b191b202354 \\*\\/"};
+static TString SECRET_END = "/* e87c9b191b202354 */";
+static auto SECRET_REGEXP = std::regex{ "\\/\\* 51a91b5d91a99eb7 \\*\\/.*\\/\\* e87c9b191b202354 \\*\\/" };
 
 TString EncloseSecret(const TString& value) {
     return TStringBuilder{} << SECRET_BEGIN << value << SECRET_END;
 }
 
 TString HideSecrets(const TString& value) {
-    return std::regex_replace(std::string{value}, SECRET_REGEXP, "/*SECRET*/");
+    return std::regex_replace(std::string{ value }, SECRET_REGEXP, "/*SECRET*/");
 }
 
 TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting) {
     switch (setting.connection_case()) {
-    case FederatedQuery::ConnectionSetting::kYdbDatabase: {
-        return GetServiceAccountId(setting.ydb_database().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kDataStreams: {
-        return GetServiceAccountId(setting.data_streams().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kObjectStorage: {
-        return GetServiceAccountId(setting.object_storage().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kMonitoring: {
-        return GetServiceAccountId(setting.monitoring().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
-        return GetServiceAccountId(setting.clickhouse_cluster().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
-        return GetServiceAccountId(setting.postgresql_cluster().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
-        return GetServiceAccountId(setting.greenplum_cluster().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kMysqlCluster: {
-        return GetServiceAccountId(setting.mysql_cluster().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kLogging: {
-        return GetServiceAccountId(setting.logging().auth());
-    }
-    case FederatedQuery::ConnectionSetting::kIceberg: {
-        return GetServiceAccountId(setting.iceberg().warehouse_auth());
-    }
-    // Do not replace with default. Adding a new connection should cause a compilation error
-    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-    break;
+        case FederatedQuery::ConnectionSetting::kYdbDatabase: {
+            return GetServiceAccountId(setting.ydb_database().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kDataStreams: {
+            return GetServiceAccountId(setting.data_streams().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kObjectStorage: {
+            return GetServiceAccountId(setting.object_storage().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kMonitoring: {
+            return GetServiceAccountId(setting.monitoring().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
+            return GetServiceAccountId(setting.clickhouse_cluster().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
+            return GetServiceAccountId(setting.postgresql_cluster().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+            return GetServiceAccountId(setting.greenplum_cluster().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+            return GetServiceAccountId(setting.mysql_cluster().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            return GetServiceAccountId(setting.logging().auth());
+        }
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            return GetServiceAccountId(setting.iceberg().warehouse_auth());
+        }
+        // Do not replace with default. Adding a new connection should cause a compilation error
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+            break;
     }
     return {};
 }
@@ -240,75 +230,72 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetIamAuthMethod(setting.logging().auth());
         case FederatedQuery::ConnectionSetting::kIceberg:
             return GetIamAuthMethod(setting.iceberg().warehouse_auth());
-
     }
 }
 
 FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
     switch (connection.content().setting().connection_case()) {
-    case FederatedQuery::ConnectionSetting::kObjectStorage:
-        return connection.content().setting().object_storage().auth();
-    case FederatedQuery::ConnectionSetting::kYdbDatabase:
-        return connection.content().setting().ydb_database().auth();
-    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-        return connection.content().setting().clickhouse_cluster().auth();
-    case FederatedQuery::ConnectionSetting::kDataStreams:
-        return connection.content().setting().data_streams().auth();
-    case FederatedQuery::ConnectionSetting::kMonitoring:
-        return connection.content().setting().monitoring().auth();
-    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-        return connection.content().setting().postgresql_cluster().auth();
-    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-        return connection.content().setting().greenplum_cluster().auth();
-    case FederatedQuery::ConnectionSetting::kMysqlCluster:
-        return connection.content().setting().mysql_cluster().auth();
-    case FederatedQuery::ConnectionSetting::kLogging:
-        return connection.content().setting().logging().auth();
-    case FederatedQuery::ConnectionSetting::kIceberg:
-        return connection.content().setting().iceberg().warehouse_auth();
-    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-        return FederatedQuery::IamAuth{};
+        case FederatedQuery::ConnectionSetting::kObjectStorage:
+            return connection.content().setting().object_storage().auth();
+        case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            return connection.content().setting().ydb_database().auth();
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            return connection.content().setting().clickhouse_cluster().auth();
+        case FederatedQuery::ConnectionSetting::kDataStreams:
+            return connection.content().setting().data_streams().auth();
+        case FederatedQuery::ConnectionSetting::kMonitoring:
+            return connection.content().setting().monitoring().auth();
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            return connection.content().setting().postgresql_cluster().auth();
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            return connection.content().setting().greenplum_cluster().auth();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return connection.content().setting().mysql_cluster().auth();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return connection.content().setting().logging().auth();
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return connection.content().setting().iceberg().warehouse_auth();
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+            return FederatedQuery::IamAuth{};
     }
 }
 
 FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting) {
     switch (setting.connection_case()) {
-    case FederatedQuery::ConnectionSetting::kObjectStorage:
-        return setting.mutable_object_storage()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kYdbDatabase:
-        return setting.mutable_ydb_database()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-        return setting.mutable_clickhouse_cluster()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kDataStreams:
-        return setting.mutable_data_streams()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kMonitoring:
-        return setting.mutable_monitoring()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-        return setting.mutable_postgresql_cluster()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-        return setting.mutable_greenplum_cluster()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kMysqlCluster:
-        return setting.mutable_mysql_cluster()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kLogging:
-        return setting.mutable_logging()->mutable_auth();
-    case FederatedQuery::ConnectionSetting::kIceberg:
-        return setting.mutable_iceberg()->mutable_warehouse_auth();
-    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-        return nullptr;
+        case FederatedQuery::ConnectionSetting::kObjectStorage:
+            return setting.mutable_object_storage()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            return setting.mutable_ydb_database()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            return setting.mutable_clickhouse_cluster()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kDataStreams:
+            return setting.mutable_data_streams()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kMonitoring:
+            return setting.mutable_monitoring()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            return setting.mutable_postgresql_cluster()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            return setting.mutable_greenplum_cluster()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return setting.mutable_mysql_cluster()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kLogging:
+            return setting.mutable_logging()->mutable_auth();
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return setting.mutable_iceberg()->mutable_warehouse_auth();
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+            return nullptr;
     }
 }
 
 TString RemoveDatabaseFromStr(TString str, const TString& databasePath) {
     TString escapedPath = RE2::QuoteMeta(databasePath);
-    RE2::GlobalReplace(&str,
-                       TStringBuilder {} << R"(db.\[)" << escapedPath << R"(\/([^ '"]+)\]|)" << escapedPath << R"(\/([^ '"]+))",
-                       R"(\1\2)");
+    RE2::GlobalReplace(&str, TStringBuilder{} << R"(db.\[)" << escapedPath << R"(\/([^ '"]+)\]|)" << escapedPath << R"(\/([^ '"]+))", R"(\1\2)");
     return str;
 }
 
 NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& databasePath) {
     TIssueDatabaseRemover remover(databasePath);
-    TVector<NYql::TIssue> newIssues; 
+    TVector<NYql::TIssue> newIssues;
     for (const auto& issue : issues) {
         newIssues.emplace_back(*remover.Run(issue));
     }
@@ -316,9 +303,7 @@ NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TStrin
 }
 
 NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels, ui32 keepTailLevels) {
-    const auto options = NYql::TTruncateIssueOpts()
-        .SetMaxLevels(maxLevels)
-        .SetKeepTailLevels(keepTailLevels);
+    const auto options = NYql::TTruncateIssueOpts().SetMaxLevels(maxLevels).SetKeepTailLevels(keepTailLevels);
 
     NYql::TIssues result;
     result.Reserve(issues.Size());
@@ -360,10 +345,11 @@ NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<
     NYql::TIssues issues;
     for (const auto& column : columns) {
         if (!CheckNestingDepth(column.type(), maxNestingDepth)) {
-            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' larger than allowed limit " << maxNestingDepth));
+            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name()
+                                                          << "' larger than allowed limit " << maxNestingDepth));
         }
     }
     return issues;
 }
 
-} // namespace NFq
+}   // namespace NFq

@@ -2,10 +2,10 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-#include <ydb/core/kqp/runtime/kqp_program_builder.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/runtime/common/kqp_program_builder.h>
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
 #include <util/generic/ptr.h>
 

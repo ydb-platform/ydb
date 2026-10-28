@@ -10,11 +10,14 @@ class TBlockingEQueue {
 public:
     explicit TBlockingEQueue(size_t maxSize)
         : MaxSize(maxSize)
-    {}
+    {
+    }
 
     void Push(TEvent&& e, size_t size = 0) {
         with_lock(Mutex) {
-            CanPush.WaitI(Mutex, [this]() { return CanPushPredicate(); });
+            CanPush.WaitI(Mutex, [this]() {
+                return CanPushPredicate();
+            });
             Events.emplace_back(std::move(e), size);
             Size += size;
         }
@@ -23,14 +26,18 @@ public:
 
     void BlockUntilEvent() {
         with_lock(Mutex) {
-            CanPop.WaitI(Mutex, [this]() { return CanPopPredicate(); });
+            CanPop.WaitI(Mutex, [this]() {
+                return CanPopPredicate();
+            });
         }
     }
 
     std::optional<TEvent> Pop(bool block) {
         with_lock(Mutex) {
             if (block) {
-                CanPop.WaitI(Mutex, [this]() { return CanPopPredicate(); });
+                CanPop.WaitI(Mutex, [this]() {
+                    return CanPopPredicate();
+                });
             } else {
                 if (!CanPopPredicate()) {
                     return {};
@@ -48,7 +55,7 @@ public:
                 CanPush.BroadCast();
             }
 
-            return std::move(front); // cast to std::optional<>
+            return std::move(front);   // cast to std::optional<>
         }
     }
 
@@ -84,4 +91,4 @@ private:
     TCondVar CanPush;
 };
 
-} // namespace NYql
+}   // namespace NYql

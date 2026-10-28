@@ -3,17 +3,16 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/common/events.h>
 
 #include <unordered_set>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -22,10 +21,9 @@ namespace {
 using namespace NActors;
 using namespace NResourcePool;
 
-
 struct TEvCheckerPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvEnd
@@ -33,13 +31,14 @@ struct TEvCheckerPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
+    struct TEvRanksCheckerResponse: public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
         TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
             : Status(status)
             , MaxRank(maxRank)
             , NumberClassifiers(numberClassifiers)
             , Issues(std::move(issues))
-        {}
+        {
+        }
 
         const Ydb::StatusIds::StatusCode Status;
         const i64 MaxRank;
@@ -48,11 +47,13 @@ struct TEvCheckerPrivate {
     };
 };
 
-class TRanksCheckerActor : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TRanksCheckerActor, TEvCheckerPrivate::TEvRanksCheckerResponse> {
+class TRanksCheckerActor: public NKikimr::TQueryBase,
+                          public TQueryRetryActorMixin<TRanksCheckerActor, TEvCheckerPrivate::TEvRanksCheckerResponse> {
     using TBase = NKikimr::TQueryBase;
 
 public:
-    TRanksCheckerActor(const TString& databaseId, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
+    TRanksCheckerActor(
+        const TString& databaseId, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
         : TBase(NKikimrServices::KQP_GATEWAY, sessionId)
         , DatabaseId(databaseId)
         , RanksToCheck(ranksToCheck)
@@ -70,10 +71,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database_id")
-                .Utf8(CanonizePath(DatabaseId))
-                .Build();
+        params.AddParam("$database_id").Utf8(CanonizePath(DatabaseId)).Build();
 
         if (!RanksToCheck.empty()) {
             sql << R"(
@@ -82,7 +80,8 @@ public:
 
                 SELECT
                     rank, name
-                FROM `)" << tablePath << R"(`
+                FROM `)"
+                << tablePath << R"(`
                 WHERE database = $database_id
                   AND rank IN $ranks;
             )";
@@ -100,7 +99,8 @@ public:
             SELECT
                 MAX(rank) AS MaxRank,
                 COUNT(*) AS NumberClassifiers
-            FROM `)" << tablePath << R"(`
+            FROM `)"
+            << tablePath << R"(`
             WHERE database = $database_id;
         )";
 
@@ -128,7 +128,8 @@ public:
                 }
 
                 if (auto it = RanksToCheck.find(*rank); it != RanksToCheck.end() && it->second != *name) {
-                    Finish(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder() << "Classifier with rank " << *rank << " already exists, its name " << *name);
+                    Finish(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                                                               << "Classifier with rank " << *rank << " already exists, its name " << *name);
                     return;
                 }
             }
@@ -161,14 +162,18 @@ private:
     ui64 NumberClassifiers = 0;
 };
 
-class TResourcePoolClassifierPreparationActor : public TActorBootstrapped<TResourcePoolClassifierPreparationActor> {
+class TResourcePoolClassifierPreparationActor: public TActorBootstrapped<TResourcePoolClassifierPreparationActor> {
 public:
-    TResourcePoolClassifierPreparationActor(std::vector<TResourcePoolClassifierConfig>&& patchedObjects, NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller, const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext)
+    TResourcePoolClassifierPreparationActor(std::vector<TResourcePoolClassifierConfig>&& patchedObjects,
+        NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller,
+        const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context,
+        const NMetadata::NModifications::TAlterOperationContext& alterContext)
         : Context(context)
         , AlterContext(alterContext)
         , Controller(std::move(controller))
         , PatchedObjects(std::move(patchedObjects))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TResourcePoolClassifierPreparationActor::StateFunc);
@@ -182,7 +187,8 @@ public:
             return;
         }
 
-        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Create && ev->Get()->NumberClassifiers >= CLASSIFIER_COUNT_LIMIT) {
+        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Create &&
+            ev->Get()->NumberClassifiers >= CLASSIFIER_COUNT_LIMIT) {
             FailAndPassAway(TStringBuilder() << "Number of resource pool classifiers reached limit in " << CLASSIFIER_COUNT_LIMIT);
             return;
         }
@@ -193,7 +199,9 @@ public:
                 continue;
             }
             if (maxRank > std::numeric_limits<i64>::max() - CLASSIFIER_RANK_OFFSET) {
-                FailAndPassAway(TStringBuilder() << "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: " << ev->Get()->MaxRank);
+                FailAndPassAway(
+                    TStringBuilder() << "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: "
+                                     << ev->Get()->MaxRank);
                 return;
             }
 
@@ -213,9 +221,9 @@ public:
 
         Serverless = ev->Get()->Serverless;
 
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(
-            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
-        ), IEventHandle::FlagTrackDelivery);
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+            new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest((ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem),
+            IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -240,7 +248,8 @@ public:
             TResourcePoolClassifierConfig::TDecoder::DeserializeFromRecord(object, objectRecord);
 
             if (!snapshot->GetClassifierConfig(object.GetDatabase(), object.GetName())) {
-                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database with id " << object.GetDatabase());
+                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database with id "
+                                                 << object.GetDatabase());
                 return;
             }
         }
@@ -296,20 +305,19 @@ private:
             if (rank == -1) {
                 continue;
             }
-            if (!ranksToNames.insert({rank, object.GetName()}).second) {
+            if (!ranksToNames.insert({ rank, object.GetName() }).second) {
                 FailAndPassAway(TStringBuilder() << "Found duplicate rank " << rank);
             }
         }
 
         Register(TRanksCheckerActor::MakeRetry(
-            SelfId(), Context.GetExternalData().GetDatabaseId(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
-        ));
+            SelfId(), Context.GetExternalData().GetDatabaseId(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames));
     }
 
     void CheckFeatureFlag(const NKikimrConfig::TFeatureFlags& featureFlags) {
         if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             FeatureFlagChecked = true;
-            PoolsChecked = true;  // no pool existence check needed for Drop
+            PoolsChecked = true;   // no pool existence check needed for Drop
             ValidateExistence();
             return;
         }
@@ -319,25 +327,26 @@ private:
             return;
         }
         if (Serverless && !featureFlags.GetEnableResourcePoolsOnServerless()) {
-            FailAndPassAway("Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
+            FailAndPassAway(
+                "Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
             return;
         }
         for (const auto& object : PatchedObjects) {
             const auto& settings = object.GetClassifierSettings();
             if (!featureFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
-                if (settings.HasFullScan.has_value() ||
-                    settings.HasPath.has_value() ||
-                    settings.HasAppName.has_value() ||
+                if (settings.HasFullScan.has_value() || settings.HasPath.has_value() || settings.HasAppName.has_value() ||
                     settings.HasStream.has_value())
                 {
-                    FailAndPassAway("Advanced resource pool classifier properties are disabled. "
-                            "Please contact your system administrator to enable it");
+                    FailAndPassAway(
+                        "Advanced resource pool classifier properties are disabled. "
+                        "Please contact your system administrator to enable it");
                     return;
                 }
             }
             if (!featureFlags.GetEnableRejectActionInResourcePoolClassifiers()) {
                 if (settings.Action.has_value()) {
-                    FailAndPassAway("Resource pool classifier action property is disabled. "
+                    FailAndPassAway(
+                        "Resource pool classifier action property is disabled. "
                         "Please contact your system administrator to enable it");
                     return;
                 }
@@ -350,8 +359,10 @@ private:
     }
 
     void ValidateExistence() {
-        if (Context.GetActivityType() != NMetadata::NModifications::IOperationsManager::EActivityType::Create && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+        if (Context.GetActivityType() != NMetadata::NModifications::IOperationsManager::EActivityType::Create &&
+            NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+                new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
             return;
         }
 
@@ -426,10 +437,13 @@ private:
     std::vector<TResourcePoolClassifierConfig> PatchedObjects;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-IActor* CreateResourcePoolClassifierPreparationActor(std::vector<TResourcePoolClassifierConfig>&& patchedObjects, NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller, const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) {
+IActor* CreateResourcePoolClassifierPreparationActor(std::vector<TResourcePoolClassifierConfig>&& patchedObjects,
+    NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context,
+    const NMetadata::NModifications::TAlterOperationContext& alterContext) {
     return new TResourcePoolClassifierPreparationActor(std::move(patchedObjects), std::move(controller), context, alterContext);
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

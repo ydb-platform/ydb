@@ -17,6 +17,9 @@ namespace NKikimr::NPrivate {
 ////////////////////////////////////////////
 using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
 
+// (tabletId, followerId): followers of one tablet on one node are separate sources
+using TTabletKey = std::pair<ui64, ui32>;
+
 struct THistogramCounter {
     NMonitoring::THistogramPtr Histogram;
 
@@ -51,8 +54,8 @@ public:
     ui64 GetMax(ui32 counterIndex) const;
     void SetMax(ui32 counterIndex, ui64 value);
 
-    void SetValues(ui64 tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
-    void ForgetTablet(ui64 tabletId);
+    void SetValues(const TTabletKey& tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
+    void ForgetTablet(const TTabletKey& tabletId);
     void RecalcAll();
 
     bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
@@ -65,7 +68,7 @@ private:
     TCountersVector SumSimpleCounters;
     THistogramVector HistSimpleCounters;
 
-    using TCountersByTabletIdMap = THashMap<ui64, TVector<ui64>>;
+    using TCountersByTabletIdMap = THashMap<TTabletKey, TVector<ui64>>;
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
@@ -86,8 +89,8 @@ public:
     ui64 GetMax(ui32 counterIndex) const;
     void SetMax(ui32 counterIndex, ui64 value);
 
-    void SetValues(ui64 tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
-    void ForgetTablet(ui64 tabletId);
+    void SetValues(const TTabletKey& tabletId, const TVector<ui64>& values, NKikimrTabletBase::TTabletTypes::EType tabletType);
+    void ForgetTablet(const TTabletKey& tabletId);
     void RecalcAll();
 
     bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
@@ -99,7 +102,7 @@ private:
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
 
-    using TCountersByTabletIdMap = THashMap<ui64, TVector<ui64>>;
+    using TCountersByTabletIdMap = THashMap<TTabletKey, TVector<ui64>>;
     TCountersByTabletIdMap CountersByTabletId;
 
     TVector<bool> ChangedCounters;
@@ -115,19 +118,22 @@ public:
 
     void Reserve(size_t hint);
 
-    void AddCounter(
+    // Returns whether the histogram is derivative (HIST_RATE, accumulates increments)
+    // rather than non-derivative (an Integral percentile counter or a HIST(x) aggregate,
+    // monlib HIST, holds the current state)
+    bool AddCounter(
         const char* name,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
         THashMap<TString, THolder<THistogramCounter>>& histogramAggregates);
 
     void SetValue(
-        ui64 tabletId,
+        const TTabletKey& tabletId,
         ui32 counterIndex,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
         const char* name,
         NKikimrTabletBase::TTabletTypes::EType tabletType);
 
-    void ForgetTablet(ui64 tabletId);
+    void ForgetTablet(const TTabletKey& tabletId);
 
     NMonitoring::THistogramPtr GetHistogram(size_t i);
 
@@ -150,8 +156,8 @@ private:
     // per percentile counter bounds.
     TVector<NMonitoring::TBucketBounds> BucketBounds;
 
-    // tabletId -> values
-    using TCountersByTabletIdMap = THashMap<ui64, TValuesVec>;
+    // (tabletId, followerId) -> values
+    using TCountersByTabletIdMap = THashMap<TTabletKey, TValuesVec>;
 
     // counter values (not "real" monitoring counters);
     TVector<TCountersByTabletIdMap> CountersByTabletId; // each index is map from tablet to counter value

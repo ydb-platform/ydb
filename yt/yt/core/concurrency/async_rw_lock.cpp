@@ -93,7 +93,7 @@ void TAsyncReaderWriterLock::TImpl::ReleaseWriter()
     WakeNext(guard);
 }
 
-void TAsyncReaderWriterLock::TImpl::WakeNext(TGuard<NThreading::TSpinLock>& guard)
+void TAsyncReaderWriterLock::TImpl::WakeNext(TGuard<TSpinLock>& guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(*guard.GetMutex());
 

@@ -7,4 +7,4 @@ NActors::TActorId YqQuoterServiceActorId() {
     return NActors::TActorId(0, name);
 }
 
-} // namespace NFq
+}   // namespace NFq

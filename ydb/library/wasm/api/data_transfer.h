@@ -6,9 +6,7 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCopyGuard
-    : public TNonCopyable
-{
+class TCopyGuard: public TNonCopyable {
 public:
     TCopyGuard() = default;
     TCopyGuard(IWebAssemblyCompartment* compartment, uintptr_t offset);
@@ -40,4 +38,4 @@ TCopyGuard CopyIntoCompartment(TRange<uintptr_t> data, IWebAssemblyCompartment* 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

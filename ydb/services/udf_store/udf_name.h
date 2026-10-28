@@ -15,4 +15,4 @@ inline constexpr TStringBuf UdfTmpFileSuffix = ".tmp";
 //! sibling included -- are usable.
 bool IsSafeUdfFileName(TStringBuf name);
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

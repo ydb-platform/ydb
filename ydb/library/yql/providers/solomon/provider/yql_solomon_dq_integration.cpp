@@ -1,12 +1,9 @@
 #include "yql_solomon_dq_integration.h"
 #include "yql_solomon_mkql_compiler.h"
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/protos/actors.pb.h>
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
@@ -16,6 +13,10 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 
 #include <util/string/builder.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -70,7 +71,7 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
     }
 }
 
-template<typename T>
+template <typename T>
 void InsertSettingIfSet(NSo::NProto::TDqSolomonSource& source, const TString& name, const TMaybe<T>& value) {
     if (value.Defined()) {
         source.MutableSettings()->insert({ name, ToString(*value.Get()) });
@@ -112,9 +113,12 @@ public:
         return TSoReadObject::Match(&read);
     }
 
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
-        if (AllOf(read, [](const auto val) { return TSoReadObject::Match(val); })) {
-            return 0ul; // TODO: return real size
+    TMaybe<ui64> EstimateReadSize(
+        ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) {
+                return TSoReadObject::Match(val);
+            })) {
+            return 0ul;   // TODO: return real size
         }
         return Nothing();
     }
@@ -148,7 +152,8 @@ public:
                     }
                     TInstant userFrom;
                     if (!TInstant::TryParseIso8601(value, userFrom)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     from = std::min(TInstant::Now(), userFrom);
@@ -161,7 +166,8 @@ public:
                     }
                     TInstant userTo;
                     if (!TInstant::TryParseIso8601(value, userTo)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     to = std::min(TInstant::Now(), userTo);
@@ -192,7 +198,8 @@ public:
                     }
                     bool boolValue;
                     if (!TryFromString<bool>(value, boolValue)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.disabled must be true or false, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            TStringBuilder() << "downsampling.disabled must be true or false, but has " << value));
                         return {};
                     }
 
@@ -205,7 +212,10 @@ public:
                         return {};
                     }
                     if (!IsIn({ "AVG"sv, "COUNT"sv, "DEFAULT_AGGREGATION"sv, "LAST"sv, "MAX"sv, "MIN"sv, "SUM"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            TStringBuilder()
+                                << "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has "
+                                << value));
                         return {};
                     }
                     downsamplingAggregation = value;
@@ -217,7 +227,8 @@ public:
                         return {};
                     }
                     if (!IsIn({ "NONE"sv, "NULL"sv, "PREVIOUS"sv }, value)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.fill must be one of NONE, NULL, PREVIOUS, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            TStringBuilder() << "downsampling.fill must be one of NONE, NULL, PREVIOUS, but has " << value));
                         return {};
                     }
                     downsamplingFill = value;
@@ -230,20 +241,23 @@ public:
                     }
                     ui32 intValue = 0;
                     if (!TryFromString(value, intValue)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                            TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
                         return {};
                     }
                     downsamplingGridSec = intValue;
                     continue;
                 }
 
-                ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "Unknown setting " << settingsRef.Child(i)->Head().Content()));
+                ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()),
+                    TStringBuilder() << "Unknown setting " << settingsRef.Child(i)->Head().Content()));
                 return {};
             }
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, "
+                                                                            "downsampling.fill or downsampling.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -259,6 +273,7 @@ public:
                 }
             }
 
+            // clang-format off
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .World(soReadObject.World())
@@ -285,6 +300,7 @@ public:
                 .RowType(soReadObject.RowType())
                 .Settings(settings)
                 .Done().Ptr();
+            // clang-format on
         }
         return read;
     }
@@ -312,7 +328,8 @@ public:
             .Ptr();
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxTasksPerStage, TExprContext&) override {
+    void FillSourceSettings(
+        const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxTasksPerStage, TExprContext&) override {
         const TDqSource dqSource(&node);
         const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
         if (!maybeSettings) {
@@ -404,22 +421,16 @@ public:
 
             YQL_ENSURE(NActors::TlsActivationContext);
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
-                NDq::CreateSolomonMetricsQueueActor(
-                    std::min<ui64>(maxTasksPerStage ? maxTasksPerStage : DefaultMaxPartitions, totalMetricsCount),
-                    readParams,
-                    credentialsProvider,
-                    NSo::ParseSolomonReadActorConfig(source.settings())
-                ),
-                NActors::TMailboxType::HTSwap,
-                State_->ExecutorPoolId
-            );
+                NDq::CreateSolomonMetricsQueueActor(std::min<ui64>(maxTasksPerStage ? maxTasksPerStage : DefaultMaxPartitions,
+                                                        totalMetricsCount), readParams, credentialsProvider,
+                    NSo::ParseSolomonReadActorConfig(source.settings())), NActors::TMailboxType::HTSwap, State_->ExecutorPoolId);
 
             NActorsProto::TActorId protoId;
             ActorIdToProto(metricsQueueActor, &protoId);
             TString stringId;
             google::protobuf::TextFormat::PrintToString(protoId, &stringId);
 
-            source.MutableSettings()->insert({"metricsQueueActor", stringId});
+            source.MutableSettings()->insert({ "metricsQueueActor", stringId });
         }
 
         protoSettings.PackFrom(source);
@@ -451,9 +462,8 @@ public:
         shardDesc.SetCluster(shard.Cluster().StringValue());
         shardDesc.SetService(shard.Service().StringValue());
 
-        shardDesc.SetClusterType(NSo::IsMoniumProject(*clusterDesc)
-            ? NSo::NProto::CT_MONIUM
-            : NSo::MapClusterType(clusterDesc->GetClusterType()));
+        shardDesc.SetClusterType(
+            NSo::IsMoniumProject(*clusterDesc) ? NSo::NProto::CT_MONIUM : NSo::MapClusterType(clusterDesc->GetClusterType()));
         shardDesc.SetUseSsl(clusterDesc->GetUseSsl());
 
         const TTypeAnnotationNode* itemType = shard.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -497,7 +507,7 @@ public:
         if (!program.empty()) {
             properties["Program"] = program;
         }
-        
+
         const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
         if (!isDisabled) {
             properties["DownsamplingDisabled"] = "false";
@@ -516,13 +526,13 @@ public:
     }
 
 private:
-    TSolomonState* State_; // State owns dq integration, so back reference must be not smart.
+    TSolomonState* State_;   // State owns dq integration, so back reference must be not smart.
 };
 
-}
+}   // namespace
 
 THolder<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state) {
     return MakeHolder<TSolomonDqIntegration>(state);
 }
 
-}
+}   // namespace NYql

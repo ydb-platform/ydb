@@ -11,4 +11,4 @@ TString GetArtifactTablePath(const TString& cpuSpec);
 TString GetArtifactChunksTablePath(const TString& cpuSpec);
 TString NormalizeCpuSpec(TStringBuf triple, TStringBuf cpu);
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

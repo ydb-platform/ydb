@@ -13,8 +13,9 @@
 #include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/datetime/base.h>
 #include <util/random/random.h>
@@ -115,7 +116,7 @@ private:
 
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
     NConcurrency::IThreadPoolPtr PingerPool_;

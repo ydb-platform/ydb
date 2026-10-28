@@ -205,9 +205,11 @@ TStorageTransportMock::WriteToPBuffer(
     const ui64 lsn,
     const NKikimr::NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_UNUSED(connection, selector, lsn, instruction, data, span);
+    LastWriteChecksums = checksums;
 
     TEvWritePersistentBufferResult result;
     result.SetStatus(WriteToPBufferStatus);
@@ -222,12 +224,14 @@ void TStorageTransportMock::WriteToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
     TDuration replyTimeout,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
     Y_UNUSED(connection, selector, lsn, instruction, replyTimeout, data);
 
     LastWriteToManyPBuffersDiskIds = persistentBufferIds;
+    LastWriteChecksums = checksums;
 
     TEvWriteToManyPersistentBuffersResult result;
     auto addResult = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& ddiskId,
@@ -262,9 +266,11 @@ NThreading::TFuture<TEvWriteResult> TStorageTransportMock::WriteToDDisk(
     const NKikimr::NDDisk::TBlockSelector& selector,
     const NKikimr::NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_UNUSED(selector, instruction, data, span);
+    LastWriteChecksums = checksums;
 
     const auto key = MakeKey(connection);
     if (auto it = PendingWritesToDDisk.find(key);

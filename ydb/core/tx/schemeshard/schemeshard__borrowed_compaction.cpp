@@ -170,6 +170,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
 
     TabletCounters->Cumulative()[COUNTER_BORROWED_COMPACTION_OK].Increment(1);
     UpdateBorrowedCompactionQueueMetrics();
+
+    // Borrowed parts are gone now -- a split deferred on borrowed data may proceed. Nudge the
+    // fair scheduler to re-evaluate waiting tables.
+    ScheduleSplitMergeRevisit(ctx);
 }
 
 } // NKikimr::NSchemeShard

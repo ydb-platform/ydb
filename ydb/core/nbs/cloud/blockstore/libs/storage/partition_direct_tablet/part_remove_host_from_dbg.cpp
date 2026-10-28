@@ -197,7 +197,10 @@ void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
     op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(
         RemoveHostInFlight->PBufferId);
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
+    SendToBsc(
+        ctx,
+        EBscRequest::RemoveHost,
+        THolder<IEventBase>(request.release()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -207,18 +210,9 @@ void TPartitionActor::HandleRemoveHostAllocationResult(
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
-    const size_t dbgId = ev->Cookie;
 
     Y_ABORT_UNLESS(RemoveHostInFlight.has_value());
-    if (RemoveHostInFlight->DirectBlockGroupId != dbgId) {
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s RemoveHost response for unexpected dbgId=%lu (stale)",
-            LogTitle.GetWithTime().c_str(),
-            dbgId);
-        return;
-    }
+    const size_t dbgId = RemoveHostInFlight->DirectBlockGroupId;
 
     auto updated = DirectBlockGroupsConnections;
     const THostIndex removeIndex = MarkSlotRemoved(

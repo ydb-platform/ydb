@@ -28,4 +28,4 @@ IClassBehaviour::TPtr TAccessBehaviour::GetInstance() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

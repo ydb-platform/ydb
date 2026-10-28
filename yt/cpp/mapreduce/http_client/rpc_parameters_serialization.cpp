@@ -784,6 +784,16 @@ TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePa
     return node;
 }
 
+TNode SerializeParamsForReadFilePartition(const TString& cookie, const TFilePartitionReaderOptions& options)
+{
+    TNode node;
+    node["cookie"] = cookie;
+    if (options.Config_) {
+        node["file_reader"] = *options.Config_;
+    }
+    return node;
+}
+
 TNode SerializeParamsForReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -977,6 +987,28 @@ TNode SerializeParamsForGetTablePartitions(
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
     result["enable_cookies"] = options.EnableCookies_;
+    result["fetch_cookie_node_descriptors"] = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+TNode SerializeParamsForGetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    TNode result;
+    SetTransactionIdParam(&result, transactionId);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
+    result["path"] = path;
+    result["ranges"] = TNode::CreateList();
+    for (const auto& range : ranges) {
+        auto rangeNode = TNode()("begin", range.Begin_);
+        if (range.End_) {
+            rangeNode["end"] = *range.End_;
+        }
+        result["ranges"].Add(std::move(rangeNode));
+    }
     result["fetch_cookie_node_descriptors"] = options.FetchCookieNodeDescriptors_;
     return result;
 }

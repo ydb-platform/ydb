@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_settings.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publications.h>
@@ -38,7 +39,7 @@ private:
     std::optional<TContinuationToken> Token;
 };
 
-class TLocalTopicClientFixture : public NUnitTest::TBaseFixture {
+class TLocalTopicClientFixture: public NUnitTest::TBaseFixture {
 public:
     inline static constexpr char TOPIC_PATH[] = "/Root/topic";
     inline static constexpr char CONSUMER[] = "consumer";
@@ -98,4 +99,4 @@ protected:
     std::unique_ptr<TDeferredPublishClient> DeferredClient;
 };
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

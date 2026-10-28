@@ -465,15 +465,17 @@ namespace similarity {
         const std::string StrDesc() const override;
         void Search(RangeQuery<dist_t> *query, IdType) const override;
         void Search(KNNQuery<dist_t> *query, IdType) const override;
+        // Query-local search breadth for concurrent readers of the same graph.
+        void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
 
         void SetQueryTimeParams(const AnyParams &) override;
 
     private:
         typedef std::vector<HnswNode *> ElementList;
-        void baseSearchAlgorithmOld(KNNQuery<dist_t> *query);
-        void baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query);
-        void SearchOld(KNNQuery<dist_t> *query, bool normalize);
-        void SearchV1Merge(KNNQuery<dist_t> *query, bool normalize);
+        void baseSearchAlgorithmOld(KNNQuery<dist_t> *query, size_t ef);
+        void baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query, size_t ef);
+        void SearchOld(KNNQuery<dist_t> *query, bool normalize, size_t ef);
+        void SearchV1Merge(KNNQuery<dist_t> *query, bool normalize, size_t ef);
 
         int getRandomLevel(double revSize)
         {

@@ -10,35 +10,21 @@
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
 const i64 PQRdReadDefaultFreeSpace = 256_MB;
 
-std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    NPq::NProto::TDqPqTopicSource&& settings,
-    ui64 inputIndex,
-    TCollectStatsLevel statsLevel,
-    TTxId txId,
-    ui64 taskId,
-    const THashMap<TString, TString>& secureParams,
-    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const NActors::TActorId& computeActorId,
-    const NActors::TActorId& localRowDispatcherActorId,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    i64 bufferSize,
-    const IPqStaticGateway::TPtr& pqGateway,
-    bool enableStreamingQueriesCounters,
-    TDuration checkPartitionCountPeriod,
-    NActors::TActorId controlPlaneActorId = {});
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    NPq::NProto::TDqPqTopicSource&& settings, ui64 inputIndex, TCollectStatsLevel statsLevel, TTxId txId, ui64 taskId,
+    const THashMap<TString, TString>& secureParams, TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg, NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NActors::TActorId& computeActorId,
+    const NActors::TActorId& localRowDispatcherActorId, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters, i64 bufferSize, const IPqStaticGateway::TPtr& pqGateway,
+    bool enableStreamingQueriesCounters, TDuration checkPartitionCountPeriod, NActors::TActorId controlPlaneActorId = {});
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

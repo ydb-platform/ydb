@@ -1,0 +1,42 @@
+PRAGMA YqlSelect = 'force';
+
+USE plato;
+
+SELECT Input.k, Input.s, Input.v
+FROM Input VIEW ksv
+ORDER BY k;
+
+$literal_table = "Input";
+
+SELECT k, s, v
+FROM $literal_table VIEW ksv
+ORDER BY k;
+
+$computed_table = CAST("Input" AS String);
+
+SELECT k, s, v
+FROM $computed_table VIEW ksv
+ORDER BY k;
+
+$call_table = "Input";
+
+SELECT key, subkey, value
+FROM $call_table()
+ORDER BY key;
+
+SELECT COUNT(*) AS row_count
+FROM Concat(Input VIEW ksv, Input2);
+
+$tables = AsList("Input");
+
+SELECT k, s, v
+FROM Each($tables VIEW ksv)
+ORDER BY k;
+
+WITH Input AS (
+    SELECT 1 AS x
+)
+SELECT physical.k, physical.s, physical.v, cte.x
+FROM Input VIEW ksv AS physical
+CROSS JOIN Input AS cte
+ORDER BY physical.k;

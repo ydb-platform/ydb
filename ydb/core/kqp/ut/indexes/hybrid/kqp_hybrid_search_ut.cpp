@@ -749,6 +749,19 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
     }
 
+    Y_UNIT_TEST(RejectSampling) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const auto issues = RunBadRequestIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs` WITH (sampling_rate="0.01", sampling_seed="42")
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Sampling is not supported for index reads");
+    }
+
     Y_UNIT_TEST(FulltextFloatNamedOptionsAreApplied) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();

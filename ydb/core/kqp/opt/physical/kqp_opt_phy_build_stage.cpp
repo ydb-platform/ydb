@@ -357,6 +357,17 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
 
     auto inputStage = inputStageMaybe.Cast();
 
+    // LIMIT (top-K) may be an arbitrary expression (e.g. `$topK + 1`). The vector search
+    // actor receives it as a TKqpPhyValue, which can only carry a literal or a query
+    // parameter, so wrap any other expression in a precompute. The build-txs pass turns that
+    // precompute into a parameter binding materialized before the search runs.
+    auto topK = read.TopK();
+    if (!topK.Maybe<TCoUint64>() && !topK.Maybe<TCoParameter>() &&
+        !topK.Maybe<TDqPhyPrecompute>() && !topK.Maybe<TKqpTxResultBinding>())
+    {
+        topK = KqpPrecomputeParameter(topK, ctx);
+    }
+
     auto connection = Build<TKqpCnVectorSearch>(ctx, pos)
         .Output<TDqOutput>()
             .Stage(inputStage)
@@ -366,7 +377,7 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
         .InputType(ExpandType(pos, *inputType, ctx))
         .Index(read.Index())
         .Columns(read.Columns())
-        .TopK(read.TopK())
+        .TopK(topK)
         .HasPrefix(ctx.NewAtom(pos, hasPrefix ? "true" : "false"))
         .Done();
 

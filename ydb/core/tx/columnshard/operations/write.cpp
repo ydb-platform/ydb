@@ -3,6 +3,7 @@
 #include "batch_builder/builder.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -41,6 +42,9 @@ void TWriteOperation::Start(TColumnShard& owner, const NEvWrite::IDataContainer:
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
     writingAction->SetBulk(IsBulk());
+    writingAction->SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(context.GetActualSchema()->GetIndexInfo().GetCacheBlobsAfterWrite(),
+        NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR, (ui64)owner.Settings.CacheDataAfterIndexing != 0,
+        (ui64)owner.Settings.CacheDataAfterCompaction != 0));
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), std::move(writingAction));
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);

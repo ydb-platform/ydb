@@ -14,7 +14,7 @@
 
 #include <library/cpp/yt/memory/new.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 #include <atomic>
 #include <thread>
@@ -90,9 +90,9 @@ void TestHazardPointersAreNeverRetainedForever(const IInvokerPtr& invoker)
     auto object = New<TTrackedObject>(&allocator);
     auto* rawObject = object.Get();
 
-    NThreading::TEvent hazardAcquired;
-    NThreading::TEvent releaseHazard;
-    NThreading::TEvent protectorFinished;
+    TEvent hazardAcquired;
+    TEvent releaseHazard;
+    TEvent protectorFinished;
 
     // The protector holds a hazard pointer to the object across its retirement,
     // forcing the retiring worker thread to leave it pending in its thread-local

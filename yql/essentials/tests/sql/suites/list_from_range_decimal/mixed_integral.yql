@@ -1,5 +1,3 @@
-PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
-
 $begin = Int8("1");
 $end = Decimal("4.0", 2, 1);
 $step = Int8("1");

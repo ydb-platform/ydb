@@ -5,7 +5,11 @@ import yatest
 import os
 
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 
 from ydb.export import ExportToS3Settings
 
@@ -28,8 +32,7 @@ class ExternalDataTableTestBase:
         )
 
         yield from super().setup_cluster(
-            disabled_feature_flags=["enable_drain_on_shutdown"],
-            extra_feature_flags=["enable_external_data_sources"]
+            disabled_feature_flags=["enable_drain_on_shutdown"], extra_feature_flags=["enable_external_data_sources"]
         )
 
     @staticmethod

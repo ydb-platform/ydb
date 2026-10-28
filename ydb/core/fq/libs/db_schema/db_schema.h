@@ -3,8 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
-#include <util/string/builder.h>
 #include <util/generic/hash_set.h>
+#include <util/string/builder.h>
 
 namespace NFq {
 
@@ -75,7 +75,7 @@ public:
 
     TSqlQueryBuilder& MaybeAddValue(const TString& name, const TMaybe<NYdb::TValue>& value);
 
-    template<typename T>
+    template <typename T>
     TSqlQueryBuilder& MaybeAddValue(const TString& name, const TMaybe<T>& value) {
         if (value) {
             AddValue(name, *value);
@@ -131,4 +131,4 @@ private:
     TVector<TString> ColNames;
 };
 
-} // namespace NFq
+}   // namespace NFq

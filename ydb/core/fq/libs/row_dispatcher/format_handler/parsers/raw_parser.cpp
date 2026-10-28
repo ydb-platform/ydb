@@ -1,6 +1,5 @@
-#include "raw_parser.h"
-
 #include "parser_base.h"
+#include "raw_parser.h"
 
 #include <ydb/library/actors/core/log.h>
 
@@ -13,17 +12,19 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-class TRawParser : public TTopicParserBase {
+class TRawParser: public TTopicParserBase {
 public:
     using TBase = TTopicParserBase;
     using TPtr = TIntrusivePtr<TRawParser>;
 
 public:
-    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager)
+    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager)
         : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters, std::move(memoryQuotaManager), "RawParserAlloc")
         , Schema(schema)
         , LogPrefix("TRawParser: ")
-    {}
+    {
+    }
 
     TStatus InitColumnParser() {
         NumberOptionals = 0;
@@ -33,7 +34,8 @@ public:
             return typeStatus;
         }
 
-        for (NKikimr::NMiniKQL::TType* type = typeStatus.DetachResult(); true; type = AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType()) {
+        for (NKikimr::NMiniKQL::TType* type = typeStatus.DetachResult(); true;
+             type = AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType()) {
             if (type->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data) {
                 auto slotStatus = GetDataSlot(type);
                 if (slotStatus.IsFail()) {
@@ -44,7 +46,8 @@ public:
             }
 
             if (type->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Unsupported type kind for raw format: " << type->GetKindAsStr());
+                return TStatus::Fail(
+                    EStatusId::UNSUPPORTED, TStringBuilder() << "Unsupported type kind for raw format: " << type->GetKindAsStr());
             }
 
             NumberOptionals++;
@@ -54,14 +57,17 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
-        for (const auto& message : messages) {
-            CurrentMessage = message.GetData();
-            Offsets.emplace_back(message.GetOffset());
+        for (const auto& record : records) {
+            if (!record.Data) {
+                ythrow TMessageStreamException(EMessageStreamStatus::Unsupported) << "PQ parser does not support null message payloads";
+            }
+            CurrentMessage = *record.Data;
+            Offsets.emplace_back(record.Id.Offset);
             ParseBuffer();
         }
     }
@@ -75,7 +81,8 @@ public:
 
         const auto& columns = Consumer->GetColumns();
         if (columns.size() != 1) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
+            return TStatus::Fail(
+                EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
         }
 
         Schema = columns[0];
@@ -105,7 +112,9 @@ protected:
                 value = value.MakeOptional();
             }
         } else if (!NumberOptionals) {
-            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse massage at offset " << Offsets.back() << ", can't parse data type " << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
+            return TStatus::Fail(EStatusId::BAD_REQUEST,
+                TStringBuilder() << "Failed to parse massage at offset " << Offsets.back() << ", can't parse data type "
+                                 << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
         }
 
         ParsedColumn.emplace_back(std::move(value));
@@ -133,12 +142,15 @@ private:
     TVector<NYql::NUdf::TUnboxedValue> ParsedColumn;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager) {
+TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters,
+    std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager) {
     const auto& columns = consumer->GetColumns();
     if (columns.size() != 1) {
-        return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
+        return TStatus::Fail(
+            EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
     }
 
     TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], functionRegistry, counters, std::move(memoryQuotaManager));
@@ -149,4 +161,4 @@ TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consu
     return ITopicParser::TPtr(parser);
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

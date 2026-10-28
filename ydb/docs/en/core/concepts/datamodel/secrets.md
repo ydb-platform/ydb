@@ -16,7 +16,7 @@ The following YQL operators are used to manage secrets:
 Examples of using secrets and working with them are provided in the following sections:
 
 * [{#T}](../../yql/reference/recipes/ttl.md)
-* [{#T}](../../recipes/backup/import-export-column-tables.md)
+* [{#T}](../query_execution/federated_query/s3/external_data_source.md)
 
 ## Access management {#secret_access}
 

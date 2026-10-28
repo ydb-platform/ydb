@@ -1,0 +1,3 @@
+RECURSE(
+    message_stream
+)

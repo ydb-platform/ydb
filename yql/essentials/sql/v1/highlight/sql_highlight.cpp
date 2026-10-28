@@ -20,6 +20,16 @@ namespace NSQLHighlight {
 using NSQLTranslationV1::Merged;
 using NSQLTranslationV1::TRegexPattern;
 
+constexpr TStringBuf StringLiteralSuffixRegex = R"re(([sSuUyYjJ]|[pP]([tTbBvV])?)?)re";
+
+TString TRangePattern::EndRegex() const {
+    TString regex = RE2::QuoteMeta(EndPlain);
+    if (EndSuffixRegex) {
+        regex += *EndSuffixRegex;
+    }
+    return regex;
+}
+
 struct TSyntax {
     const NSQLReflect::TLexerGrammar* Grammar;
     THashMap<TString, TString> RegexesDefault;
@@ -189,7 +199,7 @@ TUnit MakeUnit<EUnitKind::Literal>(TSyntax& s) {
 
 template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
-    return {
+    TUnit unit = {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
             {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re('')re"},
@@ -204,6 +214,11 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
         },
         .IsPlain = false,
     };
+
+    for (TRangePattern& range : unit.RangePatterns) {
+        range.EndSuffixRegex = StringLiteralSuffixRegex;
+    }
+    return unit;
 }
 
 template <>

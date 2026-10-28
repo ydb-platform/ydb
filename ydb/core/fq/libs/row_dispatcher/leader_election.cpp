@@ -1,17 +1,17 @@
 #include "leader_election.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
-
-#include <ydb/core/base/path.h>
 
 #include <memory>
 
@@ -24,13 +24,13 @@ using namespace NThreading;
 
 namespace {
 
-constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
+constexpr TDuration RestartDuration = TDuration::Seconds(3);   // Delay before next restart after fatal error
 constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
 constexpr char SemaphoreName[] = "RowDispatcher";
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCreateSemaphoreResult = EvBegin,
         EvCreateSessionResult,
@@ -45,39 +45,55 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
+    struct TEvCreateSemaphoreResult: NActors::TEventLocal<TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
         NYdb::NCoordination::TAsyncResult<void> Result;
+
         explicit TEvCreateSemaphoreResult(const NYdb::NCoordination::TAsyncResult<void>& future)
-            : Result(std::move(future)) {}
+            : Result(std::move(future))
+        {
+        }
     };
-    struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
+
+    struct TEvCreateSessionResult: NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
         NYdb::NCoordination::TAsyncSessionResult Result;
+
         explicit TEvCreateSessionResult(NYdb::NCoordination::TAsyncSessionResult future)
-            : Result(std::move(future)) {}
+            : Result(std::move(future))
+        {
+        }
     };
 
-    struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {};
+    struct TEvOnChangedResult: NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {};
 
-    struct TEvDescribeSemaphoreResult : NActors::TEventLocal<TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
+    struct TEvDescribeSemaphoreResult: NActors::TEventLocal<TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
         NYdb::NCoordination::TAsyncDescribeSemaphoreResult Result;
+
         explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TAsyncDescribeSemaphoreResult future)
-            : Result(std::move(future)) {}
+            : Result(std::move(future))
+        {
+        }
     };
 
-    struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, EvAcquireSemaphoreResult> {
+    struct TEvAcquireSemaphoreResult: NActors::TEventLocal<TEvAcquireSemaphoreResult, EvAcquireSemaphoreResult> {
         NYdb::NCoordination::TAsyncResult<bool> Result;
+
         explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TAsyncResult<bool> future)
-            : Result(std::move(future)) {}
+            : Result(std::move(future))
+        {
+        }
     };
-    struct TEvSessionStopped : NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
-    struct TEvRestart : NActors::TEventLocal<TEvRestart, EvTimeout> {};
+
+    struct TEvSessionStopped: NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
+
+    struct TEvRestart: NActors::TEventLocal<TEvRestart, EvTimeout> {};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TLeaderElectionMetrics {
     explicit TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
         Errors = Counters->GetCounter("LeaderElectionErrors", true);
         LeaderChanged = Counters->GetCounter("LeaderChanged", true);
     }
@@ -88,14 +104,13 @@ struct TLeaderElectionMetrics {
 };
 
 struct TActorSystemPtrMixin {
-    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr =
+        std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
 };
 
 template <class TEvent>
 void SendToActorSystem(
-    const NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr& actorSystemPtr,
-    const TActorId& actorId,
-    TEvent* event)
+    const NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr& actorSystemPtr, const TActorId& actorId, TEvent* event)
 {
     std::unique_ptr<TEvent> eventHolder(event);
     if (auto* actorSystem = actorSystemPtr->load(std::memory_order_acquire)) {
@@ -104,7 +119,6 @@ void SendToActorSystem(
 }
 
 class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
-
     enum class EState {
         Init,
         WaitNodeCreated,
@@ -135,17 +149,13 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
     struct NodeInfo {
         bool Connected = false;
     };
+
     std::map<ui32, NodeInfo> RowDispatchersByNode;
     TLeaderElectionMetrics Metrics;
 
 public:
-    TLeaderElection(
-        NActors::TActorId parentId,
-        NActors::TActorId coordinatorId,
-        const TRowDispatcherSettings::TCoordinatorSettings& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        NYdb::TDriver driver,
-        const TString& tenant,
+    TLeaderElection(NActors::TActorId parentId, NActors::TActorId coordinatorId, const TRowDispatcherSettings::TCoordinatorSettings& config,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, NYdb::TDriver driver, const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters);
     ~TLeaderElection() override;
 
@@ -190,14 +200,9 @@ private:
     NYdb::TDriverConfig GetYdbDriverConfig() const;
 };
 
-TLeaderElection::TLeaderElection(
-    NActors::TActorId parentId,
-    NActors::TActorId coordinatorId,
-    const TRowDispatcherSettings::TCoordinatorSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver /*driver*/,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+TLeaderElection::TLeaderElection(NActors::TActorId parentId, NActors::TActorId coordinatorId,
+    const TRowDispatcherSettings::TCoordinatorSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    NYdb::TDriver /*driver*/, const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
@@ -205,7 +210,8 @@ TLeaderElection::TLeaderElection(
     , CoordinationNodePath(JoinPath(TablePathPrefix, TenantId))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
-    , Metrics(counters) {
+    , Metrics(counters)
+{
 }
 
 TLeaderElection::~TLeaderElection() {
@@ -222,10 +228,8 @@ ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
     }
 
     const NYdb::EStatus st = status.GetStatus();
-    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE ||
-        st == NYdb::EStatus::TIMEOUT || st == NYdb::EStatus::BAD_SESSION ||
-        st == NYdb::EStatus::SESSION_EXPIRED ||
-        st == NYdb::EStatus::SESSION_BUSY) {
+    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE || st == NYdb::EStatus::TIMEOUT ||
+        st == NYdb::EStatus::BAD_SESSION || st == NYdb::EStatus::SESSION_EXPIRED || st == NYdb::EStatus::SESSION_BUSY) {
         return ERetryErrorClass::ShortRetry;
     }
 
@@ -237,7 +241,8 @@ ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
 }
 
 TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
-    static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
+    static auto policy =
+        TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
     return policy;
 }
 
@@ -266,45 +271,41 @@ void TLeaderElection::Bootstrap() {
 
 void TLeaderElection::ProcessState() {
     switch (State) {
-    case EState::Init:
-        if (!CoordinationNodeCreated) {
-            Register(MakeCreateCoordinationNodeActor(
-                SelfId(),
-                NKikimrServices::FQ_ROW_DISPATCHER,
-                YdbConnection,
-                CoordinationNodePath,
-                MakeSchemaRetryPolicy()));
-        }
-        State = EState::WaitNodeCreated;
-        [[fallthrough]];
-    case EState::WaitNodeCreated:
-        if (!CoordinationNodeCreated) {
-            return;
-        }
-        if (!Session) {
-            StartSession();
-        }
-        State = EState::WaitSessionCreated;
-        [[fallthrough]];
-    case EState::WaitSessionCreated:
-        if (!Session) {
-            return;
-        }
-        if (!SemaphoreCreated) {
-            CreateSemaphore();
-        }
-        State = EState::WaitSemaphoreCreated;
-        [[fallthrough]];
-    case EState::WaitSemaphoreCreated:
-        if (!SemaphoreCreated) {
-            return;
-        }
-        State = EState::Started;
-        [[fallthrough]];
-    case EState::Started:
-        AcquireSemaphore();
-        DescribeSemaphore();
-        break;
+        case EState::Init:
+            if (!CoordinationNodeCreated) {
+                Register(MakeCreateCoordinationNodeActor(
+                    SelfId(), NKikimrServices::FQ_ROW_DISPATCHER, YdbConnection, CoordinationNodePath, MakeSchemaRetryPolicy()));
+            }
+            State = EState::WaitNodeCreated;
+            [[fallthrough]];
+        case EState::WaitNodeCreated:
+            if (!CoordinationNodeCreated) {
+                return;
+            }
+            if (!Session) {
+                StartSession();
+            }
+            State = EState::WaitSessionCreated;
+            [[fallthrough]];
+        case EState::WaitSessionCreated:
+            if (!Session) {
+                return;
+            }
+            if (!SemaphoreCreated) {
+                CreateSemaphore();
+            }
+            State = EState::WaitSemaphoreCreated;
+            [[fallthrough]];
+        case EState::WaitSemaphoreCreated:
+            if (!SemaphoreCreated) {
+                return;
+            }
+            State = EState::Started;
+            [[fallthrough]];
+        case EState::Started:
+            AcquireSemaphore();
+            DescribeSemaphore();
+            break;
     }
 }
 
@@ -317,9 +318,9 @@ void TLeaderElection::CreateSemaphore() {
     Session->CreateSemaphore(SemaphoreName, 1 /* limit */)
         .Subscribe(
 
-        [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<void>& future) {
-            SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
-        });
+            [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<void>& future) {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
+            });
 }
 
 void TLeaderElection::AcquireSemaphore() {
@@ -336,13 +337,10 @@ void TLeaderElection::AcquireSemaphore() {
         Y_ABORT("SerializeToString");
     }
     PendingAcquire = true;
-    Session->AcquireSemaphore(
-        SemaphoreName,
-        NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
-        .Subscribe(
-            [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<bool>& future) {
-                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
-            });
+    Session->AcquireSemaphore(SemaphoreName, NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
+        .Subscribe([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<bool>& future) {
+            SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
+        });
 }
 
 void TLeaderElection::StartSession() {
@@ -350,16 +348,14 @@ void TLeaderElection::StartSession() {
         {"logPrefix", LogPrefix});
 
     YdbConnection->CoordinationClient
-        .StartSession(
-            CoordinationNodePath,
-            NYdb::NCoordination::TSessionSettings()
-                .Timeout(CoordinationSessionTimeout)
-                .OnStopped([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr]() {
-                    SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvSessionStopped());
-                }))
+        .StartSession(CoordinationNodePath,
+            NYdb::NCoordination::TSessionSettings().Timeout(CoordinationSessionTimeout).OnStopped([actorId = this->SelfId(),
+                                                                                                      actorSystemPtr = ActorSystemPtr]() {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvSessionStopped());
+            }))
         .Subscribe([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSessionResult(future));
-            });
+            SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSessionResult(future));
+        });
 }
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
@@ -387,7 +383,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
         ResetState();
         return;
     }
-    Session =  result.GetResult();
+    Session = result.GetResult();
     YDB_LOG_DEBUG("Session successfully created",
         {"logPrefix", LogPrefix});
     ProcessState();
@@ -475,15 +471,11 @@ void TLeaderElection::DescribeSemaphore() {
     YDB_LOG_DEBUG("Describe semaphore",
         {"logPrefix", LogPrefix});
     PendingDescribe = true;
-    Session->DescribeSemaphore(
-        SemaphoreName,
-        NYdb::NCoordination::TDescribeSemaphoreSettings()
-            .WatchData()
-            .WatchOwners()
-            .IncludeOwners()
-            .OnChanged([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](bool /* isChanged */) {
-                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvOnChangedResult());
-            }))
+    Session
+        ->DescribeSemaphore(SemaphoreName, NYdb::NCoordination::TDescribeSemaphoreSettings().WatchData().WatchOwners().IncludeOwners().OnChanged(
+                                               [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](bool /* isChanged */) {
+                                                   SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvOnChangedResult());
+                                               }))
         .Subscribe(
             [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
                 SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future));
@@ -518,7 +510,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
         return;
     }
     const auto& session = description.GetOwners()[0];
-    auto data = TString{session.GetData()};
+    auto data = TString{ session.GetData() };
     auto generation = session.GetOrderId();
     NActorsProto::TActorId protoId;
     if (!protoId.ParseFromString(data)) {
@@ -557,20 +549,16 @@ NYdb::TDriverConfig TLeaderElection::GetYdbDriverConfig() const {
     return cfg;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewLeaderElection(
-    NActors::TActorId rowDispatcherId,
-    NActors::TActorId coordinatorId,
-    const TRowDispatcherSettings::TCoordinatorSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+std::unique_ptr<NActors::IActor> NewLeaderElection(NActors::TActorId rowDispatcherId, NActors::TActorId coordinatorId,
+    const TRowDispatcherSettings::TCoordinatorSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    NYdb::TDriver driver, const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, driver, tenant, counters));
+    return std::unique_ptr<NActors::IActor>(
+        new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, driver, tenant, counters));
 }
 
-} // namespace NFq
+}   // namespace NFq

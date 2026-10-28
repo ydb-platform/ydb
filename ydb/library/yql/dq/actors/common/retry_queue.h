@@ -18,7 +18,7 @@ namespace NYql::NDq {
 
 struct TEvRetryQueuePrivate {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvRetry = EvBegin,
         EvHeartbeat,
@@ -29,18 +29,20 @@ struct TEvRetryQueuePrivate {
 
     // Events.
 
-    struct TEvRetry : NActors::TEventLocal<TEvRetry, EvRetry> {
+    struct TEvRetry: NActors::TEventLocal<TEvRetry, EvRetry> {
         explicit TEvRetry(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        {}
+        {
+        }
 
         const ui64 EventQueueId;
     };
 
-    struct TEvEvHeartbeat : NActors::TEventLocal<TEvEvHeartbeat, EvHeartbeat> {
+    struct TEvEvHeartbeat: NActors::TEventLocal<TEvEvHeartbeat, EvHeartbeat> {
         explicit TEvEvHeartbeat(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        {}
+        {
+        }
 
         const ui64 EventQueueId;
     };
@@ -65,12 +67,12 @@ concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta
 class TRetryEventsQueue {
 public:
     enum class ESessionState {
-        WrongSession,       // event RecipientId != Sender (event is not from this queue)
+        WrongSession,   // event RecipientId != Sender (event is not from this queue)
         Disconnected,
-        SessionClosed       // recipientId does not exist anymore
+        SessionClosed   // recipientId does not exist anymore
     };
 
-    class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
+    class IRetryableEvent: public TSimpleRefCount<IRetryableEvent> {
     public:
         using TPtr = TIntrusivePtr<IRetryableEvent>;
 
@@ -81,7 +83,8 @@ public:
 
     // Ordered input rejects gaps and requires the peer to replay the original events.
     // Unordered input processes each event immediately, but confirms only a contiguous prefix.
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, bool useConnect = true, bool ordered = true);
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0,
+        bool keepAlive = false, bool useConnect = true, bool ordered = true);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -92,7 +95,8 @@ public:
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
             LastSentDataTime = TInstant::Now();
-            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
+            NActors::TActivationContext::Send(
+                new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
             return;
         }
 
@@ -112,7 +116,7 @@ public:
     }
 
     template <TProtobufEventWithTransportMeta T>
-    bool OnEventReceived(const T* ev) { // Returns true if the event should be processed.
+    bool OnEventReceived(const T* ev) {   // Returns true if the event should be processed.
         LastReceivedDataTime = TInstant::Now();
 
         if (LocalRecipient) {
@@ -134,11 +138,9 @@ public:
 
         if (!Ordered && seqNo > MyConfirmedSeqNo) {
             if (ReceivedEventsSeqNos.size() > TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT) {
-                throw yexception()
-                    << "Too wide window of reordered events: " << ReceivedEventsSeqNos.size()
-                    << ". MyConfirmedSeqNo: " << MyConfirmedSeqNo
-                    << ". Received SeqNo: " << seqNo
-                    << ". TxId: \"" << TxId << "\". EventQueueId: " << EventQueueId;
+                throw yexception() << "Too wide window of reordered events: " << ReceivedEventsSeqNos.size()
+                                   << ". MyConfirmedSeqNo: " << MyConfirmedSeqNo << ". Received SeqNo: " << seqNo << ". TxId: \"" << TxId
+                                   << "\". EventQueueId: " << EventQueueId;
             }
             return ReceivedEventsSeqNos.insert(seqNo).second;
         }
@@ -177,14 +179,15 @@ private:
 
 private:
     template <TProtobufEventWithTransportMeta T>
-    class TRetryableEvent : public IRetryableEvent {
+    class TRetryableEvent: public IRetryableEvent {
     public:
         TRetryableEvent(const NActors::TActorId& recipient, const NActors::TActorId& sender, THolder<T> ev, ui64 cookie)
             : Event(std::move(ev))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
-        {}
+        {
+        }
 
         ui64 GetSeqNo() const override {
             return Event->Record.GetTransportMeta().GetSeqNo();
@@ -215,7 +218,7 @@ private:
         static TDuration RandomizeDelay(TDuration baseDelay);
 
     private:
-        TDuration Delay; // The first time retry will be done instantly.
+        TDuration Delay;   // The first time retry will be done instantly.
     };
 
 private:
@@ -226,7 +229,7 @@ private:
     bool LocalRecipient = false;
     ui64 NextSeqNo = 1;
     std::deque<IRetryableEvent::TPtr> Events;
-    ui64 MyConfirmedSeqNo = 0; // Received events seq no border.
+    ui64 MyConfirmedSeqNo = 0;   // Received events seq no border.
     std::set<ui64> ReceivedEventsSeqNos;
     bool Connected = false;
     bool RetryScheduled = false;
@@ -240,4 +243,4 @@ private:
     bool Ordered = true;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

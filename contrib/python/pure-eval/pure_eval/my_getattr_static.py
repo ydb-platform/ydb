@@ -69,7 +69,7 @@ def getattr_static(obj, attr):
         klass = type(obj)
         dict_attr = _shadowed_dict(klass)
         if (dict_attr is _sentinel or
-                type(dict_attr) is types.MemberDescriptorType):
+                type(dict_attr) is types.MemberDescriptorType or type(dict_attr) is types.GetSetDescriptorType):
             instance_result = _check_instance(obj, attr)
         else:
             raise CannotEval

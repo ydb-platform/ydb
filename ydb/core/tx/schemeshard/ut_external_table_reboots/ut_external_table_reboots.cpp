@@ -10,7 +10,7 @@ using namespace NSchemeShardUT_Private;
 namespace {
 
 void CreateExternalDataSource(TTestActorRuntime& runtime, TTestEnv& env, ui64 txId) {
-    AsyncCreateExternalDataSource(runtime, txId, "/MyRoot",R"(
+    AsyncCreateExternalDataSource(runtime, txId, "/MyRoot", R"(
             Name: "ExternalDataSource"
             SourceType: "ObjectStorage"
             Location: "https://s3.cloud.net/my_bucket"
@@ -25,7 +25,7 @@ void CreateExternalDataSource(TTestActorRuntime& runtime, TTestEnv& env, ui64 tx
     TestLs(runtime, "/MyRoot/ExternalDataSource", false, NLs::PathExist);
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
     Y_UNIT_TEST(CreateExternalTableWithReboots) {
@@ -42,12 +42,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                     Columns { Name: "b" Type: "Int32" NotNull: true }
                 )");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
+            t.TestEnv->TestWaitNotification(runtime, { t.TxId - 2, t.TxId - 1, t.TxId });
 
             {
                 TInactiveZone inactive(activeZone);
-                auto describeResult =  DescribePath(runtime, "/MyRoot/DirExternalTable/ExternalTable");
-                TestDescribeResult(describeResult, {NLs::Finished});
+                auto describeResult = DescribePath(runtime, "/MyRoot/DirExternalTable/ExternalTable");
+                TestDescribeResult(describeResult, { NLs::Finished });
 
                 UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
                 const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                     Columns { Name: "Value" Type: "Utf8" }
                 )");
             AsyncDropExternalTable(runtime, ++t.TxId, "/MyRoot", "DropMe");
-            TestModificationResults(runtime, t.TxId - 1, {ESts::StatusAccepted});
+            TestModificationResults(runtime, t.TxId - 1, { ESts::StatusAccepted });
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "DropMe");
@@ -90,8 +90,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"), { NLs::PathNotExist });
             }
         });
     }
@@ -102,7 +101,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
             CreateExternalDataSource(runtime, *t.TestEnv, ++t.TxId);
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot",R"(
+                TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
                         SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
@@ -119,8 +118,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
             }
         });
     }
@@ -131,7 +129,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
             CreateExternalDataSource(runtime, *t.TestEnv, ++t.TxId);
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot",R"(
+                TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
                         SourceType: "General"
                         DataSourcePath: "/MyRoot/ExternalDataSource"
@@ -147,8 +145,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
             }
         });
     }
@@ -175,8 +172,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
 
                 TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalTable"
@@ -191,8 +187,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
             }
         });
     }
@@ -236,7 +231,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDroppedExternalTableAndDropWithReboots) { //+
+    Y_UNIT_TEST(CreateDroppedExternalTableAndDropWithReboots) {   //+
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             CreateExternalDataSource(runtime, *t.TestEnv, ++t.TxId);
@@ -271,8 +266,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), { NLs::PathNotExist });
             }
         });
     }
@@ -300,7 +294,8 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+                { NKikimrScheme::StatusAccepted });
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");

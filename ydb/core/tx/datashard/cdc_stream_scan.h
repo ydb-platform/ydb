@@ -45,6 +45,7 @@ public:
 
     void Complete(const TPathId& streamPathId);
     void Complete(ui64 txId);
+    void Fail(ui64 txId);
     bool IsCompleted(const TPathId& streamPathId) const;
     const TStats& GetCompletedStats(const TPathId& streamPathId) const;
 

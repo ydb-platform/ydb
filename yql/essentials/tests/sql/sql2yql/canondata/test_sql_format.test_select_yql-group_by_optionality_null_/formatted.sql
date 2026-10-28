@@ -48,7 +48,9 @@ FROM (
         c
     )
     GROUP BY
-        ROLLUP (a)
+        ROLLUP (
+            a
+        )
 );
 
 SELECT
@@ -67,7 +69,10 @@ FROM (
         c
     )
     GROUP BY
-        ROLLUP (a, b)
+        ROLLUP (
+            a,
+            b
+        )
 );
 
 SELECT

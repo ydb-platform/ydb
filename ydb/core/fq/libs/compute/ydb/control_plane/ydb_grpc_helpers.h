@@ -13,4 +13,4 @@ void SetYdbRequestToken(NCloud::TEvGrpcProtoRequest<TEv, TEventType, TProtoMessa
     }
 }
 
-}  // namespace NFq
+}   // namespace NFq

@@ -54,7 +54,9 @@ class TestBackpressure(SolomonReadingTestBase):
         assert success, error
 
         api_call_count = get_api_calls_count()
-        assert api_call_count < 20, "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
+        assert (
+            api_call_count < 20
+        ), "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
 
         query = """
             SELECT value FROM local_solomon.backpressure_test WITH (
@@ -70,7 +72,9 @@ class TestBackpressure(SolomonReadingTestBase):
         assert success, error
 
         api_call_count = get_api_calls_count()
-        assert api_call_count > 100, "Solomon emulator received too few API calls, shouldn't be lower then 100, have {}".format(api_call_count)
+        assert (
+            api_call_count > 100
+        ), "Solomon emulator received too few API calls, shouldn't be lower then 100, have {}".format(api_call_count)
 
     @link_test_case("#23191")
     def test_backpressure_monitoring(self):
@@ -102,7 +106,9 @@ class TestBackpressure(SolomonReadingTestBase):
         assert success, error
 
         api_call_count = get_api_calls_count()
-        assert api_call_count < 20, "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
+        assert (
+            api_call_count < 20
+        ), "Solomon emulator received too many API calls, shouldn't be higher then 20, have {}".format(api_call_count)
 
         query = """
             SELECT value FROM local_monitoring.my_service WITH (
@@ -118,4 +124,6 @@ class TestBackpressure(SolomonReadingTestBase):
         assert success, error
 
         api_call_count = get_api_calls_count()
-        assert api_call_count > 100, "Solomon emulator received too few API calls, shouldn't be lower then 100, have {}".format(api_call_count)
+        assert (
+            api_call_count > 100
+        ), "Solomon emulator received too few API calls, shouldn't be lower then 100, have {}".format(api_call_count)

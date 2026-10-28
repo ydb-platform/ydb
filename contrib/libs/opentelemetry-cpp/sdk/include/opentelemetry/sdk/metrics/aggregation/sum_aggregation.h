@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 
 #include "opentelemetry/common/spin_lock_mutex.h"

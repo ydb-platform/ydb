@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     schema.cpp
@@ -13,7 +13,5 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/common
     ydb/core/tx/columnshard/engines/scheme/defaults/common
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

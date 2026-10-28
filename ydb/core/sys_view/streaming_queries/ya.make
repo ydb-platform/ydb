@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     streaming_queries.cpp
@@ -14,7 +14,5 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/query_actor
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

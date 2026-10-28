@@ -45,9 +45,9 @@ namespace grpc_core {
 
 // The interface hierarchy is as follows -
 //                 CallTracerAnnotationInterface
-//                      /          \
+//                    |                  |
 //        ClientCallTracer       CallTracerInterface
-//                                /             \
+//                                |              |
 //                      CallAttemptTracer    ServerCallTracer
 
 // The base class for all tracer implementations.
@@ -129,6 +129,11 @@ class ClientCallTracer : public CallTracerAnnotationInterface {
   // as transparent retry attempts.)
   class CallAttemptTracer : public CallTracerInterface {
    public:
+    enum class OptionalLabelComponent : std::uint8_t {
+      kXdsServiceLabels = 0,
+      kSize = 1,  // keep last
+    };
+
     ~CallAttemptTracer() override {}
     // TODO(yashykt): The following two methods `RecordReceivedTrailingMetadata`
     // and `RecordEnd` should be moved into CallTracerInterface.
@@ -141,6 +146,11 @@ class ClientCallTracer : public CallTracerAnnotationInterface {
     // Should be the last API call to the object. Once invoked, the tracer
     // library is free to destroy the object.
     virtual void RecordEnd(const gpr_timespec& latency) = 0;
+
+    // Adds optional labels to be reported by the underlying tracer in a call.
+    virtual void AddOptionalLabels(
+        OptionalLabelComponent component,
+        std::shared_ptr<std::map<TString, TString>> labels) = 0;
   };
 
   ~ClientCallTracer() override {}
@@ -176,7 +186,8 @@ class ServerCallTracerFactory {
 
   virtual ~ServerCallTracerFactory() {}
 
-  virtual ServerCallTracer* CreateNewServerCallTracer(Arena* arena) = 0;
+  virtual ServerCallTracer* CreateNewServerCallTracer(
+      Arena* arena, const ChannelArgs& channel_args) = 0;
 
   // Returns true if a server is to be traced, false otherwise.
   virtual bool IsServerTraced(const ChannelArgs& /*args*/) { return true; }
@@ -190,6 +201,9 @@ class ServerCallTracerFactory {
   // before grpc_init(). It is the responsibility of the caller to maintain
   // this for the lifetime of the process.
   static void RegisterGlobal(ServerCallTracerFactory* factory);
+
+  // Deletes any previous registered ServerCallTracerFactory.
+  static void TestOnlyReset();
 
   static y_absl::string_view ChannelArgName();
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "value_type.h"
+#include <ydb/core/formats/arrow/accessor/common/value_type.h>
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/conclusion/result.h>

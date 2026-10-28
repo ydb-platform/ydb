@@ -20,6 +20,8 @@ public:
     py::tuple get_chunk_count() const;  // Return (y_chunk_count, x_chunk_count)
     py::tuple get_chunk_size() const;   // Return (y_chunk_size, x_chunk_size)
 
+    virtual const char* get_name() const override;
+
     py::sequence lines(double level) override;
 
 private:

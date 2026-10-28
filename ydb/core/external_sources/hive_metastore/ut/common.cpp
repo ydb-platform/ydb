@@ -21,12 +21,13 @@ TString Exec(const TString& cmd) {
     return result;
 }
 
-}
+}   // namespace
 
 TString GetExternalPort(const TString& service, const TString& port) {
     auto dockerComposeBin = BinaryPath("library/recipes/docker_compose/bin/docker-compose");
     auto composeFileYml = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "docker-compose.yml");
-    auto result = StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
+    auto result =
+        StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
     return result ? Strip(result.back()) : TString{};
 }
 
@@ -43,4 +44,4 @@ void WaitHiveMetastore(const TString& host, int32_t port, const TString& databas
     ythrow yexception() << "Hive metastore isn't ready, host: " << host << " port: " << port;
 }
 
-}
+}   // namespace NKikimr::NExternalSource

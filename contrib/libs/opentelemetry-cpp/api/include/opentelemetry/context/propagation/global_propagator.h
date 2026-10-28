@@ -26,16 +26,35 @@ class TextMapPropagator;
 class OPENTELEMETRY_EXPORT GlobalTextMapPropagator
 {
 public:
+  /**
+   * Returns the singleton TextMapPropagator.
+   *
+   * By default, a no-op TextMapPropagator is returned. This will never return a
+   * nullptr TextMapPropagator.
+   */
   static nostd::shared_ptr<TextMapPropagator> GetGlobalPropagator() noexcept
   {
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
     return nostd::shared_ptr<TextMapPropagator>(GetPropagator());
   }
 
+  /**
+   * Changes the singleton TextMapPropagator.
+   *
+   * Passing a nullptr TextMapPropagator installs a no-op TextMapPropagator, so
+   * that GetGlobalPropagator() never returns a nullptr TextMapPropagator.
+   */
   static void SetGlobalPropagator(const nostd::shared_ptr<TextMapPropagator> &prop) noexcept
   {
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
-    GetPropagator() = prop;
+    if (prop)
+    {
+      GetPropagator() = prop;
+    }
+    else
+    {
+      GetPropagator() = nostd::shared_ptr<TextMapPropagator>(new NoOpPropagator());
+    }
   }
 
 private:

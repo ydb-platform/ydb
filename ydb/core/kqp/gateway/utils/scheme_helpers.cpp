@@ -100,7 +100,7 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
 }
 
 bool Validate(const TAlterDatabaseSettings& settings, TIssue& error) {
-    const int settingsToAlter = (settings.Owner ? 1 : 0) + (settings.SchemeLimits ? 1 : 0);
+    const int settingsToAlter = (settings.Owner ? 1 : 0) + ((settings.SchemeLimits || settings.TablesMetricsLevel) ? 1 : 0);
     if (settingsToAlter > 1) {
         error.SetMessage("Multiple setting classes cannot be altered simultaneously.");
         error.SetCode(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, TSeverityIds_ESeverityId_S_ERROR);
@@ -125,11 +125,16 @@ void FillAlterDatabaseOwner(TModifyScheme& modifyScheme, const TString& name, co
     condition->AddPathTypes(EPathType::EPathTypeExtSubDomain);
 }
 
-void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in) {
+void FillAlterDatabaseSettings(TModifyScheme& modifyScheme, const TString& name, const TAlterDatabaseSettings& settings) {
     modifyScheme.SetOperationType(ESchemeOpAlterExtSubDomain);
     auto& subdomain = *modifyScheme.MutableSubDomain();
     subdomain.SetName(name);
-    *subdomain.MutableSchemeLimits() = in;
+    if (settings.SchemeLimits) {
+        *subdomain.MutableSchemeLimits() = *settings.SchemeLimits;
+    }
+    if (settings.TablesMetricsLevel) {
+        subdomain.SetTablesMetricsLevel(*settings.TablesMetricsLevel);
+    }
 }
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {

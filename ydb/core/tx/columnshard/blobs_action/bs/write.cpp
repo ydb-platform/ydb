@@ -1,6 +1,7 @@
 #include "write.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
@@ -27,6 +28,14 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
     } else {
         self.Counters.GetTabletCounters()->OnWriteFailure();
     }
+}
+
+void TWriteAction::DoUpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) {
+    if (!Manager->IsWeightedDataChannelSelectionEnabled()) {
+        return;
+    }
+    auto ev = std::make_unique<NColumnShard::TEvPrivate::TEvUpdateChannelApproximateFreeSpace>(blobId.Channel(), approximateFreeSpaceShare);
+    TActorContext::AsActorContext().Send(TabletActorId, ev.release());
 }
 
 void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {

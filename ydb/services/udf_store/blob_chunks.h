@@ -29,12 +29,7 @@ TString JoinBlobs(const TVector<TString>& chunks);
 //! all, which is the case for the compiled artifacts; an empty md5 where one
 //! was expected is refused the same way a missing size is.
 bool JoinAndVerifyBlobs(
-    const TVector<TString>& chunks,
-    ui64 expectedChunkCount,
-    ui64 expectedSize,
-    TMaybe<TStringBuf> expectedMd5,
-    TString& body,
-    TString& error);
+    const TVector<TString>& chunks, ui64 expectedChunkCount, ui64 expectedSize, TMaybe<TStringBuf> expectedMd5, TString& body, TString& error);
 
 inline const TString& BlobKindWasmData() {
     static const TString value = "wasm_data";
@@ -69,4 +64,4 @@ struct TArtifactChunkSchema {
     static TVector<TString> GetPk();
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

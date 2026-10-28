@@ -1,18 +1,20 @@
-#include <mutex>
-#include <thread>
-
-#include <library/cpp/threading/future/future.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
+
 #include <ydb/library/actors/core/executelater.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <library/cpp/threading/future/future.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+
+#include <mutex>
+#include <thread>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
 
-class TThreadSafeQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+class TThreadSafeQuotaManager: public NYql::NDq::TGuaranteeQuotaManager {
 public:
     using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
 
@@ -40,36 +42,32 @@ private:
     mutable std::mutex Mutex;
 };
 
-class TFormatHandlerFixture : public TBaseFixture {
+class TFormatHandlerFixture: public TBaseFixture {
 public:
     using TBase = TBaseFixture;
     using TCallback = std::function<void(NActors::TActorId, TQueue<TDataBatch>&&)>;
+
     struct TMessages {
         TVector<ui64> Offsets;
         TMaybe<TInstant> Watermark;
         TBatch Batch;
     };
 
-    class TClientDataConsumer : public IClientDataConsumer {
+    class TClientDataConsumer: public IClientDataConsumer {
     public:
         using TPtr = TIntrusivePtr<TClientDataConsumer>;
 
     public:
-        TClientDataConsumer(
-            NActors::TActorId clientId,
-            TVector<TSchemaColumn> columns,
-            TString watermarkExpr,
-            TString filterExpr,
-            TCallback callback,
-            ui64 expectedFilteredRows
-        )
+        TClientDataConsumer(NActors::TActorId clientId, TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr,
+            TCallback callback, ui64 expectedFilteredRows)
             : ClientId_(clientId)
             , Columns_(std::move(columns))
             , WatermarkExpr_(std::move(watermarkExpr))
             , FilterExpr_(std::move(filterExpr))
             , Callback_(std::move(callback))
             , ExpectedFilteredRows_(expectedFilteredRows)
-        {}
+        {
+        }
 
         void Freeze() {
             std::lock_guard lock(Mutex_);
@@ -90,7 +88,7 @@ public:
         void ExpectError(TStatusCode statusCode, const TString& message, bool fatal = false) {
             std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!ExpectedError_, "Cannot add existing error, client id: " << ClientId_);
-            ExpectedError_ = {statusCode, message};
+            ExpectedError_ = { statusCode, message };
             ExpectedFatalError_ = fatal;
         }
 
@@ -99,7 +97,8 @@ public:
             UNIT_ASSERT_C(!UnexpectedError_, "Client received an unexpected error, client id: " << ClientId_);
             UNIT_ASSERT_C(!CallbackAfterFatalError_, "Client received a callback after its fatal error, client id: " << ClientId_);
             UNIT_ASSERT_C(Offsets_.empty(), "Found " << Offsets_.size() << " missing batches, client id: " << ClientId_);
-            UNIT_ASSERT_VALUES_EQUAL_C(ExpectedFilteredRows_, 0, "Found " << ExpectedFilteredRows_ << " not filtered rows, client id: " << ClientId_);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                ExpectedFilteredRows_, 0, "Found " << ExpectedFilteredRows_ << " not filtered rows, client id: " << ClientId_);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
         }
 
@@ -127,7 +126,7 @@ public:
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
-            return {.EnabledLLVM = false};
+            return { .EnabledLLVM = false };
         }
 
         virtual NActors::TActorId GetClientId() const override {
@@ -221,8 +220,8 @@ public:
 
         CreateFormatHandler({
             .FunctionRegistry = FunctionRegistry,
-            .JsonParserConfig = {.FunctionRegistry = FunctionRegistry},
-            .FiltersConfig = {.CompileServiceId = CompileService},
+            .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+            .FiltersConfig = { .CompileServiceId = CompileService },
         });
     }
 
@@ -252,21 +251,17 @@ public:
         completed.GetFuture().GetValueSync();
     }
 
-    void CreateFormatHandler(const TFormatHandlerConfig& config, ITopicFormatHandler::TSettings settings = {.ParsingFormat = "json_each_row"}, const TCountersDesc& counters = {}) {
+    void CreateFormatHandler(const TFormatHandlerConfig& config, ITopicFormatHandler::TSettings settings = { .ParsingFormat = "json_each_row" },
+        const TCountersDesc& counters = {}) {
         FormatHandler = CreateTestFormatHandler(config, settings, counters);
     }
 
-    [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, ui64 expectedFilteredRows) {
+    [[nodiscard]] TStatus MakeClient(
+        TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, ui64 expectedFilteredRows) {
         ClientIds.emplace_back(ClientIds.size(), 0, 0, 0);
 
         auto client = MakeIntrusive<TClientDataConsumer>(
-            ClientIds.back(),
-            std::move(columns),
-            std::move(watermarkExpr),
-            std::move(filterExpr),
-            std::move(callback),
-            expectedFilteredRows
-        );
+            ClientIds.back(), std::move(columns), std::move(watermarkExpr), std::move(filterExpr), std::move(callback), expectedFilteredRows);
         auto status = FormatHandler->AddClient(client);
         if (status.IsFail()) {
             return status;
@@ -286,22 +281,23 @@ public:
         return TStatus::Success();
     }
 
-    void ParseMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages, TVector<ui64> expectedOffsets = {}) {
+    void ParseRecords(const TVector<TMessageStreamRecord>& records, TVector<ui64> expectedOffsets = {}) {
         for (auto& client : Clients) {
-            client->ExpectOffsets(expectedOffsets ? expectedOffsets : TVector<ui64>{messages.back().GetOffset()});
+            client->ExpectOffsets(expectedOffsets ? expectedOffsets : TVector<ui64>{ records.back().Id.Offset });
         }
-        FormatHandler->ParseMessages(messages);
+        FormatHandler->ParseRecords(records);
         ExtractClientsData();
     }
 
-    void CheckClientError(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages, NActors::TActorId clientId, TStatusCode statusCode, const TString& message) {
+    void CheckClientError(
+        const TVector<TMessageStreamRecord>& records, NActors::TActorId clientId, TStatusCode statusCode, const TString& message) {
         for (auto& client : Clients) {
-            client->ExpectOffsets({messages.back().GetOffset()});
+            client->ExpectOffsets({ records.back().Id.Offset });
             if (client->GetClientId() == clientId) {
                 client->ExpectError(statusCode, message);
             }
         }
-        FormatHandler->ParseMessages(messages);
+        FormatHandler->ParseRecords(records);
         ExtractClientsData();
     }
 
@@ -321,8 +317,9 @@ public:
         };
     }
 
-    TCallback BatchCheck(TVector<TMessages> messages) const {
-        return [this, expectedIndex = 0ull, expectedMessages = std::move(messages)](NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
+    TCallback BatchCheck(TVector<TMessages> records) const {
+        return [this, expectedIndex = 0ull, expectedMessages = std::move(records)](
+                   NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
             while (!data.empty()) {
                 auto batch = std::move(data.front());
                 auto& actualMessages = batch.SerializedData;
@@ -330,12 +327,14 @@ public:
                 auto& actualWatermark = batch.Watermark;
                 data.pop();
 
-                UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
+                UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(),
+                    "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
                 auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
 
                 UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets, actualOffsets, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
 
-                UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
 
                 if (!expectedBatch.Rows.empty()) {
                     CheckMessageBatch(actualMessages, expectedBatch);
@@ -344,8 +343,10 @@ public:
         };
     }
 
-    static ui64 ExpectedFilteredRows(const TVector<TMessages>& messages) {
-        return std::accumulate(messages.begin(), messages.end(), 0ull, [](size_t init, const TMessages& elem){ return init + elem.Batch.Rows.size(); });
+    static ui64 ExpectedFilteredRows(const TVector<TMessages>& records) {
+        return std::accumulate(records.begin(), records.end(), 0ull, [](size_t init, const TMessages& elem) {
+            return init + elem.Batch.Rows.size();
+        });
     }
 
 private:
@@ -368,29 +369,28 @@ public:
     ITopicFormatHandler::TPtr FormatHandler;
 };
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TestFormatHandler) {
     Y_UNIT_TEST_F(FatalParsingErrorStopsAllClients, TFormatHandlerFixture) {
-        CreateFormatHandler(
-            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
-            {.ParsingFormat = "raw"});
-        const TVector<TSchemaColumn> columns = {{"data", "[DataType; Uint64]"}};
+        CreateFormatHandler({ .FunctionRegistry = FunctionRegistry, .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+                                .FiltersConfig = { .CompileServiceId = CompileService } },
+            { .ParsingFormat = "raw" });
+        const TVector<TSchemaColumn> columns = { { "data", "[DataType; Uint64]" } };
         for (size_t i = 0; i < 2; ++i) {
             CheckSuccess(MakeClient(columns, "", "", EmptyCheck(), 1));
-            Clients.back()->ExpectOffsets({41});
+            Clients.back()->ExpectOffsets({ 41 });
         }
-        FormatHandler->ParseMessages({GetMessage(41, "1")});
+        FormatHandler->ParseRecords({ GetRecord(41, "1") });
 
         const TString error = "Failed to parse massage at offset 42";
         for (auto& client : Clients) {
-            client->ExpectOffsets({42});
+            client->ExpectOffsets({ 42 });
             client->ExpectError(EStatusId::BAD_REQUEST, error, true);
         }
         // Neither later rows in this call nor subsequent calls may resume processing.
-        FormatHandler->ParseMessages({GetMessage(42, "invalid"), GetMessage(43, "2"), GetMessage(44, "invalid again")});
-        FormatHandler->ParseMessages({GetMessage(45, "3")});
+        FormatHandler->ParseRecords({ GetRecord(42, "invalid"), GetRecord(43, "2"), GetRecord(44, "invalid again") });
+        FormatHandler->ParseRecords({ GetRecord(45, "3") });
         FormatHandler->ForceRefresh();
         for (const auto clientId : ClientIds) {
             UNIT_ASSERT(FormatHandler->ExtractClientData(clientId, Max<ui64>()).empty());
@@ -408,23 +408,23 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         RunInActorContext([&] {
             CreateFormatHandler({
                 .FunctionRegistry = FunctionRegistry,
-                .JsonParserConfig = {.FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Hours(1)},
-                .FiltersConfig = {.CompileServiceId = CompileService},
+                .JsonParserConfig = { .FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Hours(1) },
+                .FiltersConfig = { .CompileServiceId = CompileService },
             });
-            CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 0));
+            CheckSuccess(MakeClient({ { "data", "[DataType; String]" } }, "", "", EmptyCheck(), 0));
             const TString error = "Failed to parse";
-            Clients.back()->ExpectOffsets({42});
+            Clients.back()->ExpectOffsets({ 42 });
             Clients.back()->ExpectError(EStatusId::BAD_REQUEST, error, true);
-            FormatHandler->ParseMessages({GetMessage(42, "not json")});
+            FormatHandler->ParseRecords({ GetRecord(42, "not json") });
 
             const auto newClient = MakeIntrusive<TClientDataConsumer>(
-                NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{{"other", "[DataType; String]"}}, "", "", EmptyCheck(), ui64{0});
+                NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{ { "other", "[DataType; String]" } }, "", "", EmptyCheck(), ui64{ 0 });
             CheckError(FormatHandler->AddClient(newClient), EStatusId::BAD_REQUEST, error);
             newClient->Validate();
             UNIT_ASSERT(!newClient->IsStarted());
 
             FormatHandler->ForceRefresh();
-            FormatHandler->ParseMessages({GetMessage(43, R"({"data": "valid"})")});
+            FormatHandler->ParseRecords({ GetRecord(43, R"({"data": "valid"})") });
             UNIT_ASSERT(FormatHandler->ExtractClientData(ClientIds.back(), Max<ui64>()).empty());
             RemoveClient(ClientIds.back());
             UNIT_ASSERT(!FormatHandler->HasClients());
@@ -435,20 +435,20 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         const auto compileService = Runtime.AllocateEdgeActor();
         TCountersDesc counters;
         NKikimr::TAlignedPagePoolCounters poolCounters(counters.CountersRoot, "row_dispatcher");
-        CreateFormatHandler(
-            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = compileService}},
-            {.ParsingFormat = "raw"}, counters);
+        CreateFormatHandler({ .FunctionRegistry = FunctionRegistry, .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+                                .FiltersConfig = { .CompileServiceId = compileService } },
+            { .ParsingFormat = "raw" }, counters);
         const auto client = MakeIntrusive<TClientDataConsumer>(
-            NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{{"data", "[DataType; Uint64]"}}, "", "TRUE", EmptyCheck(), ui64{0});
+            NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{ { "data", "[DataType; Uint64]" } }, "", "TRUE", EmptyCheck(), ui64{ 0 });
         CheckSuccess(FormatHandler->AddClient(client));
         Clients.push_back(client);
         auto request = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileRequest>(compileService, WAIT_TIMEOUT);
         UNIT_ASSERT(request);
         UNIT_ASSERT(!client->IsStarted());
 
-        client->ExpectOffsets({42});
+        client->ExpectOffsets({ 42 });
         client->ExpectError(EStatusId::BAD_REQUEST, "Failed to parse massage at offset 42", true);
-        FormatHandler->ParseMessages({GetMessage(42, "invalid")});
+        FormatHandler->ParseRecords({ GetRecord(42, "invalid") });
         client->Validate();
         FormatHandler->RemoveClient(client->GetClientId());
         FormatHandler.Reset();
@@ -470,14 +470,15 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         auto manager = std::make_shared<TThreadSafeQuotaManager>(64_MB, 64_MB);
         TCountersDesc counters;
         NKikimr::TAlignedPagePoolCounters poolCounters(counters.CountersRoot, "row_dispatcher");
-        CreateFormatHandler(
-            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}, .MemoryQuotaManager = manager},
-            {.ParsingFormat = "raw"}, counters);
+        CreateFormatHandler({ .FunctionRegistry = FunctionRegistry, .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+                                .FiltersConfig = { .CompileServiceId = CompileService },
+                                .MemoryQuotaManager = manager },
+            { .ParsingFormat = "raw" }, counters);
 
         constexpr size_t rows = 8192;
         TQueue<TDataBatch> completed;
         for (size_t client = 0; client < 2; ++client) {
-            CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", [&](auto, TQueue<TDataBatch>&& data) {
+            CheckSuccess(MakeClient({ { "data", "[DataType; String]" } }, "", "", [&](auto, TQueue<TDataBatch>&& data) {
                 UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
                 const auto& offsets = data.front().Offsets;
                 UNIT_ASSERT_VALUES_EQUAL(offsets.size(), rows);
@@ -494,13 +495,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             NYql::NUdf::TUnboxedValue foreignValue = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
             const auto foreignAllocated = Alloc.GetAllocated();
             for (size_t batch = 0; batch < 2; ++batch) {
-                TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+                TVector<TMessageStreamRecord> records;
                 TVector<ui64> expectedOffsets;
                 for (size_t i = 0; i < rows; ++i) {
-                    messages.push_back(GetMessage(batch * rows + i, "x"));
+                    records.push_back(GetRecord(batch * rows + i, "x"));
                     expectedOffsets.push_back(batch * rows + i);
                 }
-                ParseMessages(messages, std::move(expectedOffsets));
+                ParseRecords(records, std::move(expectedOffsets));
                 UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
                 UNIT_ASSERT_VALUES_EQUAL(Alloc.GetAllocated(), foreignAllocated);
                 if (!batch) {
@@ -549,14 +550,15 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
     Y_UNIT_TEST_F(QueuedOutputQuotaRejection, TFormatHandlerFixture) {
         constexpr ui64 limit = 8_MB;
         auto manager = std::make_shared<TThreadSafeQuotaManager>(limit, limit);
-        CreateFormatHandler(
-            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}, .MemoryQuotaManager = manager},
-            {.ParsingFormat = "raw"});
-        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 1));
+        CreateFormatHandler({ .FunctionRegistry = FunctionRegistry, .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+                                .FiltersConfig = { .CompileServiceId = CompileService },
+                                .MemoryQuotaManager = manager },
+            { .ParsingFormat = "raw" });
+        CheckSuccess(MakeClient({ { "data", "[DataType; String]" } }, "", "", EmptyCheck(), 1));
 
-        Clients.back()->ExpectOffsets({42});
+        Clients.back()->ExpectOffsets({ 42 });
         with_lock(Alloc) {
-            FormatHandler->ParseMessages({GetMessage(42, "x")});
+            FormatHandler->ParseRecords({ GetRecord(42, "x") });
             TMemoryQuota competingBuffer(manager);
             competingBuffer.Resize(limit - manager->GetCurrentQuota());
             UNIT_ASSERT_EXCEPTION(FormatHandler->ExtractClientData(ClientIds.back(), Max<ui64>()), NKikimr::TMemoryLimitExceededException);
@@ -570,18 +572,19 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
     }
 
     Y_UNIT_TEST_F(BoundedExtractionPreservesRemainingBatches, TFormatHandlerFixture) {
-        CreateFormatHandler({.FunctionRegistry = FunctionRegistry, .FiltersConfig = {.CompileServiceId = CompileService}}, {.ParsingFormat = "raw"});
-        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 3));
+        CreateFormatHandler(
+            { .FunctionRegistry = FunctionRegistry, .FiltersConfig = { .CompileServiceId = CompileService } }, { .ParsingFormat = "raw" });
+        CheckSuccess(MakeClient({ { "data", "[DataType; String]" } }, "", "", EmptyCheck(), 3));
         const auto clientId = ClientIds.back();
-        Clients.back()->ExpectOffsets({42, 43, 44});
+        Clients.back()->ExpectOffsets({ 42, 43, 44 });
         const TString data(MAX_BATCH_SIZE + 1, 'x');
-        FormatHandler->ParseMessages({GetMessage(42, data), GetMessage(43, data), GetMessage(44, "last")});
+        FormatHandler->ParseRecords({ GetRecord(42, data), GetRecord(43, data), GetRecord(44, "last") });
         for (ui64 offset = 42; offset <= 44; ++offset) {
             // Always make progress, including when the first batch exceeds the limit.
             auto batches = FormatHandler->ExtractClientData(clientId, 1);
             UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
             const auto& batch = batches.front();
-            UNIT_ASSERT_VALUES_EQUAL(batch.Offsets, TVector<ui64>{offset});
+            UNIT_ASSERT_VALUES_EQUAL(batch.Offsets, TVector<ui64>{ offset });
             UNIT_ASSERT_VALUES_EQUAL(batch.Rows, 1);
             UNIT_ASSERT_GT(batch.TotalSize, batch.DataSize);
             CheckMessageBatch(batch.SerializedData, TBatch().AddRow(TRow().AddString(offset < 44 ? data : TString("last"))));
@@ -593,17 +596,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
     Y_UNIT_TEST_F(ManyJsonClients, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
-        const TSchemaColumn commonColumn = {"common", "[DataType; String]"};
+        const TSchemaColumn commonColumn = { "common", "[DataType; String]" };
 
         CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
-            "",
-            "FALSE",
-            EmptyCheck(),
-            0
-        ));
+            { commonColumn, { "column_0", "[DataType; String]" }, { "column_1", "[DataType; String]" } }, "", "FALSE", EmptyCheck(), 0));
 
-        auto messages = TVector<TMessages>{
+        // clang-format off
+        auto records = TVector<TMessages>{
             {
                 {firstOffset + 0, firstOffset + 1},
                 {},
@@ -612,15 +611,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("event1").AddString("str_first__large__").AddString("some_str"))
             },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
-            "",
-            "TRUE",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ commonColumn, { "column_0", "[DataType; String]" }, { "column_1", "[DataType; String]" } }, "", "TRUE",
+            BatchCheck(records), ExpectedFilteredRows(records)));
 
-        messages = TVector<TMessages>{
+        // clang-format off
+        records = TVector<TMessages>{
             {
                 {firstOffset + 0, firstOffset + 1},
                 {},
@@ -636,221 +632,136 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("event3").AddString("str_first__large__").AddString("some_str"))
             },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
-            "",
-            "",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ commonColumn, { "column_0", "[DataType; String]" }, { "column_1", "[DataType; String]" } }, "", "",
+            BatchCheck(records), ExpectedFilteredRows(records)));
 
-        messages = TVector<TMessages>{
-            {{firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString("event1").AddString("str_first__large__"))},
-            {{firstOffset + 3}, {}, TBatch().AddRow(TRow().AddString("event3").AddString("str_first__large__"))},
+        records = TVector<TMessages>{
+            { { firstOffset + 1 }, {}, TBatch().AddRow(TRow().AddString("event1").AddString("str_first__large__")) },
+            { { firstOffset + 3 }, {}, TBatch().AddRow(TRow().AddString("event3").AddString("str_first__large__")) },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[DataType; String]"}},
-            "",
-            R"(column_0 = "str_first__large__")",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_0", "[DataType; String]" } }, "", R"(column_0 = "str_first__large__")",
+            BatchCheck(records), ExpectedFilteredRows(records)));
 
-        messages = TVector<TMessages>{
-            {{firstOffset + 0}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+        records = TVector<TMessages>{
+            { { firstOffset + 0 }, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second")) },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_1", "[DataType; String]"}},
-            "",
-            R"(column_1 = "str_second")",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_1", "[DataType; String]" } }, "", R"(column_1 = "str_second")", BatchCheck(records),
+            ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 0, R"({"common": "event0", "column_0": "some_str", "column_1": "str_second"})"),
-            GetMessage(firstOffset + 1, R"({"common": "event1", "column_0": "str_first__large__", "column_1": "some_str"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 0, R"({"common": "event0", "column_0": "some_str", "column_1": "str_second"})"),
+            GetRecord(firstOffset + 1, R"({"common": "event1", "column_0": "str_first__large__", "column_1": "some_str"})"),
         });
 
         RemoveClient(ClientIds[1]);
         RemoveClient(ClientIds[4]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 2, R"({"common": "event2", "column_0": "some_str", "column_1": "str_second"})"),
-            GetMessage(firstOffset + 3, R"({"common": "event3", "column_0": "str_first__large__", "column_1": "some_str"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 2, R"({"common": "event2", "column_0": "some_str", "column_1": "str_second"})"),
+            GetRecord(firstOffset + 3, R"({"common": "event3", "column_0": "str_first__large__", "column_1": "some_str"})"),
         });
     }
 
     Y_UNIT_TEST_F(ManyRawClients, TFormatHandlerFixture) {
-        CreateFormatHandler(
-            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
-            {.ParsingFormat = "raw"}
-        );
+        CreateFormatHandler({ .FunctionRegistry = FunctionRegistry, .JsonParserConfig = { .FunctionRegistry = FunctionRegistry },
+                                .FiltersConfig = { .CompileServiceId = CompileService } },
+            { .ParsingFormat = "raw" });
 
         constexpr ui64 firstOffset = 42;
-        const TVector<TSchemaColumn> columns = {{"data", "[DataType; String]"}};
+        const TVector<TSchemaColumn> columns = { { "data", "[DataType; String]" } };
         const TVector<TString> input = {
             R"({"column_0": "str1__++___str2", "column_1": 12345})",
             R"({"column_0": "str13__++___str23", "column_1": ["A", "B", "C"]})",
             R"({"column_0": false, "column_1": {"X": "Y"}})",
         };
 
-        CheckSuccess(MakeClient(
-            columns,
-            "",
-            "FALSE",
-            EmptyCheck(),
-            0
-        ));
+        CheckSuccess(MakeClient(columns, "", "FALSE", EmptyCheck(), 0));
 
-        auto messages = TVector<TMessages>{
-            {{firstOffset + 0, firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString(input[0])).AddRow(TRow().AddString(input[1]))},
-            {{firstOffset + 2}, {}, TBatch().AddRow(TRow().AddString(input[2]))},
+        auto records = TVector<TMessages>{
+            { { firstOffset + 0, firstOffset + 1 }, {}, TBatch().AddRow(TRow().AddString(input[0])).AddRow(TRow().AddString(input[1])) },
+            { { firstOffset + 2 }, {}, TBatch().AddRow(TRow().AddString(input[2])) },
         };
-        CheckSuccess(MakeClient(
-            columns,
-            "",
-            "TRUE",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient(columns, "", "TRUE", BatchCheck(records), ExpectedFilteredRows(records)));
 
-        messages = TVector<TMessages>{
-            {{firstOffset + 0, firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString(input[0])).AddRow(TRow().AddString(input[1]))},
+        records = TVector<TMessages>{
+            { { firstOffset + 0, firstOffset + 1 }, {}, TBatch().AddRow(TRow().AddString(input[0])).AddRow(TRow().AddString(input[1])) },
         };
-        CheckSuccess(MakeClient(
-            columns,
-            "",
-            "",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient(columns, "", "", BatchCheck(records), ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 0, input[0]),
-            GetMessage(firstOffset + 1, input[1]),
-        }, {firstOffset + 0, firstOffset + 1});
+        ParseRecords({
+                         GetRecord(firstOffset + 0, input[0]), GetRecord(firstOffset + 1, input[1]),
+                     },
+            { firstOffset + 0, firstOffset + 1 });
 
         RemoveClient(ClientIds.back());
 
-        ParseMessages({
-            GetMessage(firstOffset + 2, input[2]),
+        ParseRecords({
+            GetRecord(firstOffset + 2, input[2]),
         });
     }
 
     Y_UNIT_TEST_F(ClientValidation, TFormatHandlerFixture) {
-        const TVector<TSchemaColumn> columns = {{"data", "[DataType; String]"}};
+        const TVector<TSchemaColumn> columns = { { "data", "[DataType; String]" } };
 
-        CheckSuccess(MakeClient(
-            columns,
-            "",
-            "FALSE",
-            EmptyCheck(),
-            0
-        ));
+        CheckSuccess(MakeClient(columns, "", "FALSE", EmptyCheck(), 0));
 
-        CheckError(
-            FormatHandler->AddClient(MakeIntrusive<TClientDataConsumer>(ClientIds.back(), columns, "", "", EmptyCheck(), static_cast<ui64>(0))),
-            EStatusId::INTERNAL_ERROR,
-            "Failed to create new client, client with id [0:0:0] already exists"
-        );
+        CheckError(FormatHandler->AddClient(MakeIntrusive<TClientDataConsumer>(ClientIds.back(), columns, "", "", EmptyCheck(),
+                       static_cast<ui64>(0))), EStatusId::INTERNAL_ERROR, "Failed to create new client, client with id [0:0:0] already exists");
 
-        CheckError(
-            MakeClient(
-                {{"data", "[OptionalType; [DataType; String]]"}},
-                "",
-                "",
-                EmptyCheck(),
-                0
-            ),
-            EStatusId::SCHEME_ERROR,
-            "Failed to modify common parsing schema"
-        );
+        CheckError(MakeClient({ { "data", "[OptionalType; [DataType; String]]" } }, "", "", EmptyCheck(), 0), EStatusId::SCHEME_ERROR,
+            "Failed to modify common parsing schema");
 
-        CheckError(
-            MakeClient(
-                {{"data_2", "[EmptyListType; [DataType; String]]"}},
-                "",
-                "",
-                EmptyCheck(),
-                0
-            ),
-            EStatusId::UNSUPPORTED,
-            "Failed to update parser with new client"
-        );
+        CheckError(MakeClient({ { "data_2", "[EmptyListType; [DataType; String]]" } }, "", "", EmptyCheck(), 0), EStatusId::UNSUPPORTED,
+            "Failed to update parser with new client");
     }
 
     Y_UNIT_TEST_F(ClientError, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
-        const TSchemaColumn commonColumn = {"common", "[DataType; String]"};
+        const TSchemaColumn commonColumn = { "common", "[DataType; String]" };
 
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[OptionalType; [DataType; Uint8]]"}},
-            "",
-            "TRUE",
-            EmptyCheck(),
-            0
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_0", "[OptionalType; [DataType; Uint8]]" } }, "", "TRUE", EmptyCheck(), 0));
 
-        auto messages = TVector<TMessages>{
-            {{firstOffset}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+        auto records = TVector<TMessages>{
+            { { firstOffset }, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second")) },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_1", "[DataType; String]"}},
-            "",
-            R"(column_1 = "str_second")",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_1", "[DataType; String]" } }, "", R"(column_1 = "str_second")", BatchCheck(records),
+            ExpectedFilteredRows(records)));
 
-        CheckClientError(
-            {GetMessage(firstOffset + 0, R"({"common": "event0", "column_0": "some_str", "column_1": "str_second"})")},
-            ClientIds[0],
-            EStatusId::BAD_REQUEST,
-            TStringBuilder() << "Failed to parse json string at offset " << firstOffset << ", got parsing error for column 'column_0' with type [OptionalType; [DataType; Uint8]]"
-        );
+        CheckClientError({ GetRecord(firstOffset + 0, R"({"common": "event0", "column_0": "some_str", "column_1": "str_second"})") },
+            ClientIds[0], EStatusId::BAD_REQUEST,
+            TStringBuilder() << "Failed to parse json string at offset " << firstOffset
+                             << ", got parsing error for column 'column_0' with type [OptionalType; [DataType; Uint8]]");
     }
 
     Y_UNIT_TEST_F(ClientErrorWithEmptyFilter, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
-        const TSchemaColumn commonColumn = {"common", "[DataType; String]"};
+        const TSchemaColumn commonColumn = { "common", "[DataType; String]" };
 
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_0", "[DataType; String]"}},
-            "",
-            "",
-            EmptyCheck(),
-            0
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_0", "[DataType; String]" } }, "", "", EmptyCheck(), 0));
 
-        auto messages = TVector<TMessages>{
-            {{firstOffset}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+        auto records = TVector<TMessages>{
+            { { firstOffset }, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second")) },
         };
-        CheckSuccess(MakeClient(
-            {commonColumn, {"column_1", "[DataType; String]"}},
-            "",
-            R"(column_1 = "str_second")",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ commonColumn, { "column_1", "[DataType; String]" } }, "", R"(column_1 = "str_second")", BatchCheck(records),
+            ExpectedFilteredRows(records)));
 
-        CheckClientError(
-            {GetMessage(firstOffset + 0, R"({"common": "event0", "column_1": "str_second"})")},
-            ClientIds[0],
+        CheckClientError({ GetRecord(firstOffset + 0, R"({"common": "event0", "column_1": "str_second"})") }, ClientIds[0],
             EStatusId::PRECONDITION_FAILED,
-            TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'column_0' with type [DataType; String], buffered offsets: " << firstOffset
-        );
+            TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'column_0' with type [DataType; "
+                                "String], buffered offsets: "
+                             << firstOffset);
     }
 
     Y_UNIT_TEST_F(Watermark, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
 
-        ParseMessages({
-            GetMessage(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z"})"),
-            GetMessage(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z"})"), GetRecord(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z"})"),
         });
 
-        auto messages = TVector<TMessages>{
+        // clang-format off
+        auto records = TVector<TMessages>{
             {
                 {firstOffset + 2, firstOffset + 3},
                 TInstant::Seconds(40),
@@ -866,20 +777,16 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
             },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "", BatchCheck(records),
+            ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z"})"),
-            GetMessage(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z"})"), GetRecord(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z"})"),
         });
 
-        messages = TVector<TMessages>{
+        // clang-format off
+        records = TVector<TMessages>{
             {
                 {firstOffset + 4, firstOffset + 5},
                 TInstant::Seconds(42),
@@ -910,54 +817,46 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:04Z")) // watermark = NULL
             },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "", BatchCheck(records),
+            ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z"})"),
-            GetMessage(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z"})"), GetRecord(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z"})"),
         });
 
         RemoveClient(ClientIds[0]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"),
-            GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"), GetRecord(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
         });
 
-        ParseMessages({
-            GetMessage(firstOffset + 60, R"({"ts": "1970-01-01T00:00:01Z"})"),
-            GetMessage(firstOffset + 70, R"({"ts": "1970-01-01T00:00:02Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 60, R"({"ts": "1970-01-01T00:00:01Z"})"), GetRecord(firstOffset + 70, R"({"ts": "1970-01-01T00:00:02Z"})"),
         });
 
-        ParseMessages({
-            GetMessage(firstOffset + 600, R"({"ts": "1970-01-01T00:00:03Z"})"),
-            GetMessage(firstOffset + 700, R"({"ts": "1970-01-01T00:00:05Z"})"),
-            GetMessage(firstOffset + 800, R"({"ts": "1970-01-01T00:00:04Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 600, R"({"ts": "1970-01-01T00:00:03Z"})"), GetRecord(firstOffset + 700, R"({"ts": "1970-01-01T00:00:05Z"})"),
+            GetRecord(firstOffset + 800, R"({"ts": "1970-01-01T00:00:04Z"})"),
         });
 
         RemoveClient(ClientIds[1]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z"})"),
-            GetMessage(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z"})"), GetRecord(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z"})"),
         });
     }
 
     Y_UNIT_TEST_F(WatermarkWhere, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
 
-        ParseMessages({
-            GetMessage(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z", "pass": 1})"),
-            GetMessage(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z", "pass": 0})"),
+        ParseRecords({
+            GetRecord(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z", "pass": 1})"),
+            GetRecord(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z", "pass": 0})"),
         });
 
-        auto messages = TVector<TMessages>{
+        // clang-format off
+        auto records = TVector<TMessages>{
             {
                 {firstOffset + 2},
                 TInstant::Seconds(40),
@@ -971,20 +870,17 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "pass > 0",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" }, { "pass", "[DataType; Uint64]" } },
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "pass > 0", BatchCheck(records), ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z", "pass": 1})"),
-            GetMessage(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z", "pass": 0})"),
+        ParseRecords({
+            GetRecord(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z", "pass": 1})"),
+            GetRecord(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z", "pass": 0})"),
         });
 
-        messages = TVector<TMessages>{
+        // clang-format off
+        records = TVector<TMessages>{
             {
                 {firstOffset + 4},
                 TInstant::Seconds(42),
@@ -998,106 +894,71 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
             },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "pass > 0",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        // clang-format on
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" }, { "pass", "[DataType; Uint64]" } },
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "pass > 0", BatchCheck(records), ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z", "pass": 1})"),
-            GetMessage(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z", "pass": 0})"),
+        ParseRecords({
+            GetRecord(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z", "pass": 1})"),
+            GetRecord(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z", "pass": 0})"),
         });
 
         RemoveClient(ClientIds[0]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z", "pass": 1})"),
-            GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z", "pass": 0})"),
+        ParseRecords({
+            GetRecord(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z", "pass": 1})"),
+            GetRecord(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z", "pass": 0})"),
         });
 
         RemoveClient(ClientIds[1]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z", "pass": 1})"),
-            GetMessage(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z", "pass": 0})"),
+        ParseRecords({
+            GetRecord(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z", "pass": 1})"),
+            GetRecord(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z", "pass": 0})"),
         });
     }
 
     Y_UNIT_TEST_F(WatermarkWhereFalse, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
 
-        ParseMessages({
-            GetMessage(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z"})"),
-            GetMessage(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 0, R"({"ts": "1970-01-01T00:00:42Z"})"), GetRecord(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z"})"),
         });
 
-        auto messages = TVector<TMessages>{
-            {
-                {firstOffset + 3},
-                TInstant::Seconds(40),
-                TBatch()
-            },
-            {
-                {firstOffset + 5},
-                TInstant::Seconds(42),
-                TBatch()
-            },
+        auto records = TVector<TMessages>{
+            { { firstOffset + 3 }, TInstant::Seconds(40), TBatch() },
+            { { firstOffset + 5 }, TInstant::Seconds(42), TBatch() },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "FALSE",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "FALSE",
+            BatchCheck(records), ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z"})"),
-            GetMessage(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 2, R"({"ts": "1970-01-01T00:00:44Z"})"), GetRecord(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z"})"),
         });
 
-        messages = TVector<TMessages>{
-            {
-                {firstOffset + 5},
-                TInstant::Seconds(42),
-                TBatch()
-            },
-            {
-                {firstOffset + 7},
-                TInstant::Seconds(44),
-                TBatch()
-            },
+        records = TVector<TMessages>{
+            { { firstOffset + 5 }, TInstant::Seconds(42), TBatch() },
+            { { firstOffset + 7 }, TInstant::Seconds(44), TBatch() },
         };
-        CheckSuccess(MakeClient(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "FALSE",
-            BatchCheck(messages),
-            ExpectedFilteredRows(messages)
-        ));
+        CheckSuccess(MakeClient({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "FALSE",
+            BatchCheck(records), ExpectedFilteredRows(records)));
 
-        ParseMessages({
-            GetMessage(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z"})"),
-            GetMessage(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 4, R"({"ts": "1970-01-01T00:00:46Z"})"), GetRecord(firstOffset + 5, R"({"ts": "1970-01-01T00:00:47Z"})"),
         });
 
         RemoveClient(ClientIds[0]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"),
-            GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"), GetRecord(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
         });
 
         RemoveClient(ClientIds[1]);
 
-        ParseMessages({
-            GetMessage(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z"})"),
-            GetMessage(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z"})"),
+        ParseRecords({
+            GetRecord(firstOffset + 8, R"({"ts": "1970-01-01T00:00:50Z"})"), GetRecord(firstOffset + 9, R"({"ts": "1970-01-01T00:00:51Z"})"),
         });
     }
 }
 
-} // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

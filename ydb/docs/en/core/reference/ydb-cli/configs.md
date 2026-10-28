@@ -53,7 +53,7 @@ This section contains commands for managing the {{ ydb-short-name }} [cluster co
 - Generate a dynamic configuration file, based on a static configuration on the cluster:
 
     ```bash
-    {{ ydb-cli }} admin cluster config genereate
+    {{ ydb-cli }} admin cluster config generate
     ```
 
 - Initialize a directory with the configuration, using the path to the configuration file:

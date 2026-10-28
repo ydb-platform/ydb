@@ -12,6 +12,10 @@ namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
 }
 
+namespace Ydb::Export {
+    class ExportToS3Settings;
+}
+
 namespace NKikimr::NSchemeShard {
 
 template <typename T>
@@ -22,5 +26,10 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
 }
 
 NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeResult& describeResult);
+
+inline constexpr TStringBuf ExportDataCompleteFileName = "data_complete.json";
+inline constexpr TStringBuf ExportCompleteFileName = "export_complete.json";
+
+TString GetExportCompletionPrefix(const Ydb::Export::ExportToS3Settings& settings);
 
 } // namespace NKikimr::NSchemeShard

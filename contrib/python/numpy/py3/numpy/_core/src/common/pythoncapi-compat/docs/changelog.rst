@@ -1,6 +1,55 @@
 Changelog
 =========
 
+* 2025-09-01: Add ``PyUnstable_Object_IsUniquelyReferenced()`` function.
+* 2025-06-09: Add ``PyUnicodeWriter_WriteASCII()`` function.
+* 2025-06-03: Add functions:
+
+  * ``PySys_GetAttr()``
+  * ``PySys_GetAttrString()``
+  * ``PySys_GetOptionalAttr()``
+  * ``PySys_GetOptionalAttrString()``
+
+* 2025-01-19: Add ``PyConfig_Get()`` functions.
+* 2025-01-06: Add ``Py_fopen()`` and ``Py_fclose()`` functions.
+* 2024-12-16: Add ``structmember.h`` constants:
+
+  * ``Py_T_BOOL``
+  * ``Py_T_BYTE``
+  * ``Py_T_CHAR``
+  * ``Py_T_DOUBLE``
+  * ``Py_T_FLOAT``
+  * ``Py_T_INT``
+  * ``Py_T_LONGLONG``
+  * ``Py_T_LONG``
+  * ``Py_T_OBJECT_EX``
+  * ``Py_T_PYSSIZET``
+  * ``Py_T_SHORT``
+  * ``Py_T_STRING_INPLACE``
+  * ``Py_T_STRING``
+  * ``Py_T_UBYTE``
+  * ``Py_T_UINT``
+  * ``Py_T_ULONGLONG``
+  * ``Py_T_ULONG``
+  * ``Py_T_USHORT``
+  * ``_Py_T_NONE``
+  * ``_Py_T_OBJECT``
+  * ``Py_AUDIT_READ``
+  * ``Py_READONLY``
+  * ``_Py_WRITE_RESTRICTED``
+
+* 2024-12-13: Add functions and structs:
+
+  * ``PyLongLayout``
+  * ``PyLong_GetNativeLayout()``
+  * ``PyLongExport``
+  * ``PyLong_Export()``
+  * ``PyLong_FreeExport()``
+  * ``PyLongWriter``
+  * ``PyLongWriter_Create()``
+  * ``PyLongWriter_Finish()``
+  * ``PyLongWriter_Discard()``
+
 * 2024-11-12: Add functions:
 
   * ``PyLong_IsPositive()``

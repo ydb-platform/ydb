@@ -265,6 +265,19 @@ const confirm=()=>{confirmations++;return false};
         script = cluster_config_ui.JS + r'''
 const assert=require('assert');
 const template={tenants:[{path:'/Root/db'}],nodes:[{tenant:'/Root/db'},{tenant:''}],ydb_tenant_configs:{'/Root/db':{feature_flags:{enable_system_views:false}}}};
+ccSetPortRange(template,'http','8765-8799, 9000');ccSetPortRange(template,'grpc','2135');
+assert.deepStrictEqual(template.port_ranges,{http:'8765-8799, 9000',grpc:'2135'});
+for(const value of ['0','65536','2-1','1,','1.5','1-2-3'])assert.throws(()=>ccSetPortRange(template,'http',value));
+assert.equal(template.port_ranges.http,'8765-8799, 9000');
+for(const value of ['auto','8765-8799, auto','auto, 9000','AUTO, 9000, auto']){
+  ccSetPortRange(template,'http',value);assert.equal(template.port_ranges.http,value);
+}
+for(const value of ['auto,',',auto','auto,,9000','auto,0','auto-9000','automatic']){
+  assert.throws(()=>ccSetPortRange(template,'http',value));
+  assert.equal(template.port_ranges.http,'AUTO, 9000, auto');
+}
+ccSetPortRange(template,'http','');assert.deepStrictEqual(template.port_ranges,{grpc:'2135'});
+ccSetPortRange(template,'grpc',' ');assert(!Object.hasOwn(template,'port_ranges'));
 ccSetDomain(template,'Demo');assert.equal(ccDomain(template),'Demo');
 assert.equal(template.tenants[0].path,'/Demo/db');assert.equal(template.nodes[0].tenant,'/Demo/db');
 assert.equal(template.nodes[1].tenant,'');assert.throws(()=>ccSetDomain(template,'bad/name'));

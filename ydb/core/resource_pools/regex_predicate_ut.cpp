@@ -2,14 +2,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr {
 
 using NResourcePool::TRegexPredicate;
 
-
 Y_UNIT_TEST_SUITE(TRegexPredicateFromGlob) {
-
     Y_UNIT_TEST(LiteralGlob) {
         auto pred = TRegexPredicate::FromGlob("/Root/db/orders");
         UNIT_ASSERT(pred.Match("/Root/db/orders"));
@@ -89,4 +86,4 @@ Y_UNIT_TEST_SUITE(TRegexPredicateFromGlob) {
     }
 }
 
-}  // namespace NKikimr
+}   // namespace NKikimr

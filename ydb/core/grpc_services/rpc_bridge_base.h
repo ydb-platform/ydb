@@ -4,6 +4,7 @@
 #include "rpc_deferrable.h"
 
 #include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -39,6 +40,16 @@ public:
 protected:
     const TDerived *Self() const { return static_cast<const TDerived*>(this); }
     TDerived *Self() { return static_cast<TDerived*>(this); }
+
+    // operations changing the bridge cluster state are allowed to administrators only
+    bool CheckAdministrator(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) const {
+        if (!IsAdministrator(AppData(), this->Request_->GetSerializedToken())) {
+            status = Ydb::StatusIds::UNAUTHORIZED;
+            issues.AddIssue("Bridge operations require administrator privileges");
+            return false;
+        }
+        return true;
+    }
 };
 
 } // namespace NKikimr::NGRpcService

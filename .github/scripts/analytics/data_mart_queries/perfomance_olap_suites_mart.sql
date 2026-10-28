@@ -76,6 +76,20 @@ $suites = SELECT
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_50') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction50,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_100') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction100,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.tpcc_efficiency') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS TpccEfficiency,
+    -- Error areas across all tests of this suite run (new format:
+    -- ydb/tests/olap/lib/workload_result.py get_error_stats writes
+    -- $.errors.{other,ydb_infra,test_infra,request,timeout,diff,node_fail,performance}.true
+    -- for ERROR-priority problems and $.errors.warning.true for warnings;
+    -- old format wrote only {other,timeout,diff,warning}).
+    MAX(IF(JSON_VALUE(Stats, "$.errors.node_fail") = "true", 1, 0)) AS has_node_fail,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.request") = "true", 1, 0)) AS has_request,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.performance") = "true", 1, 0)) AS has_performance,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.ydb_infra") = "true", 1, 0)) AS has_ydb_infra,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.other") = "true", 1, 0)) AS has_other,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.diff") = "true", 1, 0)) AS has_diff,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.timeout") = "true", 1, 0)) AS has_timeout,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.test_infra") = "true", 1, 0)) AS has_test_infra,
+    MAX(IF(JSON_VALUE(Stats, "$.errors.warning") = "true", 1, 0)) AS has_warning,
     Min(MIN_OF(Timestamp, CAST(RunId/1000 AS Timestamp))) AS Begin,
     Max(Timestamp) AS End,
 FROM `perfomance/olap/tests_results`
@@ -113,6 +127,33 @@ SELECT
     s.End AS End,
     d.DiffTests AS DiffTests,
     f.FailTests AS FailTests,
+    -- Main error area of the suite run, same priority as in the tests mart:
+    -- node_fail > request > performance > ydb_infra > other > diff > timeout > test_infra > warning.
+    -- Old-format rows only ever set other/timeout/diff/warning, so they keep their old colors.
+    CASE
+        WHEN s.has_node_fail > 0 THEN "node_fail"
+        WHEN s.has_request > 0 THEN "request"
+        WHEN s.has_performance > 0 THEN "performance"
+        WHEN s.has_ydb_infra > 0 THEN "ydb_infra"
+        WHEN s.has_other > 0 THEN "other"
+        WHEN s.has_diff > 0 THEN "diff"
+        WHEN s.has_timeout > 0 THEN "timeout"
+        WHEN s.has_test_infra > 0 THEN "test_infra"
+        WHEN s.has_warning > 0 THEN "warning"
+        ELSE "ok"
+    END AS ErrorArea,
+    CASE
+        WHEN s.has_node_fail > 0 THEN "magenta"
+        WHEN s.has_request > 0 THEN "crimson"
+        WHEN s.has_performance > 0 THEN "brown"
+        WHEN s.has_ydb_infra > 0 THEN "orange"
+        WHEN s.has_other > 0 THEN "red"
+        WHEN s.has_diff > 0 THEN "cyan"
+        WHEN s.has_timeout > 0 THEN "blue"
+        WHEN s.has_test_infra > 0 THEN "purple"
+        WHEN s.has_warning > 0 THEN "yellow"
+        ELSE "green"
+    END AS Color,
     CASE
         WHEN s.Db LIKE '%sas%' THEN 'sas'
         WHEN s.Db LIKE '%vla%' THEN 'vla'

@@ -33,12 +33,19 @@ __all__ = ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
 import functools
 import warnings
 
+from numpy._core import (
+    asarray,
+    conjugate,
+    empty_like,
+    overrides,
+    reciprocal,
+    result_type,
+    sqrt,
+    take,
+)
 from numpy.lib.array_utils import normalize_axis_index
-from numpy._core import (asarray, empty_like, result_type,
-                         conjugate, take, sqrt, reciprocal)
-from . import _pocketfft_umath as pfu
-from numpy._core import overrides
 
+from . import _pocketfft_umath as pfu
 
 array_function_dispatch = functools.partial(
     overrides.array_function_dispatch, module='numpy.fft')
@@ -85,7 +92,7 @@ def _raw_fft(a, n, axis, is_real, is_forward, norm, out=None):
             out_dtype = real_dtype
         else:  # Others, complex output.
             out_dtype = result_type(a.dtype, 1j)
-        out = empty_like(a, shape=a.shape[:axis] + (n_out,) + a.shape[axis+1:],
+        out = empty_like(a, shape=a.shape[:axis] + (n_out,) + a.shape[axis + 1:],
                          dtype=out_dtype)
     elif ((shape := getattr(out, "shape", None)) is not None
           and (len(shape) != a.ndim or shape[axis] != n_out)):
@@ -198,8 +205,7 @@ def fft(a, n=None, axis=-1, norm=None, out=None):
     >>> t = np.arange(256)
     >>> sp = np.fft.fft(np.sin(t))
     >>> freq = np.fft.fftfreq(t.shape[-1])
-    >>> plt.plot(freq, sp.real, freq, sp.imag)
-    [<matplotlib.lines.Line2D object at 0x...>, <matplotlib.lines.Line2D object at 0x...>]
+    >>> _ = plt.plot(freq, sp.real, freq, sp.imag)
     >>> plt.show()
 
     """
@@ -1379,7 +1385,7 @@ def rfftn(a, s=None, axes=None, norm=None, out=None):
     a = asarray(a)
     s, axes = _cook_nd_args(a, s, axes)
     a = rfft(a, s[-1], axes[-1], norm, out=out)
-    for ii in range(len(axes)-2, -1, -1):
+    for ii in range(len(axes) - 2, -1, -1):
         a = fft(a, s[ii], axes[ii], norm, out=out)
     return a
 
@@ -1597,7 +1603,7 @@ def irfftn(a, s=None, axes=None, norm=None, out=None):
     """
     a = asarray(a)
     s, axes = _cook_nd_args(a, s, axes, invreal=1)
-    for ii in range(len(axes)-1):
+    for ii in range(len(axes) - 1):
         a = ifft(a, s[ii], axes[ii], norm)
     a = irfft(a, s[-1], axes[-1], norm, out=out)
     return a

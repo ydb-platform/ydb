@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_actor_channels_ut.cpp
+    dq_compute_actor_checkpoints_ut.cpp
     dq_compute_memory_quota_ut.cpp
     dq_compute_issues_buffer_ut.cpp
     mock_lookup_factory.cpp
@@ -34,7 +35,7 @@ PEERDIR(
     ydb/library/yql/public/ydb_issue
     yql/essentials/minikql/computation
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
     yql/essentials/utils/backtrace
 )

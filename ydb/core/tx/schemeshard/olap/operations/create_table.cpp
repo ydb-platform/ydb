@@ -132,6 +132,15 @@ public:
         PresetId = preset->GetId();
         PresetName = preset->GetName();
 
+        // A preset persisted by an older version may still contain PG columns.
+        for (const auto& [_, column] : GetSchema().GetColumns().GetColumns()) {
+            if (column.GetType().GetTypeId() == NScheme::NTypeIds::Pg) {
+                errors.AddError(TStringBuilder() << "Type '" << column.GetTypeName()
+                    << "' specified for column '" << column.GetName() << "' is not supported for column tables");
+                return false;
+            }
+        }
+
         if (description.HasSchema()) {
             if (!GetSchema().ValidateForStore(description.GetSchema(), errors)) {
                 return false;
@@ -535,7 +544,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -830,7 +839,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateColumnTable");
     }
 

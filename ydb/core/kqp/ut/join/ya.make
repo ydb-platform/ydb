@@ -22,6 +22,7 @@ ENDIF()
 SRCS(
     kqp_block_hash_join_ut.cpp
     kqp_join_order_ut.cpp
+    kqp_scalar_hash_join_ut.cpp
     kqp_benches_ut.cpp
 )
 

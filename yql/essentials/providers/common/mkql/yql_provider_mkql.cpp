@@ -2091,10 +2091,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
             latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
         }
+        bool checkMinWindowStart = false;
+        if (NNodes::TCoMultiHoppingCore::idx_CheckMinWindowStart < node.ChildrenSize()) {
+            checkMinWindowStart = FromString<bool>(*node.Child(NNodes::TCoMultiHoppingCore::idx_CheckMinWindowStart), NUdf::EDataSlot::Bool);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
             hop, interval, delay, dataWatermarks, watermarksMode,
-            sizeLimit, timeLimit, earlyPolicy, latePolicy);
+            sizeLimit, timeLimit, earlyPolicy, latePolicy, checkMinWindowStart);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {

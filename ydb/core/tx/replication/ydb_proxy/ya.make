@@ -18,8 +18,6 @@ SRCS(
     ydb_proxy.cpp
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(

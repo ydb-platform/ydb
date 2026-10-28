@@ -45,7 +45,9 @@ TString TSelectBuilder::Build(
     const TStringBuf& table,
     std::optional<ui64> tabletId,
     const TStringBuf& where,
-    const TStringBuf& declares) const {
+    const TStringBuf& declares,
+    double sampleRate,
+    ui64 samplingSeed) const {
     TStringBuilder res;
     if (declares) {
         res << declares;
@@ -119,6 +121,9 @@ TString TSelectBuilder::Build(
     res << " FROM " << TEscapedId{table};
     if (tabletId) {
         res << " WITH TabletId = '" << *tabletId << "'";
+    } else if (sampleRate < 1.0) {
+        res << " WITH (sampling_rate = '" << std::format("{:.17g}", sampleRate)
+            << "', sampling_seed = '" << samplingSeed << "')";
     }
     if (where) {
         res << " WHERE " << where;

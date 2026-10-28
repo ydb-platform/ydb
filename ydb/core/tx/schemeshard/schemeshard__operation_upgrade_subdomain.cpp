@@ -583,6 +583,7 @@ public:
 
         alterData->SetVersion(alterData->GetVersion() + 1);
         context.SS->SubDomains.Set(pathId, alterData);
+        context.SS->UpdateDatabaseSpaceSubscriptions();
 
         context.SS->PersistSubDomainVersion(db, pathId, *alterData);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData);
@@ -632,6 +633,7 @@ public:
         alterData->SetAlterPrivate(subDomain);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->SubDomains.Set(pathId, alterData);
+        context.SS->UpdateDatabaseSpaceSubscriptions();
 
         item->SwapChildren(HiddenChildren);
         item->PreSerializedChildrenListing.clear();
@@ -1038,7 +1040,7 @@ class TUpgradeSubDomain: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetUpgradeSubDomain();
@@ -1185,7 +1187,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TUpgradeSubDomain");
     }
 
@@ -1280,7 +1282,7 @@ class TUpgradeSubDomainDecision: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetUpgradeSubDomain();
@@ -1381,7 +1383,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TUpgradeSubDomainDecision");
     }
 

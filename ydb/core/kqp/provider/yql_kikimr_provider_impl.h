@@ -55,6 +55,7 @@ private:
     virtual TStatus HandleCreateObject(NNodes::TKiCreateObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterObject(NNodes::TKiAlterObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
+    virtual TStatus HandleKillSession(NNodes::TKiKillSession node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleRenameGroup(NNodes::TKiRenameGroup node, TExprContext& ctx) = 0;
@@ -314,6 +315,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusiv
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
     bool isInternalCall);
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TAutoPtr<IGraphTransformer> intents);
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
@@ -373,7 +376,6 @@ bool IsKikimrSystemColumn(const TStringBuf columnName);
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
-TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
 
 // Single source of truth for the SHOW CREATE setting names attached to
 // KiReadTable nodes and the corresponding PathType values understood by

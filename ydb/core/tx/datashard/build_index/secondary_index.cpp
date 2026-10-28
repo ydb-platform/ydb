@@ -341,7 +341,7 @@ protected:
         }
     }
 
-    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
+    virtual void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
         YDB_LOG_DEBUG("Retrying row upload",
             {"debug", Debug()});
 
@@ -361,6 +361,9 @@ protected:
                        "Mismatch"
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
+            // The uploader has replied and is about to die, so a new one may be
+            // registered for the next batch.
+            Uploader = {};
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -417,6 +420,17 @@ protected:
     }
 
     void Upload(bool isRetry = false) {
+        if (Uploader) {
+            // Only one upload may be in flight: WriteBuf is not cleared until the
+            // current uploader replies, and a late reply from a superseded uploader
+            // would trip the sender check in Handle().
+            YDB_LOG_DEBUG("Upload already in flight, skipping",
+                {"uploaderActorId", Uploader},
+                {"isRetry", isRetry},
+                {"debug", Debug()});
+            return;
+        }
+
         if (isRetry) {
             ++RetryCount;
         } else {
@@ -479,6 +493,7 @@ public:
 class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
     TVector<TCell> Value;
     TString ValueSerialized;
+    ui32 SequenceRetryCount = 0;
 
     struct TSequenceColumn {
         size_t ColumnIdx;
@@ -613,7 +628,8 @@ public:
 private:
     STFUNC(SequenceStateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            HFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 this->StateWork(ev);
         }
@@ -661,13 +677,27 @@ private:
         }
     }
 
-    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev) {
+    void HandleWakeup(const NActors::TActorContext& ctx) override {
+        if (!SequenceColumns.empty()) {
+            TopUpSequenceRequests();
+        }
+        TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR>::HandleWakeup(ctx);
+    }
+
+    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev, const NActors::TActorContext& ctx) {
         const size_t colIdx = ev->Cookie;
         Y_ENSURE(colIdx < SequenceColumns.size());
         auto& seqCol = SequenceColumns[colIdx];
         if (seqCol.InFlight > 0) {
             --seqCol.InFlight;
         }
+
+        if (ev->Get()->Status == Ydb::StatusIds::UNAVAILABLE) {
+            // Retry UNAVAILABLE errors
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(SequenceRetryCount++), new TEvents::TEvWakeup());
+            return;
+        }
+        SequenceRetryCount = 0;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             UploadStatus.StatusCode = ev->Get()->Status;

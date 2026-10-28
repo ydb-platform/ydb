@@ -44,13 +44,15 @@ class WorkloadManagerExplicitResourcePool(WorkloadManagerBase):
 
         # Route the query explicitly to each pool through the SDK pool_id parameter.
         used = self.execute_query_in_pool(query, pool_id=self.pool_a_name)
-        assert used == self.pool_a_name, \
-            f'Query with pool_id={self.pool_a_name} is expected to use pool {self.pool_a_name}, got {used}'
+        assert (
+            used == self.pool_a_name
+        ), f'Query with pool_id={self.pool_a_name} is expected to use pool {self.pool_a_name}, got {used}'
 
         used = self.execute_query_in_pool(query, pool_id=self.pool_b_name)
         allure.attach(str(used), 'used pool (b)', allure.attachment_type.TEXT)
-        assert used == self.pool_b_name, \
-            f'Query with pool_id={self.pool_b_name} is expected to use pool {self.pool_b_name}, got {used}'
+        assert (
+            used == self.pool_b_name
+        ), f'Query with pool_id={self.pool_b_name} is expected to use pool {self.pool_b_name}, got {used}'
 
     def test_explicit_resource_pool_not_found(self):
         """Verify that specifying a non-existent resource pool makes the query fail with NOT_FOUND."""

@@ -109,8 +109,8 @@
     #elif __riscv_xlen == 32
 	#define NPY_CPU_RISCV32
     #endif
-#elif defined(__loongarch__)
-    #define NPY_CPU_LOONGARCH
+#elif defined(__loongarch_lp64)
+    #define NPY_CPU_LOONGARCH64
 #elif defined(__EMSCRIPTEN__)
     /* __EMSCRIPTEN__ is defined by emscripten: an LLVM-to-Web compiler */
     #define NPY_CPU_WASM
@@ -119,16 +119,6 @@
     information about your platform (OS, CPU and compiler)
 #endif
 
-/*
- * Except for the following architectures, memory access is limited to the natural
- * alignment of data types otherwise it may lead to bus error or performance regression.
- * For more details about unaligned access, see https://www.kernel.org/doc/Documentation/unaligned-memory-access.txt.
-*/
-#if defined(NPY_CPU_X86) || defined(NPY_CPU_AMD64) || defined(__aarch64__) || defined(__powerpc64__)
-    #define NPY_ALIGNMENT_REQUIRED 0
-#endif
-#ifndef NPY_ALIGNMENT_REQUIRED
-    #define NPY_ALIGNMENT_REQUIRED 1
-#endif
+#define NPY_ALIGNMENT_REQUIRED 1
 
 #endif  /* NUMPY_CORE_INCLUDE_NUMPY_NPY_CPU_H_ */

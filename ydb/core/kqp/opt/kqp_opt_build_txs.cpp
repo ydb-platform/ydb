@@ -245,8 +245,7 @@ private:
     }
 
     bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) const {
-        const bool useStateTable = Config->EnableStreamingAggregation.Get().GetOrElse(false)
-            && !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
+        const bool useStateTable = !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
         // TODO: Avoid lambda analysis here, use sources/sinks for table interaction.
         return std::all_of(stages.begin(), stages.end(), [useStateTable](const auto& stage) {
             if (!IsKqpPureLambda(stage.Program()) || !IsKqpPureInputs(stage.Inputs())) {
@@ -462,7 +461,7 @@ private:
             const auto& inputArg = stage.Program().Args().Arg(i);
 
             // Scan inputs that may contain TKqpTxResultBinding
-            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>() || input.Maybe<TKqpCnVectorSearch>()) {
                 collectBindings(input.Ptr());
             }
 
@@ -567,6 +566,8 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
             collectPrecomputes(maybeSource.Cast().Ptr(), /* checkConnections */ true);
         } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
             collectPrecomputes(maybeStreamLookup.Cast().Settings().Ptr());
+        } else if (auto maybeVectorSearch = input.Maybe<TKqpCnVectorSearch>()) {
+            collectPrecomputes(maybeVectorSearch.Cast().TopK().Ptr());
         }
     }
 

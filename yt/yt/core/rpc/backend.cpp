@@ -5,7 +5,7 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NRpc {
 
@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    NThreading::TAtomicObject<THashMap<TStringBuf, IBackend*>> ProtocolToBackend_;
+    TAtomicObject<THashMap<TStringBuf, IBackend*>> ProtocolToBackend_;
 
     TBackendRegistryImpl() = default;
 

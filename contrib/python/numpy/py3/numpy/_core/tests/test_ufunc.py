@@ -1,26 +1,34 @@
-import warnings
-import itertools
-import sys
 import ctypes as ct
+import itertools
 import pickle
+import sys
+import warnings
 
+import numpy._core._operand_flag_tests as opflag_tests
+import numpy._core._rational_tests as _rational_tests
+import numpy._core._umath_tests as umt
 import pytest
 from pytest import param
 
 import numpy as np
 import numpy._core.umath as ncu
-import numpy._core._umath_tests as umt
 import numpy.linalg._umath_linalg as uml
-import numpy._core._operand_flag_tests as opflag_tests
-import numpy._core._rational_tests as _rational_tests
 from numpy.exceptions import AxisError
 from numpy.testing import (
-    assert_, assert_equal, assert_raises, assert_array_equal,
-    assert_almost_equal, assert_array_almost_equal, assert_no_warnings,
-    assert_allclose, HAS_REFCOUNT, suppress_warnings, IS_WASM, IS_PYPY,
-    )
+    HAS_REFCOUNT,
+    IS_PYPY,
+    IS_WASM,
+    assert_,
+    assert_allclose,
+    assert_almost_equal,
+    assert_array_almost_equal,
+    assert_array_equal,
+    assert_equal,
+    assert_no_warnings,
+    assert_raises,
+    suppress_warnings,
+)
 from numpy.testing._private.utils import requires_memory
-
 
 UNARY_UFUNCS = [obj for obj in np._core.umath.__dict__.values()
                     if isinstance(obj, np.ufunc)]
@@ -153,16 +161,16 @@ class TestUfuncGenericLoops:
 
     def test_python_complex_conjugate(self):
         # The conjugate ufunc should fall back to calling the method:
-        arr = np.array([1+2j, 3-4j], dtype="O")
+        arr = np.array([1 + 2j, 3 - 4j], dtype="O")
         assert isinstance(arr[0], complex)
         res = np.conjugate(arr)
         assert res.dtype == np.dtype("O")
-        assert_array_equal(res, np.array([1-2j, 3+4j], dtype="O"))
+        assert_array_equal(res, np.array([1 - 2j, 3 + 4j], dtype="O"))
 
     @pytest.mark.parametrize("ufunc", UNARY_OBJECT_UFUNCS)
     def test_unary_PyUFunc_O_O_method_full(self, ufunc):
         """Compare the result of the object loop with non-object one"""
-        val = np.float64(np.pi/4)
+        val = np.float64(np.pi / 4)
 
         class MyFloat(np.float64):
             def __getattr__(self, attr):
@@ -310,6 +318,7 @@ class TestUfunc:
     # from include/numpy/ufuncobject.h
     size_inferred = 2
     can_ignore = 4
+
     def test_signature0(self):
         # the arguments to test_signature are: nin, nout, core_signature
         enabled, num_dims, ixs, flags, sizes = umt.test_signature(
@@ -337,7 +346,7 @@ class TestUfunc:
         assert_equal(enabled, 1)
         assert_equal(num_dims, (2, 1, 1))
         assert_equal(ixs, (0, 1, 2, 3))
-        assert_equal(flags, (self.size_inferred,)*4)
+        assert_equal(flags, (self.size_inferred,) * 4)
         assert_equal(sizes, (-1, -1, -1, -1))
 
     def test_signature3(self):
@@ -346,7 +355,7 @@ class TestUfunc:
         assert_equal(enabled, 1)
         assert_equal(num_dims, (2, 1, 2))
         assert_equal(ixs, (0, 1, 2, 1, 3))
-        assert_equal(flags, (self.size_inferred,)*4)
+        assert_equal(flags, (self.size_inferred,) * 4)
         assert_equal(sizes, (-1, -1, -1, -1))
 
     def test_signature4(self):
@@ -356,7 +365,7 @@ class TestUfunc:
         assert_equal(enabled, 1)
         assert_equal(num_dims, (2, 2, 2))
         assert_equal(ixs, (0, 1, 1, 2, 0, 2))
-        assert_equal(flags, (self.size_inferred,)*3)
+        assert_equal(flags, (self.size_inferred,) * 3)
         assert_equal(sizes, (-1, -1, -1))
 
     def test_signature5(self):
@@ -436,14 +445,13 @@ class TestUfunc:
         assert_equal(np.vecdot.signature, "(n),(n)->()")
 
     def test_forced_sig(self):
-        a = 0.5*np.arange(3, dtype='f8')
+        a = 0.5 * np.arange(3, dtype='f8')
         assert_equal(np.add(a, 0.5), [0.5, 1, 1.5])
-        with pytest.warns(DeprecationWarning):
-            assert_equal(np.add(a, 0.5, sig='i', casting='unsafe'), [0, 0, 1])
+        with assert_raises(TypeError):
+            np.add(a, 0.5, sig='i', casting='unsafe')
         assert_equal(np.add(a, 0.5, sig='ii->i', casting='unsafe'), [0, 0, 1])
-        with pytest.warns(DeprecationWarning):
-            assert_equal(np.add(a, 0.5, sig=('i4',), casting='unsafe'),
-                         [0, 0, 1])
+        with assert_raises(TypeError):
+            np.add(a, 0.5, sig=('i4',), casting='unsafe')
         assert_equal(np.add(a, 0.5, sig=('i4', 'i4', 'i4'),
                                             casting='unsafe'), [0, 0, 1])
 
@@ -451,17 +459,15 @@ class TestUfunc:
         np.add(a, 0.5, out=b)
         assert_equal(b, [0.5, 1, 1.5])
         b[:] = 0
-        with pytest.warns(DeprecationWarning):
+        with assert_raises(TypeError):
             np.add(a, 0.5, sig='i', out=b, casting='unsafe')
-        assert_equal(b, [0, 0, 1])
-        b[:] = 0
+        assert_equal(b, [0, 0, 0])
         np.add(a, 0.5, sig='ii->i', out=b, casting='unsafe')
         assert_equal(b, [0, 0, 1])
         b[:] = 0
-        with pytest.warns(DeprecationWarning):
+        with assert_raises(TypeError):
             np.add(a, 0.5, sig=('i4',), out=b, casting='unsafe')
-        assert_equal(b, [0, 0, 1])
-        b[:] = 0
+        assert_equal(b, [0, 0, 0])
         np.add(a, 0.5, sig=('i4', 'i4', 'i4'), out=b, casting='unsafe')
         assert_equal(b, [0, 0, 1])
 
@@ -486,8 +492,8 @@ class TestUfunc:
         np.add(3, 4, signature=(float_dtype, float_dtype, None))
 
     @pytest.mark.parametrize("get_kwarg", [
-            lambda dt: dict(dtype=dt),
-            lambda dt: dict(signature=(dt, None, None))])
+            param(lambda dt: {"dtype": dt}, id="dtype"),
+            param(lambda dt: {"signature": (dt, None, None)}, id="signature")])
     def test_signature_dtype_instances_allowed(self, get_kwarg):
         # We allow certain dtype instances when there is a clear singleton
         # and the given one is equivalent; mainly for backcompat.
@@ -497,13 +503,9 @@ class TestUfunc:
         assert int64 is not int64_2
 
         assert np.add(1, 2, **get_kwarg(int64_2)).dtype == int64
-        td = np.timedelta(2, "s")
+        td = np.timedelta64(2, "s")
         assert np.add(td, td, **get_kwarg("m8")).dtype == "m8[s]"
 
-    @pytest.mark.parametrize("get_kwarg", [
-            param(lambda x: dict(dtype=x), id="dtype"),
-            param(lambda x: dict(signature=(x, None, None)), id="signature")])
-    def test_signature_dtype_instances_allowed(self, get_kwarg):
         msg = "The `dtype` and `signature` arguments to ufuncs"
 
         with pytest.raises(TypeError, match=msg):
@@ -653,9 +655,9 @@ class TestUfunc:
 
                 # Check with no output type specified
                 if tc in 'FDG':
-                    tgt = complex(x)/complex(y)
+                    tgt = complex(x) / complex(y)
                 else:
-                    tgt = float(x)/float(y)
+                    tgt = float(x) / float(y)
 
                 res = np.true_divide(x, y)
                 rtol = max(np.finfo(res).resolution, 1e-15)
@@ -664,7 +666,7 @@ class TestUfunc:
                 if tc in 'bhilqBHILQ':
                     assert_(res.dtype.name == 'float64')
                 else:
-                    assert_(res.dtype.name == dt.name )
+                    assert_(res.dtype.name == dt.name)
 
                 # Check with output type specified.  This also checks for the
                 # incorrect casts in issue gh-3484 because the unary '-' does
@@ -681,7 +683,7 @@ class TestUfunc:
                         # Casting complex to float is not allowed
                         assert_raises(TypeError, np.true_divide, x, y, dtype=dtout)
                     else:
-                        tgt = float(x)/float(y)
+                        tgt = float(x) / float(y)
                         rtol = max(np.finfo(dtout).resolution, 1e-15)
                         # The value of tiny for double double is NaN
                         with suppress_warnings() as sup:
@@ -701,7 +703,7 @@ class TestUfunc:
 
                 for tcout in 'FDG':
                     dtout = np.dtype(tcout)
-                    tgt = complex(x)/complex(y)
+                    tgt = complex(x) / complex(y)
                     rtol = max(np.finfo(dtout).resolution, 1e-15)
                     # The value of tiny for double double is NaN
                     with suppress_warnings() as sup:
@@ -846,7 +848,7 @@ class TestUfunc:
         np.array([[1., 2j, 3.], [4., 5., 6j]], dtype=object)])
     @pytest.mark.parametrize("matrix", [
         None,
-        np.array([[1.+1j, 0.5, -0.5j],
+        np.array([[1. + 1j, 0.5, -0.5j],
                   [0.25, 2j, 0.],
                   [4., 0., -1j]])])
     def test_vecmatvec_identity(self, matrix, vec):
@@ -923,10 +925,10 @@ class TestUfunc:
         msg = "broadcast"
         a = np.arange(4).reshape((2, 1, 2))
         b = np.arange(4).reshape((1, 2, 2))
-        assert_array_equal(np.vecdot(a, b), np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(np.vecdot(a, b), np.sum(a * b, axis=-1), err_msg=msg)
         msg = "extend & broadcast loop dimensions"
         b = np.arange(4).reshape((2, 2))
-        assert_array_equal(np.vecdot(a, b), np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(np.vecdot(a, b), np.sum(a * b, axis=-1), err_msg=msg)
         # Broadcast in core dimensions should fail
         a = np.arange(8).reshape((4, 2))
         b = np.arange(4).reshape((4, 1))
@@ -994,31 +996,31 @@ class TestUfunc:
     def test_type_cast(self):
         msg = "type cast"
         a = np.arange(6, dtype='short').reshape((2, 3))
-        assert_array_equal(np.vecdot(a, a), np.sum(a*a, axis=-1),
+        assert_array_equal(np.vecdot(a, a), np.sum(a * a, axis=-1),
                            err_msg=msg)
         msg = "type cast on one argument"
         a = np.arange(6).reshape((2, 3))
         b = a + 0.1
-        assert_array_almost_equal(np.vecdot(a, b), np.sum(a*b, axis=-1),
+        assert_array_almost_equal(np.vecdot(a, b), np.sum(a * b, axis=-1),
                                   err_msg=msg)
 
     def test_endian(self):
         msg = "big endian"
         a = np.arange(6, dtype='>i4').reshape((2, 3))
-        assert_array_equal(np.vecdot(a, a), np.sum(a*a, axis=-1),
+        assert_array_equal(np.vecdot(a, a), np.sum(a * a, axis=-1),
                            err_msg=msg)
         msg = "little endian"
         a = np.arange(6, dtype='<i4').reshape((2, 3))
-        assert_array_equal(np.vecdot(a, a), np.sum(a*a, axis=-1),
+        assert_array_equal(np.vecdot(a, a), np.sum(a * a, axis=-1),
                            err_msg=msg)
 
         # Output should always be native-endian
         Ba = np.arange(1, dtype='>f8')
         La = np.arange(1, dtype='<f8')
-        assert_equal((Ba+Ba).dtype, np.dtype('f8'))
-        assert_equal((Ba+La).dtype, np.dtype('f8'))
-        assert_equal((La+Ba).dtype, np.dtype('f8'))
-        assert_equal((La+La).dtype, np.dtype('f8'))
+        assert_equal((Ba + Ba).dtype, np.dtype('f8'))
+        assert_equal((Ba + La).dtype, np.dtype('f8'))
+        assert_equal((La + Ba).dtype, np.dtype('f8'))
+        assert_equal((La + La).dtype, np.dtype('f8'))
 
         assert_equal(np.absolute(La).dtype, np.dtype('f8'))
         assert_equal(np.absolute(Ba).dtype, np.dtype('f8'))
@@ -1028,18 +1030,18 @@ class TestUfunc:
     def test_incontiguous_array(self):
         msg = "incontiguous memory layout of array"
         x = np.arange(64).reshape((2, 2, 2, 2, 2, 2))
-        a = x[:, 0,:, 0,:, 0]
-        b = x[:, 1,:, 1,:, 1]
+        a = x[:, 0, :, 0, :, 0]
+        b = x[:, 1, :, 1, :, 1]
         a[0, 0, 0] = -1
         msg2 = "make sure it references to the original array"
         assert_equal(x[0, 0, 0, 0, 0, 0], -1, err_msg=msg2)
-        assert_array_equal(np.vecdot(a, b), np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(np.vecdot(a, b), np.sum(a * b, axis=-1), err_msg=msg)
         x = np.arange(24).reshape(2, 3, 4)
         a = x.T
         b = x.T
         a[0, 0, 0] = -1
         assert_equal(x[0, 0, 0], -1, err_msg=msg2)
-        assert_array_equal(np.vecdot(a, b), np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(np.vecdot(a, b), np.sum(a * b, axis=-1), err_msg=msg)
 
     def test_output_argument(self):
         msg = "output argument"
@@ -1047,26 +1049,69 @@ class TestUfunc:
         b = np.arange(4).reshape((2, 1, 2)) + 1
         c = np.zeros((2, 3), dtype='int')
         np.vecdot(a, b, c)
-        assert_array_equal(c, np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c, np.sum(a * b, axis=-1), err_msg=msg)
         c[:] = -1
         np.vecdot(a, b, out=c)
-        assert_array_equal(c, np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c, np.sum(a * b, axis=-1), err_msg=msg)
 
         msg = "output argument with type cast"
         c = np.zeros((2, 3), dtype='int16')
         np.vecdot(a, b, c)
-        assert_array_equal(c, np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c, np.sum(a * b, axis=-1), err_msg=msg)
         c[:] = -1
         np.vecdot(a, b, out=c)
-        assert_array_equal(c, np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c, np.sum(a * b, axis=-1), err_msg=msg)
 
         msg = "output argument with incontiguous layout"
         c = np.zeros((2, 3, 4), dtype='int16')
         np.vecdot(a, b, c[..., 0])
-        assert_array_equal(c[..., 0], np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c[..., 0], np.sum(a * b, axis=-1), err_msg=msg)
         c[:] = -1
         np.vecdot(a, b, out=c[..., 0])
-        assert_array_equal(c[..., 0], np.sum(a*b, axis=-1), err_msg=msg)
+        assert_array_equal(c[..., 0], np.sum(a * b, axis=-1), err_msg=msg)
+
+    @pytest.mark.parametrize("arg", ["array", "scalar", "subclass"])
+    def test_output_ellipsis(self, arg):
+        class subclass(np.ndarray):
+            def __array_wrap__(self, obj, context=None, return_value=None):
+                return super().__array_wrap__(obj, context, return_value)
+
+        if arg == "scalar":
+            one = 1
+            expected_type = np.ndarray
+        elif arg == "array":
+            one = np.array(1)
+            expected_type = np.ndarray
+        elif arg == "subclass":
+            one = np.array(1).view(subclass)
+            expected_type = subclass
+
+        assert type(np.add(one, 2, out=...)) is expected_type
+        assert type(np.add.reduce(one, out=...)) is expected_type
+        res1, res2 = np.divmod(one, 2, out=...)
+        assert type(res1) is type(res2) is expected_type
+
+    def test_output_ellipsis_errors(self):
+        with pytest.raises(TypeError,
+                match=r"out=\.\.\. is only allowed as a keyword argument."):
+            np.add(1, 2, ...)
+
+        with pytest.raises(TypeError,
+                match=r"out=\.\.\. is only allowed as a keyword argument."):
+            np.add.reduce(1, (), None, ...)
+
+        with pytest.raises(TypeError,
+                match=r"must use `\.\.\.` as `out=\.\.\.` and not per-operand/in a tuple"):
+            np.negative(1, out=(...,))
+
+        with pytest.raises(TypeError,
+                match=r"must use `\.\.\.` as `out=\.\.\.` and not per-operand/in a tuple"):
+            # We only allow out=... not individual args for now
+            np.divmod(1, 2, out=(np.empty(()), ...))
+
+        with pytest.raises(TypeError,
+                match=r"must use `\.\.\.` as `out=\.\.\.` and not per-operand/in a tuple"):
+            np.add.reduce(1, out=(...,))
 
     def test_axes_argument(self):
         # vecdot signature: '(n),(n)->()'
@@ -1297,18 +1342,18 @@ class TestUfunc:
         a = np.arange(6).reshape((2, 3))
         b = np.arange(10, 16).reshape((2, 3))
         w = np.arange(20, 26).reshape((2, 3))
-        assert_array_equal(umt.innerwt(a, b, w), np.sum(a*b*w, axis=-1))
+        assert_array_equal(umt.innerwt(a, b, w), np.sum(a * b * w, axis=-1))
         a = np.arange(100, 124).reshape((2, 3, 4))
         b = np.arange(200, 224).reshape((2, 3, 4))
         w = np.arange(300, 324).reshape((2, 3, 4))
-        assert_array_equal(umt.innerwt(a, b, w), np.sum(a*b*w, axis=-1))
+        assert_array_equal(umt.innerwt(a, b, w), np.sum(a * b * w, axis=-1))
 
     def test_innerwt_empty(self):
         """Test generalized ufunc with zero-sized operands"""
         a = np.array([], dtype='f8')
         b = np.array([], dtype='f8')
         w = np.array([], dtype='f8')
-        assert_array_equal(umt.innerwt(a, b, w), np.sum(a*b*w, axis=-1))
+        assert_array_equal(umt.innerwt(a, b, w), np.sum(a * b * w, axis=-1))
 
     def test_cross1d(self):
         """Test with fixed-sized signature."""
@@ -1409,18 +1454,18 @@ class TestUfunc:
     def compare_matrix_multiply_results(self, tp):
         d1 = np.array(np.random.rand(2, 3, 4), dtype=tp)
         d2 = np.array(np.random.rand(2, 3, 4), dtype=tp)
-        msg = "matrix multiply on type %s" % d1.dtype.name
+        msg = f"matrix multiply on type {d1.dtype.name}"
 
         def permute_n(n):
             if n == 1:
                 return ([0],)
             ret = ()
-            base = permute_n(n-1)
+            base = permute_n(n - 1)
             for perm in base:
                 for i in range(n):
-                    new = perm + [n-1]
-                    new[n-1] = new[i]
-                    new[i] = n-1
+                    new = perm + [n - 1]
+                    new[n - 1] = new[i]
+                    new[i] = n - 1
                     ret += (new,)
             return ret
 
@@ -1428,17 +1473,17 @@ class TestUfunc:
             if n == 0:
                 return ((),)
             ret = ()
-            base = slice_n(n-1)
+            base = slice_n(n - 1)
             for sl in base:
-                ret += (sl+(slice(None),),)
-                ret += (sl+(slice(0, 1),),)
+                ret += (sl + (slice(None),),)
+                ret += (sl + (slice(0, 1),),)
             return ret
 
         def broadcastable(s1, s2):
-            return s1 == s2 or s1 == 1 or s2 == 1
+            return s1 == s2 or 1 in {s1, s2}
 
         permute_3 = permute_n(3)
-        slice_3 = slice_n(3) + ((slice(None, None, -1),)*3,)
+        slice_3 = slice_n(3) + ((slice(None, None, -1),) * 3,)
 
         ref = True
         for p1 in permute_3:
@@ -1454,9 +1499,8 @@ class TestUfunc:
                             assert_array_almost_equal(
                                 umt.matrix_multiply(a1, a2),
                                 np.sum(a2[..., np.newaxis].swapaxes(-3, -1) *
-                                       a1[..., np.newaxis,:], axis=-1),
-                                err_msg=msg + ' %s %s' % (str(a1.shape),
-                                                          str(a2.shape)))
+                                       a1[..., np.newaxis, :], axis=-1),
+                                err_msg=msg + f' {str(a1.shape)} {str(a2.shape)}')
 
         assert_equal(ref, True, err_msg="reference check")
 
@@ -1542,7 +1586,7 @@ class TestUfunc:
         np.add.accumulate(arr, out=arr)
         np.add.accumulate(arr, out=arr)
         assert_array_equal(arr,
-                           np.array([[1]*i for i in [1, 3, 6, 10]], dtype=object),
+                           np.array([[1] * i for i in [1, 3, 6, 10]], dtype=object),
                           )
 
         # And the same if the axis argument is used
@@ -1551,7 +1595,7 @@ class TestUfunc:
         np.add.accumulate(arr, out=arr, axis=-1)
         np.add.accumulate(arr, out=arr, axis=-1)
         assert_array_equal(arr[0, :],
-                           np.array([[2]*i for i in [1, 3, 6, 10]], dtype=object),
+                           np.array([[2] * i for i in [1, 3, 6, 10]], dtype=object),
                           )
 
     def test_object_array_accumulate_failure(self):
@@ -1712,7 +1756,7 @@ class TestUfunc:
         # Not contiguous
         yield np.empty((3, 5, 4), order='C').swapaxes(1, 2)[1:, 1:, 1:]
         # Not contiguous and not aligned
-        a = np.empty((3*4*5*8 + 1,), dtype='i1')
+        a = np.empty((3 * 4 * 5 * 8 + 1,), dtype='i1')
         a = a[1:].view(dtype='f8')
         a.shape = (3, 4, 5)
         a = a[1:, 1:, 1:]
@@ -2057,9 +2101,39 @@ class TestUfunc:
                 MyThing.rmul_count += 1
                 return self
 
-        np.float64(5)*MyThing((3, 3))
+        np.float64(5) * MyThing((3, 3))
         assert_(MyThing.rmul_count == 1, MyThing.rmul_count)
         assert_(MyThing.getitem_count <= 2, MyThing.getitem_count)
+
+    def test_array_wrap_array_priority(self):
+        class ArrayPriorityBase(np.ndarray):
+            @classmethod
+            def __array_wrap__(cls, array, context=None, return_scalar=False):
+                return cls
+
+        class ArrayPriorityMinus0(ArrayPriorityBase):
+            __array_priority__ = 0
+
+        class ArrayPriorityMinus1000(ArrayPriorityBase):
+            __array_priority__ = -1000
+
+        class ArrayPriorityMinus1000b(ArrayPriorityBase):
+            __array_priority__ = -1000
+
+        class ArrayPriorityMinus2000(ArrayPriorityBase):
+            __array_priority__ = -2000
+
+        x = np.ones(2).view(ArrayPriorityMinus1000)
+        xb = np.ones(2).view(ArrayPriorityMinus1000b)
+        y = np.ones(2).view(ArrayPriorityMinus2000)
+
+        assert np.add(x, y) is ArrayPriorityMinus1000
+        assert np.add(y, x) is ArrayPriorityMinus1000
+        assert np.add(x, xb) is ArrayPriorityMinus1000
+        assert np.add(xb, x) is ArrayPriorityMinus1000b
+        y_minus0 = np.zeros(2).view(ArrayPriorityMinus0)
+        assert np.add(np.zeros(2), y_minus0) is ArrayPriorityMinus0
+        assert type(np.add(xb, x, np.zeros(2))) is np.ndarray
 
     @pytest.mark.parametrize("a", (
                              np.arange(10, dtype=int),
@@ -2119,7 +2193,7 @@ class TestUfunc:
             for i, v in zip(indx, vals):
                 # Make sure all the work happens inside the ufunc
                 # in order to duplicate error/warning handling
-                ufunc(atag[i], v, out=atag[i:i+1], casting="unsafe")
+                ufunc(atag[i], v, out=atag[i:i + 1], casting="unsafe")
         assert_equal(atag, a)
         # If w_loop warned, make sure w_at warned as well
         if len(w_loop) > 0:
@@ -2361,10 +2435,9 @@ class TestUfunc:
         with pytest.raises(ValueError):
             np.add.at(arr, [0, 1], [1, 2, 3])
 
-
     def test_reduce_arguments(self):
         f = np.add.reduce
-        d = np.ones((5,2), dtype=int)
+        d = np.ones((5, 2), dtype=int)
         o = np.ones((2,), dtype=d.dtype)
         r = o * 5
         assert_equal(f(d), r)
@@ -2433,11 +2506,11 @@ class TestUfunc:
             def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
                 return getattr(ufunc, method)(*(input.view(np.ndarray)
                                               for input in inputs), **kwargs)
-        a = np.arange(12.).reshape(4,3)
+        a = np.arange(12.).reshape(4, 3)
         ra = a.view(dtype=('f8,f8,f8')).squeeze()
         mra = ra.view(MyA)
 
-        target = np.array([ True, False, False, False], dtype=bool)
+        target = np.array([True, False, False, False], dtype=bool)
         assert_equal(np.all(target == (mra == ra[0])), True)
 
     def test_scalar_equal(self):
@@ -2562,7 +2635,7 @@ class TestUfunc:
         # For legacy dtypes, the signature currently has to be forced if `out=`
         # is passed.  The two paths below should differ, without `dtype=` the
         # expected result should be: `np.prod(arr.astype("f8")).astype("f4")`!
-        arr = np.full(5, 2**25-1, dtype=np.int64)
+        arr = np.full(5, 2**25 - 1, dtype=np.int64)
 
         # float32 and int64 promote to float64:
         res = np.zeros((), dtype=np.float32)
@@ -2597,10 +2670,10 @@ class TestUfunc:
         #
         # gh-8036
 
-        x = np.arange(7*13*8, dtype=np.int16).reshape(7, 13, 8)
-        x = x[4:6,1:11:6,1:5].transpose(1, 2, 0)
-        y_base = np.arange(4*4, dtype=np.int16).reshape(4, 4)
-        y = y_base[::2,:]
+        x = np.arange(7 * 13 * 8, dtype=np.int16).reshape(7, 13, 8)
+        x = x[4:6, 1:11:6, 1:5].transpose(1, 2, 0)
+        y_base = np.arange(4 * 4, dtype=np.int16).reshape(4, 4)
+        y = y_base[::2, :]
 
         y_base_copy = y_base.copy()
 
@@ -2609,8 +2682,8 @@ class TestUfunc:
 
         # The results should match, and y_base shouldn't get clobbered
         assert_equal(r0, r1)
-        assert_equal(y_base[1,:], y_base_copy[1,:])
-        assert_equal(y_base[3,:], y_base_copy[3,:])
+        assert_equal(y_base[1, :], y_base_copy[1, :])
+        assert_equal(y_base[3, :], y_base_copy[3, :])
 
     @pytest.mark.parametrize("with_cast", [True, False])
     def test_reduceat_and_accumulate_out_shape_mismatch(self, with_cast):
@@ -2815,7 +2888,7 @@ def test_ufunc_noncontiguous(ufunc):
                 # since different algorithms (libm vs. intrinsics) can be used
                 # for different input strides
                 res_eps = np.finfo(dt).eps
-                tol = 3*res_eps
+                tol = 3 * res_eps
                 assert_allclose(res_c, res_n, atol=tol, rtol=tol)
                 assert_allclose(res_c, res_o, atol=tol, rtol=tol)
             else:
@@ -2905,7 +2978,7 @@ def test_trivial_loop_invalid_cast():
 
 @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
 @pytest.mark.parametrize("offset",
-        [0, ncu.BUFSIZE//2, int(1.5*ncu.BUFSIZE)])
+        [0, ncu.BUFSIZE // 2, int(1.5 * ncu.BUFSIZE)])
 def test_reduce_casterrors(offset):
     # Test reporting of casting errors in reductions, we test various
     # offsets to where the casting error will occur, since these may occur
@@ -2930,6 +3003,45 @@ def test_reduce_casterrors(offset):
     # if the error happened immediately.
     # This does not define behaviour, the output is invalid and thus undefined
     assert out[()] < value * offset
+
+
+@pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
+def test_reduction_no_reference_leak():
+    # Test that the generic reduction does not leak references.
+    # gh-29358
+    arr = np.array([1, 2, 3], dtype=np.int32)
+    count = sys.getrefcount(arr)
+
+    np.add.reduce(arr, dtype=np.int32, initial=0)
+    assert count == sys.getrefcount(arr)
+
+    np.add.accumulate(arr, dtype=np.int32)
+    assert count == sys.getrefcount(arr)
+
+    np.add.reduceat(arr, [0, 1], dtype=np.int32)
+    assert count == sys.getrefcount(arr)
+
+    # with `out=` the reference count is not changed
+    out = np.empty((), dtype=np.int32)
+    out_count = sys.getrefcount(out)
+
+    np.add.reduce(arr, dtype=np.int32, out=out, initial=0)
+    assert count == sys.getrefcount(arr)
+    assert out_count == sys.getrefcount(out)
+
+    out = np.empty(arr.shape, dtype=np.int32)
+    out_count = sys.getrefcount(out)
+
+    np.add.accumulate(arr, dtype=np.int32, out=out)
+    assert count == sys.getrefcount(arr)
+    assert out_count == sys.getrefcount(out)
+
+    out = np.empty((2,), dtype=np.int32)
+    out_count = sys.getrefcount(out)
+
+    np.add.reduceat(arr, [0, 1], dtype=np.int32, out=out)
+    assert count == sys.getrefcount(arr)
+    assert out_count == sys.getrefcount(out)
 
 
 def test_object_reduce_cleanup_on_failure():
@@ -3002,7 +3114,7 @@ def test_addition_reduce_negative_zero(dtype, use_initial):
 
     # Test various length, in case SIMD paths or chunking play a role.
     # 150 extends beyond the pairwise blocksize; probably not important.
-    for i in range(0, 150):
+    for i in range(150):
         arr = np.array([neg_zero] * i, dtype=dtype)
         res = np.sum(arr, **kwargs)
         if i > 0 or use_initial:
@@ -3029,7 +3141,7 @@ def test_addition_unicode_inverse_byte_order(order1, order2):
     arr1 = np.array([element], dtype=f"{order1}U4")
     arr2 = np.array([element], dtype=f"{order2}U4")
     result = arr1 + arr2
-    assert result == 2*element
+    assert result == 2 * element
 
 
 @pytest.mark.parametrize("dtype", [np.int8, np.int16, np.int32, np.int64])

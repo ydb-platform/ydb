@@ -51,7 +51,6 @@ public:
     static bool IsAllowedType(ui32 typeId);
     static bool IsAllowedPkType(ui32 typeId);
     static bool IsAllowedDictionaryType(ui32 typeId);
-    static bool IsAllowedPgType(ui32 pgTypeId);
 };
 
 class TOlapColumnAdd: public TOlapColumnBase {

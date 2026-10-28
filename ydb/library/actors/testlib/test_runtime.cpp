@@ -1838,7 +1838,8 @@ namespace NActors {
             setup->Interconnect.ProxyActors[peerNodeId] = {proxyActor, TMailboxType::ReadAsFilled, InterconnectPoolId()};
         }
 
-        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
+        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(),
+            UseRealInterconnect ? nullptr : &InterconnectMock);
 
         setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
             NActors::TMailboxType::Simple, InterconnectPoolId()));

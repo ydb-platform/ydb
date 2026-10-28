@@ -1,5 +1,4 @@
 RECURSE(
-    core
     dq
     providers
     public

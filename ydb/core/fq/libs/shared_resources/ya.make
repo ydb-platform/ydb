@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     db_exec.cpp
@@ -26,8 +26,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/extension_common
     ydb/public/sdk/cpp/src/client/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

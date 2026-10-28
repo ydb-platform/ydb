@@ -1,16 +1,15 @@
-#include <ydb/services/workload_manager/has_full_scan_matcher.h>
 #include <ydb/core/resource_pools/regex_predicate.h>
+
+#include <ydb/services/workload_manager/has_full_scan_matcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
-using NResourcePool::TRegexPredicate;
 using NKqpProto::TKqpPhyQuery;
 using NKqpProto::TKqpPhyTableOperation;
 using NKqpProto::TKqpReadRangesSource;
-
+using NResourcePool::TRegexPredicate;
 
 namespace {
 
@@ -39,16 +38,22 @@ const auto Matches = [](auto builder, auto configure) {
     return MatchesFullScan(TRegexPredicate::FromGlob("/Root/t"), phy);
 };
 
-const auto AssertHasFullScan       = [](auto c) { UNIT_ASSERT( Matches(AddOp,     c)); };
-const auto AssertNoFullScan        = [](auto c) { UNIT_ASSERT(!Matches(AddOp,     c)); };
-const auto AssertHasFullScanSource = [](auto c) { UNIT_ASSERT( Matches(AddSource, c)); };
-const auto AssertNoFullScanSource  = [](auto c) { UNIT_ASSERT(!Matches(AddSource, c)); };
+const auto AssertHasFullScan = [](auto c) {
+    UNIT_ASSERT(Matches(AddOp, c));
+};
+const auto AssertNoFullScan = [](auto c) {
+    UNIT_ASSERT(!Matches(AddOp, c));
+};
+const auto AssertHasFullScanSource = [](auto c) {
+    UNIT_ASSERT(Matches(AddSource, c));
+};
+const auto AssertNoFullScanSource = [](auto c) {
+    UNIT_ASSERT(!Matches(AddSource, c));
+};
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TFullScanMatcherPredicate) {
-
     Y_UNIT_TEST(EmptyPredicateAcceptsAny) {
         TKqpPhyQuery phy;
         UNIT_ASSERT(MatchesFullScan(std::nullopt, phy));
@@ -78,9 +83,10 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherPredicate) {
 }
 
 Y_UNIT_TEST_SUITE(TFullScanMatcherOps) {
-
     Y_UNIT_TEST(ReadRangeEmptyBoundsIsFullScan) {
-        AssertHasFullScan([](auto* op) { op->MutableReadRange()->MutableKeyRange(); });
+        AssertHasFullScan([](auto* op) {
+            op->MutableReadRange()->MutableKeyRange();
+        });
     }
 
     Y_UNIT_TEST(ReadRangeWithBoundsIsNotFullScan) {
@@ -91,7 +97,9 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherOps) {
 
     Y_UNIT_TEST(ReadRangesEmptyParamNameIsFullScan) {
         // ParamName defaults to "" — matches the documented "full scan" convention.
-        AssertHasFullScan([](auto* op) { op->MutableReadRanges()->MutableKeyRanges(); });
+        AssertHasFullScan([](auto* op) {
+            op->MutableReadRanges()->MutableKeyRanges();
+        });
     }
 
     Y_UNIT_TEST(ReadRangesWithParamNameIsNotFullScan) {
@@ -101,14 +109,17 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherOps) {
     }
 
     Y_UNIT_TEST(ReadOlapRangeEmptyParamNameIsFullScan) {
-        AssertHasFullScan([](auto* op) { op->MutableReadOlapRange()->MutableKeyRanges(); });
+        AssertHasFullScan([](auto* op) {
+            op->MutableReadOlapRange()->MutableKeyRanges();
+        });
     }
 }
 
 Y_UNIT_TEST_SUITE(TFullScanMatcherSources) {
-
     Y_UNIT_TEST(SourceEmptyKeyRangeIsFullScan) {
-        AssertHasFullScanSource([](auto* rs) { rs->MutableKeyRange(); });
+        AssertHasFullScanSource([](auto* rs) {
+            rs->MutableKeyRange();
+        });
     }
 
     Y_UNIT_TEST(SourceBoundedKeyRangeIsNotFullScan) {
@@ -118,23 +129,27 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherSources) {
     }
 
     Y_UNIT_TEST(SourceRangesEmptyParamNameIsFullScan) {
-        AssertHasFullScanSource([](auto* rs) { rs->MutableRanges(); });
+        AssertHasFullScanSource([](auto* rs) {
+            rs->MutableRanges();
+        });
     }
 
     Y_UNIT_TEST(SourceRangesWithParamNameIsNotFullScan) {
-        AssertNoFullScanSource([](auto* rs) { rs->MutableRanges()->SetParamName("keys"); });
+        AssertNoFullScanSource([](auto* rs) {
+            rs->MutableRanges()->SetParamName("keys");
+        });
     }
 
     Y_UNIT_TEST(SourceWithoutRangesOrKeyRangeIsFullScan) {
         // neither KeyRange nor Ranges set
-        AssertHasFullScanSource([](auto*) {});
+        AssertHasFullScanSource([](auto*) {
+        });
     }
 }
 
 // LIMIT is intentionally ignored: a `WHERE filter LIMIT N` with a zero-selectivity
 // filter scans the whole table at runtime, so we do not let LIMIT bypass the classifier.
 Y_UNIT_TEST_SUITE(TFullScanMatcherLimit) {
-
     Y_UNIT_TEST(ReadRangeWithLimitIsFullScan) {
         AssertHasFullScan([](auto* op) {
             op->MutableReadRange()->MutableKeyRange();
@@ -157,8 +172,10 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherLimit) {
     }
 
     Y_UNIT_TEST(SourceWithLimitIsFullScan) {
-        AssertHasFullScanSource([](auto* rs) { rs->MutableItemsLimit(); });
+        AssertHasFullScanSource([](auto* rs) {
+            rs->MutableItemsLimit();
+        });
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     compile_service.cpp
@@ -14,7 +14,5 @@ PEERDIR(
 
     ydb/library/actors/core
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

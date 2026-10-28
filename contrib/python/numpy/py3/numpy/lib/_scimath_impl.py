@@ -16,10 +16,9 @@ correctly handled.  See their respective docstrings for specific examples.
 """
 import numpy._core.numeric as nx
 import numpy._core.numerictypes as nt
-from numpy._core.numeric import asarray, any
+from numpy._core.numeric import any, asarray
 from numpy._core.overrides import array_function_dispatch, set_module
 from numpy.lib._type_check_impl import isreal
-
 
 __all__ = [
     'sqrt', 'log', 'log2', 'logn', 'log10', 'power', 'arccos', 'arcsin',
@@ -380,7 +379,7 @@ def logn(n, x):
     """
     x = _fix_real_lt_zero(x)
     n = _fix_real_lt_zero(n)
-    return nx.log(x)/nx.log(n)
+    return nx.log(x) / nx.log(n)
 
 
 @set_module('numpy.lib.scimath')

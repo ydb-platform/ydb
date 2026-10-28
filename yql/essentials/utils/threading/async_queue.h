@@ -23,7 +23,7 @@ public:
 
     virtual ~TAsyncQueue() {
         MtpQueue_->Stop();
-        MtpQueue_.Destroy();
+        MtpQueue_.reset();
     }
 
     template <typename TCallable>

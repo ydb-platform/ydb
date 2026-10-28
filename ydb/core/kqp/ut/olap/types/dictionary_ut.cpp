@@ -185,6 +185,43 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Filter(/*isDictionary=*/true))).Execute();
     }
 
+    // The second read verifies that every active Col2 portion has dictionary positions.
+    Y_UNIT_TEST(ILikeKernel) {
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 Utf8 ENCODING(DICT),
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, "Alpha"), (2u, "beta"), (3u, "ALPINE")
+        ------
+        READ: PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+              SELECT Col1 FROM `/Root/ColumnTable` WHERE Col2 ILIKE "%alp%" ORDER BY Col1;
+        EXPECTED: [[1u];[3u]]
+        ------
+        READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                      WHERE Activity == 1 AND EntityName = 'Col2';
+              $Ok = SELECT SUM(CASE
+                    WHEN JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size")
+                    THEN 1 ELSE 0 END) AS ok
+                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'Col2';
+              SELECT ($All > 0u) AND ($All == $Ok);
+        EXPECTED: [[[%true]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
     Y_UNIT_TEST(Simple) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Simple(/*isDictionary=*/true))).Execute();
     }

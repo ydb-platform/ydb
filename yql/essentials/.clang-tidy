@@ -5,6 +5,7 @@ Checks: >
   -arcadia-taxi-dangling-config-ref,
   arcadia-typeid-name-restriction,
   arcadia-ascii-compare-ignorecase,
+  -arcadia-missing-reserve,
   arcadia-unneeded-temporary-string,
   -arcadia-using-namespace-in-header,
   -boost-use-to-string,

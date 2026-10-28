@@ -1,5 +1,7 @@
 #include "config.h"
+
 #include <ydb/core/protos/config.pb.h>
+
 #include <util/generic/ylimits.h>
 
 namespace NKikimr::NMetadata::NRequest {
@@ -19,4 +21,4 @@ TDuration TConfig::GetRetryPeriod(const ui32 retry) const {
     return RetryPeriodStart * kff + RetryPeriodFinish * (1 - kff);
 }
 
-}
+}   // namespace NKikimr::NMetadata::NRequest

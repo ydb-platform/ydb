@@ -47,6 +47,7 @@ TICStorageTransport::WriteToPBuffer(
     const ui64 lsn,
     const NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
@@ -58,6 +59,7 @@ TICStorageTransport::WriteToPBuffer(
         lsn,
         instruction,
         data,
+        checksums,
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     auto future = request->Promise.GetFuture();
@@ -78,6 +80,7 @@ void TICStorageTransport::WriteToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
     TDuration replyTimeout,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
@@ -105,6 +108,7 @@ void TICStorageTransport::WriteToManyPBuffers(
             std::move(persistentBufferIds),
             replyTimeout,
             data,
+            checksums,
             std::move(wrappedCallback),
             span ? span->GetTraceId() : NWilson::TTraceId());
 
@@ -121,6 +125,7 @@ TICStorageTransport::WriteToDDisk(
     const NKikimr::NDDisk::TBlockSelector& selector,
     const NKikimr::NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::DDisk);
@@ -131,6 +136,7 @@ TICStorageTransport::WriteToDDisk(
         selector,
         instruction,
         data,
+        checksums,
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     auto future = request->Promise.GetFuture();

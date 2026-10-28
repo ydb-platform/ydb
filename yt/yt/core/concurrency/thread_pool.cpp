@@ -26,7 +26,7 @@ class TInvokerQueueAdapter
 {
 public:
     TInvokerQueueAdapter(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const TTagSet& counterTagSet,
         TDuration pollingPeriod)
         : TMpmcInvokerQueue(callbackEventCount, counterTagSet)
@@ -94,7 +94,7 @@ class TThreadPoolThread
 public:
     TThreadPoolThread(
         TIntrusivePtr<TInvokerQueueAdapter> queue,
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::string& threadGroupName,
         const std::string& threadName,
         const TThreadPoolOptions& options)
@@ -192,7 +192,7 @@ public:
 
 private:
     const TThreadPoolOptions Options_;
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TIntrusivePtr<TInvokerQueueAdapter> Queue_;
     const IInvokerPtr Invoker_;
 

@@ -65,6 +65,7 @@ def patch_alembic_version(context: MigrationContext) -> MigrationContext:
 
 def _add_common_imports(directive):
     directive.imports.add("from clickhouse_connect import cc_sqlalchemy")
+    directive.imports.add("from clickhouse_connect.cc_sqlalchemy.datatypes.base import sqla_type_from_name")
     directive.imports.add("from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import *  # noqa: F401,F403")
     directive.imports.add("from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import *  # noqa: F401,F403")
 

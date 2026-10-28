@@ -2,25 +2,25 @@
 #include "arrow_inferencinator.h"
 #include "infer_config.h"
 
+#include <ydb/core/external_sources/object_storage/events.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+
 #include <arrow/buffer.h>
 #include <arrow/buffer_builder.h>
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/parser.h>
+#include <arrow/io/memory.h>
 #include <arrow/json/chunker.h>
 #include <arrow/json/options.h>
-#include <arrow/io/memory.h>
 #include <arrow/util/endian.h>
 #include <arrow/util/string_view.h>
-
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
 
 #include <optional>
-
-#include <ydb/core/external_sources/object_storage/events.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
 
 #if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
@@ -29,16 +29,17 @@
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
-class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
+class TArrowFileFetcher: public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
     struct TRequest;
+
 public:
     TArrowFileFetcher(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params)
-        : S3FetcherId_{s3FetcherId}
-        , Config_{MakeFormatConfig(params)}
+        : S3FetcherId_{ s3FetcherId }
+        , Config_{ MakeFormatConfig(params) }
     {
         Y_ABORT_UNLESS(IsArrowInferredFormat(Config_->Format));
-        
+
         auto decompression = params.FindPtr("compression");
         if (decompression) {
             DecompressionFormat_ = *decompression;
@@ -79,11 +80,9 @@ public:
                 break;
             }
             default: {
-                ctx.Send(localRequest.Requester, MakeError(
-                    localRequest.Path,
-                    NFq::TIssuesIds::UNSUPPORTED,
-                    TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Config_->Format))
-                );
+                ctx.Send(
+                    localRequest.Requester, MakeError(localRequest.Path, NFq::TIssuesIds::UNSUPPORTED,
+                                                TStringBuilder{} << "unsupported format for inference: " << ConvertFileFormat(Config_->Format)));
                 return;
             }
             case EFileFormat::Undefined:
@@ -94,7 +93,8 @@ public:
     void HandleS3Response(TEvS3RangeResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         auto& response = *ev->Get();
         auto requestIt = InflightRequests_.find(response.Path);
-        Y_ABORT_UNLESS(requestIt != InflightRequests_.end(), "S3 response with path %s for unknown request %s", response.Path.c_str(), response.RequestId.AsGuidString().c_str());
+        Y_ABORT_UNLESS(requestIt != InflightRequests_.end(), "S3 response with path %s for unknown request %s", response.Path.c_str(),
+            response.RequestId.AsGuidString().c_str());
 
         const auto& request = requestIt->second;
 
@@ -161,7 +161,7 @@ public:
         constexpr int32_t kSingleRow = 1;
         arrow::csv::BlockParser parser(options, /*num_cols=*/-1, /*first_row=*/-1, /*max_num_rows=*/kSingleRow);
 
-        arrow::util::string_view view{data.data(), data.size()};
+        arrow::util::string_view view{ data.data(), data.size() };
         uint32_t parsedBytes = 0;
         // ParseFinal tolerates a missing trailing newline on the last (in this case only) row.
         auto status = parser.ParseFinal(view, &parsedBytes);
@@ -176,15 +176,13 @@ public:
         return static_cast<size_t>(parser.num_cols());
     }
 
-    std::optional<TString> PrependSyntheticCsvHeader(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
+    std::optional<TString> PrependSyntheticCsvHeader(
+        const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         TString parseError;
         auto columnCount = DetectCsvColumnCount(data, options, parseError);
         if (!columnCount) {
-            auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't determine column count for headerless CSV " << request.Path << ": " << parseError
-            );
+            auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't determine column count for headerless CSV " << request.Path << ": " << parseError);
             SendError(ctx, error);
             return std::nullopt;
         }
@@ -208,14 +206,12 @@ public:
     void HandleS3Error(TEvS3RangeError::TPtr& ev, const NActors::TActorContext& ctx) {
         auto& error = *ev->Get();
 
-        auto resultError = MakeError(
-            error.Path,
-            NFq::TIssuesIds::INTERNAL_ERROR,
-            TStringBuilder{} << "couldn't fetch data from S3, curl code: " << static_cast<ui32>(error.CurlResponseCode) << ", http code: " << error.HttpCode,
-            std::move(error.Issues)
-        );
+        auto resultError = MakeError(error.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+            TStringBuilder{} << "couldn't fetch data from S3, curl code: " << static_cast<ui32>(error.CurlResponseCode)
+                             << ", http code: " << error.HttpCode, std::move(error.Issues));
         SendError(ctx, resultError);
     }
+
 private:
     struct TRequest {
         TString Path;
@@ -236,21 +232,14 @@ private:
         Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", path.c_str());
 
         const auto& request = it.first->second;
-        auto s3Request = new TEvRequestS3Range(
-            request.Path,
-            request.From, request.To,
-            request.RequestId,
-            SelfId()
-        );
+        auto s3Request = new TEvRequestS3Range(request.Path, request.From, request.To, request.RequestId, SelfId());
         ctx.Send(S3FetcherId_, s3Request);
     }
 
     void HandleAsRAFile(TRequest&& insertedRequest, const NActors::TActorContext& ctx) {
         auto format = Config_->Format;
-        auto error = MakeError(
-            insertedRequest.Path, NFq::TIssuesIds::UNSUPPORTED,
-            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(format) << '(' << static_cast<ui32>(format) << ')'
-        );
+        auto error = MakeError(insertedRequest.Path, NFq::TIssuesIds::UNSUPPORTED,
+            TStringBuilder{} << "got unsupported format: " << ConvertFileFormat(format) << '(' << static_cast<ui32>(format) << ')');
         SendError(ctx, error);
     }
 
@@ -262,11 +251,8 @@ private:
             NDB::ReadBufferFromString dataBuffer(data);
             auto decompressorBuffer = NYql::MakeDecompressor(dataBuffer, *DecompressionFormat_);
             if (!decompressorBuffer) {
-                auto error = MakeError(
-                    request.Path,
-                    NFq::TIssuesIds::INTERNAL_ERROR,
-                    TStringBuilder{} << "unknown compression: " << *DecompressionFormat_ << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz" 
-                );
+                auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "unknown compression: " << *DecompressionFormat_ << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz");
                 SendError(ctx, error);
                 return {};
             }
@@ -274,36 +260,28 @@ private:
             TStringBuilder decompressedData;
             while (!decompressorBuffer->eof() && decompressedData.size() < 10_MB) {
                 decompressorBuffer->nextIfAtEnd();
-                size_t maxDecompressedChunkSize = std::min(
-                    decompressorBuffer->available(),                
-                    10_MB - decompressedData.size()
-                );
-                TString decompressedChunk{maxDecompressedChunkSize, ' '};
+                size_t maxDecompressedChunkSize = std::min(decompressorBuffer->available(), 10_MB - decompressedData.size());
+                TString decompressedChunk{ maxDecompressedChunkSize, ' ' };
                 decompressorBuffer->read(&decompressedChunk.front(), maxDecompressedChunkSize);
                 decompressedData << decompressedChunk;
             }
             return std::move(decompressedData);
         } catch (const std::exception& error) {
-            auto errorEv = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't decompress file, check compression params: " << error.what()
-            );
+            auto errorEv = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't decompress file, check compression params: " << error.what());
             SendError(ctx, errorEv);
             return {};
         }
 #else
         auto error = MakeError(
-            request.Path,
-            NFq::TIssuesIds::INTERNAL_ERROR,
-            TStringBuilder{} << "inference with decompression is not supported on windows"
-        );
+            request.Path, NFq::TIssuesIds::INTERNAL_ERROR, TStringBuilder{} << "inference with decompression is not supported on windows");
         SendError(ctx, error);
         return {};
 #endif
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
+    std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(
+        const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
@@ -313,11 +291,8 @@ private:
         auto status = chunker->Process(arrowData, &whole, &partial);
 
         if (!status.ok()) {
-            auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't run arrow CSV chunker for " << request.Path << ": " << status.ToString()
-            );
+            auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't run arrow CSV chunker for " << request.Path << ": " << status.ToString());
             SendError(ctx, error);
             return nullptr;
         }
@@ -329,11 +304,8 @@ private:
         uint32_t metadataSize = arrow::BitUtil::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
 
         if (metadataSize > 10_MB) {
-            auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't load parquet metadata, size is bigger than 10MB : " << metadataSize
-            );
+            auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't load parquet metadata, size is bigger than 10MB : " << metadataSize);
             SendError(ctx, error);
             return;
         }
@@ -349,7 +321,8 @@ private:
         RequestPartialFile(std::move(localRequest), ctx, request.From - metadataSize, request.To + 4);
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+    std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(
+        const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = BuildBufferFromData(data, request, ctx);
         if (!arrowData) {
             return nullptr;
@@ -357,7 +330,8 @@ private:
         return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> CleanupJsonFile(const TString& data, const TRequest& request, const arrow::json::ParseOptions& options, const NActors::TActorContext& ctx) {
+    std::shared_ptr<arrow::io::RandomAccessFile> CleanupJsonFile(
+        const TString& data, const TRequest& request, const arrow::json::ParseOptions& options, const NActors::TActorContext& ctx) {
         auto chunker = arrow::json::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
@@ -369,13 +343,10 @@ private:
             auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);
             int64_t count = 1;
             auto status = chunker->ProcessSkip(empty, arrowData, false, &count, &whole);
-            
+
             if (!status.ok()) {
-                auto error = MakeError(
-                    request.Path,
-                    NFq::TIssuesIds::INTERNAL_ERROR,
-                    TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
-                );
+                auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                    TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString());
                 SendError(ctx, error);
                 return nullptr;
             }
@@ -386,11 +357,8 @@ private:
         auto status = chunker->Process(arrowData, &whole, &partial);
 
         if (!status.ok()) {
-            auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString()
-            );
+            auto error = MakeError(request.Path, NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't run arrow json chunker for " << request.Path << ": " << status.ToString());
             SendError(ctx, error);
             return nullptr;
         }
@@ -404,10 +372,7 @@ private:
         auto buildRes = builder.Append(data.data(), data.size());
         if (!buildRes.ok()) {
             auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't read data from S3Fetcher: " << buildRes.ToString()
-            );
+                request.Path, NFq::TIssuesIds::INTERNAL_ERROR, TStringBuilder{} << "couldn't read data from S3Fetcher: " << buildRes.ToString());
             SendError(ctx, error);
             return nullptr;
         }
@@ -415,10 +380,7 @@ private:
         buildRes = builder.Finish(&dataBuffer);
         if (!buildRes.ok()) {
             auto error = MakeError(
-                request.Path,
-                NFq::TIssuesIds::INTERNAL_ERROR,
-                TStringBuilder{} << "couldn't copy data from S3Fetcher: " << buildRes.ToString()
-            );
+                request.Path, NFq::TIssuesIds::INTERNAL_ERROR, TStringBuilder{} << "couldn't copy data from S3Fetcher: " << buildRes.ToString());
             SendError(ctx, error);
             return nullptr;
         }
@@ -440,10 +402,10 @@ private:
     NActors::TActorId S3FetcherId_;
     std::shared_ptr<FormatConfig> Config_;
     TMaybe<TString> DecompressionFormat_;
-    std::unordered_map<TString, TRequest> InflightRequests_; // Path -> Request
+    std::unordered_map<TString, TRequest> InflightRequests_;   // Path -> Request
 };
 
 NActors::IActor* CreateArrowFetchingActor(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params) {
-    return new TArrowFileFetcher{s3FetcherId, params};
+    return new TArrowFileFetcher{ s3FetcherId, params };
 }
-} // namespace NKikimr::NExternalSource::NObjectStorage::NInference
+}   // namespace NKikimr::NExternalSource::NObjectStorage::NInference

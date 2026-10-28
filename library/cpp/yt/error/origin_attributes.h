@@ -4,13 +4,10 @@
 
 #include <library/cpp/yt/global/access.h>
 
-#include <library/cpp/yt/memory/ref.h>
-
 #include <library/cpp/yt/misc/guid.h>
 
+#include <library/cpp/yt/system/public.h>
 #include <library/cpp/yt/system/thread_name.h>
-
-#include <library/cpp/yt/threading/public.h>
 
 #include <util/datetime/base.h>
 
@@ -22,17 +19,18 @@ namespace NYT {
 
 //! When this guard is set, newly created errors do not have non-deterministic
 //! system attributes and have "datetime" and "host" attributes overridden with a given values.
+//! #localHostNameOverride must point to eternal storage (e.g. obtained via #InternHostName).
 class TErrorSanitizerGuard
     : public TNonCopyable
 {
 public:
-    TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride);
+    TErrorSanitizerGuard(TInstant datetimeOverride, TStringBuf localHostNameOverride);
     ~TErrorSanitizerGuard();
 
 private:
     const bool SavedEnabled_;
     const TInstant SavedDatetimeOverride_;
-    const TSharedRef SavedLocalHostNameOverride_;
+    const TStringBuf SavedLocalHostNameOverride_;
 };
 
 bool IsErrorSanitizerEnabled() noexcept;
@@ -46,13 +44,13 @@ struct TOriginAttributes
 
     TProcessId Pid = 0;
 
-    NThreading::TThreadId Tid = 0;
+    TThreadId Tid = 0;
     TThreadName ThreadName;
 
     TInstant Datetime;
 
-    TSharedRef HostHolder;
-    mutable TStringBuf Host;
+    //! Points to eternal storage; see #InternHostName.
+    TStringBuf Host;
 
     // Opaque storage for data from yt/yt/core.
     // Currently may contain FiberId, TraceId, SpandId.

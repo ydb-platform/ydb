@@ -17,6 +17,7 @@
  */
 
 
+	.file   "svml_z0_cbrt_d_la.s"
 	.text
 .L_2__routine_start___svml_cbrt8_z0_0:
 

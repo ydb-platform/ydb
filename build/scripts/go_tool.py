@@ -192,15 +192,29 @@ def call(cmd, cwd, env=None):
     return subprocess.check_output(cmd, stdin=None, stderr=subprocess.STDOUT, cwd=cwd, env=env, text=True)
 
 
-# Mirror cmd/internal/objabi.EncodeArg from the Go stdlib: the response file
-# read by `go link @file` parses `\` as the start of an escape, so only `\\`
-# and `\n` are legal. Windows paths in build_root (e.g. `C:\...\main.a`)
-# otherwise trip cmd/link with `panic: badly formatted input`.
-_GO_LINK_ARG_ESCAPES = str.maketrans({'\\': r'\\', '\n': r'\n'})
+# Response file encoding for `go tool link @file`, which differs by toolchain.
+#
+# Go 1.27 (#77177) rewrote cmd/internal/objabi.expandArgs to use GCC-compatible
+# quoting, splitting unquoted arguments on whitespace. Mirror
+# cmd/go/internal/work.encodeArg for it.
+_GO_LINK_ARG_SPECIAL_CHARS = " \t\n\r'\"\\$`"
+_GO_LINK_ARG_QUOTE_ESCAPES = str.maketrans({'\\': r'\\', '"': r'\"', '$': r'\$', '`': r'\`'})
+
+# Go 1.26 and earlier read one argument per line and run it through
+# cmd/internal/objabi.DecodeArg, which only understands `\\` and `\n` and panics
+# with `badly formatted input` on any other escape. Windows paths in build_root
+# (e.g. `C:\...\main.a`) otherwise trip cmd/link.
+_GO_LINK_ARG_LINE_ESCAPES = str.maketrans({'\\': r'\\', '\n': r'\n'})
 
 
-def _encode_go_link_arg(arg):
-    return arg.translate(_GO_LINK_ARG_ESCAPES)
+def _encode_go_link_arg(arg, goversion):
+    if compare_versions('1.27', goversion) < 0:
+        return arg.translate(_GO_LINK_ARG_LINE_ESCAPES)
+    if not arg:
+        return '""'
+    if not any(char in arg for char in _GO_LINK_ARG_SPECIAL_CHARS):
+        return arg
+    return '"{}"'.format(arg.translate(_GO_LINK_ARG_QUOTE_ESCAPES))
 
 
 def classify_srcs(srcs, args):
@@ -472,6 +486,9 @@ def do_compile_go(args):
 def do_compile_asm(args):
     assert len(args.srcs) == 1 and len(args.asm_srcs) == 1
     cmd = [args.go_asm]
+    # cmd/asm grew -std in Go 1.27; earlier toolchains reject the flag outright.
+    if args.is_std and compare_versions('1.27', args.goversion) >= 0:
+        cmd.append('-std')
     cmd += get_trimpath_args(args)
     cmd += ['-I', args.output_root, '-I', os.path.join(args.pkg_root, 'include')]
     cmd += ['-D', 'GOOS_' + args.targ_os]
@@ -583,7 +600,7 @@ def do_link_exe(args):
     # newline='\n' keeps text mode from emitting CRLF on Windows hosts.
     with tempfile.NamedTemporaryFile(mode='w', newline='\n', delete_on_close=False) as response_file:
         for arg in cmd[1:]:
-            response_file.write(_encode_go_link_arg(arg))
+            response_file.write(_encode_go_link_arg(arg, args.goversion))
             response_file.write('\n')
         response_file.close()
         cmd = [cmd[0], '@' + response_file.name]

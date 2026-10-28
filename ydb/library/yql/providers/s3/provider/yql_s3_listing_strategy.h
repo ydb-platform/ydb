@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -31,17 +31,10 @@ public:
     virtual ~IS3ListingStrategy() = default;
 };
 
-IS3ListingStrategy::TPtr MakeS3ListingStrategy(
-    const IHTTPGateway::TPtr& httpGateway,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-    const NS3Lister::IS3ListerFactory::TPtr& listerFactory,
-    ui64 minDesiredDirectoriesOfFilesPerQuery,
-    size_t maxParallelOps,
+IS3ListingStrategy::TPtr MakeS3ListingStrategy(const IHTTPGateway::TPtr& httpGateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
+    const NS3Lister::IS3ListerFactory::TPtr& listerFactory, ui64 minDesiredDirectoriesOfFilesPerQuery, size_t maxParallelOps,
     bool allowLocalFiles);
 
-IS3ListingStrategy::TPtr MakeCollectingS3ListingStrategy(
-    IS3ListingStrategy::TListerFactoryMethod&& listerFactoryMethod,
-    TString collectingName
-);
+IS3ListingStrategy::TPtr MakeCollectingS3ListingStrategy(IS3ListingStrategy::TListerFactoryMethod&& listerFactoryMethod, TString collectingName);
 
-} // namespace NYql
+}   // namespace NYql

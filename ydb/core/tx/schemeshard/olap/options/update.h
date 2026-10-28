@@ -14,6 +14,7 @@ private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
+    YDB_ACCESSOR_DEF(std::optional<bool>, CacheBlobsAfterWrite);
     YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
@@ -26,6 +27,9 @@ public:
         }
         if (alterRequest.GetOptions().HasDeduplicationEnabled()) {
             DeduplicationEnabled = alterRequest.GetOptions().GetDeduplicationEnabled();
+        }
+        if (alterRequest.GetOptions().HasCacheBlobsAfterWrite()) {
+            CacheBlobsAfterWrite = alterRequest.GetOptions().GetCacheBlobsAfterWrite();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -61,6 +65,9 @@ public:
         }
         if (DeduplicationEnabled) {
             alterRequest.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
+        }
+        if (CacheBlobsAfterWrite) {
+            alterRequest.MutableOptions()->SetCacheBlobsAfterWrite(*CacheBlobsAfterWrite);
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

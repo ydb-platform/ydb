@@ -281,6 +281,8 @@ public:
 
     bool get_corner_mask() const;
 
+    virtual const char* get_name() const override;
+
     // Create and return polygons for a line (i.e. non-filled) contour at the
     // specified level.
     py::sequence lines(double level) override;

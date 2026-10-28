@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/services/metadata/common/ss_dialog.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/common/ss_dialog.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -23,22 +24,23 @@ private:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     virtual void OnBootstrap() override;
     virtual void OnTimeout() override;
-public:
 
+public:
     class TEvController: public ITableExistsController {
     private:
         const TActorIdentity ActorId;
+
     public:
         class TEvError: public TEventLocal<TEvError, EvPathExistsCheckFailed> {
         private:
             YDB_READONLY_DEF(TString, ErrorMessage);
             YDB_READONLY_DEF(TString, Path);
+
         public:
             TEvError(const TString& errorMessage, const TString& path)
                 : ErrorMessage(errorMessage)
                 , Path(path)
             {
-
             }
         };
 
@@ -46,24 +48,26 @@ public:
         private:
             YDB_READONLY_FLAG(TableExists, false);
             YDB_READONLY_DEF(TString, TablePath);
+
         public:
             TEvResult(const bool exists, const TString& path)
                 : TableExistsFlag(exists)
-                , TablePath(path) {
-
+                , TablePath(path)
+            {
             }
         };
 
         virtual void OnPathExistsCheckFailed(const TString& errorMessage, const TString& path) const override {
             ActorId.Send(ActorId, new TEvError(errorMessage, path));
         }
+
         virtual void OnPathExistsCheckResult(const bool exists, const TString& path) const override {
             ActorId.Send(ActorId, new TEvResult(exists, path));
         }
 
         TEvController(const TActorIdentity& actorId)
-            : ActorId(actorId) {
-
+            : ActorId(actorId)
+        {
         }
     };
 
@@ -75,13 +79,13 @@ public:
                 TBase::StateMain(ev);
         }
     }
+
     TTableExistsActor(ITableExistsController::TPtr controller, const TString& path, const TDuration d)
         : TBase(d)
         , OutputController(controller)
         , Path(path)
     {
-
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

@@ -60,7 +60,13 @@ class YQLRun(object):
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'yql/essentials/tools/udf_resolver/udf_resolver')
+            udf_resolver_path = os.getenv('YQL_UDFRESOLVER_PATH')
+            if udf_resolver_path:
+                self.udf_resolver_binary = yql_utils.yql_binary_path(udf_resolver_path)
+            else:
+                self.udf_resolver_binary = yql_utils.yql_binary_path_with_impl(
+                    'yql/essentials/tools/udf_resolver/udf_resolver'
+                )
         except Exception:
             self.udf_resolver_binary = None
 
@@ -219,7 +225,6 @@ class YQLRun(object):
         if self.extra_args:
             cmd += " ".join(self.extra_args) + " "
 
-        cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
         cmd += '--fuzz-untyped-lambda '
         if self.fuzz_universal:

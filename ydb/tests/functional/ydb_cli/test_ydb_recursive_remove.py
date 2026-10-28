@@ -6,7 +6,7 @@ import yatest
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 
 CLUSTER_CONFIG = dict(
-    extra_feature_flags=["enable_external_data_sources"],
+    extra_feature_flags=["enable_external_data_sources", "enable_schema_secrets"],
     query_service_config=dict(
         available_external_data_sources=["ObjectStorage"]
     ))
@@ -31,6 +31,14 @@ def create_view(session, view, query="SELECT 42"):
     session.execute_scheme(
         f"""
         CREATE VIEW `{view}` WITH security_invoker = TRUE AS {query};
+        """
+    )
+
+
+def create_secret(session, secret):
+    session.execute_scheme(
+        f"""
+        CREATE SECRET `{secret}` WITH (value = 'synthetic-value');
         """
     )
 
@@ -68,6 +76,24 @@ class TestRecursiveRemove:
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
 
+    @pytest.mark.parametrize(
+        "path,secret", [(".", "secret"), ("secrets", "secrets/nested/secret")],
+        ids=["database_root", "nested_directory"],
+    )
+    def test_secrets(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, path, secret):
+        database_path = ydb_database
+        driver = ydb_client(database_path)
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            create_secret(session, secret)
+            execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path, ["scheme", "rmdir", "--recursive", "--force", path]
+            )
+            assert_that(
+                [child.name for child in driver.scheme_client.list_directory(database_path).children],
+                only_contains(".metadata", ".sys"),
+            )
+
     def test_various_scheme_objects(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session):
         database_path = ydb_database
         driver = ydb_client(database_path)
@@ -75,6 +101,8 @@ class TestRecursiveRemove:
         with session_pool.checkout() as session:
             create_table(session, "table")
             create_view(session, "views/view")
+            create_secret(session, "secret")
+            create_secret(session, "secrets/nested/secret")
             create_external_data_source(session, "externals/data_source")
             create_external_table(session, "externals/table", "externals/data_source")
             execute_ydb_cli_command(

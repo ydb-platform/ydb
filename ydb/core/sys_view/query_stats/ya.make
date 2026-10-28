@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     query_metrics.h
@@ -14,8 +14,6 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/core/sys_view/service
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRC(yql_yt_dq_task_preprocessor.cpp)
 
@@ -19,7 +19,5 @@ PEERDIR(
     yt/yql/providers/yt/gateway/lib
     yt/yql/providers/yt/lib/yson_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

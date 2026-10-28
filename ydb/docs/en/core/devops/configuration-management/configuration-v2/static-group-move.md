@@ -4,9 +4,9 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-When using Configuration V2, static group management is performed automatically and the Self Heal mechanism will perform reconfiguration when one static group node fails.
+When using Configuration V2, static group management is performed automatically and the SelfHeal mechanism will perform reconfiguration when one static group node fails.
 
-When manual static group configuration management is needed, you need to disable automatic static group management, get the current static group configuration, make changes and apply the modified configuration as the target static group configuration. Then you need to remove the target static group configuration from the configuration file and enable automatic static group configuration management.
+When manual static group configuration management is needed, disable automatic static group management, get the current static group configuration, make changes and apply the modified configuration as the target static group configuration. Then remove the target static group configuration from the configuration file and enable automatic static group configuration management.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
@@ -29,13 +29,14 @@ groups:
 ...
 ```
 
-To replace `node_id:1`, we use another host with a static node deployed on it with `node_id:10`.
+To replace `node_id:1`, use another host with a static node deployed on it with `node_id:10`.
 
 To move part of the static group from host `node_id:1` to `node_id:10`:
 
 1. Disable automatic static group management.
 2. Get the current static group configuration.
 3. Make changes and apply the modified configuration as the target static group configuration.
+
     In the configuration file `config.yaml`, change the `node_id` value, replacing the identifier of the host being removed with the identifier of the host being added:
 
     ```yaml
@@ -53,7 +54,7 @@ To move part of the static group from host `node_id:1` to `node_id:10`:
     ...
     ```
 
-      Change the `path` and disk `pdisk_category` if they differ on the host with `node_id: 10`.
+    Change the `path` and disk `pdisk_category` if they differ on the host with `node_id: 10`.
 4. Go to the {{ ydb-ui-name }} monitoring page and ensure that the static group VDisk appeared on the target physical disk and is replicating. For more details, see [{#T}](../../../reference/ydb-ui/ydb-monitoring.md#static-group).
 5. Remove the target static group configuration from the configuration file and enable automatic static group configuration management.
 

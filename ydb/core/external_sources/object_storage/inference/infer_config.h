@@ -21,4 +21,4 @@ struct FormatConfig {
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params = {});
 
-} // namespace NKikimr::NExternalSource::NObjectStorage::NInference
+}   // namespace NKikimr::NExternalSource::NObjectStorage::NInference

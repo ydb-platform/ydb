@@ -14,8 +14,8 @@
 
 #include <library/cpp/yt/logging/tag.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -265,7 +265,7 @@ private:
     std::atomic<NProfiling::TCpuInstant> FinishTime_ = 0;
     std::atomic<NProfiling::TCpuDuration> ElapsedCpuTime_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TTagList Tags_;
     TLogList Logs_;
     TAsyncChildrenList AsyncChildren_;
@@ -274,7 +274,7 @@ private:
     std::vector<std::pair<std::string, TProfilingTagValue>> ProfilingTags_;
 
     // Must NOT allocate memory while modifying AllocationTagList_ to avoid deadlock with allocator.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, AllocationTagsLock_);
     TAtomicIntrusivePtr<TAllocationTagList> AllocationTagList_;
 
     std::atomic<bool> LeakDetected_;

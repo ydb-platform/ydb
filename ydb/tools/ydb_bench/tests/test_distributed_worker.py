@@ -1,4 +1,5 @@
 import copy
+import errno
 import json
 import socket
 import sys
@@ -16,8 +17,165 @@ import yaml
 from ydb.tools.ydb_bench.lib import distributed_worker, distributed_workload, distributed_runtime, local_ydb, runner
 from ydb.tools.ydb_bench.lib.config import load_config
 from ydb.tools.ydb_bench.lib.distributed_artifacts import DIAGNOSTIC_TAIL_BYTES, copy_results
-from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions, LEASE_SECONDS
+
+
+class PortReservationTest(unittest.TestCase):
+    def setUp(self):
+        self.worker = distributed_worker.DistributedWorker(
+            'host', '/unused', SimpleNamespace(lock=threading.RLock()), '/unused'
+        )
+        self.state = {'template': {'port_ranges': {'http': '8000-8002'}}, 'sockets': {}}
+        patch = mock.patch.object(self.worker, '_check')
+        self.check = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_busy_and_forbidden_ports_are_skipped_and_closed(self):
+        busy, forbidden, free = mock.Mock(), mock.Mock(), mock.Mock()
+        busy.bind.side_effect = OSError(errno.EADDRINUSE, 'busy')
+        forbidden.bind.side_effect = OSError(errno.EACCES, 'permission')
+        free.getsockname.return_value = ('0.0.0.0', 8002)
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=[busy, forbidden, free]):
+            self.assertEqual(8002, self.worker._reserve_port(self.state, 's', 'http', iter(range(8000, 8003))))
+        for stream, port in [(busy, 8000), (forbidden, 8001), (free, 8002)]:
+            stream.bind.assert_called_once_with(('0.0.0.0', port))
+        busy.close.assert_called_once()
+        forbidden.close.assert_called_once()
+        free.close.assert_not_called()
+        self.assertEqual({'s': [free]}, self.state['sockets'])
+
+    def test_exhaustion_does_not_fall_back_to_ephemeral_ports(self):
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EADDRINUSE, 'busy')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaisesRegex(BenchmarkError, 'No available HTTP ports on host host for node s in 8000-8002'):
+                self.worker._reserve_port(self.state, 's', 'http', iter(range(8000, 8003)))
+        self.assertEqual([mock.call(('0.0.0.0', p)) for p in range(8000, 8003)], stream.bind.call_args_list)
+        self.assertEqual(3, stream.close.call_count)
+        self.assertEqual({}, self.state['sockets'])
+
+    def test_unexpected_bind_error_and_cancellation_stop_reservation(self):
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EMFILE, 'too many files')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream) as factory:
+            with self.assertRaises(OSError):
+                self.worker._reserve_port(self.state, 's', 'http', [8000, 8001])
+            stream.close.assert_called_once()
+            self.check.side_effect = BenchmarkInterrupted('cancelled')
+            with self.assertRaises(BenchmarkInterrupted):
+                self.worker._reserve_port(self.state, 's', 'http', [8000, 8001])
+            self.assertEqual(1, factory.call_count)
+
+    def test_pools_are_shared_by_host_and_automatic_ports_are_reserved_last(self):
+        self.state['template']['port_ranges'] = {'http': '8000-8001', 'ic': '19001, 19003'}
+        bound = set()
+        streams = []
+
+        def socket_factory(*_args):
+            stream = mock.Mock()
+
+            def bind(address):
+                port = address[1] or (30000 + len(bound))
+                if port in bound:
+                    raise OSError(errno.EADDRINUSE, 'busy')
+                bound.add(port)
+                stream.getsockname.return_value = (address[0], port)
+
+            stream.bind.side_effect = bind
+            streams.append(stream)
+            return stream
+
+        local = [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}, {'name': 'cli', 'role': 'cli'}]
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+            result = self.worker._reserve_node_ports(self.state, local)
+        self.assertEqual((8000, 8001), (result['s']['mon_port'], result['d']['mon_port']))
+        self.assertEqual((19001, 19003), (result['s']['ic_port'], result['d']['ic_port']))
+        self.assertEqual({}, result['cli'])
+        self.assertEqual(6, len(bound))
+        self.assertEqual([mock.call(('0.0.0.0', 0))] * 2, [s.bind.call_args for s in streams[-2:]])
+        self.assertEqual({'s', 'd'}, set(self.state['sockets']))
+        self.assertTrue(all(len(sockets) == 3 for sockets in self.state['sockets'].values()))
+
+    def test_auto_ports_use_explicit_ports_first_then_fallback_for_each_node(self):
+        self.assertTrue(self.worker.capabilities({})['port_auto'])
+        local = [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}, {'name': 'cli', 'role': 'cli'}]
+        for policy in ('8000-8002, auto', 'auto, 8000-8002'):
+            with self.subTest(policy=policy):
+                state = {
+                    'template': {'port_ranges': {'grpc': policy, 'http': '8002-8003', 'ic': 'auto'}},
+                    'sockets': {},
+                }
+                bound, calls = set(), []
+
+                def socket_factory(*_args):
+                    stream = mock.Mock()
+
+                    def bind(address):
+                        calls.append(address[1])
+                        port = address[1] or 30000 + len(bound)
+                        if port in bound or port == 8000:
+                            raise OSError(errno.EADDRINUSE, 'busy')
+                        if port == 8001:
+                            raise OSError(errno.EACCES, 'permission')
+                        bound.add(port)
+                        stream.getsockname.return_value = (address[0], port)
+
+                    stream.bind.side_effect = bind
+                    return stream
+
+                with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+                    result = self.worker._reserve_node_ports(state, local)
+                # The strict HTTP pool wins the overlap, then optional gRPC
+                # exhausts busy/forbidden/reserved ports before any bind(0).
+                self.assertEqual([8002, 8003, 8000, 8001, 8002, 0, 0, 0, 0], calls)
+                self.assertEqual((8002, 8003), (result['s']['mon_port'], result['d']['mon_port']))
+                self.assertEqual(6, len({port for ports in result.values() for port in ports.values()}))
+                self.assertEqual({}, result['cli'])
+                self.assertTrue(all(len(sockets) == 3 for sockets in state['sockets'].values()))
+
+    def test_auto_uses_available_listed_ports_and_defers_os_assignment(self):
+        self.state['template']['port_ranges'] = {'grpc': '8000, auto', 'ic': '9000, auto'}
+        bound, calls = set(), []
+
+        def socket_factory(*_args):
+            stream = mock.Mock()
+
+            def bind(address):
+                calls.append(address[1])
+                port = address[1] or 30000 + len(bound)
+                self.assertNotIn(port, bound)
+                bound.add(port)
+                stream.getsockname.return_value = (address[0], port)
+
+            stream.bind.side_effect = bind
+            return stream
+
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+            result = self.worker._reserve_node_ports(
+                self.state, [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}]
+            )
+        self.assertEqual([8000, 9000, 0, 0, 0, 0], calls)
+        self.assertEqual(8000, result['s']['grpc_port'])
+        self.assertEqual(9000, result['s']['ic_port'])
+        self.assertEqual(6, len(bound))
+
+    def test_auto_does_not_hide_unexpected_or_os_allocation_errors(self):
+        self.state['template']['port_ranges'] = {'http': 'auto'}
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EADDRINUSE, 'no ephemeral ports')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaises(OSError):
+                self.worker._reserve_node_ports(self.state, [{'name': 's', 'role': 'static'}])
+        stream.bind.assert_called_once_with(('0.0.0.0', 0))
+        stream.close.assert_called_once()
+        self.assertEqual({}, self.state['sockets'])
+        stream.reset_mock()
+        stream.bind.side_effect = OSError(errno.EMFILE, 'too many files')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaises(OSError):
+                self.worker._reserve_port(self.state, 's', 'http', [8000], required=False)
+        stream.close.assert_called_once()
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "distributed workers require Linux")
@@ -110,6 +268,53 @@ class DistributedWorkerTest(unittest.TestCase):
             worker.configure({**self.reference, "hosts": hosts})
             self.finish(worker, "configure")
         return payload, hosts
+
+    def test_configured_ports_reach_saved_yaml_and_node_commands(self):
+        self.template['port_ranges'] = {'http': '8000, auto', 'grpc': '2100-2102', 'ic': '19000-19002'}
+
+        def reserve(_state, _node, _kind, candidates, **_options):
+            port = next(iter(candidates), None)
+            return 31000 if port == 0 else port
+
+        with mock.patch.object(
+            distributed_worker.DistributedWorker,
+            '_reserve_port',
+            side_effect=reserve,
+        ), mock.patch.object(distributed_worker.socket, 'getfqdn', side_effect=['a.test', 'b.test']):
+            _, hosts = self.prepare()
+        self.assertEqual(
+            [8000, 8000, 31000],
+            [node['ports']['mon_port'] for host in hosts for node in host['nodes'] if node['role'] != 'cli'],
+        )
+        for worker in self.workers:
+            worker.configure({**self.reference, 'hosts': hosts})
+            self.finish(worker, 'configure')
+        self.assertEqual(self.template['port_ranges'], self.workers[0].state['template']['port_ranges'])
+        for worker in self.workers:
+            saved = yaml.load(
+                (worker.state['root'] / 'results/configuration/cluster.yaml').read_text(),
+                Loader=distributed_worker.cluster_config._DocumentLoader,
+            )['config']
+            self.assertEqual([19000, 19000], [host['port'] for host in saved['hosts']])
+            with mock.patch.object(distributed_worker, 'start_managed_process') as start, mock.patch.object(
+                worker, '_wait_ports'
+            ):
+                process = mock.Mock(pid=1000000000)
+                process.poll.return_value = 0
+                start.return_value = process
+                for role in ('static', 'dynamic'):
+                    worker._start_nodes(worker.state, role)
+                nodes = [node for node in worker.state['prepared']['nodes'] if node['role'] != 'cli']
+                self.assertEqual(len(nodes), start.call_count)
+                for call, node in zip(start.call_args_list, nodes):
+                    command = call.args[0]
+                    for flag, key in [
+                        ('--mon-port', 'mon_port'),
+                        ('--grpc-port', 'grpc_port'),
+                        ('--ic-port', 'ic_port'),
+                    ]:
+                        self.assertEqual(node['ports'][key], command[command.index(flag) + 1])
+        self.assertEqual({}, next(node for host in hosts for node in host['nodes'] if node['role'] == 'cli')['ports'])
 
     def workload_config(self):
         return yaml.safe_dump(

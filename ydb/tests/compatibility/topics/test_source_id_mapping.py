@@ -21,11 +21,16 @@ FCC_TOPIC = "srcid_compat_topic"
 
 FED_DC = "dc1"
 FED_ACCOUNT = "account"
-FED_TOPIC_PATH = "/Root/account/topic"
+FED_TOPIC_NAME = "topic"
+# Config manager materializes a federation topic in the account database under LbUserDatabaseRoot.
+FED_LB_ROOT = "/Root/logbroker-federation"
+FED_ACCOUNT_DB = f"{FED_LB_ROOT}/{FED_ACCOUNT}"
+FED_TOPIC_PATH = f"{FED_ACCOUNT_DB}/{FED_TOPIC_NAME}"
+# Clients of a config-manager topic use the account database. The short name and the
+# absolute path are the same object; root-database aliases are a different resolver.
 FED_TOPIC_ALIASES = (
+    FED_TOPIC_NAME,
     FED_TOPIC_PATH,
-    "account/topic",
-    "account--topic",
 )
 SOURCE_ID_META2_PATH = "/Root/PQ/SourceIdMeta2"
 CLUSTER_TABLE_PATH = "/Root/PQ/Config/V2/Cluster"
@@ -109,7 +114,7 @@ def write_after_init(driver, topic, expected_init_seqno, seqno):
 
 def init_federation_tables(driver):
     scheme = ydb.SchemeClient(driver)
-    for path in ("/Root/account", "/Root/PQ", "/Root/PQ/Config", "/Root/PQ/Config/V2"):
+    for path in ("/Root/PQ", "/Root/PQ/Config", "/Root/PQ/Config/V2"):
         try:
             scheme.make_directory(path)
         except Exception as exc:
@@ -203,8 +208,31 @@ def create_topic(driver, path, attributes=None):
     raise AssertionError(f"create_topic {path} failed: {last_error}")
 
 
-def run_scenario(fixture, topic, aliases, attributes=None):
-    create_topic(fixture.driver, topic, attributes)
+def create_federation_topic(fixture, attributes=None):
+    token = fixture.cluster.config.default_clusteradmin
+    fixture.cluster.create_database(
+        FED_ACCOUNT_DB,
+        storage_pool_units_count={"hdd": 1},
+        token=token,
+    )
+    fixture.cluster.register_and_start_slots(FED_ACCOUNT_DB, count=1)
+    fixture.cluster.wait_tenant_up(FED_ACCOUNT_DB, token=token)
+
+    driver = ydb.Driver(ydb.DriverConfig(database=FED_ACCOUNT_DB, endpoint=fixture.endpoint))
+    driver.wait(timeout=60)
+    try:
+        create_topic(driver, FED_TOPIC_NAME, attributes)
+    finally:
+        driver.stop()
+
+    fixture.database_path = FED_ACCOUNT_DB
+    fixture.stop_driver()
+    fixture.driver = fixture.create_driver()
+
+
+def run_scenario(fixture, topic, aliases, attributes=None, skip_create=False):
+    if not skip_create:
+        create_topic(fixture.driver, topic, attributes)
 
     first_ack = write_with_seqno(fixture.driver, topic, SEQNO_FIRST, partition_id=PARTITION_ID)
     assert isinstance(first_ack, ydb.TopicWriteResult.Written), first_ack
@@ -219,8 +247,9 @@ def run_scenario(fixture, topic, aliases, attributes=None):
     assert isinstance(second_ack, ydb.TopicWriteResult.Written), second_ack
 
 
-def run_mapping_by_id_scenario(fixture, topic, aliases, attributes=None):
-    create_topic(fixture.driver, topic, attributes)
+def run_mapping_by_id_scenario(fixture, topic, aliases, attributes=None, skip_create=False):
+    if not skip_create:
+        create_topic(fixture.driver, topic, attributes)
 
     first_ack = write_with_seqno(fixture.driver, topic, SEQNO_FIRST, partition_id=PARTITION_ID)
     assert isinstance(first_ack, ydb.TopicWriteResult.Written), first_ack
@@ -254,15 +283,19 @@ class TestSourceIdMappingFcc(RestartToAnotherVersionFixture):
 class TestSourceIdMappingFederation(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(use_legacy_pq=True)
+        yield from self.setup_cluster(
+            use_legacy_pq=True,
+            lb_user_database_root=FED_LB_ROOT,
+        )
 
     def test_producer_session_after_restart(self):
         init_federation_tables(self.driver)
+        create_federation_topic(self, attributes={"_federation_account": FED_ACCOUNT})
         run_scenario(
             self,
-            topic=FED_TOPIC_PATH,
+            topic=FED_TOPIC_NAME,
             aliases=FED_TOPIC_ALIASES,
-            attributes={"_federation_account": FED_ACCOUNT},
+            skip_create=True,
         )
 
 
@@ -271,13 +304,17 @@ class TestSourceIdMappingByIdFederation(RestartToAnotherVersionFixture):
     def setup(self):
         if self.all_binary_paths[1] != current_binary_path:
             pytest.skip("EnableTopicSourceIdMappingById is available only on current")
-        yield from self.setup_cluster(use_legacy_pq=True)
+        yield from self.setup_cluster(
+            use_legacy_pq=True,
+            lb_user_database_root=FED_LB_ROOT,
+        )
 
     def test_producer_session_after_enabling_mapping_by_id(self):
         init_federation_tables(self.driver)
+        create_federation_topic(self, attributes={"_federation_account": FED_ACCOUNT})
         run_mapping_by_id_scenario(
             self,
-            topic=FED_TOPIC_PATH,
+            topic=FED_TOPIC_NAME,
             aliases=FED_TOPIC_ALIASES,
-            attributes={"_federation_account": FED_ACCOUNT},
+            skip_create=True,
         )

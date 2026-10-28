@@ -12,7 +12,7 @@
 
 #include <library/cpp/yt/mpl/type_traits.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -352,7 +352,7 @@ private:
     };
 
     std::atomic<EState> State_ = EState::Uninitialized;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, InitializationLock_);
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;

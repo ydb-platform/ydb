@@ -1,11 +1,10 @@
 #include "path_list_reader.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/string/builder.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql::NS3Details {
 
@@ -18,7 +17,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
         return map;
     }
 
-    NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath* path, const TString& name = {}, ui64 size = 0, bool read = false) {
+    NYql::NS3::TRange::TPath* SetPath(NYql::NS3::TRange::TPath * path, const TString& name = {}, ui64 size = 0, bool read = false) {
         path->SetName(name);
         path->SetSize(size);
         path->SetRead(read);
@@ -30,7 +29,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
 
         NS3::TRange range;
         range.SetStartPathIndex(42);
-        range.AddDeprecatedPath("my/path"); // We shouldn't react on this
+        range.AddDeprecatedPath("my/path");   // We shouldn't react on this
 
         {
             auto* root = SetPath(range.AddPaths(), "root", 1, true);
@@ -40,7 +39,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
                 SetPath(folder->AddChildren(), "f2", 100500, true);
             }
             SetPath(root->AddChildren(), "f3", 0, true);
-            SetPath(root->AddChildren(), "nothing"); // Shouldn't be processed.
+            SetPath(root->AddChildren(), "nothing");   // Shouldn't be processed.
         }
         {
             auto* root2 = SetPath(range.AddPaths(), "root2");
@@ -79,4 +78,4 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
     }
 }
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

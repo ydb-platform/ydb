@@ -254,7 +254,7 @@ public:
     DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, false);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
     TSslCtxPtr Context_;
     TSslCtxPtr ActiveContext_;
     TInstant CommitTime_;

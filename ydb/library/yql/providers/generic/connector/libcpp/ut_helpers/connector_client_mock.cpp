@@ -4,17 +4,17 @@
 
 namespace NYql::NConnector::NTest {
 
-    using namespace fmt::literals;
+using namespace fmt::literals;
 
-    ::Ydb::Type MakeYdbType(::Ydb::Type::PrimitiveTypeId primitiveType, bool optional) {
-        ::Ydb::Type type;
-        if (optional) {
-            type.mutable_optional_type()->mutable_item()->Settype_id(primitiveType);
-        } else {
-            type.Settype_id(primitiveType);
-        }
-        return type;
+::Ydb::Type MakeYdbType(::Ydb::Type::PrimitiveTypeId primitiveType, bool optional) {
+    ::Ydb::Type type;
+    if (optional) {
+        type.mutable_optional_type()->mutable_item()->Settype_id(primitiveType);
+    } else {
+        type.Settype_id(primitiveType);
     }
+    return type;
+}
 
 #define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)                     \
     template <>                                                                       \
@@ -23,34 +23,26 @@ namespace NYql::NConnector::NTest {
         proto->mutable_value()->Y_CAT(set_, value_name)(value);                       \
     }
 
-    DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
-    DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
-    DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
-    DEFINE_SIMPLE_TYPE_SETTER(i64, INT64, int64_value);
-    DEFINE_SIMPLE_TYPE_SETTER(ui64, UINT64, uint64_value);
+DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
+DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
+DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
+DEFINE_SIMPLE_TYPE_SETTER(i64, INT64, int64_value);
+DEFINE_SIMPLE_TYPE_SETTER(ui64, UINT64, uint64_value);
 
-    template <>
-    void SetValue(const ui32& value, Ydb::TypedValue* proto, const ::Ydb::Type::PrimitiveTypeId& typeId, bool optional) {
-        *proto->mutable_type() = MakeYdbType(typeId, optional);
-        proto->mutable_value()->Y_CAT(set_, uint32_value)(value);
-    }
+template <>
+void SetValue(const ui32& value, Ydb::TypedValue* proto, const ::Ydb::Type::PrimitiveTypeId& typeId, bool optional) {
+    *proto->mutable_type() = MakeYdbType(typeId, optional);
+    proto->mutable_value()->Y_CAT(set_, uint32_value)(value);
+}
 
-    void CreatePostgreSQLExternalDataSource(
-        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
-        const TString& dataSourceName,
-        NYql::EGenericProtocol protocol,
-        const TString& host,
-        int port,
-        const TString& login,
-        const TString& password,
-        bool useTls,
-        const TString& databaseName,
-        const TString& schema)
-    {
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-        const TString query = fmt::format(
-            R"(
+void CreatePostgreSQLExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr, const TString& dataSourceName,
+    NYql::EGenericProtocol protocol, const TString& host, int port, const TString& login, const TString& password, bool useTls,
+    const TString& databaseName, const TString& schema)
+{
+    auto tc = kikimr->GetTableClient();
+    auto session = tc.CreateSession().GetValueSync().GetSession();
+    const TString query = fmt::format(
+        R"(
             CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
             CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
@@ -64,37 +56,21 @@ namespace NYql::NConnector::NTest {
                 DATABASE_NAME="{database}",
                 SCHEMA="{schema}"
             );
-        )",
-            "data_source_name"_a = dataSourceName,
-            "host"_a = host,
-            "port"_a = port,
-            "login"_a = login,
-            "password"_a = password,
-            "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
-            "source_type"_a = PG_SOURCE_TYPE,
-            "database"_a = databaseName,
-            "schema"_a = schema);
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
+        )", "data_source_name"_a = dataSourceName, "host"_a = host, "port"_a = port, "login"_a = login, "password"_a = password,
+        "use_tls"_a = useTls ? "TRUE" : "FALSE", "protocol"_a = NYql::EGenericProtocol_Name(protocol), "source_type"_a = PG_SOURCE_TYPE,
+        "database"_a = databaseName, "schema"_a = schema);
+    auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+}
 
-    void CreateClickHouseExternalDataSource(
-        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
-        const TString& dataSourceName,
-        NYql::EGenericProtocol protocol,
-        const TString& clickHouseClusterId,
-        const TString& login,
-        const TString& password,
-        bool useTls,
-        const TString& serviceAccountId,
-        const TString& serviceAccountIdSignature,
-        const TString& databaseName)
-    {
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-        const TString query = fmt::format(
-            R"(
+void CreateClickHouseExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr, const TString& dataSourceName,
+    NYql::EGenericProtocol protocol, const TString& clickHouseClusterId, const TString& login, const TString& password, bool useTls,
+    const TString& serviceAccountId, const TString& serviceAccountIdSignature, const TString& databaseName)
+{
+    auto tc = kikimr->GetTableClient();
+    auto session = tc.CreateSession().GetValueSync().GetSession();
+    const TString query = fmt::format(
+        R"(
             CREATE SECRET sa_signature WITH (value="sa_signature");
             CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
@@ -110,34 +86,21 @@ namespace NYql::NConnector::NTest {
                 PROTOCOL="{protocol}",
                 DATABASE_NAME="{database}"
             );
-        )",
-            "cluster_id"_a = clickHouseClusterId,
-            "data_source_name"_a = dataSourceName,
-            "login"_a = login,
-            "password"_a = password,
-            "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NYql::EGenericProtocol_Name(protocol),
-            "service_account_id"_a = serviceAccountId,
-            "service_account_id_signature"_a = serviceAccountIdSignature,
-            "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),
-            "database"_a = databaseName);
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
+        )", "cluster_id"_a = clickHouseClusterId, "data_source_name"_a = dataSourceName, "login"_a = login, "password"_a = password,
+        "use_tls"_a = useTls ? "TRUE" : "FALSE", "protocol"_a = NYql::EGenericProtocol_Name(protocol), "service_account_id"_a = serviceAccountId,
+        "service_account_id_signature"_a = serviceAccountIdSignature, "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),
+        "database"_a = databaseName);
+    auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+}
 
-    void CreateYdbExternalDataSource(
-        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
-        const TString& dataSourceName,
-        const TString& login,
-        const TString& password,
-        const TString& endpoint,
-        bool useTls,
-        const TString& databaseName)
-    {
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-        const TString query = fmt::format(
-            R"(
+void CreateYdbExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr, const TString& dataSourceName,
+    const TString& login, const TString& password, const TString& endpoint, bool useTls, const TString& databaseName)
+{
+    auto tc = kikimr->GetTableClient();
+    auto session = tc.CreateSession().GetValueSync().GetSession();
+    const TString query = fmt::format(
+        R"(
             CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
             CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
@@ -149,23 +112,15 @@ namespace NYql::NConnector::NTest {
                 PASSWORD_SECRET_PATH="{data_source_name}_password",
                 USE_TLS="{use_tls}"
             );
-        )",
-            "data_source_name"_a = dataSourceName,
-            "login"_a = login,
-            "password"_a = password,
-            "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "source_type"_a = ToString(NYql::EDatabaseType::Ydb),
-            "endpoint"_a = endpoint,
-            "database"_a = databaseName);
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
+        )", "data_source_name"_a = dataSourceName, "login"_a = login, "password"_a = password, "use_tls"_a = useTls ? "TRUE" : "FALSE",
+        "source_type"_a = ToString(NYql::EDatabaseType::Ydb), "endpoint"_a = endpoint, "database"_a = databaseName);
+    auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+}
 
-    std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
-        return arrow::RecordBatch::Make(
-            std::make_shared<arrow::Schema>(arrow::FieldVector()),
-            static_cast<i64>(rowsCount),
-            std::vector<std::shared_ptr<arrow::Array>>());
-    }
+std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
+    return arrow::RecordBatch::Make(
+        std::make_shared<arrow::Schema>(arrow::FieldVector()), static_cast<i64>(rowsCount), std::vector<std::shared_ptr<arrow::Array>>());
+}
 
-} // namespace NYql::NConnector::NTest
+}   // namespace NYql::NConnector::NTest

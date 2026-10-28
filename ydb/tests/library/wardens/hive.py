@@ -7,17 +7,24 @@ from ydb.tests.library.wardens.base import LivenessWarden
 logger = logging.getLogger(__name__)
 
 
+def _node_monitors(cluster, counters):
+    if counters is None:
+        return {node_id: node.monitor for node_id, node in cluster.nodes.items()}
+    return {node_id: counters.monitor(node) for node_id, node in cluster.nodes.items()}
+
+
 class BootQueueSizeWarden(LivenessWarden):
-    def __init__(self, cluster):
+    def __init__(self, cluster, counters=None):
         super(BootQueueSizeWarden, self).__init__()
         self.cluster = cluster
+        self._counters = counters
 
     @property
     def list_of_liveness_violations(self):
         hive_boot_queue_size = 0
         asked_hosts = 0
 
-        monitors = {node_id: node.monitor for node_id, node in self.cluster.nodes.items()}
+        monitors = _node_monitors(self.cluster, self._counters)
         for node_id, node in self.cluster.nodes.items():
             asked_hosts += 1
             hive_boot_queue_size += monitors[node_id].sensor(
@@ -43,13 +50,14 @@ class BootQueueSizeWarden(LivenessWarden):
 
 
 class AllTabletsAliveLivenessWarden(LivenessWarden):
-    def __init__(self, cluster):
+    def __init__(self, cluster, counters=None):
         self.cluster = cluster
+        self._counters = counters
 
     @property
     def list_of_liveness_violations(self):
         tablets_alive_count, tablets_count, state_done = 0, 0, 0
-        monitors = {node_id: node.monitor for node_id, node in self.cluster.nodes.items()}
+        monitors = _node_monitors(self.cluster, self._counters)
         for node_id, node in self.cluster.nodes.items():
             tablets_alive_count += monitors[node_id].sensor(
                 counters='tablets',

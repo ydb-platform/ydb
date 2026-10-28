@@ -33,7 +33,7 @@ inline bool& InsideGuestCallbackFlag() {
     return inside;
 }
 
-} // namespace NPrivate
+}   // namespace NPrivate
 
 //! Whether this thread is inside a call the host itself made into guest code.
 //! The one such call is moving the guest allocator break through its "sbrk"
@@ -258,9 +258,7 @@ inline constexpr ui64 MaxBridgeNodeIndex = 0xffffffffULL;
 
 inline ui64 PackBridgeHandle(ui64 generation, ui64 index) {
     if (generation == 0 || generation > MaxBridgeGeneration || index > MaxBridgeNodeIndex) {
-        ythrow yexception()
-            << "Bridge: cannot pack handle generation=" << generation
-            << " index=" << index;
+        ythrow yexception() << "Bridge: cannot pack handle generation=" << generation << " index=" << index;
     }
     return (generation << 32) | index;
 }
@@ -282,7 +280,7 @@ inline ui64 BridgeHandleIndex(ui64 handle) {
     return handle & MaxBridgeNodeIndex;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm
 
 template <>
 struct THash<NKikimr::NUdfStore::NWasm::TBridgeIdentity> {

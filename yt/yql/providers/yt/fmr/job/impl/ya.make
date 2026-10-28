@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_fmr_indexed_block_reader.cpp
@@ -35,8 +35,6 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

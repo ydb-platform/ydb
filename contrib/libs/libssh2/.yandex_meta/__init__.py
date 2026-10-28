@@ -7,10 +7,15 @@ libssh2 = GNUMakeNixProject(
     copy_top_sources_except=["NEWS"],
     makeflags=["-C", "src", "libssh2.la"],
     disable_includes=[
+        "libgcrypt.c",
         "libgcrypt.h",
+        "wincng.c",
         "wincng.h",
+        "os400qc3.c",
         "os400qc3.h",
+        "mbedtls.c",
         "mbedtls.h",
+        "wolfssl/",
     ],
     platform_dispatchers=[
         "src/libssh2_config.h",

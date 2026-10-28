@@ -168,6 +168,15 @@ namespace NTable {
             return update->RowVersion.TxId;
         }
 
+        ui32 GetDeltaSavepointSeqNum() const
+        {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            return update->SavepointSeqNum;
+        }
+
         std::tuple<ELockMode, ui64> GetLockInfo() const {
             auto* update = GetCurrentVersion();
             Y_ENSURE(update);

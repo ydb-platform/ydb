@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(

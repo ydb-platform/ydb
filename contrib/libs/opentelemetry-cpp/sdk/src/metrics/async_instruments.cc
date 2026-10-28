@@ -43,12 +43,12 @@ void ObservableInstrument::RemoveCallback(opentelemetry::metrics::ObservableCall
   observable_registry_->RemoveCallback(callback, state, this);
 }
 
-const InstrumentDescriptor &ObservableInstrument::GetInstrumentDescriptor()
+const InstrumentDescriptor &ObservableInstrument::GetInstrumentDescriptor() const
 {
   return instrument_descriptor_;
 }
 
-AsyncWritableMetricStorage *ObservableInstrument::GetMetricStorage()
+AsyncWritableMetricStorage *ObservableInstrument::GetMetricStorage() const
 {
   return storage_.get();
 }

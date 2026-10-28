@@ -792,6 +792,16 @@
             ]
         },
         {
+            "Name": "TKqpOlapUdf",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapUdf"},
+            "Children": [
+                {"Index": 0, "Name": "Args", "Type": "TExprList"},
+                {"Index": 1, "Name": "KernelName", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "OutputType", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOlapJsonExists",
             "Base": "TKqpOlapJsonOperationBase",
             "Match": {"Type": "Callable", "Name": "KqpOlapJsonExists"}
@@ -890,7 +900,10 @@
         {
             "Name": "TKqpOpEmptySource",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpEmptySource"}
+            "Match": {"Type": "Callable", "Name": "KqpOpEmptySource"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase", "Optional": true}
+            ]
         },
         {
             "Name": "TKqpOpMapElementBase",

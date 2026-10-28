@@ -1,18 +1,18 @@
 #include "s3_recipe_ut_helpers.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <fmt/format.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -43,19 +43,15 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                 DATA_SOURCE="external_data_source",
                 LOCATION="test_object_plan_s3_source",
                 FORMAT="json_each_row"
-            );)sql",
-            "location"_a = GetBucketLocation("test_bucket_plan_s3_source")
-            );
+            );)sql", "location"_a = GetBucketLocation("test_bucket_plan_s3_source"));
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = R"sql(SELECT * FROM external_table)sql";
 
         auto queryClient = kikimr->GetQueryClient();
-        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+        TExecuteQueryResult queryResult =
+            queryClient.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
 
         UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
         UNIT_ASSERT(queryResult.GetStats());
@@ -116,10 +112,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                 FORMAT="json_each_row",
                 COMPRESSION="gzip"
             );
-            )sql",
-            "read_location"_a = GetBucketLocation("test_bucket_read"),
-            "write_location"_a = GetBucketLocation("test_bucket_write")
-            );
+            )sql", "read_location"_a = GetBucketLocation("test_bucket_read"), "write_location"_a = GetBucketLocation("test_bucket_write"));
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -130,10 +123,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             )sql";
 
         auto queryClient = kikimr->GetQueryClient();
-        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+        TExecuteQueryResult queryResult =
+            queryClient.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
 
         UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
         UNIT_ASSERT(queryResult.GetStats());
@@ -191,9 +182,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                 LOCATION="/",
                 FORMAT="json_each_row"
             );
-            )sql",
-            "read_location"_a = GetBucketLocation("test_ctas_read")
-        );
+            )sql", "read_location"_a = GetBucketLocation("test_ctas_read"));
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -208,10 +197,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             )sql";
 
         auto queryClient = kikimr->GetQueryClient();
-        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::NoTx(),
-            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+        TExecuteQueryResult queryResult =
+            queryClient.ExecuteQuery(sql, TTxControl::NoTx(), TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
         UNIT_ASSERT(queryResult.GetStats());
@@ -256,9 +243,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                     LOCATION="{insert_location}",
                     AUTH_METHOD="NONE"
                 );
-                )sql",
-                "insert_location"_a = GetBucketLocation("test_insert")
-            );
+                )sql", "insert_location"_a = GetBucketLocation("test_insert"));
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -288,10 +273,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             SELECT * FROM olap_source
         )sql";
 
-        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::NoTx(),
-            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+        TExecuteQueryResult queryResult =
+            queryClient.ExecuteQuery(sql, TTxControl::NoTx(), TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
         UNIT_ASSERT(queryResult.GetStats());
@@ -329,9 +312,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                     LOCATION="{insert_location}",
                     AUTH_METHOD="NONE"
                 );
-                )sql",
-                "insert_location"_a = GetBucketLocation("test_read_write")
-            );
+                )sql", "insert_location"_a = GetBucketLocation("test_read_write"));
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -354,10 +335,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         )sql";
 
         auto queryClient = kikimr->GetQueryClient();
-        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::NoTx(),
-            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+        TExecuteQueryResult queryResult =
+            queryClient.ExecuteQuery(sql, TTxControl::NoTx(), TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
         UNIT_ASSERT(queryResult.GetStats());
@@ -406,9 +385,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
                     flag Bool,
                     PRIMARY KEY (id)
                 ) WITH (STORE = COLUMN);
-            )sql",
-            "sink_location"_a = GetBucketLocation("test_bool_export_cs")
-            );
+            )sql", "sink_location"_a = GetBucketLocation("test_bool_export_cs"));
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -433,10 +410,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             SELECT id, flag FROM olap_bool_source
         )sql";
 
-        auto execRes = queryClient.ExecuteQuery(
-            sql,
-            TTxControl::NoTx(),
-            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+        auto execRes = queryClient.ExecuteQuery(sql, TTxControl::NoTx(), TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(execRes.GetStatus(), NYdb::EStatus::SUCCESS, execRes.GetIssues().ToString());
         UNIT_ASSERT(execRes.GetStats());
@@ -479,4 +453,4 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

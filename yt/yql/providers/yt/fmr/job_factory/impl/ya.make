@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_job_factory_impl.cpp
@@ -12,8 +12,6 @@ PEERDIR(
     yt/yql/providers/yt/fmr/request_options
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

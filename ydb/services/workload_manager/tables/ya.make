@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     table_queries.cpp
@@ -11,7 +11,5 @@ PEERDIR(
 
     ydb/library/table_creator
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

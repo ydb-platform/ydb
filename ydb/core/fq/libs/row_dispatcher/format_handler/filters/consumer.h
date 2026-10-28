@@ -7,7 +7,7 @@
 
 namespace NFq::NRowDispatcher {
 
-class IProcessedDataConsumer : public TThrRefBase {
+class IProcessedDataConsumer: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IProcessedDataConsumer>;
 
@@ -28,4 +28,4 @@ public:
     virtual void OnError(TStatus status) = 0;
 };
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

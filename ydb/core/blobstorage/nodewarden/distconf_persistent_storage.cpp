@@ -295,6 +295,12 @@ namespace NKikimr::NStorage {
                 drivesToRead.push_back(drive.GetPath());
             };
 
+            // An empty record means a successful read of an empty disk. Keep it
+            // distinct from a failed read, whose existing metadata is still unknown.
+            for (const auto& [path, guid] : msg.NoMetadata) {
+                MetadataByPath.try_emplace(path);
+            }
+
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 MetadataByPath[path] = m;
 
@@ -343,7 +349,10 @@ namespace NKikimr::NStorage {
                     const auto [begin, end] = std::ranges::remove_if(drivesToWrite, [&](const TString& path) {
                         const auto it = MetadataByPath.find(path);
                         if (it == MetadataByPath.end()) {
-                            return false; // this drive did not contain any metadata at all, we have to write it
+                            // Do not overwrite unread metadata using a local commit:
+                            // this drive may contain a newer generation. Let bootstrap
+                            // finish so cluster quorum recovery can resolve the config.
+                            return true;
                         }
                         const NKikimrBlobStorage::TPDiskMetadataRecord& m = it->second;
                         if (!m.HasCommittedStorageConfig()) {

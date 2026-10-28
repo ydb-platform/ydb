@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/sub_column.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -19,6 +20,20 @@ Y_UNIT_TEST_SUITE(TSubColumnDataExtractorTests) {
                 result = value.ToJsonValue().GetString();
             });
         UNIT_ASSERT_VALUES_EQUAL(result, "others");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDefaultDataExtractorTests) {
+    Y_UNIT_TEST(UsesCanonicalSubColumnNameForCategory) {
+        const auto name = NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName::Parse(R"($."service.component")");
+        const NRequest::TOriginalDataAddress address(1, name);
+        TDefaultDataExtractor extractor;
+        ui64 hash = 0;
+
+        UNIT_ASSERT(extractor.CheckForIndex(address, &hash));
+        const TString expectedName = R"("service.component")";
+        UNIT_ASSERT_VALUES_EQUAL(expectedName, name.GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(NRequest::TOriginalDataAddress::CalcSubColumnHash(expectedName), hash);
     }
 }
 

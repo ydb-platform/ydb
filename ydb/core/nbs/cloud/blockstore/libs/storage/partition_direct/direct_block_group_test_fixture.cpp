@@ -31,6 +31,23 @@ TBlockedDetectedState TDBGFixture::GetBlockedDetected(
         .GetValue(waitTimeout);
 }
 
+std::array<size_t, MaxHostCount> TDBGFixture::CountDDisksByHostDebugOnly(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    EDDiskBalanceStrategy strategy,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, strategy]
+               {
+                   const auto allowedForBalancing =
+                       dbg->GetBalancingAllowedHosts();
+                   return dbg->CountDDisksByHost(strategy, allowedForBalancing);
+               })
+        .GetValue(waitTimeout);
+}
+
 TVector<ui64> TDBGFixture::ReadAllDDiskSeqNos(
     const TExecutorPtr& executor,
     const std::shared_ptr<TDirectBlockGroup>& dbg,

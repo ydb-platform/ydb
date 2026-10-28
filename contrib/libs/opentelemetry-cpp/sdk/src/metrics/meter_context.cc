@@ -6,10 +6,12 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+#  include <string>
+#endif
 #include <utility>
 #include <vector>
 
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/span.h"
@@ -31,7 +33,9 @@
 #include "opentelemetry/version.h"
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+#  include "opentelemetry/sdk/common/env_variables.h"
 #  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
+#  include "opentelemetry/sdk/metrics/instruments.h"
 #endif  // ENABLE_METRICS_EXEMPLAR_PREVIEW
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -40,14 +44,65 @@ namespace sdk
 namespace metrics
 {
 
-MeterContext::MeterContext(std::unique_ptr<ViewRegistry> views,
-                           const opentelemetry::sdk::resource::Resource &resource,
-                           std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>>
-                               meter_configurator) noexcept
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+namespace exemplar_filter_env
+{
+namespace
+{
+
+constexpr char kMetricsExemplarFilterEnv[] = "OTEL_METRICS_EXEMPLAR_FILTER";
+
+}  // namespace
+
+ExemplarFilterType GetExemplarFilterFromEnv()
+{
+  std::string value;
+  if (!common::GetStringEnvironmentVariable(kMetricsExemplarFilterEnv, value) || value.empty())
+  {
+    return ExemplarFilterType::kTraceBased;
+  }
+
+  if (InstrumentDescriptorUtil::CaseInsensitiveAsciiEquals(value, "always_on"))
+  {
+    return ExemplarFilterType::kAlwaysOn;
+  }
+
+  if (InstrumentDescriptorUtil::CaseInsensitiveAsciiEquals(value, "always_off"))
+  {
+    return ExemplarFilterType::kAlwaysOff;
+  }
+
+  if (InstrumentDescriptorUtil::CaseInsensitiveAsciiEquals(value, "trace_based"))
+  {
+    return ExemplarFilterType::kTraceBased;
+  }
+
+  OTEL_INTERNAL_LOG_WARN("Environment variable <" << kMetricsExemplarFilterEnv
+                                                  << "> has an invalid value <" << value
+                                                  << ">, ignoring");
+  return ExemplarFilterType::kTraceBased;
+}
+
+}  // namespace exemplar_filter_env
+#endif
+
+MeterContext::MeterContext(
+    std::unique_ptr<ViewRegistry> views,
+    const opentelemetry::sdk::resource::Resource &resource,
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>> meter_configurator
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+    ,
+    ExemplarFilterType exemplar_filter_type
+#endif
+    ) noexcept
     : resource_{resource},
       views_(std::move(views)),
       sdk_start_ts_{std::chrono::system_clock::now()},
       meter_configurator_(std::move(meter_configurator))
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+      ,
+      exemplar_filter_type_(exemplar_filter_type)
+#endif
 {}
 
 const resource::Resource &MeterContext::GetResource() const noexcept
@@ -69,7 +124,7 @@ const instrumentationscope::ScopeConfigurator<MeterConfig> &MeterContext::GetMet
 bool MeterContext::ForEachMeter(
     nostd::function_ref<bool(std::shared_ptr<Meter> &meter)> callback) noexcept
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(meter_lock_);
+  std::lock_guard<std::mutex> guard(meter_lock_);
   for (auto &meter : meters_)
   {
     if (!callback(meter))
@@ -127,7 +182,7 @@ ExemplarFilterType MeterContext::GetExemplarFilter() const noexcept
 
 void MeterContext::AddMeter(const std::shared_ptr<Meter> &meter)
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(meter_lock_);
+  std::lock_guard<std::mutex> guard(meter_lock_);
   meters_.push_back(meter);
 }
 
@@ -135,7 +190,7 @@ void MeterContext::RemoveMeter(nostd::string_view name,
                                nostd::string_view version,
                                nostd::string_view schema_url)
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(meter_lock_);
+  std::lock_guard<std::mutex> guard(meter_lock_);
 
   std::vector<std::shared_ptr<Meter>> filtered_meters;
 
@@ -184,7 +239,7 @@ bool MeterContext::ForceFlush(std::chrono::microseconds timeout) noexcept
 {
   bool result = true;
   // Simultaneous flush not allowed.
-  const std::lock_guard<opentelemetry::common::SpinLockMutex> locked(forceflush_lock_);
+  const std::lock_guard<std::mutex> locked(forceflush_lock_);
 
   auto time_remaining = (std::chrono::steady_clock::duration::max)();
   if (std::chrono::duration_cast<std::chrono::microseconds>(time_remaining) > timeout)

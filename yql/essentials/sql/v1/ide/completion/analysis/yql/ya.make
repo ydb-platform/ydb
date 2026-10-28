@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cluster.cpp
@@ -10,8 +10,6 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/core
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

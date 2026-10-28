@@ -4,6 +4,7 @@
 
 namespace NYql {
 
-IFederatedTopicClient::TPtr CreateExternalFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TFederatedTopicClientSettings& settings);
+IFederatedTopicClient::TPtr CreateExternalFederatedTopicClient(
+    const NYdb::TDriver& driver, const NYdb::NTopic::TFederatedTopicClientSettings& settings);
 
-} // namespace NYql
+}   // namespace NYql

@@ -45,7 +45,12 @@ inline y_absl::Status IntoStatus(y_absl::Status* status) {
 // can participate in TrySeq as result types that affect control flow.
 inline bool IsStatusOk(const y_absl::Status& status) { return status.ok(); }
 
-template <typename To, typename From>
+template <typename T>
+inline bool IsStatusOk(const y_absl::StatusOr<T>& status) {
+  return status.ok();
+}
+
+template <typename To, typename From, typename SfinaeVoid = void>
 struct StatusCastImpl;
 
 template <typename To>
@@ -59,18 +64,50 @@ struct StatusCastImpl<To, const To&> {
 };
 
 template <typename T>
-struct StatusCastImpl<y_absl::StatusOr<T>, y_absl::Status> {
+struct StatusCastImpl<y_absl::Status, y_absl::StatusOr<T>> {
+  static y_absl::Status Cast(y_absl::StatusOr<T>&& t) {
+    return std::move(t.status());
+  }
+};
+
+template <typename T>
+struct StatusCastImpl<y_absl::Status, y_absl::StatusOr<T>&> {
+  static y_absl::Status Cast(const y_absl::StatusOr<T>& t) { return t.status(); }
+};
+
+template <typename T>
+struct StatusCastImpl<y_absl::Status, const y_absl::StatusOr<T>&> {
+  static y_absl::Status Cast(const y_absl::StatusOr<T>& t) { return t.status(); }
+};
+
+// StatusCast<> allows casting from one status-bearing type to another,
+// regardless of whether the status indicates success or failure.
+// This means that we can go from StatusOr to Status safely, but not in the
+// opposite direction.
+// For cases where the status is guaranteed to be a failure (and hence not
+// needing to preserve values) see FailureStatusCast<> below.
+template <typename To, typename From>
+To StatusCast(From&& from) {
+  return StatusCastImpl<To, From>::Cast(std::forward<From>(from));
+}
+
+template <typename To, typename From, typename SfinaeVoid = void>
+struct FailureStatusCastImpl : public StatusCastImpl<To, From> {};
+
+template <typename T>
+struct FailureStatusCastImpl<y_absl::StatusOr<T>, y_absl::Status> {
   static y_absl::StatusOr<T> Cast(y_absl::Status&& t) { return std::move(t); }
 };
 
 template <typename T>
-struct StatusCastImpl<y_absl::StatusOr<T>, const y_absl::Status&> {
+struct FailureStatusCastImpl<y_absl::StatusOr<T>, const y_absl::Status&> {
   static y_absl::StatusOr<T> Cast(const y_absl::Status& t) { return t; }
 };
 
 template <typename To, typename From>
-To StatusCast(From&& from) {
-  return StatusCastImpl<To, From>::Cast(std::forward<From>(from));
+To FailureStatusCast(From&& from) {
+  GPR_DEBUG_ASSERT(!IsStatusOk(from));
+  return FailureStatusCastImpl<To, From>::Cast(std::forward<From>(from));
 }
 
 }  // namespace grpc_core

@@ -141,7 +141,10 @@ TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf
     TStorageAddress keyAddress(currentPrefix, key);
     auto it = StorageHash.find(keyAddress);
     if (it == StorageHash.end()) {
-        it = StorageHash.emplace(keyAddress, BuildSubcolumnName(currentPrefix, key)).first;
+        // The input array may be released before the next chunk is processed.
+        Storage.emplace_back(key.data(), key.size());
+        const TStringBuf storedKey(Storage.back().data(), Storage.back().size());
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, storedKey), BuildSubcolumnName(currentPrefix, storedKey)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

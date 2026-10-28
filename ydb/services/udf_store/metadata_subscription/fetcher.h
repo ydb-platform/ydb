@@ -2,8 +2,9 @@
 
 #include "snapshot.h"
 #include "udf_module_behaviour.h"
-#include <ydb/services/metadata/abstract/common.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -15,4 +16,4 @@ class TSnapshotsFetcher: public NMetadata::NFetcher::TSnapshotsFetcher<TSnapshot
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

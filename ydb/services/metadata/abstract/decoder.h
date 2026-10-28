@@ -40,4 +40,4 @@ public:
         return object.DeserializeFromRecord(decoder, rs.rows()[0]);
     }
 };
-}
+}   // namespace NKikimr::NMetadata::NInternal

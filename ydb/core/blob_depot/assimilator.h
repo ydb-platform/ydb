@@ -4,6 +4,8 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
+#include <ydb/core/util/backoff.h>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TGroupAssimilator : public TActorBootstrapped<TGroupAssimilator> {
@@ -14,6 +16,7 @@ namespace NKikimr::NBlobDepot {
                 EvResumeScanDataForCopying,
                 EvTxComplete,
                 EvUpdateBytesCopiedQ,
+                EvRetryAssimilate,
             };
         };
 
@@ -47,6 +50,7 @@ namespace NKikimr::NBlobDepot {
         THashMap<ui64, std::tuple<TData::TKey, ui64>> Puts;
 
         bool ActionInProgress = false;
+        TBackoffTimer AssimilateRetryBackoff{10, 5000};
         bool ResumeScanDataForCopyingInFlight = false;
 
         std::optional<TLogoBlobID> LastPlanScannedKey;
@@ -79,6 +83,7 @@ namespace NKikimr::NBlobDepot {
     private:
         void Action();
         void SendAssimilateRequest();
+        void HandleRetryAssimilate();
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
         void ScanDataForPlanning();
         void HandleResumeScanDataForPlanning();

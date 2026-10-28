@@ -6,7 +6,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <atomic>
 
@@ -93,7 +93,7 @@ private:
 
     struct TShard
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock);
+        YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock);
 
         TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList;
         TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList;
@@ -127,7 +127,7 @@ private:
     bool Touch(TShard* shard, TItem* item);
     void DrainTouchBuffer(TShard* shard);
 
-    void Trim(TShard* shard, NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
+    void Trim(TShard* shard, TWriterGuard<TReaderWriterSpinLock>& guard);
 
     void PushToYounger(TShard* shard, TItem* item);
     void MoveToYounger(TShard* shard, TItem* item);

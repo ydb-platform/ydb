@@ -2423,6 +2423,11 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         return node;
     }
 
+    if (readSettings.Sampling) {
+        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Sampling is not supported for index reads"));
+        return {};
+    }
+
     // clang-format off
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos()).Value(expectedSettings->ColumnName).Done())
@@ -2821,6 +2826,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return node;
     }
     auto read = maybeRead.Cast();
+
+    if (TKqpReadTableSettings::Parse(read).Sampling) {
+        return addError("Sampling is not supported for index reads");
+    }
 
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
     YQL_ENSURE(tableDesc.Metadata);

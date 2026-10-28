@@ -8,17 +8,15 @@
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/yql/dq/actors/dq.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -27,9 +25,8 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TStopperActor : public TBaseComputeActor<TStopperActor> {
+class TStopperActor: public TBaseComputeActor<TStopperActor> {
 public:
-
     using TBase = TBaseComputeActor<TStopperActor>;
 
     enum ERequestType {
@@ -40,11 +37,9 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("CancelOperation") },
-            { MakeIntrusive<TComputeRequestCounters>("GetOperation") },
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests =
+            CreateArray<RT_MAX, TComputeRequestCountersPtr>({ { MakeIntrusive<TComputeRequestCounters>("CancelOperation") },
+                { MakeIntrusive<TComputeRequestCounters>("GetOperation") }, { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -52,7 +47,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -62,7 +57,9 @@ public:
         }
     };
 
-    TStopperActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TStopperActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger,
+        const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor,
+        const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBase(queryCounters, "Stopper")
         , Params(params)
         , Parent(parent)
@@ -71,7 +68,8 @@ public:
         , OperationId(operationId)
         , Builder(params.Config.GetCommon(), std::move(processor))
         , Counters(GetStepCountersSubgroup())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_STOPPER_ACTOR";
 
@@ -84,7 +82,9 @@ public:
             {"operationId", OperationId},
             {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TStopperActor::StateFunc);
-        Register(new TRetryActor<TEvYdbCompute::TEvCancelOperationRequest, TEvYdbCompute::TEvCancelOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_CANCEL_OPERATION), SelfId(), Connector, OperationId));
+        Register(
+            new TRetryActor<TEvYdbCompute::TEvCancelOperationRequest, TEvYdbCompute::TEvCancelOperationResponse, NYdb::TOperation::TOperationId>(
+                Counters.GetCounters(ERequestType::RT_CANCEL_OPERATION), SelfId(), Connector, OperationId));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -95,7 +95,8 @@ public:
 
     void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND && response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
+        if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND &&
+            response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
             YDB_LOG_ERROR("[ydb] [Stopper] Can't cancel operation",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
@@ -125,7 +126,8 @@ public:
             {"jobId", Params.JobId},
             {"operationId", OperationId},
             {"status", response.Status});
-        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(
+            Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
     }
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
@@ -168,7 +170,8 @@ public:
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
 
-        Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(response.QueryStats, response.Issues, FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode);
+        Fq::Private::PingTaskRequest pingTaskRequest =
+            Builder.Build(response.QueryStats, response.Issues, FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode);
         if (Builder.Issues) {
             YDB_LOG_WARN("[ydb] [Stopper]",
                 {"cloudId", Params.CloudId},
@@ -228,14 +231,10 @@ private:
     TInstant StartTime;
 };
 
-std::unique_ptr<NActors::IActor> CreateStopperActor(const TRunActorParams& params,
-                                                    const TActorId& parent,
-                                                    const TActorId& connector,
-                                                    const TActorId& pinger,
-                                                    const NYdb::TOperation::TOperationId& operationId,
-                                                    std::unique_ptr<IPlanStatProcessor>&& processor,
-                                                    const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateStopperActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+    const TActorId& pinger, const NYdb::TOperation::TOperationId& operationId, std::unique_ptr<IPlanStatProcessor>&& processor,
+    const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TStopperActor>(params, parent, connector, pinger, operationId, std::move(processor), queryCounters);
 }
 
-}
+}   // namespace NFq

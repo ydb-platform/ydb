@@ -248,7 +248,7 @@ namespace NActors {
     }
 
     std::shared_ptr<TLineWriterState> TInMemoryMetricsBackend::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
-        auto state = std::make_shared<TLineWriterState>();
+        auto state = std::make_shared<TLineWriterState>(this);
         RegisterLine(state, MakeLineKey(name, labels), meta);
         return state;
     }

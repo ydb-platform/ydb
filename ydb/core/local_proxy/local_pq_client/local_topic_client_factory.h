@@ -8,5 +8,4 @@ namespace NKikimr::NKqp {
 
 NYql::IPqLocalClientFactory::TPtr CreateLocalTopicClientFactory(const TLocalTopicClientSettings& settings);
 
-} // namespace NKikimr::NKqp
-
+}   // namespace NKikimr::NKqp

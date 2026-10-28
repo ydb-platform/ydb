@@ -1132,6 +1132,17 @@ NApi::TReadTablePartitionOptions SerializeOptionsForReadTablePartition(
     return result;
 }
 
+NApi::TReadFilePartitionOptions SerializeOptionsForReadFilePartition(
+    const TFilePartitionReaderOptions& options)
+{
+    NApi::TReadFilePartitionOptions result;
+    if (options.Config_) {
+        result.Config = ConvertTo<NApi::TFileReaderConfigPtr>(
+            NYson::TYsonString(NodeToYsonString(*options.Config_, NYson::EYsonFormat::Binary)));
+    }
+    return result;
+}
+
 NApi::TAlterTableOptions SerializeOptionsForAlterTable(
     TMutationId& mutationId,
     const TTransactionId& transactionId,
@@ -1238,6 +1249,31 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     }
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
+    result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+std::vector<NApi::TFileReadRange> SerializeFileReadRanges(const TVector<TFileReadRange>& ranges)
+{
+    std::vector<NApi::TFileReadRange> result;
+    result.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        auto& apiRange = result.emplace_back();
+        apiRange.Begin = range.Begin_;
+        if (range.End_) {
+            apiRange.End = *range.End_;
+        }
+    }
+    return result;
+}
+
+NApi::TPartitionFileOptions SerializeOptionsForGetFilePartitions(
+    const TTransactionId& transactionId,
+    const TGetFilePartitionsOptions& options)
+{
+    NApi::TPartitionFileOptions result;
+    SetTransactionId(&result, transactionId);
+    SerializeSuppressableAccessTrackingOptions(&result, options);
     result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
     return result;
 }

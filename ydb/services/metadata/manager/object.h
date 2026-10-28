@@ -9,7 +9,7 @@
 
 namespace NKikimr::NMetadata::NModifications {
 
-class TBaseObject : public IRecordsMerger {
+class TBaseObject: public IRecordsMerger {
 protected:
     virtual IColumnValuesMerger::TPtr BuildMerger(const TString& columnName) const override;
 
@@ -26,4 +26,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

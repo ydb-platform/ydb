@@ -34,7 +34,7 @@ private:
     std::atomic<i64> GetLatestTimestampCallCounter_ = 0;
     NConcurrency::TPeriodicExecutorPtr LatestTimestampExecutor_;
     std::atomic<TTimestamp> LatestTimestamp_ = MinTimestamp;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ClockClusterTagMapSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ClockClusterTagMapSpinLock_);
     THashMap<NObjectClient::TCellTag, std::atomic<TTimestamp>> LatestTimestampByClockCellTag_;
 
     TFuture<TTimestamp> OnGenerateTimestamps(

@@ -484,6 +484,8 @@ message TEvLoadTestRequest {
             // and the load tablet forwards them to PersistentBuffer. When
             // disabled, neither event carries payload checksums.
             optional bool EnableChecksums = 9 [default = true];
+            // Nonzero only for acknowledged automation configuration.
+            optional uint64 ConfigurationId = 10;
         }
 
         // Load-actor -> worker: "write SizeBytes at this flat address".
@@ -601,6 +603,9 @@ message TEvLoadTestRequest {
         // the shared WorkloadConfig out to one single-tablet child run per
         // target (each child sets NbsDbgLikeTabletId and clears Targets).
         repeated TNbsTabletTarget Targets = 103;
+        // Service-owned automation startup contract; clients must not supply these.
+        optional bool RequireReady = 104;
+        optional uint32 StartupTimeoutSeconds = 105 [default = 60];
     }
 
     message TInterconnectLoad {
@@ -709,6 +714,8 @@ message TEvNbsLoadTabletGetSummaryResult {
     // this count (not NumDirectBlockGroups) as the effective DBG count so that
     // they do not generate addresses for DBGs whose peers are not yet ready.
     optional uint32 NumReadyDirectBlockGroups = 8;
+    optional uint32 AutomationProtocolVersion = 9;
+    optional TEvLoadTestRequest.TNbsDbgLikeLoad.TAllocConfig Allocation = 10;
 }
 
 message TEvLoadTestResponse {
@@ -766,4 +773,11 @@ message TEvNodeFinishResponse {
     optional string LastHtmlPage = 7;
     optional string JsonResult = 8;
     optional TNbsDbgLikeNodeStats NbsDbgLikeStats = 9;
+    optional bool NbsTerminationConfirmed = 10;
+}
+
+message TEvConfigureTabletResult {
+    optional uint64 ConfigurationId = 1;
+    optional bool Success = 2;
+    optional string Error = 3;
 }

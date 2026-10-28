@@ -23,7 +23,7 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -211,10 +211,10 @@ protected:
 
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ConnectionsSpinLock_);
     THashSet<TConnectionPtr> Connections_;
     TPromise<void> AllConnectionsTerminatedPromise_;
 

@@ -26,8 +26,21 @@ private:
     TIdsControl ProcessIds;
 
     void TryAllocateWaiting();
+    // One admitted allocation. Scopes with no admission are served before scopes that already hold one.
+    bool ScheduleOneUnrestricted();
+    // Nothing fits the band and every holder waits for its own next request: grant one above the band.
+    // Called in a loop until some holder has all its requests served or nothing is left to force.
+    bool ForceOneOnDeadlock();
+    void RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress);
     void RefreshSignals() const {
         Signals->ProcessesCount->Set(Processes.size());
+        ui64 admittedGroups = 0;
+        ui64 admittedBytes = 0;
+        for (const auto& [_, process] : Processes) {
+            process.CollectAdmitted(admittedGroups, admittedBytes);
+        }
+        Signals->UnrestrictedAdmittedGroupsCount->Set(admittedGroups);
+        Signals->AdmittedBytes->Set(admittedBytes);
     }
 
     class TOrderedProcessesGuard {
@@ -110,10 +123,10 @@ public:
     void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
         const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx);
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
-    void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
+    void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
-    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);
+    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unrestrictedSoft = std::nullopt);
 
     bool IsEmpty() const {
         return Processes.empty();

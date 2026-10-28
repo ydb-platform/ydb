@@ -7,6 +7,8 @@
 #include <library/cpp/yt/backtrace/backtrace.h>
 #endif
 
+#include <library/cpp/yt/misc/immortal.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,23 +37,8 @@ struct TOKFutureGlobals
     const TFuture<void> Future{TOKFutureTag(), &PromiseState};
 };
 
-// OKFuture is intended to be initialized at compile time so other global
-// constructors would already have an access to it. But at the same time
-// it should not be destroyed because it may be accessed at static destruction
-// phase. Wrap it into a union to satisfy both conditions.
-union TOKFutureGlobalsStorage
-{
-    constexpr TOKFutureGlobalsStorage()
-        : Globals()
-    { }
-
-    ~TOKFutureGlobalsStorage()
-    { }
-
-    TOKFutureGlobals Globals;
-};
-
-constinit TOKFutureGlobalsStorage OKFutureGlobalsStorage;
+// OKFuture must be available to global constructors and survive static destruction.
+constinit TImmortal<TOKFutureGlobals> OKFutureGlobals;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -177,7 +164,7 @@ bool TFutureState<void>::BlockingWait(TInstant deadline) const
             return true;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_.reset(new NThreading::TEvent());
+            ReadyEvent_.reset(new TEvent());
         }
     }
 
@@ -219,12 +206,12 @@ bool TFutureState<void>::TrySetError(const TError& error)
     return TrySet(error);
 }
 
-void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard)
 {
     DoTrySet<true>(error, std::move(guard));
 }
 
-bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
+bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     return TryUnsubscribe(&VoidResultHandlers_, cookie, VoidResultHandlerCookieBase, guard);
@@ -245,7 +232,7 @@ void TFutureState<void>::WaitUntilSet() const
             return;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_ = std::make_unique<NThreading::TEvent>();
+            ReadyEvent_ = std::make_unique<TEvent>();
         }
     }
 
@@ -328,7 +315,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const TFuture<void>& OKFuture = NDetail::OKFutureGlobalsStorage.Globals.Future;
+constinit const TFuture<void>& OKFuture = NDetail::OKFutureGlobals->Future;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -154,6 +154,7 @@ public:
             TVersionedLookupRowsOptions options;
             options.RetentionConfig = New<TRetentionConfig>();
             options.RetentionConfig->MaxDataVersions = 1;
+            options.ReplicaConsistency = EReplicaConsistency::Sync;
 
             auto partitionRowset = WaitFor(consumerTransaction->VersionedLookupRows(ConsumerPath_, ConsumerNameTable_, keyRowsBuilder.Build(), options))
                 .ValueOrThrow()

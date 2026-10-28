@@ -1,7 +1,6 @@
 #include <ydb/services/udf_store/table_query.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/string/cast.h>
 
 namespace NKikimr::NUdfStore::NTableQuery {
@@ -28,15 +27,15 @@ Ydb::Table::ExecuteDataQueryResponse MakePage(const TVector<ui64>& indices, bool
     return response;
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TWasmChunkReads) {
     Y_UNIT_TEST(AppendsMultiplePages) {
-        for (auto append : {AppendSourceChunksResponse, AppendArtifactChunksResponse}) {
+        for (auto append : { AppendSourceChunksResponse, AppendArtifactChunksResponse }) {
             TVector<TString> chunks;
-            UNIT_ASSERT(append(MakePage({0, 1, 2, 3}), chunks));
-            UNIT_ASSERT(append(MakePage({4, 5, 6, 7}), chunks));
-            UNIT_ASSERT(append(MakePage({8, 9}), chunks));
+            UNIT_ASSERT(append(MakePage({ 0, 1, 2, 3 }), chunks));
+            UNIT_ASSERT(append(MakePage({ 4, 5, 6, 7 }), chunks));
+            UNIT_ASSERT(append(MakePage({ 8, 9 }), chunks));
             UNIT_ASSERT_VALUES_EQUAL(chunks.size(), 10);
             for (ui64 index = 0; index < chunks.size(); ++index) {
                 UNIT_ASSERT_VALUES_EQUAL(chunks[index], ToString(index));
@@ -46,17 +45,17 @@ Y_UNIT_TEST_SUITE(TWasmChunkReads) {
 
     Y_UNIT_TEST(EmptyPageAfterFullPagePreservesData) {
         TVector<TString> chunks;
-        UNIT_ASSERT(AppendSourceChunksResponse(MakePage({0, 1, 2, 3}), chunks));
+        UNIT_ASSERT(AppendSourceChunksResponse(MakePage({ 0, 1, 2, 3 }), chunks));
         const auto expected = chunks;
         UNIT_ASSERT(AppendSourceChunksResponse(MakePage({}), chunks));
         UNIT_ASSERT(chunks == expected);
     }
 
     Y_UNIT_TEST(RejectsGapsDuplicatesAndReplayedPages) {
-        for (auto append : {AppendSourceChunksResponse, AppendArtifactChunksResponse}) {
-            for (const TVector<ui64>& indices : {TVector<ui64>{4, 6}, {4, 4}, {0, 1}, {5, 4}}) {
+        for (auto append : { AppendSourceChunksResponse, AppendArtifactChunksResponse }) {
+            for (const TVector<ui64>& indices : { TVector<ui64>{ 4, 6 }, { 4, 4 }, { 0, 1 }, { 5, 4 } }) {
                 TVector<TString> chunks;
-                UNIT_ASSERT(append(MakePage({0, 1, 2, 3}), chunks));
+                UNIT_ASSERT(append(MakePage({ 0, 1, 2, 3 }), chunks));
                 const auto expected = chunks;
                 UNIT_ASSERT(!append(MakePage(indices), chunks));
                 UNIT_ASSERT(chunks == expected);
@@ -65,16 +64,16 @@ Y_UNIT_TEST_SUITE(TWasmChunkReads) {
     }
 
     Y_UNIT_TEST(RejectsTruncatedAndOversizedPages) {
-        for (auto append : {AppendSourceChunksResponse, AppendArtifactChunksResponse}) {
+        for (auto append : { AppendSourceChunksResponse, AppendArtifactChunksResponse }) {
             TVector<TString> chunks;
-            UNIT_ASSERT(!append(MakePage({0, 1}, true), chunks));
-            UNIT_ASSERT(!append(MakePage({0, 1, 2, 3, 4}), chunks));
+            UNIT_ASSERT(!append(MakePage({ 0, 1 }, true), chunks));
+            UNIT_ASSERT(!append(MakePage({ 0, 1, 2, 3, 4 }), chunks));
             UNIT_ASSERT(chunks.empty());
         }
     }
 
     Y_UNIT_TEST(RejectsFailedRequest) {
-        auto response = MakePage({0});
+        auto response = MakePage({ 0 });
         response.mutable_operation()->set_status(Ydb::StatusIds::PRECONDITION_FAILED);
         TVector<TString> chunks;
         UNIT_ASSERT(!AppendSourceChunksResponse(response, chunks));
@@ -83,4 +82,4 @@ Y_UNIT_TEST_SUITE(TWasmChunkReads) {
     }
 }
 
-} // namespace NKikimr::NUdfStore::NTableQuery
+}   // namespace NKikimr::NUdfStore::NTableQuery

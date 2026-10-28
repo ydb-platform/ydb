@@ -52,6 +52,27 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    Y_UNIT_TEST(CreateWithoutInitialScan) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        runtime.GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::PathExist,
+            NLs::ReplicationState(NKikimrReplication::TReplicationState::kPaused),
+        });
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            State { StandBy {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(Disabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableReplication(false));

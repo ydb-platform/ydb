@@ -5,11 +5,12 @@
 #define MY_BENCHMARK_CAPTURE(func, T, test_case_name, ...) \
     BENCHMARK_PRIVATE_DECLARE(func) \
             = (::benchmark::internal::RegisterBenchmarkInternal( \
+                std::unique_ptr<benchmark::internal::Benchmark>( \
                     new ::benchmark::internal::FunctionBenchmark( \
                             #func "/" #test_case_name "/" #T, \
                             [](::benchmark::State &st) { \
                                 func<T>(st, __VA_ARGS__); \
-                            })))
+                            }))))
 
 #define BENCH_SORT(func, type) \
     MY_BENCHMARK_CAPTURE(func, type, random_128, 128, std::string("random")); \

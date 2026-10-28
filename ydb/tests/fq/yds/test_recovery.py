@@ -34,7 +34,9 @@ def run_with_sleep(args):
 
 @pytest.fixture
 def kikimr():
-    kikimr_conf = StreamingOverKikimrConfig(node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(2)}, cloud_mode=True)
+    kikimr_conf = StreamingOverKikimrConfig(
+        node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(2)}, cloud_mode=True
+    )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()

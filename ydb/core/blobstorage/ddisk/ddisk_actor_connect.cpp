@@ -107,6 +107,10 @@ namespace NKikimr::NDDisk {
         connection.DDiskSessionSeqNo = creds.DDiskSessionSeqNo;
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
+        if (!connection.Active && !IsPersistentBufferActor) {
+            TabletStats.AddSessions(creds.TabletId, 1, TActivationContext::Monotonic());
+            NotifyTabletStats();
+        }
         connection.Active = true;
         if (!sameSession) {
             connection.Token = IssueConnectionToken(connectionIndex, connection);
@@ -142,6 +146,10 @@ namespace NKikimr::NDDisk {
         if (auto it = connectionDict.find(connectionKey); it != connectionDict.end()) {
             TConnectionInfo& connection = Connections[it->second];
             RememberConnectionToken( connection, EConnectionTokenInvalidationReason::Disconnect);
+            if (!IsPersistentBufferActor) {
+                TabletStats.AddSessions(connection.TabletId, -1, TActivationContext::Monotonic());
+                NotifyTabletStats();
+            }
             connection.Active = false;
             connection.Token = {};
             FreeConnectionIndices.push_back(it->second);

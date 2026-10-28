@@ -178,6 +178,17 @@ RD_EXPORT void rd_kafka_mock_group_initial_rebalance_delay_ms(
 
 
 /**
+ * @brief Set the controller broker id reported in Metadata responses.
+ *
+ * A value of -1 indicates that there is currently no controller, which is
+ * a valid state the client must handle.
+ */
+RD_EXPORT void
+rd_kafka_mock_set_controller_id(rd_kafka_mock_cluster_t *mcluster,
+                                int32_t controller_id);
+
+
+/**
  * @brief Push \p cnt errors and RTT tuples in the \p ... va-arg list onto
  *        the broker's error stack for the given \p ApiKey.
  *

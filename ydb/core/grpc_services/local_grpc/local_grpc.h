@@ -1,16 +1,18 @@
 #pragma once
 
 #include <ydb/core/grpc_services/base/base.h>
+
 #include <ydb/library/grpc/server/grpc_request_base.h>
 
 namespace NKikimr::NGRpcService::NLocalGrpc {
 
-class TContextBase : public NYdbGrpc::IRequestContextBase {
+class TContextBase: public NYdbGrpc::IRequestContextBase {
 public:
     TContextBase(std::shared_ptr<IRequestCtx> baseRequest)
-        : BaseRequest_{std::move(baseRequest)}
-        , AuthState_{/*needAuth*/true}
-    {}
+        : BaseRequest_{ std::move(baseRequest) }
+        , AuthState_{ /*needAuth*/ true }
+    {
+    }
 
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 
@@ -23,7 +25,7 @@ public:
     }
 
     void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details = "") override {
-        NYql::TIssue issue{TStringBuilder() << "grpc code: " << static_cast<i32>(code) << ", msg: " << msg << " (" << details << ")"};
+        NYql::TIssue issue{ TStringBuilder() << "grpc code: " << static_cast<i32>(code) << ", msg: " << msg << " (" << details << ")" };
         issue.SetCode(code, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
         RaiseIssue(issue);
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -39,10 +41,10 @@ public:
     }
 
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
-        auto value = BaseRequest_->GetPeerMetaValues(TString{key});
+        auto value = BaseRequest_->GetPeerMetaValues(TString{ key });
         if (value) {
             MetaValueCache_ = std::move(*value);
-            return {TStringBuf(MetaValueCache_)};
+            return { TStringBuf(MetaValueCache_) };
         }
         return {};
     }
@@ -55,7 +57,9 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
-    TString GetEndpointId() const override { return {}; }
+    TString GetEndpointId() const override {
+        return {};
+    }
 
     google::protobuf::Arena* GetArena() override {
         return &Arena_;
@@ -74,12 +78,29 @@ public:
     void SetNextReplyCallback(TOnNextReply&& cb) override {
         Y_UNUSED(cb);
     }
-    void FinishStreamingOk() override {}
-    TAsyncFinishResult GetFinishFuture() override { return {}; }
-    TString GetPeer() const override { return {}; }
-    bool SslServer() const override { return false; }
-    bool IsClientLost() const override { return false; }
-    bool IsStreamCall() const override { return false; }
+
+    void FinishStreamingOk() override {
+    }
+
+    TAsyncFinishResult GetFinishFuture() override {
+        return {};
+    }
+
+    TString GetPeer() const override {
+        return {};
+    }
+
+    bool SslServer() const override {
+        return false;
+    }
+
+    bool IsClientLost() const override {
+        return false;
+    }
+
+    bool IsStreamCall() const override {
+        return false;
+    }
 
 public:
     NYql::TIssues GetIssues() {
@@ -108,21 +129,19 @@ private:
     mutable TString MetaValueCache_;
 };
 
-template<typename TReq, typename TResp>
-class TContext
-    : public TContextBase {
+template <typename TReq, typename TResp>
+class TContext: public TContextBase {
 public:
     using TRequest = TReq;
     using TResponse = TResp;
     using TBase = TContextBase;
 
-    TContext(
-        TReq&& request, std::shared_ptr<IRequestCtx> baseRequest,
-        std::function<void(const TResponse&)> replyCallback)
-        : TBase{std::move(baseRequest)}
-        , Request_{std::move(request)}
-        , ReplyCallback_{std::move(replyCallback)}
-    {}
+    TContext(TReq&& request, std::shared_ptr<IRequestCtx> baseRequest, std::function<void(const TResponse&)> replyCallback)
+        : TBase{ std::move(baseRequest) }
+        , Request_{ std::move(request) }
+        , ReplyCallback_{ std::move(replyCallback) }
+    {
+    }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResp resp;
@@ -160,12 +179,8 @@ struct TCallBase {
     using TResult = TRes;
 
     static TIntrusivePtr<NYdbGrpc::IRequestContextBase> MakeContext(
-        TReq&& request,
-        std::shared_ptr<IRequestCtx>&& baseRequest,
-        std::function<void(const TResp&)>&& replyCallback) {
-        return new TContext<TReq, TResp>{
-            std::move(request), std::move(baseRequest), std::move(replyCallback)
-        };
+        TReq&& request, std::shared_ptr<IRequestCtx>&& baseRequest, std::function<void(const TResp&)>&& replyCallback) {
+        return new TContext<TReq, TResp>{ std::move(request), std::move(baseRequest), std::move(replyCallback) };
     }
 };
 
@@ -175,13 +190,14 @@ template <typename TReq>
 struct TCall;
 
 template <typename TMsg, ui32 EMsgType>
-class TEventBase : public TEventLocal<TEventBase<TMsg, EMsgType>, EMsgType> {
+class TEventBase: public TEventLocal<TEventBase<TMsg, EMsgType>, EMsgType> {
 public:
     TEventBase() = default;
 
     TEventBase(TMsg message)
-        : Message{std::move(message)}
-    {}
+        : Message{ std::move(message) }
+    {
+    }
 
     TMsg Message;
 };
@@ -193,8 +209,9 @@ class TEvent;
 class TCaller {
 public:
     TCaller(TActorId grpcProxyId)
-        : GRpcRequestProxyId_{std::move(grpcProxyId)}
-    {}
+        : GRpcRequestProxyId_{ std::move(grpcProxyId) }
+    {
+    }
 
     /// Caller has to handle TEvent<TResponse> of corresponding request
     template <typename TRequest>
@@ -202,12 +219,14 @@ public:
         using TGrpcCall = TCall<std::decay_t<TRequest>>;
         using TResponse = typename TGrpcCall::TResponse;
 
-        auto localRequest = TGrpcCall::MakeRequest(std::move(request), std::move(baseRequest), [as = ctx.ActorSystem(), selfId = ctx.SelfID](const TResponse& resp) {
-            as->Send(selfId, new TEvent<TResponse>(resp));
-        });
+        auto localRequest = TGrpcCall::MakeRequest(
+            std::move(request), std::move(baseRequest), [as = ctx.ActorSystem(), selfId = ctx.SelfID](const TResponse& resp) {
+                as->Send(selfId, new TEvent<TResponse>(resp));
+            });
         ctx.Send(GRpcRequestProxyId_, localRequest.release());
     }
+
 private:
     TActorId GRpcRequestProxyId_;
 };
-} // namespace NKikimr::NGRpcService::NLocalGrpc
+}   // namespace NKikimr::NGRpcService::NLocalGrpc

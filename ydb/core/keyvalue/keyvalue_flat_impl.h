@@ -28,9 +28,6 @@
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
 
-// Uncomment the following macro to enable consistency check before every transactions in TTxRequest
-//#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
-
 namespace NKikimr {
 namespace NKeyValue {
 
@@ -170,21 +167,8 @@ protected:
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
         }
 
-        bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
-#ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
-            TKeyValueState state;
-            if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
-                return false;
-            }
-            Y_ABORT_UNLESS(!state.IsDamaged());
-            state.VerifyEqualIndex(Self->State);
-            txc.DB.NoMoreReadsForTx();
-            return true;
-#else
-            Y_UNUSED(txc);
-            return true;
-#endif
-        }
+        // defined in keyvalue.cpp, a no-op unless the library is built with -DKIKIMR_KEYVALUE_CONSISTENCY_CHECKS=yes
+        bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc);
     };
 
     struct TTxDropRefCountsOnError : NTabletFlatExecutor::ITransaction {
@@ -807,18 +791,16 @@ public:
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
+    static TAutoPtr<TTabletCountersBase> MakeTabletCounters() {
+        return new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
+            EPercentileCounters_descriptor, ETxTypes_descriptor>();
+    }
+
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {
-        TAutoPtr<TTabletCountersBase> counters(
-        new TProtobufTabletCounters<
-                ESimpleCounters_descriptor,
-                ECumulativeCounters_descriptor,
-                EPercentileCounters_descriptor,
-                ETxTypes_descriptor
-            >());
-        State.SetupTabletCounters(counters);
+        State.SetupTabletCounters(MakeTabletCounters());
         State.Clear();
         State.SetTabletInfo(info);
     }

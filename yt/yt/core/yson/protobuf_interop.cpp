@@ -37,7 +37,7 @@
 #include <library/cpp/yt/string/stream.h>
 #include <library/cpp/yt/string/string.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>
@@ -1227,7 +1227,7 @@ protected:
             if (!std::binary_search(numbers.begin(), numbers.end(), number)) {
                 const auto* field = type->FindFieldByNumber(number);
                 YT_VERIFY(field);
-                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+                YPathStack_.Push(field->GetYsonName());
                 THROW_ERROR_EXCEPTION("Missing required field %v",
                     YPathStack_.GetHumanReadablePath())
                     .With("ypath", YPathStack_.GetPath())
@@ -1244,7 +1244,7 @@ protected:
         for (auto index = 0; index + 1 < std::ssize(numbers); ++index) {
             if (numbers[index] == numbers[index + 1]) {
                 const auto* field = type->GetFieldByNumber(numbers[index]);
-                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+                YPathStack_.Push(field->GetYsonName());
                 THROW_ERROR_EXCEPTION("Duplicate field %v",
                     YPathStack_.GetHumanReadablePath())
                     .With("ypath", YPathStack_.GetPath())
@@ -1284,7 +1284,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProtobufWriter
-    : public TProtobufTranscoderBase
+    : public IProtobufWriter
+    , public TProtobufTranscoderBase
     , public TForwardingYsonConsumer
 {
 public:
@@ -1306,6 +1307,46 @@ public:
         , ForwardingUnknownYsonFieldValueWriter_(UnknownYsonFieldValueStringWriter_, Options_.UnknownYsonFieldModeResolver)
         , TreeBuilder_(CreateBuilderFromFactory(GetEphemeralNodeFactory()))
     { }
+
+    bool TryOnProtobufMessage(TRange<TStringBuf> parts) override
+    {
+        if (!State_.ForwardingConsumers.empty()) {
+            return false;
+        }
+        if (TypeStack_.empty()) {
+            CodedOutputStream output(OutputStream_);
+            for (auto part : parts) {
+                output.WriteRaw(part.data(), part.size());
+            }
+            return true;
+        }
+
+        const auto* field = FieldStack_.back().Field;
+        if (!field || field->GetType() != FieldDescriptor::TYPE_MESSAGE) {
+            return false;
+        }
+
+        if (field->IsRepeated() && !FieldStack_.back().ParsingList) {
+            for (auto part : parts) {
+                WriteTag();
+                BodyCodedStream_.WriteVarint64(part.size());
+                BodyCodedStream_.WriteRaw(part.data(), part.size());
+            }
+        } else {
+            ui64 size = 0;
+            for (auto part : parts) {
+                size += part.size();
+            }
+            WriteTag();
+            BodyCodedStream_.WriteVarint64(size);
+            for (auto part : parts) {
+                BodyCodedStream_.WriteRaw(part.data(), part.size());
+            }
+        }
+        FieldStack_.pop_back();
+        YPathStack_.Pop();
+        return true;
+    }
 
 private:
     ZeroCopyOutputStream* const OutputStream_;
@@ -1700,7 +1741,7 @@ private:
             typeEntry.NonRequiredFieldNumbers.push_back(number);
         }
         FieldStack_.emplace_back(field);
-        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+        YPathStack_.Push(field->GetYsonName());
 
         TryWriteCustomlyConvertibleType();
     }
@@ -2176,7 +2217,7 @@ private:
     }
 };
 
-std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
+std::unique_ptr<IProtobufWriter> CreateProtobufWriter(
     ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
     TProtobufWriterOptions options)
@@ -2323,7 +2364,7 @@ private:
     void OnKeyedItem(const TProtobufField* field)
     {
         Consumer_->OnKeyedItem(field->GetYsonName());
-        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+        YPathStack_.Push(field->GetYsonName());
     }
 
     void OnKeyedItem(TStringBuf key)

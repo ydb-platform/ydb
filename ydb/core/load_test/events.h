@@ -3,6 +3,7 @@
 #include <ydb/core/base/events.h>
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -115,7 +116,17 @@ struct TEvLoad {
         // In-process (per-DBG worker actor -> proxy tablet): peer-connectivity
         // readiness update so the tablet can answer GetSummary.
         EvNbsDbgActorReady,
+        EvNbsDbgLikeLoadControl,
+        EvNbsDbgLikeLoadControlResponse,
+        EvConfigureTabletResult,
     };
+
+    struct TEvNbsDbgLikeLoadControl : TEventPB<TEvNbsDbgLikeLoadControl,
+        NKikimrClient::TNbsDbgLikeLoadControl, EvNbsDbgLikeLoadControl> {};
+    struct TEvNbsDbgLikeLoadControlResponse : TEventPB<TEvNbsDbgLikeLoadControlResponse,
+        NKikimrClient::TNbsDbgLikeLoadControlResponse, EvNbsDbgLikeLoadControlResponse> {};
+    struct TEvConfigureTabletResult : TEventPB<TEvConfigureTabletResult,
+        NKikimr::TEvConfigureTabletResult, EvConfigureTabletResult> {};
 
     struct TEvLoadTestRequest : public TEventPB<TEvLoadTestRequest,
         NKikimr::TEvLoadTestRequest, EvLoadTestRequest>
@@ -187,6 +198,8 @@ struct TEvLoad {
 
     struct TEvLoadTestFinished : public TEventLocal<TEvLoadTestFinished, TEvLoad::EvLoadTestFinished> {
         ui64 Tag;
+        bool TerminationConfirmed = true;
+        TVector<NKikimr::TEvNodeFinishResponse::TNbsDbgLikeNodeStats> NbsDbgLikeLoadTablets;
         TIntrusivePtr<TLoadReport> Report; // nullptr indicates an error or an early stop
         TString ErrorReason; // human readable status, might be nonempty even in the case of success
         TString LastHtmlPage;
@@ -410,6 +423,20 @@ inline void SerializeNbsDbgLikeHistogram(
         dst.AddValues(it.GetValue());
         dst.AddCounts(count);
     }
+}
+
+inline void FillNbsDbgLikeLoadStats(const TNbsDbgLikeFinishStats& src,
+    NKikimr::TEvNodeFinishResponse::TNbsDbgLikeNodeStats& dst) {
+    dst.SetWritesOk(src.WritesOk);
+    dst.SetWritesErr(src.WritesErr);
+    dst.SetWriteBytes(src.WriteBytes);
+    dst.SetReadsOk(src.ReadsPbOk + src.ReadsDDiskOk);
+    dst.SetReadsErr(src.ReadsErr);
+    dst.SetReadBytes(src.ReadsPbBytes + src.ReadsDDiskBytes);
+    dst.SetMeasuredMs(src.MeasuredMs);
+    dst.SetMaxInFlight(src.MaxInFlight);
+    SerializeNbsDbgLikeHistogram(src.WriteE2eUs, *dst.MutableWriteLatencyUs());
+    SerializeNbsDbgLikeHistogram(src.ReadPbUs, *dst.MutableReadLatencyUs());
 }
 
 // Reconstruct an HDR histogram from the proto carrier produced by

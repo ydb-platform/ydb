@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/string.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+
+#include <util/generic/string.h>
 
 namespace NFq {
 
@@ -20,4 +20,4 @@ struct TDebugItem {
 using TDebugInfo = TVector<TDebugItem>;
 using TDebugInfoPtr = std::shared_ptr<TDebugInfo>;
 
-} // namespace NFq
+}   // namespace NFq

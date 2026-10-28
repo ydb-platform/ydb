@@ -42,8 +42,8 @@ private:
     const TClosure SyncFinish_;
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NYT::NThreading::TSpinLock, StateLock_);
-    using TGuard = TGuard<NYT::NThreading::TSpinLock>;
+    YT_DECLARE_SPIN_LOCK(NYT::TSpinLock, StateLock_);
+    using TGuard = TGuard<NYT::TSpinLock>;
 
     enum class EState
     {

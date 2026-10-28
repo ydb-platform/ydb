@@ -71,6 +71,12 @@ struct TTransactionCommitOptions
     //! Transactions that have intersecting ordering tags are committed in the order of
     //! their commit timestamps.
     TStrongOrderingTagsMap StrongOrderingTags = {};
+
+    //! Postpones transaction commit on a particular cell until all commit
+    //! approvals are received. Does nothing if the participant does not support
+    //! delayed transaction commits; also a no-op for 1PC, since sending a
+    //! commit approval reliably requires 2PC.
+    THashMap<NObjectClient::TCellId, int> TargetCommitApprovalCounts;
 };
 
 struct TTransactionCommitResult

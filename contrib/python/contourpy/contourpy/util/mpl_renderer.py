@@ -452,7 +452,7 @@ class MplDebugRenderer(MplRenderer):
         ax = self._get_ax(ax)
         separate_lines = convert_lines(lines, line_type, LineType.Separate)
         if TYPE_CHECKING:
-            separate_lines = cast(cpy.LineReturn_Separate, separate_lines)
+            separate_lines = cast("cpy.LineReturn_Separate", separate_lines)
 
         if arrow_size > 0.0:
             for line in separate_lines:

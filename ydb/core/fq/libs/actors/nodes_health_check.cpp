@@ -1,17 +1,17 @@
 #include "proxy_private.h"
 
-#include <ydb/library/services/services.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
-
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <google/protobuf/util/time_util.h>
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_NODES_MANAGER
 
@@ -21,22 +21,19 @@ using namespace NActors;
 using namespace NYql;
 using namespace NMonitoring;
 
-class TNodesHealthCheckActor
-    : public NActors::TActorBootstrapped<TNodesHealthCheckActor>
-{
+class TNodesHealthCheckActor: public NActors::TActorBootstrapped<TNodesHealthCheckActor> {
 public:
-    TNodesHealthCheckActor(
-        const NActors::TActorId& sender,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev,
-        TDynamicCounterPtr counters)
+    TNodesHealthCheckActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider,
+        TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev, TDynamicCounterPtr counters)
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters))
-        , LifetimeDuration(Counters->GetSubgroup("subsystem", "private_api")->GetHistogram("NodesHealthCheckTask",  ExponentialHistogram(10, 2, 50)))
+        , LifetimeDuration(
+              Counters->GetSubgroup("subsystem", "private_api")->GetHistogram("NodesHealthCheckTask", ExponentialHistogram(10, 2, 50)))
         , StartTime(TInstant::Now())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_NODES_HEALTH_CHECK";
 
@@ -72,8 +69,7 @@ public:
         auto& req = Ev->Record;
         Tenant = req.tenant();
 
-        Send(NFq::ControlPlaneStorageServiceActorId(),
-            new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(req)));
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(req)));
     }
 
 private:
@@ -114,16 +110,9 @@ private:
     TString Tenant;
 };
 
-IActor* CreateNodesHealthCheckActor(
-    const NActors::TActorId& sender,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev,
-    TDynamicCounterPtr counters) {
-    return new TNodesHealthCheckActor(
-        sender,
-        timeProvider,
-        std::move(ev),
-        std::move(counters));
+IActor* CreateNodesHealthCheckActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev, TDynamicCounterPtr counters) {
+    return new TNodesHealthCheckActor(sender, timeProvider, std::move(ev), std::move(counters));
 }
 
-} /* NFq */
+}   // namespace NFq

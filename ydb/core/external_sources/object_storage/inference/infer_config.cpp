@@ -25,10 +25,10 @@ void ConfigureJsonEachRow(FormatConfig& config) {
     config.JsonParseOpts.newlines_in_values = true;
 }
 
-}
+}   // namespace
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
-    static THashSet<TString> supportedParams {
+    static THashSet<TString> supportedParams{
         "format",
         "compression",
         "filepattern",
@@ -61,28 +61,28 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
     config->ShouldMakeOptional = true;
 
     switch (format) {
-    case EFileFormat::CsvWithNames:
-    case EFileFormat::Csv:
-        ConfigureCsv(*config, params);
-        break;
-    case EFileFormat::TsvWithNames:
-        ConfigureTsv(*config);
-        break;
-    case EFileFormat::Parquet:
-        // No configuration needed.
-        break;
-    case EFileFormat::JsonEachRow:
-        ConfigureJsonEachRow(*config);
-        break;
-    case EFileFormat::JsonList:
-        // Defaults are sufficient.
-        break;
-    case EFileFormat::Undefined:
-    default:
-        throw yexception() << "invalid parameter: unknown format specified";
+        case EFileFormat::CsvWithNames:
+        case EFileFormat::Csv:
+            ConfigureCsv(*config, params);
+            break;
+        case EFileFormat::TsvWithNames:
+            ConfigureTsv(*config);
+            break;
+        case EFileFormat::Parquet:
+            // No configuration needed.
+            break;
+        case EFileFormat::JsonEachRow:
+            ConfigureJsonEachRow(*config);
+            break;
+        case EFileFormat::JsonList:
+            // Defaults are sufficient.
+            break;
+        case EFileFormat::Undefined:
+        default:
+            throw yexception() << "invalid parameter: unknown format specified";
     }
 
     return config;
 }
 
-} // namespace NKikimr::NExternalSource::NObjectStorage::NInference
+}   // namespace NKikimr::NExternalSource::NObjectStorage::NInference

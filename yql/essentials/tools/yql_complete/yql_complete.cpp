@@ -65,10 +65,7 @@ NSQLComplete::TCompletionInput MakeCompletionInput(TString& text, TMaybe<ui64> p
         ythrow yexception() << "provided position " << *pos << " is out of range " << lengthUtf8;
     }
 
-    return {
-        .Text = text,
-        .CursorPosition = UTF8PositionToBytes(text, *pos),
-    };
+    return {{.Text = text, .CursorPosition = UTF8PositionToBytes(text, *pos)}};
 }
 
 int Run(int argc, char** argv) {

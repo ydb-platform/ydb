@@ -46,4 +46,4 @@ void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
     }
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

@@ -3,6 +3,7 @@
 #include "local_topic_client_settings.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/events_common.h>
 
@@ -16,17 +17,19 @@ public:
 
 protected:
     template <typename TRpc, typename TSettings>
-    NThreading::TFuture<NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const NYdb::TOperationRequestSettings<TSettings>& settings, NRpcService::TLocalRpcOperationRequestCreator requestCreator) const {
+    NThreading::TFuture<NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto,
+        const NYdb::TOperationRequestSettings<TSettings>& settings, NRpcService::TLocalRpcOperationRequestCreator requestCreator) const {
         const auto promise = NThreading::NewPromise<NRpcService::TLocalRpcOperationResult>();
-        auto* actor = new NRpcService::TOperationRequestExecuter<TRpc, TSettings>(std::move(proto), {
-            .ChannelBufferSize = ChannelBufferSize,
-            .OperationSettings = settings,
-            .RequestCreator = std::move(requestCreator),
-            .Database = Database,
-            .Token = CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo()) : Nothing(),
-            .Promise = promise,
-            .OperationName = "local_topic_rpc_operation",
-        });
+        auto* actor = new NRpcService::TOperationRequestExecuter<TRpc, TSettings>(
+            std::move(proto), {
+                                  .ChannelBufferSize = ChannelBufferSize,
+                                  .OperationSettings = settings,
+                                  .RequestCreator = std::move(requestCreator),
+                                  .Database = Database,
+                                  .Token = CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo()) : Nothing(),
+                                  .Promise = promise,
+                                  .OperationName = "local_topic_rpc_operation",
+                              });
         ActorSystem->Register(actor, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         return promise.GetFuture();
     }
@@ -44,7 +47,8 @@ public:
         TEvent(TEventVariant&& event, i64 size)
             : Event(std::move(event))
             , Size(size)
-        {}
+        {
+        }
 
         TEventVariant Event;
         i64 Size = 0;
@@ -115,4 +119,4 @@ protected:
     std::queue<TEvent> Events;
 };
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

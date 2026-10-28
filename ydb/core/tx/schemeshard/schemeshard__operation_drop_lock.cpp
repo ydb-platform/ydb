@@ -92,7 +92,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
 
@@ -207,13 +207,17 @@ public:
         context.SS->LockedPaths.erase(pathId);
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
 
+        // A path lock just released -- a split deferred on the lock may now proceed. Nudge the
+        // fair scheduler (no-op when nothing is waiting / the scheduler is off).
+        context.SS->ScheduleSplitMergeRevisit(TActivationContext::AsActorContext());
+
         context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
     }

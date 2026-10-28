@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kikimr_program_builder.cpp
@@ -26,8 +26,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/decimal
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

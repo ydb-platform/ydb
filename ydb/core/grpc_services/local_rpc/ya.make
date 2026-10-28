@@ -16,6 +16,4 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/issue
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

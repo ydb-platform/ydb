@@ -15,4 +15,4 @@ public:
     TCheckpointId NextId();
 };
 
-} // namespace NFq
+}   // namespace NFq

@@ -9,17 +9,13 @@ namespace NFq {
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) const {
     const auto& request = ev->Get()->Request;
     return ValidateWriteResultData(
-        request.result_id().value(),
-        request.result_set(),
-        NProtoInterop::CastFromProto(request.deadline()),
-        Config->ResultSetsTtl
-    );
+        request.result_id().value(), request.result_set(), NProtoInterop::CastFromProto(request.deadline()), Config->ResultSetsTtl);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(RTC_WRITE_RESULT_DATA)};
+    TRequestCounters requestCounters{ nullptr, Counters.GetCommonCounters(RTC_WRITE_RESULT_DATA) };
     requestCounters.IncInFly();
 
     requestCounters.Common->RequestBytes->Add(ev->Get()->GetByteSize());
@@ -63,13 +59,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     for (const auto& row : resultSet.rows()) {
         TString serializedRow;
         if (!row.SerializeToString(&serializedRow)) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error serialize proto message for row. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error serialize proto message for row. Please contact internal support";
         }
 
         itemsAsList.AddListItem()
             .BeginStruct()
-            .AddMember("row_id").Int64(rowId)
-            .AddMember("result_set").String(row.SerializeAsString())
+            .AddMember("row_id")
+            .Int64(rowId)
+            .AddMember("result_set")
+            .String(row.SerializeAsString())
             .EndStruct();
         rowId++;
     }
@@ -82,31 +81,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     queryBuilder.AddTimestamp("expire_at", deadline);
     queryBuilder.AddValue("items", itemsAsList.Build());
 
-    queryBuilder.AddText(
-        "UPSERT INTO `" RESULT_SETS_TABLE_NAME "`\n"
-        "SELECT $result_id as result_id, $result_set_id as result_set_id,\n"
-        " T.*, $expire_at as expire_at FROM as_table($items) AS T;\n"
-    );
+    queryBuilder.AddText("UPSERT INTO `" RESULT_SETS_TABLE_NAME
+                         "`\n"
+                         "SELECT $result_id as result_id, $result_set_id as result_set_id,\n"
+                         " T.*, $expire_at as expire_at FROM as_table($items) AS T;\n");
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [response] { return *response; };
+    auto prepare = [response] {
+        return *response;
+    };
     auto success = SendResponse<TEvControlPlaneStorage::TEvWriteResultDataResponse, Fq::Private::WriteTaskResultResult>(
-        "WriteResultDataRequest - WriteResultDataResult",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        "WriteResultDataRequest - WriteResultDataResult", NActors::TActivationContext::ActorSystem(), result, SelfId(), std::move(ev), startTime,
+        requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, future.GetValue());
+    });
 }
 
-} // NFq
+}   // namespace NFq

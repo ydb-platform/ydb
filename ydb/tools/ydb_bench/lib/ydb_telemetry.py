@@ -34,11 +34,27 @@ def _archive_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def _archive_definition(definition, previous):
+    """Reuse JSON identity when ordinary string labels are unchanged."""
+    if previous is not None and previous[1] == definition:
+        return previous[0]
+    return _archive_json(definition)
+
+
+def _archive_value(value):
+    # Scalar counters dominate snapshots. Keep the previous JSON-state contract
+    # while avoiding construction of a JSONEncoder for each integer sample.
+    if len(value) == 1 and type(value.get("value")) is int:
+        return '{"value":' + str(value["value"]) + "}"
+    return _archive_json(value)
+
+
 class CountersArchiveEncoder:
     """Dictionary and last successful snapshot, scoped to one archive part."""
 
     def __init__(self):
         self.definitions = {}
+        self.definition_cache = {}
         self.nodes = {}
         self.state_bytes = 0
         self.sequence = 0
@@ -54,9 +70,14 @@ class CountersArchiveEncoder:
         old_order, old_values = self.nodes.get(node, (None, {}))
         order, values, definitions, changes = [], {}, [], []
         occurrences = {}
-        for sensor in record["counters"]["sensors"]:
+        for position, sensor in enumerate(record["counters"]["sensors"]):
             definition = {key: value for key, value in sensor.items() if key not in ("value", "hist")}
-            key = _archive_json(definition)
+            previous = (
+                self.definition_cache.get(old_order[position])
+                if old_order is not None and position < len(old_order)
+                else None
+            )
+            key = _archive_definition(definition, previous)
             occurrence = occurrences.get(key, 0)
             occurrences[key] = occurrence + 1
             identity = (key, occurrence)
@@ -64,9 +85,18 @@ class CountersArchiveEncoder:
                 self.definitions[identity] = len(self.definitions)
                 self.state_bytes += len(key)
                 definitions.append([self.definitions[identity], definition])
+                labels = definition.get("labels")
+                if (
+                    isinstance(labels, dict)
+                    and all(isinstance(item, str) for item in labels.values())
+                    and (len(definition) == 1 or (len(definition) == 2 and isinstance(definition.get("kind"), str)))
+                ):
+                    # Only string-only definitions use dict equality: Python's
+                    # numeric equality would otherwise conflate 0, 0.0 and False.
+                    self.definition_cache[self.definitions[identity]] = (key, dict(definition, labels=dict(labels)))
             metric = self.definitions[identity]
             value = {key: value for key, value in sensor.items() if key in ("value", "hist")}
-            encoded = _archive_json(value)
+            encoded = _archive_value(value)
             order.append(metric)
             values[metric] = encoded
             # A newly present scalar defaults to integer zero, never a missing sample.

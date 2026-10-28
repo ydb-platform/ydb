@@ -5,7 +5,7 @@
 
 namespace NFq {
 // keep in sync with token accessor logic
-class TSigner : public TThrRefBase {
+class TSigner: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TSigner>;
 
@@ -16,6 +16,7 @@ public:
 
 public:
     explicit TSigner(const TString& hmacSecret);
+
     TString SignAccountId(const TString& serviceAccountId) const {
         return Sign(SERVICE_ACCOUNT_ID, serviceAccountId);
     }
@@ -28,4 +29,4 @@ private:
 };
 
 TSigner::TPtr CreateSignerFromFile(const TString& secretFile);
-}
+}   // namespace NFq

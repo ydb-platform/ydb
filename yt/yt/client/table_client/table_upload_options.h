@@ -14,6 +14,7 @@
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
 
 namespace NYT::NTableClient {
 
@@ -39,13 +40,16 @@ public:
 
     ui64 Set(const TTableSchemaPtr& schema);
 
-    void Persist(const NPhoenix::TPersistenceContext& context);
-
     ui64 Reset();
+
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
 
 private:
     TTableSchemaPtr TableSchema_ = New<TTableSchema>();
     ui64 Revision_ = 0;
+
+    PHOENIX_DECLARE_TYPE(TEpochSchema, 0x3c7a1e64);
 };
 
 struct TTableUploadOptions
@@ -67,7 +71,10 @@ struct TTableUploadOptions
 
     TTableSchemaPtr GetUploadSchema() const;
 
-    void Persist(const NPhoenix::TPersistenceContext& context);
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
+
+    PHOENIX_DECLARE_TYPE(TTableUploadOptions, 0x4d8b2f75);
 };
 
 const std::vector<std::string>& GetTableUploadOptionsAttributeKeys();

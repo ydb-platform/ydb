@@ -1,4 +1,6 @@
 #include "table_upload_options.h"
+
+#include <yt/yt/core/phoenix/type_def.h>
 #include "helpers.h"
 
 #include <yt/yt/client/table_client/helpers.h>
@@ -61,13 +63,14 @@ ui64 TEpochSchema::Set(const TTableSchemaPtr& schema)
     return ++Revision_;
 }
 
-void TEpochSchema::Persist(const NPhoenix::TPersistenceContext& context)
+void TEpochSchema::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Revision_);
-    Persist<TNonNullableIntrusivePtrSerializer<>>(context, TableSchema_);
+    PHOENIX_REGISTER_FIELD(1, Revision_);
+    PHOENIX_REGISTER_FIELD(2, TableSchema_,
+        .template Serializer<TNonNullableIntrusivePtrSerializer<>>());
 }
+
+PHOENIX_DEFINE_TYPE(TEpochSchema);
 
 ui64 TEpochSchema::Reset()
 {
@@ -91,28 +94,27 @@ TTableSchemaPtr TTableUploadOptions::GetUploadSchema() const
     }
 }
 
-void TTableUploadOptions::Persist(const NPhoenix::TPersistenceContext& context)
+void TTableUploadOptions::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, UpdateMode);
-    Persist(context, LockMode);
-    Persist(context, TableSchema);
-    Persist(context, SchemaId);
-    Persist(context, SchemaModification);
-    // COMPAT(dave11ar): NControllerAgent::ESnapshotVersion::VersionedMapReduceWrite
-    if (context.GetVersion() >= 301602) {
-        Persist(context, VersionedWriteOptions);
-    }
-    Persist(context, SchemaMode);
-    Persist(context, OptimizeFor);
-    Persist(context, ChunkFormat);
-    Persist(context, CompressionCodec);
-    Persist(context, ErasureCodec);
-    Persist(context, EnableStripedErasure);
-    Persist(context, SecurityTags);
-    Persist(context, PartiallySorted);
+    PHOENIX_REGISTER_FIELD(1, UpdateMode);
+    PHOENIX_REGISTER_FIELD(2, LockMode);
+    PHOENIX_REGISTER_FIELD(3, TableSchema);
+    PHOENIX_REGISTER_FIELD(4, SchemaId);
+    PHOENIX_REGISTER_FIELD(5, SchemaModification);
+    // COMPAT(dave11ar): NControllerAgent::ESnapshotVersion::VersionedMapReduceWrite.
+    PHOENIX_REGISTER_FIELD(6, VersionedWriteOptions,
+        .SinceVersion(301602));
+    PHOENIX_REGISTER_FIELD(7, SchemaMode);
+    PHOENIX_REGISTER_FIELD(8, OptimizeFor);
+    PHOENIX_REGISTER_FIELD(9, ChunkFormat);
+    PHOENIX_REGISTER_FIELD(10, CompressionCodec);
+    PHOENIX_REGISTER_FIELD(11, ErasureCodec);
+    PHOENIX_REGISTER_FIELD(12, EnableStripedErasure);
+    PHOENIX_REGISTER_FIELD(13, SecurityTags);
+    PHOENIX_REGISTER_FIELD(14, PartiallySorted);
 }
+
+PHOENIX_DEFINE_TYPE(TTableUploadOptions);
 
 ////////////////////////////////////////////////////////////////////////////////
 

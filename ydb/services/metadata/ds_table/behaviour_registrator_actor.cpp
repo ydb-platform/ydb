@@ -9,18 +9,21 @@ namespace NKikimr::NMetadata::NProvider {
 class TBehaviourRegistrator::TInternalController: public NInitializer::IInitializerOutput, public ISchemeDescribeController {
 private:
     const NActors::TActorIdentity ActorId;
+
 public:
     TInternalController(const NActors::TActorIdentity& actorId)
-        : ActorId(actorId) {
-
+        : ActorId(actorId)
+    {
     }
 
     virtual void OnInitializationFinished(const TString& id) const override {
         ActorId.Send(ActorId, new NInitializer::TEvInitializationFinished(id));
     }
+
     virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) override {
         ActorId.Send(ActorId, new TEvTableDescriptionFailed(errorMessage, requestId));
     }
+
     virtual void OnDescriptionSuccess(TTableInfo&& result, const TString& requestId) override {
         ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result->Columns), requestId));
     }
@@ -45,8 +48,8 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
 }
 
 void TBehaviourRegistrator::Handle(TEvStartRegistration::TPtr& /*ev*/) {
-    NInitializer::TDSAccessorInitialized::Execute(ReqConfig,
-        Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetSnapshotOwner());
+    NInitializer::TDSAccessorInitialized::Execute(
+        ReqConfig, Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetSnapshotOwner());
 }
 
 void TBehaviourRegistrator::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
@@ -69,4 +72,4 @@ void TBehaviourRegistrator::Bootstrap() {
     TBase::Sender<TEvStartRegistration>().SendTo(SelfId());
 }
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

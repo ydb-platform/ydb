@@ -54,6 +54,7 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
     , UserRequestContext(userRequestContext)
     , UsePessimisticLocks(usePessimisticLocks)
 {
+    YQL_ENSURE(Config);
     YQL_ENSURE(QueryCtx);
     YQL_ENSURE(Tables);
 }

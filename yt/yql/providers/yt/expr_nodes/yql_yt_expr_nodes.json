@@ -407,6 +407,23 @@
             ]
         },
         {
+            "Name": "TYtCreateSymlink",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtCreateSymlink!"},
+            "Children": [
+                {"Index": 3, "Name": "Target", "Type": "TYtTable"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TYtDropSymlink",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtDropSymlink!"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TYtDropView",
             "Base": "TYtIsolatedOpBase",
             "Match": {"Type": "Callable", "Name": "YtDropView!"},

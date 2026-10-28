@@ -1,14 +1,12 @@
 #include "resource_pool_classifier_settings.h"
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/library/aclib/aclib.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
 using namespace NResourcePool;
-
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
     Y_UNIT_TEST(SettingsValidationMissingPoolAndAction) {
@@ -32,7 +30,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         settings.ResourcePool = "some_pool";
         settings.MemberName = BUILTIN_ACL_METADATA;
         UNIT_ASSERT(settings.Validate().has_value());
-        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "cannot create classifier for system user " << settings.MemberName);
+        UNIT_ASSERT_STRING_CONTAINS(
+            *settings.Validate(), TStringBuilder() << "cannot create classifier for system user " << settings.MemberName);
     }
 
     Y_UNIT_TEST(SettingsValidationOkWithPool) {
@@ -48,4 +47,4 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
     }
 }
 
-}  // namespace NKikimr
+}   // namespace NKikimr

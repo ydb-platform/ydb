@@ -1,5 +1,7 @@
 PY3_LIBRARY()
 
+STYLE_PYTHON()
+
 PEERDIR(
     contrib/python/aiohttp
     contrib/python/grpcio

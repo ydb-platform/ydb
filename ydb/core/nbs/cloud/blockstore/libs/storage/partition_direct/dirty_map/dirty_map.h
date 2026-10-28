@@ -148,14 +148,19 @@ public:
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
-    // Returns an empty proto when no DDisk needs repair.
+    // Returns no DDisk states when no DDisk needs repair.
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
+    // Returns the restore barrier waiting to be persisted.
+    [[nodiscard]] TPBufferKey GetTargetRestoreBarrier() const;
     // Predicts the future state after applying vChunkConfig without changing
     // the current in-memory state.
     [[nodiscard]] TDirtyMapStateProto MakeFutureState(
         const TVChunkConfig& vChunkConfig,
         bool isTouched) const;
-    void StatePersisted(ui32 persistGeneration);
+    // The state of persistGeneration with its restore barrier is committed.
+    void StatePersisted(
+        ui32 persistGeneration,
+        TPBufferKey persistedRestoreBarrier);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
     // Memory management
@@ -241,6 +246,14 @@ private:
         TInflightInfo& inflightInfo);
 
     void RemovePBuffer(TPBufferKey pBufferKey);
+    // Raises the restore barrier target, keeping it below unflushed records.
+    void MaybeAdvanceRestoreBarrier();
+    // Returns whether the persisted restore barrier covers the record.
+    [[nodiscard]] bool MaybeCoverByRestoreBarrier(
+        TPBufferKey pBufferKey,
+        TInflightInfo& inflight);
+    // Removes the waiting records covered by the persisted restore barrier.
+    void ForgetBelowRestoreBarrier();
 
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
@@ -279,10 +292,14 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changes when the behind map changes.
+    // Changes when the behind map or the target restore barrier changes.
     ui32 StateGeneration = 0;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;
+    // Persisted restore barrier.
+    TPBufferKey RestoreBarrier;
+    // Restore barrier waiting to be persisted.
+    TPBufferKey TargetRestoreBarrier;
 
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;

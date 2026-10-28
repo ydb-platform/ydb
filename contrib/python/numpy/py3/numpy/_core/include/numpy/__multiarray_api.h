@@ -407,6 +407,8 @@ extern NPY_NO_EXPORT PyTypeObject PyHalfArrType_Type;
 
 extern NPY_NO_EXPORT PyTypeObject NpyIter_Type;
 
+NPY_NO_EXPORT  NPY_ARRAYMETHOD_FLAGS NpyIter_GetTransferFlags \
+       (NpyIter *);
 NPY_NO_EXPORT  NpyIter * NpyIter_New \
        (PyArrayObject *, npy_uint32, NPY_ORDER, NPY_CASTING, PyArray_Descr*);
 NPY_NO_EXPORT  NpyIter * NpyIter_MultiNew \
@@ -1137,6 +1139,12 @@ static int PyArray_RUNTIME_VERSION = 0;
 #define PyTimedeltaArrType_Type (*(PyTypeObject *)PyArray_API[216])
 #define PyHalfArrType_Type (*(PyTypeObject *)PyArray_API[217])
 #define NpyIter_Type (*(PyTypeObject *)PyArray_API[218])
+
+#if NPY_FEATURE_VERSION >= NPY_2_3_API_VERSION
+#define NpyIter_GetTransferFlags \
+        (*(NPY_ARRAYMETHOD_FLAGS (*)(NpyIter *)) \
+    PyArray_API[223])
+#endif
 #define NpyIter_New \
         (*(NpyIter * (*)(PyArrayObject *, npy_uint32, NPY_ORDER, NPY_CASTING, PyArray_Descr*)) \
     PyArray_API[224])
@@ -1488,6 +1496,7 @@ _import_array(void)
 {
   int st;
   PyObject *numpy = PyImport_ImportModule("numpy._core._multiarray_umath");
+  PyObject *c_api;
   if (numpy == NULL && PyErr_ExceptionMatches(PyExc_ModuleNotFoundError)) {
     PyErr_Clear();
     numpy = PyImport_ImportModule("numpy.core._multiarray_umath");
@@ -1497,7 +1506,7 @@ _import_array(void)
       return -1;
   }
 
-  PyObject *c_api = PyObject_GetAttrString(numpy, "_ARRAY_API");
+  c_api = PyObject_GetAttrString(numpy, "_ARRAY_API");
   Py_DECREF(numpy);
   if (c_api == NULL) {
       return -1;
@@ -1581,6 +1590,12 @@ _import_array(void)
   return 0;
 }
 
+#if (SWIG_VERSION < 0x040400)
+#define _RETURN_VALUE NULL
+#else
+#define _RETURN_VALUE 0
+#endif
+
 #define import_array() { \
   if (_import_array() < 0) { \
     PyErr_Print(); \
@@ -1588,7 +1603,7 @@ _import_array(void)
         PyExc_ImportError, \
         "numpy._core.multiarray failed to import" \
     ); \
-    return NULL; \
+    return _RETURN_VALUE; \
   } \
 }
 

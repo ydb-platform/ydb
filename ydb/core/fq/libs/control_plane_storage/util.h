@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
 #include <google/protobuf/timestamp.pb.h>
-
 #include <util/datetime/base.h>
 
 namespace NFq {
@@ -36,4 +35,4 @@ bool IsValidDateTimeFormatName(const TString& formatName);
 
 bool IsValidTimestampFormatName(const TString& formatName);
 
-} // namespace NFq
+}   // namespace NFq

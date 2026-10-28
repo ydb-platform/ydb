@@ -19,8 +19,10 @@ namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    TCreateTableFormatter()
-        : Alloc(__LOCATION__)
+    // Emit global indexes as separate ALTER TABLE ADD INDEX statements when enabled.
+    explicit TCreateTableFormatter(bool separateGlobalIndexes = false)
+        : SeparateGlobalIndexes(separateGlobalIndexes)
+        , Alloc(__LOCATION__)
     {
         Alloc.Release();
     }
@@ -51,9 +53,11 @@ private:
     void Format(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& statistics);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
     bool Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith);
+    bool Format(const Ydb::Table::MetricsSettings& metricsSettings, TString& del, bool needWith);
     bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);
 
-    void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);
+    void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt,
+        std::optional<TString> objectKeyPrefix = std::nullopt);
 
     void Format(const NKikimrSchemeOp::TOlapColumnDescription& olapColumnDesc);
     void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
@@ -80,6 +84,7 @@ private:
 
     TString ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
 
+    const bool SeparateGlobalIndexes;
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;
 };

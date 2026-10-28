@@ -4,9 +4,10 @@
 
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/execution_stack.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/system/thread.h>
 
@@ -71,8 +72,8 @@ private:
     std::atomic<bool> Stopping_ = false;
     TShutdownCookie ShutdownCookie_;
 
-    NThreading::TEvent StartedEvent_;
-    NThreading::TEvent StoppedEvent_;
+    TEvent StartedEvent_;
+    TEvent StoppedEvent_;
 
     TThreadId ThreadId_ = InvalidThreadId;
     ::TThread UnderlyingThread_;

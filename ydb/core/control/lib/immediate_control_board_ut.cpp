@@ -1,6 +1,7 @@
 #include "immediate_control_board_impl.h"
 #include "immediate_control_board_wrapper.h"
 #include "dynamic_control_board_impl.h"
+#include "immediate_control_board_html_renderer.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne64.h>
@@ -57,6 +58,56 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
             UNIT_ASSERT_EQUAL(control->Get(), defaultValue);
             UNIT_ASSERT_EQUAL(control->GetDefault(), defaultValue);
         }
+    }
+
+    // Verify that a shared wrapper restores the latest default after a control changes.
+    Y_UNIT_TEST(TestWrapperRestoresDefault) {
+        TControlWrapper control(10, 0, 20);
+        TControlWrapper shared = control;
+
+        // Change the shared control through one wrapper.
+        TDynamicControlBoard board;
+        board.RegisterSharedControl(control, "control");
+        TAtomic previous = 0;
+        board.SetValue("control", 15, previous);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(shared), 15);
+
+        // Restore through the other wrapper and verify the shared value.
+        shared.RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(control), 10);
+        UNIT_ASSERT(control.IsDefault());
+
+        // Reset the default and verify that restoration reads the new value.
+        control.Reset(12, 0, 20);
+        board.SetValue("control", 18, previous);
+        control.RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(shared), 12);
+        UNIT_ASSERT_VALUES_EQUAL(shared.GetDefault(), 12);
+    }
+
+    // Verify that HTML offers a named restore action only for a changed control.
+    Y_UNIT_TEST(TestHtmlShowsNamedRestoreForChangedControl) {
+        TIntrusivePtr<TControl> control(new TControl(10, 0, 20));
+
+        // Change one control and render its action and aggregate count.
+        control->SetFromHtmlRequest(15);
+        TControlBoardTableHtmlRenderer renderer;
+        renderer.AddNewTable("Controls");
+        renderer.AddTableItem("TestControl", control);
+        const TString html = renderer.GetHtml();
+
+        UNIT_ASSERT(html.find("name='restoreDefault' value='TestControl'") != TString::npos);
+        UNIT_ASSERT(html.find("<b>Restore Defaults</b>") != TString::npos);
+        UNIT_ASSERT_VALUES_EQUAL(renderer.GetChangedCount(), 1);
+
+        // Restore the control and verify that the named action disappears.
+        control->RestoreDefault();
+        TControlBoardTableHtmlRenderer restoredRenderer;
+        restoredRenderer.AddNewTable("Controls");
+        restoredRenderer.AddTableItem("TestControl", control);
+        const TString restoredHtml = restoredRenderer.GetHtml();
+        UNIT_ASSERT(restoredHtml.find("name='restoreDefault'") == TString::npos);
+        UNIT_ASSERT_VALUES_EQUAL(restoredRenderer.GetChangedCount(), 0);
     }
 
     Y_UNIT_TEST(TestControlWrapperAsI64) {

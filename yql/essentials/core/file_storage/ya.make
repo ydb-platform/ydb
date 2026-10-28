@@ -31,6 +31,11 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    external_utils
+)
+
 RECURSE_FOR_TESTS(
+    download
     ut
 )

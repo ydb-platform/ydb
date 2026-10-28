@@ -3,15 +3,13 @@
 #include <contrib/restricted/thrift/thrift/protocol/TBinaryProtocol.h>
 #include <contrib/restricted/thrift/thrift/transport/TSocket.h>
 #include <contrib/restricted/thrift/thrift/transport/TTransportUtils.h>
-
 #include <library/cpp/threading/future/core/future.h>
-
 #include <util/generic/string.h>
 #include <util/thread/pool.h>
 
 namespace NKikimr::NExternalSource {
 
-struct THiveMetastoreClient : public TThrRefBase {
+struct THiveMetastoreClient: public TThrRefBase {
 public:
     THiveMetastoreClient(const TString& host, int32_t port);
 
@@ -27,15 +25,17 @@ public:
     NThreading::TFuture<Apache::Hadoop::Hive::TableStatsResult> GetTableStatistics(const Apache::Hadoop::Hive::TableStatsRequest& request);
 
     NThreading::TFuture<Apache::Hadoop::Hive::Partition> AddPartition(const Apache::Hadoop::Hive::Partition& partition);
-    NThreading::TFuture<void> DropPartition(const TString& databaseName, const TString& tableName, const std::vector<std::string>& partitionValues, bool deleteData = false);
-    NThreading::TFuture<std::vector<Apache::Hadoop::Hive::Partition>> GetPartitionsByFilter(const TString& databaseName, const TString& tableName, const TString& filter, int16_t maxPartitions = -1);
+    NThreading::TFuture<void> DropPartition(
+        const TString& databaseName, const TString& tableName, const std::vector<std::string>& partitionValues, bool deleteData = false);
+    NThreading::TFuture<std::vector<Apache::Hadoop::Hive::Partition>> GetPartitionsByFilter(
+        const TString& databaseName, const TString& tableName, const TString& filter, int16_t maxPartitions = -1);
 
     NThreading::TFuture<std::string> GetConfigValue(const std::string& name, const std::string& defaultValue = {});
 
     ~THiveMetastoreClient();
 
 private:
-    template<typename TResultValue>
+    template <typename TResultValue>
     NThreading::TFuture<TResultValue> RunOperation(const std::function<TResultValue()>& function);
 
 private:
@@ -46,4 +46,4 @@ private:
     TThreadPool ThreadPool;
 };
 
-}
+}   // namespace NKikimr::NExternalSource

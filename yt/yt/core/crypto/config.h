@@ -69,4 +69,18 @@ DEFINE_REFCOUNTED_TYPE(TSslContextConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TServerSslContextConfig
+    : public virtual TSslContextConfig
+{
+    std::optional<TDuration> UpdatePeriod;
+
+    REGISTER_YSON_STRUCT(TServerSslContextConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServerSslContextConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NCrypto

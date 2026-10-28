@@ -27,7 +27,7 @@ TPlainStatus InitCancelledStatus() {
     return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
 }
 
-TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
+TCredentialsWaitResult ReadyResult(NThreading::TFuture<void> future) {
     try {
         future.GetValue();
         return {};
@@ -43,15 +43,16 @@ TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
 NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
     const TDbDriverStatePtr& dbState,
     const TRpcRequestSettings& requestSettings,
-    const IQueueClientContextPtr& context) const
+    const IQueueClientContextPtr& context,
+    NThreading::TFuture<std::string>& authInfo) const
 {
-    if (!requestSettings.UseAuth) {
+    if (!requestSettings.UseAuth || authInfo.Initialized()) {
         return {};
     }
-    auto ready = dbState->GetCredentialsReady();
-    return ready.HasValue() && !(context && context->IsCancelled())
+    authInfo = dbState->GetCredentialsProvider()->GetAuthInfoAsync();
+    return authInfo.HasValue() && !(context && context->IsCancelled())
         ? NThreading::TFuture<void>{}
-        : ready;
+        : authInfo.IgnoreResult();
 }
 
 void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
@@ -102,10 +103,10 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     } else {
         auto result = NThreading::NewPromise<TCredentialsWaitResult>();
         wait = result.GetFuture();
-        credentialsReady.Subscribe([result](const NThreading::TFuture<void>& future) mutable {
+        credentialsReady.Subscribe([result](NThreading::TFuture<void> future) mutable {
             result.TrySetValue(ReadyResult(future));
         });
-        cancelled.GetFuture().Subscribe([result](const NThreading::TFuture<void>&) mutable {
+        cancelled.GetFuture().Subscribe([result](NThreading::TFuture<void>) mutable {
             result.TrySetValue(InitCancelledStatus());
         });
         if (requestSettings.Deadline != TDeadline::Max()) {
@@ -120,7 +121,7 @@ void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     }
 
     wait.Subscribe([callback = std::move(callback), scheduleCallback = std::move(scheduleCallback)]
-        (const NThreading::TFuture<TCredentialsWaitResult>& future) mutable {
+        (NThreading::TFuture<TCredentialsWaitResult> future) mutable {
         scheduleCallback(TDeadline::Now(),
             [callback = std::move(callback), status = future.GetValue()]
             (bool scheduledSuccessfully) mutable {
@@ -140,13 +141,9 @@ bool IsTokenCorrect(const std::string& in) {
     return true;
 }
 
-std::string GetAuthInfo(TDbDriverStatePtr p) {
+std::string GetAuthInfo(NThreading::TFuture<std::string> authInfo) {
     try {
-        auto credentialsProvider = p->GetCredentialsProvider();
-        if (!credentialsProvider) {
-            throw TAuthenticationError("Credentials provider is not initialized");
-        }
-        auto token = credentialsProvider->GetAuthInfo();
+        auto token = authInfo.GetValue();
         if (!IsTokenCorrect(token)) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }
@@ -699,19 +696,14 @@ void TGRpcConnectionsImpl::StopResponseQueue() {
     });
 }
 
-TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const {
+TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState,
+    NThreading::TFuture<std::string> authInfo) const {
     TCallMeta meta;
     meta.Timeout = requestSettings.Deadline;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    if (requestSettings.UseAuth) {
-        meta.CallCredentials = dbState->GetCallCredentials();
-    }
-#else
     auto credentialsProvider = dbState->GetCredentialsProvider();
     if (requestSettings.UseAuth && credentialsProvider && credentialsProvider->IsValid()) {
-        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState)});
+        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(authInfo)});
     }
-#endif
     if (!requestSettings.TraceId.empty()) {
         meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
     }

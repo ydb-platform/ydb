@@ -1,6 +1,7 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_pipe_req.h"
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
@@ -947,15 +948,18 @@ private:
         return entry.GetPDiskFilter() + ",ErasureSpecies:" + entry.GetErasureSpecies();
     }
 
-    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
-        if (pdiskInfo.GetExpectedSlotSize()) {
-            return pdiskInfo.GetExpectedSlotSize();
+    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
+        ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        if (!slotSize) {
+            slotSize = pdiskInfo.GetExpectedSlotSize();
         }
-        if (pdiskInfo.GetExpectedSlotCount()) {
-            return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
-        } else {
-            return pdiskInfo.GetTotalSize() / 16;
+        if (!slotSize) {
+            const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
+            slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
+        return TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.HasUserChunkPoolSize() ? std::make_optional(pdiskInfo.GetUserChunkPoolSize()) : std::nullopt);
     }
 
     static NKikimrWhiteboard::EFlag GetClusterStateFromSelfCheck(const Ydb::Monitoring::SelfCheckResult& result) {
@@ -1001,7 +1005,7 @@ private:
             AddProblem("no-pdisk-info");
         }
 
-        std::unordered_map<ui32, TString> groupToErasure;
+        std::unordered_map<ui32, const NKikimrSysView::TGroupInfo&> groupsIndex;
         std::unordered_set<ui32> proxyGroups;
         std::unordered_map<ui32, std::unordered_map<TString, ui32>> pileToGroupStatus;
 
@@ -1021,7 +1025,7 @@ private:
                 if (info.HasBridgePileId()) {
                     pileToGroupStatus[info.GetBridgePileId()][info.GetOperatingStatus()]++;
                 }
-                groupToErasure.emplace(key.GetGroupId(), info.GetErasureSpeciesV2());
+                groupsIndex.emplace(key.GetGroupId(), info);
             }
         } else {
             AddProblem("no-group-info");
@@ -1074,22 +1078,21 @@ private:
                 const NKikimrSysView::TVSlotKey& key = entry.GetKey();
                 const NKikimrSysView::TVSlotInfo& info = entry.GetInfo();
                 auto itPDisk = pDisksIndex.find(std::make_pair(key.GetNodeId(), key.GetPDiskId()));
-                if (itPDisk != pDisksIndex.end()) {
+                auto itGroup = groupsIndex.find(info.GetGroupId());
+                if (itPDisk != pDisksIndex.end() && itGroup != groupsIndex.end()) {
                     ui64 allocated = info.GetAllocatedSize();
-                    ui64 slotSize = GetSlotSize(itPDisk->second);
+                    ui64 slotSize = GetSlotSize(itPDisk->second, itGroup->second.GetGroupSizeInUnits());
                     ui64 slotAvailable = slotSize > allocated ? slotSize - allocated : 0;
                     ui64 available = info.GetAvailableSize();
                     if (slotSize < available || available == 0) {
                         available = slotAvailable;
                     }
-                    auto itGroup = groupToErasure.find(info.GetGroupId());
-                    if (itGroup != groupToErasure.end()) {
-                        TString type = TString("Type:") + itPDisk->second.GetType() + ",ErasureSpecies:" + itGroup->second;
-                        auto itStats = storageStatsByType.find(type);
-                        if (itStats != storageStatsByType.end()) {
-                            itStats->second.SetCurrentAllocatedSize(itStats->second.GetCurrentAllocatedSize() + allocated);
-                            itStats->second.SetCurrentAvailableSize(itStats->second.GetCurrentAvailableSize() + available);
-                        }
+                    TString type = TString("Type:") + itPDisk->second.GetType() + ",ErasureSpecies:" + itGroup->second.GetErasureSpeciesV2();
+                    auto itStats = storageStatsByType.find(type);
+                    if (itStats != storageStatsByType.end()) {
+                        itStats->second.SetCurrentAllocatedSize(itStats->second.GetCurrentAllocatedSize() + allocated);
+                        const ui64 currentAvailable = itStats->second.GetCurrentAvailableSize();
+                        itStats->second.SetCurrentAvailableSize(currentAvailable + Min(available, Max<ui64>() - currentAvailable));
                     }
                 }
             }

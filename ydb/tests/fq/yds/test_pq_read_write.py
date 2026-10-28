@@ -20,7 +20,7 @@ def start_yds_query(kikimr, client, sql, with_checkpoints) -> str:
     if with_checkpoints:
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
     else:
-        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1)
+        kikimr.control_plane.wait_worker_count(1, "DQ_MESSAGE_STREAM_READ_ACTOR", 1)
     return query_id
 
 

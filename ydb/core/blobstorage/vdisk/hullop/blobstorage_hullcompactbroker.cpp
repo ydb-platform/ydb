@@ -1,6 +1,5 @@
 #include "blobstorage_hullcompactbroker.h"
 #include <memory>
-#include <cmath>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/base/counters.h>
@@ -77,24 +76,21 @@ namespace NKikimr {
 
     struct TCompactionRequest{
         TCompactionKey Key;
-        double Priority;
+        TCompactionPriority Priority;
         TInstant RequestTime;
-        ui64 RequestOrder;
 
-        TCompactionRequest(const TGroupId& groupId, const TVDiskIdShort& vDiskId, const TActorId actorId, const double priority, ui64 requestOrder)
+        TCompactionRequest(const TGroupId& groupId, const TVDiskIdShort& vDiskId, const TActorId actorId, TCompactionPriority priority)
             : Key(groupId, vDiskId, actorId)
             , Priority(priority)
             , RequestTime(TInstant::Now())
-            , RequestOrder(requestOrder)
         {}
 
         TString ToString() const {
             TStringStream str;
             str << "{TCompactionRequest " << Key.ToString()
-                << " Priority# " << Priority
+                << " Priority# " << Priority.ToString()
                 << " RequestTime# " << RequestTime.ToStringUpToSeconds()
                 << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds()
-                << " RequestOrder# " << RequestOrder
                 << "}";
             return str.Str();
         }
@@ -133,7 +129,6 @@ namespace NKikimr {
 
     struct TCompactionQueue {
         i64 MaxActiveCompactions;
-        ui64 NextRequestOrder = 0;
 
         struct TCompactionRequests : public THashMap<TCompactionKey, TCompactionRequest> {
             TString ToString() const {
@@ -180,10 +175,10 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
+        void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionPriority priority) {
             TCompactionKey key(groupId, vdiskId, actorId);
 
-            PendingCompactions.insert_or_assign(key, TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
+            PendingCompactions.insert_or_assign(key, TCompactionRequest(groupId, vdiskId, actorId, priority));
         }
 
         void ReleaseCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
@@ -240,11 +235,7 @@ namespace NKikimr {
 
             auto it = std::max_element(PendingCompactions.begin(), PendingCompactions.end(),
                     [](const auto& lhs, const auto& rhs) {
-                        constexpr double epsilon = 1e-9;
-                        if (std::abs(lhs.second.Priority - rhs.second.Priority) > epsilon) {
-                            return lhs.second.Priority < rhs.second.Priority;
-                        }
-                        return lhs.second.RequestOrder > rhs.second.RequestOrder;
+                        return rhs.second.Priority > lhs.second.Priority;
                     });
             Y_VERIFY(it != PendingCompactions.end());
             TCompactionKey key = it->first;
@@ -272,7 +263,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RequestCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
+        void RequestCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionPriority priority) {
             return CompactionsPerPDisk[pdiskId].RequestCompactionToken(groupId, vdiskId, actorId, priority);
         }
 
@@ -352,7 +343,7 @@ namespace NKikimr {
                 {"TEvCompactionTokenRequest", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenRequests->Inc();
-            CompactionsPerPDisk.RequestCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Ratio);
+            CompactionsPerPDisk.RequestCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Priority);
             TryToStartNewCompactions(ctx);
         }
 
@@ -429,7 +420,7 @@ namespace NKikimr {
                            << " VDiskId# " << request.Key.VDiskId
                            << " ActorId# " << request.Key.ActorId
                            << " WaitTimeSec# " << static_cast<i64>(waitTimeSeconds)
-                           << " Priority# " << request.Priority << "}";
+                           << " Priority# " << request.Priority.ToString() << "}";
                         longWaitingCompactions.push_back(ss.Str());
                     }
                 }

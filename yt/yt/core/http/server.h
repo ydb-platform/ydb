@@ -89,7 +89,8 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     NNet::IListenerPtr listener,
     NConcurrency::IPollerPtr poller,
-    NConcurrency::IPollerPtr acceptor);
+    NConcurrency::IPollerPtr acceptor,
+    IInvokerPtr compressionInvoker = nullptr);
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller);
@@ -106,7 +107,8 @@ IServerPtr CreateServer(
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller,
-    IInvokerPtr invoker);
+    IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -134,8 +136,8 @@ public:
     bool IsEmpty() const override;
 
 private:
-    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Exact_;
-    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Subtrees_;
+    THashMap<std::string, IHttpHandlerPtr> Exact_;
+    THashMap<std::string, IHttpHandlerPtr> Subtrees_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

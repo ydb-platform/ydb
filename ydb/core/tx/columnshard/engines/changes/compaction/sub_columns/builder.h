@@ -55,7 +55,7 @@ private:
             const bool passthrough = it.GetValueType() == TargetValueType;
             const ui32 storedSize = std::visit([&](auto& builder) -> ui32 {
                 if (passthrough) {
-                    builder.AddArrayElement(recordIndex, it.GetArray(), it.GetLocalIndex());
+                    builder.AddValue(recordIndex, it.GetValueView());
                     return it.GetValueSize();
                 }
                 const auto bj = it.GetValueAsBinaryJson();

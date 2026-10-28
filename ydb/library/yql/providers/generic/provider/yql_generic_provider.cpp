@@ -5,42 +5,35 @@
 
 namespace NYql {
 
-    TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
-                                                               const IDatabaseAsyncResolver::TPtr& dbResolver,
-                                                               const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory
-                                                               )
+TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
+    const IDatabaseAsyncResolver::TPtr& dbResolver, const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory)
+{
+    return
+        [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
+            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, TIntrusivePtr<IRandomProvider> randomProvider,
+            TIntrusivePtr<TTypeAnnotationContext> typeCtx, const TOperationProgressWriter& progressWriter,
+            const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter, const TQContext& qContext)
     {
-        return [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
-                                                               const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                                               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-                                                               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-                                                               THiddenQueryAborter hiddenAborter, const TQContext& qContext)
-        {
-            Y_UNUSED(sessionId);
-            Y_UNUSED(userName);
-            Y_UNUSED(functionRegistry);
-            Y_UNUSED(randomProvider);
-            Y_UNUSED(progressWriter);
-            Y_UNUSED(operationOptions);
-            Y_UNUSED(hiddenAborter);
-            Y_UNUSED(qContext);
+        Y_UNUSED(sessionId);
+        Y_UNUSED(userName);
+        Y_UNUSED(functionRegistry);
+        Y_UNUSED(randomProvider);
+        Y_UNUSED(progressWriter);
+        Y_UNUSED(operationOptions);
+        Y_UNUSED(hiddenAborter);
+        Y_UNUSED(qContext);
 
-            auto state = MakeIntrusive<TGenericState>(
-                typeCtx.Get(),
-                functionRegistry,
-                dbResolver,
-                credentialsFactory,
-                genericClient,
-                gatewaysConfig->GetGeneric());
+        auto state = MakeIntrusive<TGenericState>(
+            typeCtx.Get(), functionRegistry, dbResolver, credentialsFactory, genericClient, gatewaysConfig->GetGeneric());
 
-            TDataProviderInfo info;
+        TDataProviderInfo info;
 
-            info.Names.insert({TString{GenericProviderName}});
-            info.Source = CreateGenericDataSource(state);
-            info.Sink = CreateGenericDataSink(state);
+        info.Names.insert({ TString{ GenericProviderName } });
+        info.Source = CreateGenericDataSource(state);
+        info.Sink = CreateGenericDataSink(state);
 
-            return info;
-        };
-    }
+        return info;
+    };
+}
 
-} // namespace NYql
+}   // namespace NYql

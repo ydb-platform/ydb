@@ -1,16 +1,15 @@
-#include "format_handler.h"
 #include "data_packer.h"
+#include "format_handler.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/consumer.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
-
-#include <util/generic/queue.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
+
+#include <util/generic/queue.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
@@ -18,7 +17,7 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
+class TTopicFormatHandler: public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
 public:
@@ -48,12 +47,12 @@ private:
     };
 
     struct TColumnDesc {
-        ui64 ColumnId;  // Stable column id, used in TClientHandler
+        ui64 ColumnId;   // Stable column id, used in TClientHandler
         TString TypeYson;
-        std::unordered_set<NActors::TActorId> Clients;  // Set of clients with this column
+        std::unordered_set<NActors::TActorId> Clients;   // Set of clients with this column
     };
 
-    class TParserHandler : public IParsedDataConsumer {
+    class TParserHandler: public IParsedDataConsumer {
     public:
         using TPtr = TIntrusivePtr<TParserHandler>;
 
@@ -62,7 +61,8 @@ private:
             : Self(self)
             , ParerSchema(parerSchema)
             , LogPrefix(TStringBuilder() << Self.LogPrefix << "TParserHandler: ")
-        {}
+        {
+        }
 
     public:
         const TVector<TSchemaColumn>& GetColumns() const override {
@@ -126,7 +126,7 @@ private:
         const TString LogPrefix;
     };
 
-    class TClientHandler : public IProcessedDataConsumer {
+    class TClientHandler: public IProcessedDataConsumer {
     public:
         using TPtr = TIntrusivePtr<TClientHandler>;
 
@@ -168,7 +168,9 @@ private:
                 const auto it = Self.ColumnsDesc.find(column.Name);
                 if (it != Self.ColumnsDesc.end()) {
                     if (it->second.TypeYson != column.TypeYson) {
-                        return TStatus::Fail(EStatusId::SCHEME_ERROR, TStringBuilder() << "Use the same column type in all queries via RD, current type for column `" << column.Name << "` is " << it->second.TypeYson << " (requested type is " << column.TypeYson <<")");
+                        return TStatus::Fail(EStatusId::SCHEME_ERROR,
+                            TStringBuilder() << "Use the same column type in all queries via RD, current type for column `" << column.Name
+                                             << "` is " << it->second.TypeYson << " (requested type is " << column.TypeYson << ")");
                     }
 
                     it->second.Clients.emplace(Client->GetClientId());
@@ -180,7 +182,8 @@ private:
                         Self.FreeColumnIds.pop_back();
                     }
 
-                    Self.ColumnsDesc[column.Name] = TColumnDesc{.ColumnId = columnId, .TypeYson = column.TypeYson, .Clients = {Client->GetClientId()}};
+                    Self.ColumnsDesc[column.Name] =
+                        TColumnDesc{ .ColumnId = columnId, .TypeYson = column.TypeYson, .Clients = { Client->GetClientId() } };
                     Self.MaxColumnId = std::max(Self.MaxColumnId, columnId + 1);
                     ColumnsIds.emplace_back(columnId);
                 }
@@ -390,7 +393,8 @@ private:
 
                 auto [data, size] = DataPacker.Finish();
                 ClientDataMemory.Add(size);
-                ClientData.emplace(NYql::MakeReadOnlyRope(std::move(data)), std::move(FilteredOffsets), Watermark, size, NumberRows, DataPackerSize);
+                ClientData.emplace(
+                    NYql::MakeReadOnlyRope(std::move(data)), std::move(FilteredOffsets), Watermark, size, NumberRows, DataPackerSize);
 
                 NumberRows = 0;
                 DataPackerSize = 0;
@@ -413,9 +417,9 @@ private:
         ui64 Offset;
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
-        TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
+        TVector<NYql::NUdf::TUnboxedValue> FilteredRow;   // Temporary value holder for DataPacket
         TMemoryLimitedDataPacker DataPacker;
-        TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
+        TVector<ui64> FilteredOffsets;   // Offsets of current batch in DataPacker
         TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
         TMemoryQuota ClientDataMemory;
@@ -424,7 +428,8 @@ private:
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"), config.MemoryQuotaManager, "FormatHandlerAlloc")
+        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"), config.MemoryQuotaManager,
+              "FormatHandlerAlloc")
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -455,7 +460,7 @@ public:
             return;
         }
 
-        ForceRefresh(); // Clear parser before client is started (otherwise the client may receive too many new messages).
+        ForceRefresh();   // Clear parser before client is started (otherwise the client may receive too many new messages).
 
         if (Filters && !FatalErrorStatus) {
             Filters->OnCompileResponse(ev);
@@ -491,25 +496,26 @@ public:
         YDB_LOG_ERROR("Got unexpected exception",
             {"logPrefix", LogPrefix},
             {"exception", error.what()});
-        FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Format handler error, got unexpected exception: " << error.what()));
+        FatalError(
+            TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Format handler error, got unexpected exception: " << error.what()));
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         if (FatalErrorStatus) {
             return;
         }
 
         YDB_LOG_TRACE("Send messages to parser",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
-        if (!messages.empty()) {
-            CurrentOffset = messages.back().GetOffset();
+        if (!records.empty()) {
+            CurrentOffset = records.back().Id.Offset;
         }
 
         if (Parser) {
-            Parser->ParseMessages(messages);
+            Parser->ParseRecords(records);
             ScheduleRefresh();
         } else if (!Clients.empty()) {
             FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, "Failed to parse messages, expected empty clients set without parser"));
@@ -558,7 +564,8 @@ public:
 
         auto clientHandler = MakeIntrusive<TClientHandler>(*this, client);
         if (!Clients.emplace(client->GetClientId(), clientHandler).second) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to create new client, client with id " << client->GetClientId() << " already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR,
+                TStringBuilder() << "Failed to create new client, client with id " << client->GetClientId() << " already exists");
         }
         Counters.ActiveClients->Inc();
 
@@ -669,7 +676,7 @@ private:
         TVector<TSchemaColumn> parerSchema;
         parerSchema.reserve(ColumnsDesc.size());
         for (const auto& [columnName, columnDesc] : ColumnsDesc) {
-            parerSchema.emplace_back(TSchemaColumn{.Name = columnName, .TypeYson = columnDesc.TypeYson});
+            parerSchema.emplace_back(TSchemaColumn{ .Name = columnName, .TypeYson = columnDesc.TypeYson });
         }
 
         if (ParserHandler && parerSchema == ParserHandler->GetColumns()) {
@@ -794,7 +801,7 @@ private:
     // Columns indexes
     ui64 MaxColumnId = 0;
     TVector<ui64> FreeColumnIds;
-    TVector<ui64> ParserSchemaIndex;  // Column id to index in parser schema
+    TVector<ui64> ParserSchemaIndex;   // Column id to index in parser schema
     std::map<TString, TColumnDesc> ColumnsDesc;
     std::unordered_map<NActors::TActorId, TClientHandler::TPtr> Clients;
 
@@ -814,7 +821,7 @@ private:
     const TCounters Counters;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// ITopicFormatHandler::TDestroy
 
@@ -826,31 +833,32 @@ void ITopicFormatHandler::TDestroy::Destroy(ITopicFormatHandler* handler) {
     }
 }
 
-ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
+ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config,
+    const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
     const auto handler = new TTopicFormatHandler(config, settings, counters);
     owner.RegisterWithSameMailbox(handler);
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors) {
     return {
         .FunctionRegistry = functionRegistry,
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry, skipJsonErrors),
-        .FiltersConfig = {
-            .CompileServiceId = compileServiceId
-        },
+        .FiltersConfig = { .CompileServiceId = compileServiceId },
         .MemoryQuotaManager = rowDispatcherConfig.GetMemoryQuotaManager(),
     };
 }
 
 namespace NTests {
 
-ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
+ITopicFormatHandler::TPtr CreateTestFormatHandler(
+    const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
     const auto handler = new TTopicFormatHandler(config, settings, counters);
     NActors::TActivationContext::ActorSystem()->Register(handler);
     return ITopicFormatHandler::TPtr(handler);
 }
 
-}  // namespace NTests
+}   // namespace NTests
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

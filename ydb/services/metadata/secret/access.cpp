@@ -1,7 +1,9 @@
 #include "access.h"
 #include "access_behaviour.h"
 #include "checker_access.h"
+
 #include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NMetadata::NSecret {
@@ -31,4 +33,4 @@ NInternal::TTableRecord TAccess::SerializeToRecord() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

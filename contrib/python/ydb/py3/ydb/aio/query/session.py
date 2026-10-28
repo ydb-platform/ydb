@@ -61,6 +61,8 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
                 DEFAULT_INITIAL_RESPONSE_TIMEOUT,
             )
             issues._process_response(first_response)
+            if not self._closed:
+                self._session_metrics.count_open()
         except BaseException:
             # BaseException, not Exception: a cancelled attach must tear the stream
             # down too, otherwise the half-attached session is orphaned server-side.
@@ -74,11 +76,17 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
             return
         try:
             async for status in self._status_stream:
-                issues._process_response(status)
+                try:
+                    issues._process_response(status)
+                except Exception as e:
+                    logger.debug("Attach stream status error: %s, session_id: %s", e, self._session_id)
+                    self._on_attach_stream_status_error(e)
+                    return
             logger.debug("Attach stream closed, session_id: %s", self._session_id)
+            self._close_session(invalidate=True, reason="attach_closed")
         except Exception as e:
-            logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
-            self._close_session(invalidate=True)
+            logger.debug("Attach stream transport error: %s, session_id: %s", e, self._session_id)
+            self._close_session(invalidate=True, reason="transport_error")
 
     async def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
@@ -88,13 +96,13 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         if self._closed:
             return
 
+        self._close_session()
+
         if self._session_id:
             try:
                 await self._delete_call(settings=settings)
             except Exception:
                 pass
-
-        self._close_session()
 
     async def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.
@@ -111,7 +119,6 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
             await self._create_call(settings=settings)
             set_peer_attributes(span, self._peer)
             await self._attach()
-            self._session_metrics.count_open()
 
         return self
 
@@ -128,9 +135,9 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
     async def execute(
         self,
         query: str,
-        parameters: dict = None,
-        syntax: base.QuerySyntax = None,
-        exec_mode: base.QueryExecMode = None,
+        parameters: Optional[dict] = None,
+        syntax: Optional[base.QuerySyntax] = None,
+        exec_mode: Optional[base.QueryExecMode] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
         *,

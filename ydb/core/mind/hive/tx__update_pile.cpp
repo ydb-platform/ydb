@@ -66,7 +66,7 @@ public:
         }
 
         for (auto* tablet : TabletsToRestart) {
-            tablet->BecomeStopped();
+            tablet->BecomeStopped(EHiveEventReason::PileUpdate);
             if (tablet->IsReadyToBoot()) {
                 tablet->InitiateBoot();
             }

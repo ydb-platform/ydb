@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cpu_quota_manager.cpp
@@ -18,8 +18,6 @@ PEERDIR(
 
     library/cpp/retry
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

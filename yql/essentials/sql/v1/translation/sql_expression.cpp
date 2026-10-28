@@ -1151,7 +1151,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
 
         TNodePtr id;
         if (IsYqlSelectProduced_) {
-            id = BuildYqlColumnRef(Ctx_.Pos());
+            id = BuildYqlColumnRef(Ctx_.Pos(), columnOrType);
         } else if (columnOrType) {
             id = BuildColumnOrType(Ctx_.Pos());
         } else {

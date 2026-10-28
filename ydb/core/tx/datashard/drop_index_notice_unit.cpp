@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
@@ -38,11 +39,18 @@ public:
         Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
+        bool readyIndexDropped = false;
         if (params.HasIndexPathId()) {
             const auto indexPathId = TPathId::FromProto(params.GetIndexPathId());
 
             const auto& userTables = DataShard.GetUserTables();
             Y_ENSURE(userTables.contains(pathId.LocalPathId));
+
+            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
+            if (const auto it = indexes.find(indexPathId); it != indexes.end()) {
+                readyIndexDropped = it->second.State == NKikimrSchemeOp::EIndexStateReady;
+            }
+
             userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&](const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             });
@@ -60,13 +68,18 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
+        if (readyIndexDropped) {
+            PersistCdcSchemaChange(DataShard, txc, op, pathId, *tableInfo);
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
         if (RemoveSender) {
             ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
         }

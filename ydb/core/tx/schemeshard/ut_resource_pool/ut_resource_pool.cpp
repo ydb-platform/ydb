@@ -2,7 +2,6 @@
 
 using namespace NSchemeShardUT_Private;
 
-
 Y_UNIT_TEST_SUITE(TResourcePoolTest) {
     Y_UNIT_TEST(CreateResourcePool) {
         TTestBasicRuntime runtime;
@@ -14,7 +13,8 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: "MyResourcePool"
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
@@ -52,16 +52,17 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "60"
                     }
                 }
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
         NKikimrSchemeOp::TResourcePoolProperties properties;
-        properties.MutableProperties()->insert({"concurrent_query_limit", "10"});
-        properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+        properties.MutableProperties()->insert({ "concurrent_query_limit", "10" });
+        properties.MutableProperties()->insert({ "query_cancel_after_seconds", "60" });
 
-        auto describeResult =  DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
-        TestDescribeResult(describeResult, {NLs::PathExist});
+        auto describeResult = DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
+        TestDescribeResult(describeResult, { NLs::PathExist });
         UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
         const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
         UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
@@ -79,7 +80,8 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: "MyResourcePool"
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
@@ -117,9 +119,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDropTxId(), txId - 1);
 
         env.TestWaitNotification(runtime, txId - 1);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool"), {
-            NLs::PathNotExist
-        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool"), { NLs::PathNotExist });
     }
 
     Y_UNIT_TEST(ParallelCreateResourcePool) {
@@ -134,21 +134,18 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: "MyResourcePool2"
             )");
-        TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 2, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
-        env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
+        env.TestWaitNotification(runtime, { txId, txId - 1, txId - 2 });
 
         TestDescribe(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool1");
         TestDescribe(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool2");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools"),
-                           {NLs::PathVersionEqual(7)});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool1"),
-                           {NLs::PathVersionEqual(2)});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool2"),
-                           {NLs::PathVersionEqual(2)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools"), { NLs::PathVersionEqual(7) });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool1"), { NLs::PathVersionEqual(2) });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool2"), { NLs::PathVersionEqual(2) });
     }
 
     Y_UNIT_TEST(ParallelCreateSameResourcePool) {
@@ -170,32 +167,30 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         AsyncCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", resourcePoolConfig);
 
         ui64 sts[3];
-        sts[0] = TestModificationResults(runtime, txId-2, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
-        sts[1] = TestModificationResults(runtime, txId-1, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
-        sts[2] = TestModificationResults(runtime, txId,   {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
+        sts[0] =
+            TestModificationResults(runtime, txId - 2, { ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists });
+        sts[1] =
+            TestModificationResults(runtime, txId - 1, { ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists });
+        sts[2] = TestModificationResults(runtime, txId, { ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists });
 
-        for (ui32 i=0; i<3; ++i) {
+        for (ui32 i = 0; i < 3; ++i) {
             if (sts[i] == ESts::StatusAlreadyExists) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/NilNoviSubLuna"),
-                                   {NLs::Finished,
-                                    NLs::IsResourcePool});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/NilNoviSubLuna"), { NLs::Finished, NLs::IsResourcePool });
             }
 
             if (sts[i] == ESts::StatusMultipleModifications) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/NilNoviSubLuna"),
-                                   {NLs::Finished,
-                                    NLs::IsResourcePool});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/NilNoviSubLuna"), { NLs::Finished, NLs::IsResourcePool });
             }
         }
 
-        env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
+        env.TestWaitNotification(runtime, { txId - 2, txId - 1, txId });
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/NilNoviSubLuna"),
-                           {NLs::Finished,
-                            NLs::IsResourcePool,
-                            NLs::PathVersionEqual(2)});
+            { NLs::Finished, NLs::IsResourcePool, NLs::PathVersionEqual(2) });
 
-        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", resourcePoolConfig, {ESts::StatusAlreadyExists});
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", resourcePoolConfig, { ESts::StatusAlreadyExists });
     }
 
     Y_UNIT_TEST(ReadOnlyMode) {
@@ -220,17 +215,16 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Check that describe works
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/SubDirA"),
-                           {NLs::Finished});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool"),
-                           {NLs::Finished,
-                            NLs::IsResourcePool});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/SubDirA"), { NLs::Finished });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool"), { NLs::Finished, NLs::IsResourcePool });
 
         // Check that new modifications fail
-        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", {NKikimrScheme::StatusReadOnly});
+        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB", { NKikimrScheme::StatusReadOnly });
         TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: "MyResourcePool2"
-            )", {NKikimrScheme::StatusReadOnly});
+            )",
+            { NKikimrScheme::StatusReadOnly });
 
         // Disable ReadOnly
         SetSchemeshardReadOnlyMode(runtime, false);
@@ -251,15 +245,18 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
 
         TestCreateResourcePool(runtime, ++txId, "/MyRoot", R"(
                 Name: "AnotherDir/MyResourcePool"
-            )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.metadata/workload_manager/pools"}});
+            )",
+            { { NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.metadata/workload_manager/pools" } });
 
         TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: "AnotherDir/MyResourcePool"
-            )", {{NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.metadata/workload_manager/pools"}});
+            )",
+            { { NKikimrScheme::StatusSchemeError, "Resource pools shoud be placed in /MyRoot/.metadata/workload_manager/pools" } });
 
         TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                 Name: ""
-            )", {{NKikimrScheme::StatusSchemeError, "error: path part shouldn't be empty"}});
+            )",
+            { { NKikimrScheme::StatusSchemeError, "error: path part shouldn't be empty" } });
     }
 
     Y_UNIT_TEST(AlterResourcePool) {
@@ -282,17 +279,18 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "50"
                     }
                 }
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
         NKikimrSchemeOp::TResourcePoolProperties properties;
-        properties.MutableProperties()->insert({"concurrent_query_limit", "10"});
-        properties.MutableProperties()->insert({"query_count_limit", "50"});
+        properties.MutableProperties()->insert({ "concurrent_query_limit", "10" });
+        properties.MutableProperties()->insert({ "query_count_limit", "50" });
 
         {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
-            TestDescribeResult(describeResult, {NLs::PathExist});
+            auto describeResult = DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
+            TestDescribeResult(describeResult, { NLs::PathExist });
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
@@ -312,16 +310,17 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "60"
                     }
                 }
-            )", {NKikimrScheme::StatusAccepted});
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
         properties.MutableProperties()->find("concurrent_query_limit")->second = "20";
-        properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+        properties.MutableProperties()->insert({ "query_cancel_after_seconds", "60" });
 
         {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
-            TestDescribeResult(describeResult, {NLs::PathExist});
+            auto describeResult = DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
+            TestDescribeResult(describeResult, { NLs::PathExist });
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
@@ -350,15 +349,15 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "50"
                     }
                 }
-            )", {NKikimrScheme::StatusAccepted}
-        );
+            )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
 
         constexpr ui32 TEST_RUNS = 30;
         TSet<ui64> txIds;
         for (ui32 i = 0; i < TEST_RUNS; ++i) {
-            AsyncAlterResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools",R"(
+            AsyncAlterResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
                     Name: "MyResourcePool"
                     Properties {
                         Properties {
@@ -370,15 +369,15 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                             value: "60"
                         }
                     }
-                )"
-            );
+                )");
 
             txIds.insert(txId);
         }
 
         ui32 acceptedCount = 0;
         for (auto testTx : txIds) {
-            const auto result = TestModificationResults(runtime, testTx, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            const auto result =
+                TestModificationResults(runtime, testTx, { NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications });
             acceptedCount += result == NKikimrScheme::StatusAccepted;
         }
         UNIT_ASSERT_GE(acceptedCount, 1);
@@ -386,17 +385,17 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         env.TestWaitNotification(runtime, txIds);
 
         {
-            auto describeResult =  DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
-            TestDescribeResult(describeResult, {NLs::PathExist});
+            auto describeResult = DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
+            TestDescribeResult(describeResult, { NLs::PathExist });
             UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
             const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
             UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), acceptedCount + 1);
 
             NKikimrSchemeOp::TResourcePoolProperties properties;
-            properties.MutableProperties()->insert({"concurrent_query_limit", "20"});
-            properties.MutableProperties()->insert({"query_count_limit", "50"});
-            properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+            properties.MutableProperties()->insert({ "concurrent_query_limit", "20" });
+            properties.MutableProperties()->insert({ "query_count_limit", "50" });
+            properties.MutableProperties()->insert({ "query_cancel_after_seconds", "60" });
             CompareProperties(resourcePoolDescription.GetProperties(), properties);
         }
     }
@@ -417,6 +416,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
                         value: "20"
                     }
                 }
-            )", {NKikimrScheme::StatusPathDoesNotExist});
+            )",
+            { NKikimrScheme::StatusPathDoesNotExist });
     }
 }

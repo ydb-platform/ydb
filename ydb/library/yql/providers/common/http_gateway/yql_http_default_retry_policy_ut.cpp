@@ -5,7 +5,6 @@
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
-
     Y_UNIT_TEST(RetriableCurlCode) {
         auto state = GetHTTPDefaultRetryPolicy()->CreateRetryState();
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
@@ -17,7 +16,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
     }
 
     Y_UNIT_TEST(RetriableHttpCodes) {
-        for (long httpCode : {408, 425, 429, 500, 502, 503, 504}) {
+        for (long httpCode : { 408, 425, 429, 500, 502, 503, 504 }) {
             auto state = GetHTTPDefaultRetryPolicy()->CreateRetryState();
             UNIT_ASSERT_C(state->GetNextRetryDelay(CURLE_OK, httpCode).Defined(), httpCode);
         }
@@ -25,7 +24,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
 
     Y_UNIT_TEST(NonRetriableHttpCodes) {
         // 0 is the rare case when curl code is not available, e.g. manual cancelling
-        for (long httpCode : {0, 200, 400, 403, 404, 501}) {
+        for (long httpCode : { 0, 200, 400, 403, 404, 501 }) {
             auto state = GetHTTPDefaultRetryPolicy()->CreateRetryState();
             UNIT_ASSERT_C(!state->GetNextRetryDelay(CURLE_OK, httpCode).Defined(), httpCode);
         }
@@ -55,7 +54,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
     }
 
     Y_UNIT_TEST(MaxRetries) {
-        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxRetries = 2})->CreateRetryState();
+        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{ .MaxRetries = 2 })->CreateRetryState();
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
         UNIT_ASSERT(!state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
@@ -63,7 +62,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
 
     Y_UNIT_TEST(MaxTime) {
         // maxTime has to stay above minDelay (10ms), see Y_ASSERT in TExponentialBackoffPolicy
-        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxTime = TDuration::MilliSeconds(50)})->CreateRetryState();
+        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{ .MaxTime = TDuration::MilliSeconds(50) })->CreateRetryState();
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
         Sleep(TDuration::MilliSeconds(150));
         UNIT_ASSERT(!state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
@@ -80,14 +79,14 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
     }
 
     Y_UNIT_TEST(CustomRetriedCurlCodes) {
-        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.RetriedCurlCodes = {CURLE_URL_MALFORMAT}})->CreateRetryState();
+        auto state = GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{ .RetriedCurlCodes = { CURLE_URL_MALFORMAT } })->CreateRetryState();
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_URL_MALFORMAT, 0).Defined());
         UNIT_ASSERT(!state->GetNextRetryDelay(CURLE_COULDNT_CONNECT, 0).Defined());
     }
 
     Y_UNIT_TEST(FqPolicyUsesFqRetriedCurlCodes) {
         // These codes are retried by the Fq policy only
-        for (CURLcode curlCode : {CURLE_PARTIAL_FILE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST}) {
+        for (CURLcode curlCode : { CURLE_PARTIAL_FILE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST }) {
             auto fqState = GetFqHTTPRetryPolicy()->CreateRetryState();
             UNIT_ASSERT_C(fqState->GetNextRetryDelay(curlCode, 0).Defined(), int(curlCode));
 
@@ -144,7 +143,6 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
         UNIT_ASSERT(state->GetNextRetryDelay(CURLE_COULDNT_RESOLVE_HOST, 0).Defined());
     }
-
 }
 
-} // namespace NYql
+}   // namespace NYql

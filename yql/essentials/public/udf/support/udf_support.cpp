@@ -8,14 +8,6 @@
 
 static NYql::NUdf::TStaticSymbols Symbols;
 
-extern "C" void* UdfAllocate(ui64 size) {
-    return Symbols.UdfAllocateFunc(size);
-}
-
-extern "C" void UdfFree(const void* mem) {
-    return Symbols.UdfFreeFunc(mem);
-}
-
 extern "C" [[noreturn]] void UdfTerminate(const char* message) {
     Symbols.UdfTerminate(message);
     std::terminate();
@@ -29,7 +21,6 @@ extern "C" void UdfUnregisterObject(::NYql::NUdf::TBoxedValue* object) {
     return Symbols.UdfUnregisterObject(object);
 }
 
-    #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 extern "C" void* UdfAllocateWithSize(ui64 size) {
     return Symbols.UdfAllocateWithSizeFunc(size);
 }
@@ -37,7 +28,6 @@ extern "C" void* UdfAllocateWithSize(ui64 size) {
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
     return Symbols.UdfFreeWithSizeFunc(mem, size);
 }
-    #endif
 
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
 extern "C" void* UdfArrowAllocate(ui64 size) {

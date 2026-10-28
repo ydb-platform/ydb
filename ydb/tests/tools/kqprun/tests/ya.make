@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 DATA(
     arcadia/ydb/tests/tools/kqprun/tests/cfg
 )

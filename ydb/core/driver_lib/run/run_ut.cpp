@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/util/affinity.h>
 
+#include <library/cpp/testing/common/scope.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(XdsBootstrapConfigInitializer) {
@@ -26,14 +27,21 @@ public:
 const TString XDS_BOOTSTRAP_ENV = "GRPC_XDS_BOOTSTRAP";
 const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
 
-Y_UNIT_TEST(CanNotSetEnvIfXdsBootstrapConfigIsAbsent) {
+struct TXdsBootstrapConfigFixture : public NUnitTest::TBaseFixture {
+    NTesting::TScopedEnvironment XdsEnv{{
+        {XDS_BOOTSTRAP_ENV, ""},
+        {XDS_BOOTSTRAP_CONFIG_ENV, ""},
+    }};
+};
+
+Y_UNIT_TEST_F(CanNotSetEnvIfXdsBootstrapConfigIsAbsent, TXdsBootstrapConfigFixture) {
     NKikimrConfig::TAppConfig appConfig;
     TTestKikimrRunner::InitXdsBootstrapConfig(appConfig);
     TString jsonXdsBootstrapConfig = GetEnv(XDS_BOOTSTRAP_CONFIG_ENV);
     UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, "", "The checked value: " + jsonXdsBootstrapConfig);
 }
 
-Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnv) {
+Y_UNIT_TEST_F(CanSetGrpcXdsBootstrapConfigEnv, TXdsBootstrapConfigFixture) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     auto* xdsServers = xdsBootstrapConfig->AddXdsServers();
@@ -54,7 +62,7 @@ Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnv) {
     UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, expectedJson, "The checked value: " + jsonXdsBootstrapConfig);
 }
 
-Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers) {
+Y_UNIT_TEST_F(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers, TXdsBootstrapConfigFixture) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     {
@@ -85,7 +93,7 @@ Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers) {
     UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, expectedJson, "The checked value: " + jsonXdsBootstrapConfig);
 }
 
-Y_UNIT_TEST(CanNotSetGrpcXdsBootstrapConfigEnvIfVariableAlreadySet) {
+Y_UNIT_TEST_F(CanNotSetGrpcXdsBootstrapConfigEnvIfVariableAlreadySet, TXdsBootstrapConfigFixture) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     auto* xdsServers = xdsBootstrapConfig->AddXdsServers();

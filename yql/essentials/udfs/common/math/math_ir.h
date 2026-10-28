@@ -32,6 +32,8 @@ namespace NYql::NUdf {
     XX(Cosh, cosh)              \
     XX(Erf, Erf)                \
     XX(Exp, exp)                \
+    XX(Expm1, expm1)            \
+    XX(Log1p, log1p)            \
     XX(Exp2, Exp2)              \
     XX(Fabs, fabs)              \
     XX(Floor, std::floor)       \

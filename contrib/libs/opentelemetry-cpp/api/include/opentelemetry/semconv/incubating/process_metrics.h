@@ -181,6 +181,46 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 }
 
 /**
+  Number of disk operations performed by the process.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricProcessDiskOperations = "process.disk.operations";
+static constexpr const char *descrMetricProcessDiskOperations =
+    "Number of disk operations performed by the process.";
+static constexpr const char *unitMetricProcessDiskOperations = "{operation}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricProcessDiskOperations(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricProcessDiskOperations, descrMetricProcessDiskOperations,
+                                    unitMetricProcessDiskOperations);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>>
+CreateSyncDoubleMetricProcessDiskOperations(metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricProcessDiskOperations, descrMetricProcessDiskOperations,
+                                    unitMetricProcessDiskOperations);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricProcessDiskOperations(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricProcessDiskOperations,
+                                             descrMetricProcessDiskOperations,
+                                             unitMetricProcessDiskOperations);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricProcessDiskOperations(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricProcessDiskOperations,
+                                              descrMetricProcessDiskOperations,
+                                              unitMetricProcessDiskOperations);
+}
+
+/**
   The amount of physical memory in use.
   <p>
   updowncounter
@@ -216,6 +256,51 @@ CreateAsyncDoubleMetricProcessMemoryUsage(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricProcessMemoryUsage, descrMetricProcessMemoryUsage, unitMetricProcessMemoryUsage);
+}
+
+/**
+  Percentage of total physical memory that is used by the process.
+  <p>
+  gauge
+ */
+static constexpr const char *kMetricProcessMemoryUtilization = "process.memory.utilization";
+static constexpr const char *descrMetricProcessMemoryUtilization =
+    "Percentage of total physical memory that is used by the process.";
+static constexpr const char *unitMetricProcessMemoryUtilization = "1";
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+
+static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
+CreateSyncInt64MetricProcessMemoryUtilization(metrics::Meter *meter)
+{
+  return meter->CreateInt64Gauge(kMetricProcessMemoryUtilization,
+                                 descrMetricProcessMemoryUtilization,
+                                 unitMetricProcessMemoryUtilization);
+}
+
+static inline nostd::unique_ptr<metrics::Gauge<double>>
+CreateSyncDoubleMetricProcessMemoryUtilization(metrics::Meter *meter)
+{
+  return meter->CreateDoubleGauge(kMetricProcessMemoryUtilization,
+                                  descrMetricProcessMemoryUtilization,
+                                  unitMetricProcessMemoryUtilization);
+}
+#endif /* OPENTELEMETRY_ABI_VERSION_NO */
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricProcessMemoryUtilization(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableGauge(kMetricProcessMemoryUtilization,
+                                           descrMetricProcessMemoryUtilization,
+                                           unitMetricProcessMemoryUtilization);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricProcessMemoryUtilization(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableGauge(kMetricProcessMemoryUtilization,
+                                            descrMetricProcessMemoryUtilization,
+                                            unitMetricProcessMemoryUtilization);
 }
 
 /**
@@ -386,6 +471,48 @@ CreateAsyncDoubleMetricProcessPagingFaults(metrics::Meter *meter)
 }
 
 /**
+  Number of pending signals for the process.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricProcessSignalsPending = "process.signals_pending";
+static constexpr const char *descrMetricProcessSignalsPending =
+    "Number of pending signals for the process.";
+static constexpr const char *unitMetricProcessSignalsPending = "{signal}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricProcessSignalsPending(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricProcessSignalsPending,
+                                         descrMetricProcessSignalsPending,
+                                         unitMetricProcessSignalsPending);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricProcessSignalsPending(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricProcessSignalsPending,
+                                          descrMetricProcessSignalsPending,
+                                          unitMetricProcessSignalsPending);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricProcessSignalsPending(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricProcessSignalsPending,
+                                                   descrMetricProcessSignalsPending,
+                                                   unitMetricProcessSignalsPending);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricProcessSignalsPending(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricProcessSignalsPending,
+                                                    descrMetricProcessSignalsPending,
+                                                    unitMetricProcessSignalsPending);
+}
+
+/**
   Process threads count.
   <p>
   updowncounter
@@ -423,14 +550,14 @@ CreateAsyncDoubleMetricProcessThreadCount(metrics::Meter *meter)
 }
 
 /**
-  Number of unix file descriptors in use by the process.
+  Number of UNIX file descriptors in use by the process.
   <p>
   updowncounter
  */
 static constexpr const char *kMetricProcessUnixFileDescriptorCount =
     "process.unix.file_descriptor.count";
 static constexpr const char *descrMetricProcessUnixFileDescriptorCount =
-    "Number of unix file descriptors in use by the process.";
+    "Number of UNIX file descriptors in use by the process.";
 static constexpr const char *unitMetricProcessUnixFileDescriptorCount = "{file_descriptor}";
 
 static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>

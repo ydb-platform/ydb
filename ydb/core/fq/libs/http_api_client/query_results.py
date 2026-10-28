@@ -240,6 +240,7 @@ class YQResults:
             return convert
 
         if column_type == "EmptyDict":
+
             def convert(x):
                 return {}
 

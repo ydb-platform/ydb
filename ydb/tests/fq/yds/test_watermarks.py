@@ -14,7 +14,6 @@ from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 1
 
@@ -51,7 +50,10 @@ class TestWatermarks(TestYdsBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     def test_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool):
         client.create_yds_connection(
-            name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
+            name=YDS_CONNECTION,
+            database=os.getenv("YDB_DATABASE"),
+            endpoint=os.getenv("YDB_ENDPOINT"),
+            shared_reading=shared_reading,
         )
         self.init_topics(f"test_watermarks_{'shared' if shared_reading else 'no_shared'}")
 
@@ -93,10 +95,12 @@ class TestWatermarks(TestYdsBase):
 
         query_id = start_yds_query(kikimr, client, sql)
 
-        self.write_stream([
-            '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
-            '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
-        ])
+        self.write_stream(
+            [
+                '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
+                '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
+            ]
+        )
         assert self.read_stream(1) == []
 
         expected = [
@@ -123,9 +127,14 @@ class TestWatermarks(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
-    def test_idle_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool, tasks: int):
+    def test_idle_watermarks(
+        self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool, tasks: int
+    ):
         client.create_yds_connection(
-            name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
+            name=YDS_CONNECTION,
+            database=os.getenv("YDB_DATABASE"),
+            endpoint=os.getenv("YDB_ENDPOINT"),
+            shared_reading=shared_reading,
         )
         self.init_topics(f"test_idle_watermarks_{'shared' if shared_reading else 'no_shared'}", partitions_count=2)
 
@@ -168,10 +177,13 @@ class TestWatermarks(TestYdsBase):
 
         query_id = start_yds_query(kikimr, client, sql)
 
-        self.write_stream([
-            '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
-            '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
-        ], partition_key=b'1')
+        self.write_stream(
+            [
+                '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
+                '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
+            ],
+            partition_key=b'1',
+        )
         assert self.read_stream(1) == []
 
         time.sleep(2)

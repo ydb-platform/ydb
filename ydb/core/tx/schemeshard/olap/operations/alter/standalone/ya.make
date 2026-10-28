@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     object.cpp
@@ -11,7 +11,5 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/ttl
     ydb/core/tx/schemeshard/olap/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

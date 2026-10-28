@@ -5,6 +5,7 @@
 
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/download/download_stream.h>
+#include <yql/essentials/core/file_storage/download/download_limiter.h>
 #include <yql/essentials/core/file_storage/http_download/http_download.h>
 #include <yql/essentials/core/file_storage/defs/provider.h>
 
@@ -48,7 +49,6 @@ class TPvPathFinder {
 public:
     TPvPathFinder() {
         YQL_LOG(DEBUG) << "Searching for pv utility";
-        // Try standard PATH first
         TShellCommand cmd("which", {"pv"});
         cmd.Run().Wait();
         if (*cmd.GetExitCode() == 0) {
@@ -56,25 +56,7 @@ public:
             YQL_LOG(DEBUG) << "Found pv in PATH";
             return;
         }
-        // Try to find pv in current directory tree (from DATA(sbr://...))
-        TShellCommand findCmd("find", {".", "-maxdepth", "5", "-name", "pv", "-type", "f", "-executable"});
-        findCmd.Run().Wait();
-        if (*findCmd.GetExitCode() == 0) {
-            TString output = findCmd.GetOutput();
-            if (!output.empty()) {
-                // Take first line (path to pv)
-                size_t newlinePos = output.find('\n');
-                if (newlinePos != TString::npos) {
-                    output = output.substr(0, newlinePos);
-                }
-                if (!output.empty()) {
-                    Path_ = output;
-                    YQL_LOG(DEBUG) << "Found pv at: " << Path_;
-                    return;
-                }
-            }
-        }
-        ythrow yexception() << "pv utility not found in PATH or current directory tree";
+        ythrow yexception() << "pv utility not found in PATH";
     }
 
     const TString& Get() const {
@@ -115,6 +97,7 @@ public:
     explicit TFileStorageImpl(const TFileStorageConfig& params, const std::vector<NFS::IDownloaderPtr>& downloaders)
         : Storage_(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ULL, params.GetPath())
         , Config_(params)
+        , DownloadLimiter_(NSize::TSize(params.GetDownloadBandwidthLimitBytes()))
         , UseFakeChecksums_(GetEnv("YQL_LOCAL") == "1")
     {
         Downloaders_.push_back(MakeHttpDownloader(params));
@@ -291,7 +274,7 @@ private:
         NFS::TDataProvider puller;
         TString etag;
         TString lastModified;
-        std::tie(puller, etag, lastModified) = downloader->Download(url, token, urlMeta.ETag, urlMeta.LastModified);
+        std::tie(puller, etag, lastModified) = downloader->Download(url, token, urlMeta.ETag, urlMeta.LastModified, DownloadLimiter_);
         if (!puller) {
             Y_ENSURE(oldContentLink); // should not fire
             return oldContentLink;
@@ -352,6 +335,7 @@ private:
 
     TStorage Storage_;
     const TFileStorageConfig Config_;
+    const TDownloadLimiter DownloadLimiter_;
     std::vector<NFS::IDownloaderPtr> Downloaders_;
     const bool UseFakeChecksums_; // YQL-15353
 };

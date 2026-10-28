@@ -8,7 +8,7 @@ namespace NYql {
 
 IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression);
 
-} // namespace NYql
+}   // namespace NYql
 
 #else
 
@@ -17,7 +17,7 @@ namespace NDB {
 // forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 class ReadBuffer;
 
-} // namespace NDB
+}   // namespace NDB
 
 namespace NYql {
 
@@ -25,6 +25,6 @@ std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& input, const 
 
 IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression);
 
-} // namespace NYql
+}   // namespace NYql
 
 #endif

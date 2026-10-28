@@ -15,6 +15,8 @@
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/versioned_row.h>
 
+#include <yt/yt/client/transaction_client/public.h>
+
 #include <yt/yt/client/chaos_client/replication_card.h>
 
 #include <yt/yt/client/ypath/public.h>
@@ -129,6 +131,7 @@ struct TTableMountInfo final
     bool EnableDetailedProfiling = false;
 
     NTableClient::ETabletTransactionSerializationType SerializationType = NTableClient::ETabletTransactionSerializationType::Coarse;
+    NTransactionClient::ECommitOrdering CommitOrdering = NTransactionClient::ECommitOrdering::Weak;
 
     bool IsSorted() const;
     bool IsOrdered() const;
@@ -218,6 +221,9 @@ struct ITableMountCache
 {
     //! May throw if another client requested this entry first and the result is not ready yet.
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
+
+    //! Invalidates a cached table entry, even if it has no tablets.
+    virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
 
     //! Invalidates cached table info for all table infos owning this tablet.
     virtual void InvalidateTablet(TTabletId tabletId) = 0;

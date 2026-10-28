@@ -5,22 +5,17 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-
-#include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/common/helpers.h>
-#include <ydb/services/workload_manager/tables/table_queries.h>
-
 #include <ydb/core/mind/tenant_node_enumeration.h>
-
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-
+#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/tables/table_queries.h>
 
 namespace NKikimr::NWorkloadManager {
 
@@ -28,8 +23,7 @@ namespace {
 
 using namespace NActors;
 
-
-class TWorkloadService : public TActorBootstrapped<TWorkloadService> {
+class TWorkloadService: public TActorBootstrapped<TWorkloadService> {
     struct TCounters {
         const NMonitoring::TDynamicCounterPtr Counters;
 
@@ -63,15 +57,16 @@ class TWorkloadService : public TActorBootstrapped<TWorkloadService> {
 public:
     explicit TWorkloadService(NMonitoring::TDynamicCounterPtr counters)
         : Counters(counters)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TWorkloadService::MainState);
 
         // Subscribe for FeatureFlags and WorkloadManagerConfig
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
-            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem
-        }), IEventHandle::FlagTrackDelivery);
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+                (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem }), IEventHandle::FlagTrackDelivery);
 
         CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(Counters.Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
@@ -113,7 +108,8 @@ public:
 
         WorkloadManagerConfig = event.GetConfig().GetWorkloadManagerConfig();
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
-        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
+        EnabledResourcePoolsOnServerless =
+            event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enabled");
@@ -174,12 +170,14 @@ public:
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
         const TActorId& workerActorId = ev->Sender;
         if (!EnabledResourcePools) {
-            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED, "Workload manager is disabled. Please contact your system administrator to enable it");
+            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED,
+                "Workload manager is disabled. Please contact your system administrator to enable it");
             return;
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
-        LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
+        LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId
+                                           << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
 
@@ -188,7 +186,8 @@ public:
         const TString& poolId = ev->Get()->PoolId;
         const TString& sessionId = ev->Get()->SessionId;
         if (GetOrCreateDatabaseState(databaseId)->PendingSessionIds.contains(sessionId)) {
-            LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+            LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, DatabaseId: " << databaseId
+                                                        << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
             GetOrCreateDatabaseState(databaseId)->PendingCancelRequests[sessionId].emplace_back(std::move(ev));
             return;
         }
@@ -199,7 +198,8 @@ public:
             return;
         }
 
-        LOG_D("Finished request with worker actor " << ev->Sender << ", DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+        LOG_D("Finished request with worker actor " << ev->Sender << ", DatabaseId: " << databaseId << ", PoolId: " << poolId
+                                                    << ", SessionId: " << ev->Get()->SessionId);
         poolState->DoCleanupRequest(std::move(ev));
     }
 
@@ -258,30 +258,24 @@ private:
         const TString& databaseId = ev->Get()->DatabaseId;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully fetched database info, DatabaseId: " << databaseId
-                << ", Serverless: " << ev->Get()->Serverless
-                << ", PathId: " << ev->Get()->PathId
-            );
+            LOG_D("Successfully fetched database info, DatabaseId: " << databaseId << ", Serverless: " << ev->Get()->Serverless
+                                                                     << ", PathId: " << ev->Get()->PathId);
 
             // Subscribe to scheme cache watch for this PathId
             auto databaseState = GetOrCreateDatabaseState(databaseId);
 
             if (!databaseState->WatchKey) {
                 databaseState->WatchKey = ++FreeWatchKey;
-                auto subscribeEvent = new TEvTxProxySchemeCache::TEvWatchPathId(
-                    ev->Get()->PathId, databaseState->WatchKey);
+                auto subscribeEvent = new TEvTxProxySchemeCache::TEvWatchPathId(ev->Get()->PathId, databaseState->WatchKey);
 
                 Send(MakeSchemeCacheID(), subscribeEvent);
 
-                LOG_D("Subscribed to scheme cache watch for database: " << databaseId
-                    << ", PathId: " << ev->Get()->PathId
-                    << ", WatchKey: " << databaseState->WatchKey
-                );
+                LOG_D("Subscribed to scheme cache watch for database: " << databaseId << ", PathId: " << ev->Get()->PathId
+                                                                        << ", WatchKey: " << databaseState->WatchKey);
             }
         } else {
-            LOG_D("Failed to fetch database info, DatabaseId: " << databaseId
-                << ", Status: " << ev->Get()->Status
-                << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_D("Failed to fetch database info, DatabaseId: " << databaseId << ", Status: " << ev->Get()->Status
+                                                                << ", Issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdateDatabaseInfo(ev);
@@ -349,10 +343,8 @@ private:
             LOG_D("Successfully fetched pool: " << poolId << ", DatabaseId: " << databaseId);
             poolHandler = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig)->PoolHandler;
         } else {
-            LOG_W("Failed to fetch pool: " << poolId
-                << ", database id: " << databaseId
-                << ", status: " << ev->Get()->Status
-                << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_W("Failed to fetch pool: " << poolId << ", database id: " << databaseId << ", status: " << ev->Get()->Status
+                                           << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
@@ -431,7 +423,9 @@ private:
     void Handle(TEvPrivate::TEvFinishRequestInPool::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Request finished in pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", Duration: " << ev->Get()->Duration << ", CpuConsumed: " << ev->Get()->CpuConsumed << ", AdjustCpuQuota: " << ev->Get()->AdjustCpuQuota);
+        LOG_T("Request finished in pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", Duration: " << ev->Get()->Duration
+                                                       << ", CpuConsumed: " << ev->Get()->CpuConsumed
+                                                       << ", AdjustCpuQuota: " << ev->Get()->AdjustCpuQuota);
 
         if (auto poolState = GetPoolState(databaseId, poolId)) {
             poolState->OnRequestFinished();
@@ -635,7 +629,7 @@ private:
 
 private:
     void ReplyContinueError(const TActorId& replyActorId, ui64 queryId, Ydb::StatusIds::StatusCode status, const TString& message) const {
-        ReplyContinueError(replyActorId, queryId, status, {NYql::TIssue(message)});
+        ReplyContinueError(replyActorId, queryId, status, { NYql::TIssue(message) });
     }
 
     void ReplyContinueError(const TActorId& replyActorId, ui64 queryId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
@@ -649,7 +643,7 @@ private:
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
         LOG_W("Reply cleanup error " << status << " to " << replyActorId << ": " << message);
-        Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
+        Send(replyActorId, new TEvCleanupResponse(status, { NYql::TIssue(message) }));
     }
 
     TDatabaseState* GetOrCreateDatabaseState(TString databaseId) {
@@ -660,7 +654,11 @@ private:
         }
 
         LOG_I("Creating new database state for id " << databaseId);
-        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
+        return &DatabaseToState
+                    .insert(
+                        { databaseId, TDatabaseState{ .SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless,
+                                          .WorkloadManagerConfig = WorkloadManagerConfig } })
+                    .first->second;
     }
 
     TPoolState* GetOrCreatePoolState(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
@@ -671,8 +669,9 @@ private:
 
         LOG_I("Creating new handler for pool " << poolKey);
 
-        const auto poolHandler = Register(CreatePoolHandlerActor(databaseId, poolId, poolConfig, EnableResourcePoolsCounters ? Counters.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()));
-        const auto poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler}}).first->second;
+        const auto poolHandler = Register(CreatePoolHandlerActor(
+            databaseId, poolId, poolConfig, EnableResourcePoolsCounters ? Counters.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        const auto poolState = &PoolIdToState.insert({ poolKey, TPoolState{ .PoolHandler = poolHandler } }).first->second;
 
         Counters.ActivePools->Inc();
         ScheduleIdleCheck();
@@ -706,16 +705,16 @@ private:
     bool IdleChecksStarted = false;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
-    std::unordered_set<TString> PendingHandlers;  // DatabaseID/PoolID
+    std::unordered_set<TString> PendingHandlers;   // DatabaseID/PoolID
     ui32 FreeWatchKey = 0;
 
-    std::unordered_map<TString, TDatabaseState> DatabaseToState;  // DatabaseID to state
-    std::unordered_map<TString, TPoolState> PoolIdToState;  // DatabaseID/PoolID to state
+    std::unordered_map<TString, TDatabaseState> DatabaseToState;   // DatabaseID to state
+    std::unordered_map<TString, TPoolState> PoolIdToState;   // DatabaseID/PoolID to state
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
     return new NWorkloadManager::TWorkloadService(counters);
@@ -730,5 +729,4 @@ NActors::TActorId MakeServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-
-} // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

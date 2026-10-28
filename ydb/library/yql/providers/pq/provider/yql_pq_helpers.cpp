@@ -13,7 +13,8 @@ using namespace NNodes;
 namespace {
 
 bool EnsureWatermarkExpr(const TPosition pos, TCoArgument arg, TExprBase body, TExprContext& ctx) {
-    static constexpr std::string_view message = "Unrecognized watermark expression, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
+    static constexpr std::string_view message =
+        "Unrecognized watermark expression, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
 
     const auto maybeMember = body.Maybe<TCoMember>();
     if (!maybeMember) {
@@ -32,20 +33,17 @@ bool EnsureWatermarkExpr(const TPosition pos, TCoArgument arg, TExprBase body, T
         ctx.AddError(TIssue(pos, message));
         return false;
     }
-    if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time"}, member.Name())) {
+    if (!IsIn({ "_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time" }, member.Name())) {
         ctx.AddError(TIssue(pos, message));
         return false;
     }
     return true;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 void Add(TVector<TCoNameValueTuple>& settings, TStringBuf name, TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
-    settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-        .Name().Build(name)
-        .Value<TCoAtom>().Build(value)
-        .Done());
+    settings.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build(name) .Value<TCoAtom>().Build(value) .Done());
 }
 
 TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPositionHandle pos, TExprContext& ctx) {
@@ -59,47 +57,49 @@ TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPos
             maxPartitionsCount = federatedTopics[0].PartitionsCount;
         } else {
             TVector<TDqPqFederatedCluster> clusters(Reserve(federatedTopics.size()));
-            for (const auto& topic: federatedTopics) {
+            for (const auto& topic : federatedTopics) {
+                // clang-format off
                 clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
                     .Name().Build(topic.Info.Name)
                     .Endpoint().Build(topic.Info.Endpoint)
                     .Database().Build(topic.Info.Path)
                     .PartitionsCount().Build(ToString(topic.PartitionsCount))
                     .Done());
+                // clang-format on
                 maxPartitionsCount = std::max(maxPartitionsCount, topic.PartitionsCount);
             }
+            // clang-format off
             props.push_back(
                     Build<TCoNameValueTuple>(ctx, pos)
                     .Name().Build(FederatedClustersProp)
                     .Value<TDqPqFederatedClusterList>().Add(clusters).Build().Done());
+            // clang-format on
         }
     }
     Add(props, PartitionsCountProp, ToString(maxPartitionsCount), pos, ctx);
 
-    return Build<TCoNameValueTupleList>(ctx, pos)
-        .Add(props)
-        .Done();
+    return Build<TCoNameValueTupleList>(ctx, pos).Add(props).Done();
 }
 
 void FindYdsDbIdsForResolving(
-    const TPqState::TPtr& state,
-    TExprNode::TPtr input,
-    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& ids)
+    const TPqState::TPtr& state, TExprNode::TPtr input, THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& ids)
 {
-    if (auto pqNodes = FindNodes(input, [&](const TExprNode::TPtr& node) {
-        if (auto maybePqRead = TMaybeNode<TPqRead>(node)) {
-            TPqRead read = maybePqRead.Cast();
-            if (read.DataSource().Category().Value() == PqProviderName) {
-                return true;
-            }
-        } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
-            TPqWrite write = maybePqWrite.Cast();
-            if (write.DataSink().Category().Value() == PqProviderName) {
-                return true;
-            }
-        }
-        return false;
-    }); !pqNodes.empty()) {
+    if (auto pqNodes = FindNodes(input,
+            [&](const TExprNode::TPtr& node) {
+                if (auto maybePqRead = TMaybeNode<TPqRead>(node)) {
+                    TPqRead read = maybePqRead.Cast();
+                    if (read.DataSource().Category().Value() == PqProviderName) {
+                        return true;
+                    }
+                } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
+                    TPqWrite write = maybePqWrite.Cast();
+                    if (write.DataSink().Category().Value() == PqProviderName) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        !pqNodes.empty()) {
         TString cluster;
         for (auto& node : pqNodes) {
             if (auto maybePqRead = TMaybeNode<TPqRead>(node)) {
@@ -114,13 +114,14 @@ void FindYdsDbIdsForResolving(
             YQL_CLOG(INFO, ProviderPq) << "Found cluster: " << cluster;
             const auto& clusterCfgSettings = state->Configuration->ClustersConfigurationSettings;
             const auto foundSetting = clusterCfgSettings.find(cluster);
-            if (foundSetting == clusterCfgSettings.end()
-                || foundSetting->second.ClusterType != NYql::TPqClusterConfig::CT_DATA_STREAMS
-                || foundSetting->second.Endpoint)
+            if (foundSetting == clusterCfgSettings.end() || foundSetting->second.ClusterType != NYql::TPqClusterConfig::CT_DATA_STREAMS ||
+                foundSetting->second.Endpoint) {
                 continue;
+            }
             YQL_CLOG(INFO, ProviderPq) << "Found dbId: " << foundSetting->second.DatabaseId;
-            if (!foundSetting->second.DatabaseId)
+            if (!foundSetting->second.DatabaseId) {
                 continue;
+            }
             YQL_CLOG(INFO, ProviderPq) << "Resolve YDS id: " << foundSetting->second.DatabaseId;
             const auto idKey = std::make_pair(foundSetting->second.DatabaseId, NYql::EDatabaseType::DataStreams);
             const auto foundDbId = state->DatabaseIds.find(idKey);
@@ -132,9 +133,7 @@ void FindYdsDbIdsForResolving(
     YQL_CLOG(INFO, ProviderPq) << "Ids to resolve: " << ids.size();
 }
 
-void FillSettingsWithResolvedYdsIds(
-    const TPqState::TPtr& state,
-    const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds)
+void FillSettingsWithResolvedYdsIds(const TPqState::TPtr& state, const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds)
 {
     YQL_CLOG(INFO, ProviderPq) << "FullResolvedIds size: " << fullResolvedIds.size();
     auto& clusters = state->Configuration->ClustersConfigurationSettings;
@@ -172,11 +171,7 @@ TMaybeNode<TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name) {
     return nullptr;
 }
 
-TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(
-    const NNodes::TCoLambda& watermark,
-    const TPqState& state,
-    TExprContext& ctx
-) {
+TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(const NNodes::TCoLambda& watermark, const TPqState& state, TExprContext& ctx) {
     const auto pos = ctx.GetPosition(watermark.Pos());
 
     if (!state.EnableWatermarks && !state.EnableWatermarksAdvanced) {
@@ -217,16 +212,10 @@ TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(
         return Nothing();
     }
 
-    const auto newArg = Build<TCoArgument>(ctx, arg.Pos())
-        .Name(arg.Name())
-        .Done();
+    const auto newArg = Build<TCoArgument>(ctx, arg.Pos()).Name(arg.Name()).Done();
     return std::pair{
-        Build<TCoLambda>(ctx, watermark.Pos())
-            .Args({newArg})
-            .Body(ctx.ReplaceNode(sub.Left().Ptr(), arg.Ref(), newArg.Ptr()))
-            .Done(),
-        *delay
+        Build<TCoLambda>(ctx, watermark.Pos()).Args({ newArg }).Body(ctx.ReplaceNode(sub.Left().Ptr(), arg.Ref(), newArg.Ptr())).Done(), *delay
     };
 }
 
-} // namespace NYql
+}   // namespace NYql

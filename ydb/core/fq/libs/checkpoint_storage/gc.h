@@ -14,10 +14,7 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewGC(
-    const TCheckpointStorageSettings::TGcSettings& config,
-    const TCheckpointStoragePtr& checkpointStorage,
-    const TStateStoragePtr& stateStorage,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+std::unique_ptr<NActors::IActor> NewGC(const TCheckpointStorageSettings::TGcSettings& config, const TCheckpointStoragePtr& checkpointStorage,
+    const TStateStoragePtr& stateStorage, const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NFq
+}   // namespace NFq

@@ -99,6 +99,143 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 
 Y_UNIT_TEST_SUITE(KqpScan) {
 
+    Y_UNIT_TEST_TWIN(SamplingHintWithNewRboWithoutFallback, AstCache) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
+        tableService->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        tableService->SetEnableAstCache(AstCache);
+        tableService->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/FourShard` (
+                Key Uint64,
+                PRIMARY KEY (Key)
+            ) WITH (PARTITION_AT_KEYS = (100u, 200u, 300u));
+        )").GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 key : {1u, 2u, 101u, 102u, 201u, 202u, 301u, 302u}) {
+            rows.AddListItem().BeginStruct().AddMember("Key").Uint64(key).EndStruct();
+        }
+        rows.EndList();
+        auto upsert = db.BulkUpsert("/Root/FourShard", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        const auto rboSuccess = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success");
+        const auto rboFailed = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed");
+        const auto successBefore = rboSuccess->Val();
+        const auto failedBefore = rboFailed->Val();
+        const TString fullResult = R"([[[1u]];[[2u]];[[101u]];[[102u]];[[201u]];[[202u]];[[301u]];[[302u]]])";
+
+        // A tiny positive rate produces an empty sample for this fixture and
+        // verifies that optimization does not silently drop sampling.
+        for (const TString rate : {"1", "0.00000000000000000001"}) {
+            const TString query = TStringBuilder()
+                << "SELECT Key FROM `/Root/FourShard` WITH (sampling_rate=\"" << rate
+                << "\", sampling_seed=\"42\", sampling_memtable_stride=\"1\") ORDER BY Key";
+            const TString expected = rate == "1" ? fullResult : "[]";
+
+            auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+            CompareYson(expected, StreamResultToYson(scan));
+
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query,
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore);
+        UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
+
+        // Cached ASTs need the same explicit translation mode as the RBO tests.
+        auto ordinary = kikimr.GetQueryClient().ExecuteQuery(
+            "PRAGMA YqlSelect = 'force'; SELECT Key FROM `/Root/FourShard` ORDER BY Key",
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(ordinary.IsSuccess(), ordinary.GetIssues().ToString());
+        CompareYson(fullResult, FormatResultSetYson(ordinary.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
+
+        if (!AstCache) {
+            auto unsupported = kikimr.GetQueryClient().ExecuteQuery(R"(
+                SELECT Key FROM `/Root/FourShard` WITH (foo="bar");
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!unsupported.IsSuccess(), "Unsampled table hints must not bypass forced RBO translation");
+            UNIT_ASSERT_STRING_CONTAINS(unsupported.GetIssues().ToString(), "table_hints");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectUnsupportedSamplingHints, NewRbo) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetInitFederatedQuerySetupFactory(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/SamplingHints` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX ByValue GLOBAL ON (Value)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        const TVector<std::pair<TString, TString>> cases = {
+            {R"(WITH (sampling_rate="0"))", "samplingrate"},
+            {R"(WITH (sampling_rate="1.1"))", "samplingrate"},
+            {R"(WITH (sampling_rate="nan"))", "samplingrate"},
+            {R"(WITH (sampling_rate="0.5", sampling_seed="-1"))", "samplingseed"},
+            {R"(WITH (sampling_rate="0.5", sampling_memtable_stride="0"))", "samplingmemtablestride"},
+            {R"(WITH (sampling_seed="42"))", "Sampling requires sampling_rate"},
+            {R"(VIEW ByValue WITH (sampling_rate="0.5"))", "Sampling is not supported for index reads"},
+            {R"(WITH (sampling_rate="0.5") WHERE Key = 1u)", "Sampling is not supported for lookups"},
+        };
+        for (const auto& [suffix, expectedIssue] : cases) {
+            auto it = db.StreamExecuteScanQuery(TStringBuilder()
+                << "SELECT * FROM `/Root/SamplingHints` " << suffix).GetValueSync();
+            if (!it.IsSuccess()) {
+                UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), expectedIssue);
+                continue;
+            }
+            auto part = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_C(!part.IsSuccess(), suffix);
+            UNIT_ASSERT_STRING_CONTAINS(part.GetIssues().ToString(), expectedIssue);
+        }
+
+        for (const TString hint : {"", R"(WITH (sampling_rate="0.5"))"}) {
+            if (NewRbo && hint.empty()) {
+                continue; // New RBO does not support explicit streamlookup joins.
+            }
+            const TString query = TStringBuilder()
+                << "SELECT r.Key FROM `/Root/SamplingHints` AS l"
+                << " LEFT JOIN /*+ streamlookup() */ ANY `/Root/SamplingHints` " << hint
+                << " AS r ON l.Key = r.Key";
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query,
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (hint.empty()) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!result.IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Sampling is not supported for lookups");
+            }
+        }
+    }
+
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
         TKikimrSettings settings;
         // This test expects SourceRead is enabled for ScanQuery

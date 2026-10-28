@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -30,7 +30,5 @@ PEERDIR(
     yql/essentials/parser/pg_catalog
     library/cpp/disjoint_sets
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

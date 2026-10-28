@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -95,10 +95,7 @@ TBridgeHandle BridgeDictLookup(TBridgeHandle dict, TBridgeHandle key);
 TBridgeHandle BridgeDictMakeIterator(TBridgeHandle handle);
 TBridgeHandle BridgeDictMakeKeysIterator(TBridgeHandle handle);
 TBridgeHandle BridgeDictMakePayloadsIterator(TBridgeHandle handle);
-int32_t BridgeDictIterNext(
-    TBridgeHandle iter,
-    TBridgeHandle* outKey,
-    TBridgeHandle* outPayload);
+int32_t BridgeDictIterNext(TBridgeHandle iter, TBridgeHandle* outKey, TBridgeHandle* outPayload);
 
 TBridgeHandle BridgeMakeNull(void);
 TBridgeHandle BridgeMakeInt64(int64_t value);
@@ -178,5 +175,5 @@ void BridgeRef(TBridgeHandle handle);
 void BridgeUnref(TBridgeHandle handle);
 
 #ifdef __cplusplus
-} // extern "C"
+}   // extern "C"
 #endif

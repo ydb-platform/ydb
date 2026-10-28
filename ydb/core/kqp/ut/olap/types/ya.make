@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/ut/common

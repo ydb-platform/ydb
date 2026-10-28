@@ -5,7 +5,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
@@ -148,7 +147,8 @@ struct HttpSslOptions
         ssl_cipher_suite(input_ssl_cipher_suite)
   {
     /* Use SSL if url starts with "https:" */
-    if (strncmp(url.data(), "https:", 6) == 0)
+    const nostd::string_view https_scheme{"https:"};
+    if (url.substr(0, https_scheme.size()) == https_scheme)
     {
       use_ssl = true;
     }

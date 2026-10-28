@@ -142,29 +142,6 @@ namespace detail {  // for code folding and Raw128
   HWY_NEON_DEF_FUNCTION(int64, 2, name, prefix##q, infix, s64, args) \
   HWY_NEON_DEF_FUNCTION(int64, 1, name, prefix, infix, s64, args)
 
-// Clang 17 crashes with bf16, see github.com/llvm/llvm-project/issues/64179.
-#undef HWY_NEON_HAVE_BFLOAT16
-#if HWY_HAVE_SCALAR_BF16_TYPE &&                              \
-    ((HWY_TARGET == HWY_NEON_BF16 &&                          \
-      (!HWY_COMPILER_CLANG || HWY_COMPILER_CLANG >= 1800)) || \
-     defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC))
-#define HWY_NEON_HAVE_BFLOAT16 1
-#else
-#define HWY_NEON_HAVE_BFLOAT16 0
-#endif
-
-// HWY_NEON_HAVE_F32_TO_BF16C is defined if NEON vcvt_bf16_f32 and
-// vbfdot_f32 are available, even if the __bf16 type is disabled due to
-// GCC/Clang bugs.
-#undef HWY_NEON_HAVE_F32_TO_BF16C
-#if HWY_NEON_HAVE_BFLOAT16 || HWY_TARGET == HWY_NEON_BF16 || \
-    (defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) &&        \
-     (HWY_COMPILER_GCC_ACTUAL >= 1000 || HWY_COMPILER_CLANG >= 1100))
-#define HWY_NEON_HAVE_F32_TO_BF16C 1
-#else
-#define HWY_NEON_HAVE_F32_TO_BF16C 0
-#endif
-
 // bfloat16_t
 #if HWY_NEON_HAVE_BFLOAT16
 #define HWY_NEON_DEF_FUNCTION_BFLOAT_16(name, prefix, infix, args)       \
@@ -1950,10 +1927,74 @@ HWY_API Vec128<T, 16> InsertLane(const Vec128<T, 16> v, size_t i, T t) {
 // ================================================== ARITHMETIC
 
 // ------------------------------ Addition
-HWY_NEON_DEF_FUNCTION_ALL_TYPES(operator+, vadd, _, 2)
+HWY_NEON_DEF_FUNCTION_UINTS(operator+, vadd, _, 2)
+HWY_NEON_DEF_FUNCTION_ALL_FLOATS(operator+, vadd, _, 2)
+
+template <size_t N>
+HWY_API Vec128<int8_t, N> operator+(Vec128<int8_t, N> a, Vec128<int8_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) + BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int16_t, N> operator+(Vec128<int16_t, N> a,
+                                     Vec128<int16_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) + BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int32_t, N> operator+(Vec128<int32_t, N> a,
+                                     Vec128<int32_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) + BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int64_t, N> operator+(Vec128<int64_t, N> a,
+                                     Vec128<int64_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) + BitCast(du, b));
+}
 
 // ------------------------------ Subtraction
-HWY_NEON_DEF_FUNCTION_ALL_TYPES(operator-, vsub, _, 2)
+HWY_NEON_DEF_FUNCTION_UINTS(operator-, vsub, _, 2)
+HWY_NEON_DEF_FUNCTION_ALL_FLOATS(operator-, vsub, _, 2)
+
+template <size_t N>
+HWY_API Vec128<int8_t, N> operator-(Vec128<int8_t, N> a, Vec128<int8_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) - BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int16_t, N> operator-(Vec128<int16_t, N> a,
+                                     Vec128<int16_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) - BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int32_t, N> operator-(Vec128<int32_t, N> a,
+                                     Vec128<int32_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) - BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int64_t, N> operator-(Vec128<int64_t, N> a,
+                                     Vec128<int64_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) - BitCast(du, b));
+}
 
 // ------------------------------ SumsOf8
 
@@ -2476,8 +2517,30 @@ HWY_API Vec128<T, N> RoundingShiftRightSame(const Vec128<T, N> v, int bits) {
 
 // All except ui64
 HWY_NEON_DEF_FUNCTION_UINT_8_16_32(operator*, vmul, _, 2)
-HWY_NEON_DEF_FUNCTION_INT_8_16_32(operator*, vmul, _, 2)
 HWY_NEON_DEF_FUNCTION_ALL_FLOATS(operator*, vmul, _, 2)
+
+template <size_t N>
+HWY_API Vec128<int8_t, N> operator*(Vec128<int8_t, N> a, Vec128<int8_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) * BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int16_t, N> operator*(Vec128<int16_t, N> a,
+                                     Vec128<int16_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) * BitCast(du, b));
+}
+
+template <size_t N>
+HWY_API Vec128<int32_t, N> operator*(Vec128<int32_t, N> a,
+                                     Vec128<int32_t, N> b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  return BitCast(d, BitCast(du, a) * BitCast(du, b));
+}
 
 // ------------------------------ Integer multiplication
 
@@ -3395,21 +3458,19 @@ HWY_API Mask128<int64_t, N> TestBit(Vec128<int64_t, N> v,
 #undef HWY_NEON_BUILD_PARAM_HWY_TESTBIT
 #undef HWY_NEON_BUILD_ARG_HWY_TESTBIT
 
-// ------------------------------ Abs i64 (IfThenElse, BroadcastSignBit)
+// ------------------------------ Abs i64 (IfNegativeThenElse, Neg)
 HWY_API Vec128<int64_t> Abs(const Vec128<int64_t> v) {
 #if HWY_ARCH_ARM_A64
   return Vec128<int64_t>(vabsq_s64(v.raw));
 #else
-  const auto zero = Zero(DFromV<decltype(v)>());
-  return IfThenElse(MaskFromVec(BroadcastSignBit(v)), zero - v, v);
+  return IfNegativeThenElse(v, Neg(v), v);
 #endif
 }
 HWY_API Vec64<int64_t> Abs(const Vec64<int64_t> v) {
 #if HWY_ARCH_ARM_A64
   return Vec64<int64_t>(vabs_s64(v.raw));
 #else
-  const auto zero = Zero(DFromV<decltype(v)>());
-  return IfThenElse(MaskFromVec(BroadcastSignBit(v)), zero - v, v);
+  return IfNegativeThenElse(v, Neg(v), v);
 #endif
 }
 
@@ -3418,7 +3479,7 @@ HWY_API Vec128<int64_t> SaturatedAbs(const Vec128<int64_t> v) {
   return Vec128<int64_t>(vqabsq_s64(v.raw));
 #else
   const auto zero = Zero(DFromV<decltype(v)>());
-  return IfThenElse(MaskFromVec(BroadcastSignBit(v)), SaturatedSub(zero, v), v);
+  return IfNegativeThenElse(v, SaturatedSub(zero, v), v);
 #endif
 }
 HWY_API Vec64<int64_t> SaturatedAbs(const Vec64<int64_t> v) {
@@ -3426,7 +3487,7 @@ HWY_API Vec64<int64_t> SaturatedAbs(const Vec64<int64_t> v) {
   return Vec64<int64_t>(vqabs_s64(v.raw));
 #else
   const auto zero = Zero(DFromV<decltype(v)>());
-  return IfThenElse(MaskFromVec(BroadcastSignBit(v)), SaturatedSub(zero, v), v);
+  return IfNegativeThenElse(v, SaturatedSub(zero, v), v);
 #endif
 }
 
@@ -3561,6 +3622,28 @@ HWY_API Vec128<double> Max(Vec128<double> a, Vec128<double> b) {
 // Armv7: NaN if any is NaN.
 HWY_NEON_DEF_FUNCTION_ALL_FLOATS(Max, vmax, _, 2)
 #endif  // HWY_ARCH_ARM_A64
+
+// ------------------------------ MinNumber and MaxNumber
+
+#if !HWY_ARCH_ARM_A64
+
+#ifdef HWY_NATIVE_FLOAT_MIN_MAX_NUMBER
+#undef HWY_NATIVE_FLOAT_MIN_MAX_NUMBER
+#else
+#define HWY_NATIVE_FLOAT_MIN_MAX_NUMBER
+#endif
+
+template <class V, HWY_IF_FLOAT_OR_SPECIAL_V(V)>
+HWY_API V MinNumber(V a, V b) {
+  return Min(IfThenElse(IsNaN(a), b, a), IfThenElse(IsNaN(b), a, b));
+}
+
+template <class V, HWY_IF_FLOAT_OR_SPECIAL_V(V)>
+HWY_API V MaxNumber(V a, V b) {
+  return Max(IfThenElse(IsNaN(a), b, a), IfThenElse(IsNaN(b), a, b));
+}
+
+#endif
 
 // ================================================== MEMORY
 
@@ -7946,6 +8029,17 @@ HWY_API Vec128<T, N> OddEvenBlocks(Vec128<T, N> /* odd */, Vec128<T, N> even) {
 template <typename T, size_t N>
 HWY_API Vec128<T, N> SwapAdjacentBlocks(Vec128<T, N> v) {
   return v;
+}
+
+// ------------------------------ InterleaveEvenBlocks
+template <class D, class V = VFromD<D>>
+HWY_API V InterleaveEvenBlocks(D, V a, V /*b*/) {
+  return a;
+}
+// ------------------------------ InterleaveOddBlocks
+template <class D, class V = VFromD<D>>
+HWY_API V InterleaveOddBlocks(D, V a, V /*b*/) {
+  return a;
 }
 
 // ------------------------------ ReverseBlocks

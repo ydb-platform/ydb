@@ -83,6 +83,39 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
     }
 
+    Y_UNIT_TEST(CoroutineSerializerAbortDuringPayload) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("record after payload");
+        msg.AddPayload(MakeStringRope(TString(1024, 'x')));
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        // Stop inside the payload count, rope size, and rope body respectively.
+        for (size_t feedSize : {1, 2, 64}) {
+            TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&msg, true, false);
+            char buffer[64];
+            auto chunks = chunker.FeedBuf(buffer, feedSize);
+            TString prefix;
+            for (const auto& chunk : chunks) {
+                prefix.append(chunk.Buf, chunk.Size);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(prefix, expected.substr(0, feedSize));
+            UNIT_ASSERT(!chunker.IsComplete());
+            UNIT_ASSERT_VALUES_EQUAL(chunker.GetCurrentEvent(), &msg);
+            chunker.Abort();
+            UNIT_ASSERT(chunker.IsComplete());
+            UNIT_ASSERT(!chunker.IsSuccessfull());
+            UNIT_ASSERT_VALUES_EQUAL(chunker.ByteCount(), feedSize);
+            TString afterAbort;
+            for (const auto& chunk : chunks) {
+                afterAbort.append(chunk.Buf, chunk.Size);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(afterAbort, prefix);
+        }
+    }
+
     Y_UNIT_TEST(CoroutineSerializerChunkSizesAroundSlopBoundary) {
         TEvMessageWithPayload msg;
         msg.Record.SetMeta("hello, world!");

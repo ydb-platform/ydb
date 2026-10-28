@@ -2,9 +2,9 @@
 
 #include "compartment.h"
 
-#include <vector>
-
 #include <util/generic/noncopyable.h>
+
+#include <vector>
 
 namespace NYdb::NWasm {
 
@@ -13,9 +13,7 @@ namespace NYdb::NWasm {
 //! Manages allocations with respect to the difference between
 //! memory addresses inside the VM and inside the host process.
 //! We intentionally define a separate class to work with memory pools.
-class TWebAssemblyMemoryPool
-    : public TNonCopyable
-{
+class TWebAssemblyMemoryPool: public TNonCopyable {
 public:
     TWebAssemblyMemoryPool();
     explicit TWebAssemblyMemoryPool(IWebAssemblyCompartment* compartment);
@@ -42,4 +40,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

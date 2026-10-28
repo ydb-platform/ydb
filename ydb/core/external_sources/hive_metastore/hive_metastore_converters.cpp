@@ -1,4 +1,5 @@
 #include "hive_metastore_converters.h"
+
 #include <util/generic/set.h>
 
 namespace NKikimr::NExternalSource {
@@ -51,7 +52,7 @@ Ydb::Type GetType(const std::string& typeName) {
     throw yexception() << "Unsupported type: " << typeName;
 }
 
-}
+}   // namespace
 
 TString THiveMetastoreConverters::GetFormat(const Apache::Hadoop::Hive::Table& table) {
     if (!table.sd.__isset.inputFormat) {
@@ -133,29 +134,29 @@ TString THiveMetastoreConverters::GetCompression(const Apache::Hadoop::Hive::Tab
 }
 
 TString THiveMetastoreConverters::GetLocation(const Apache::Hadoop::Hive::Table& table) {
-    return TString{table.sd.location};
+    return TString{ table.sd.location };
 }
 
 std::vector<Ydb::Column> THiveMetastoreConverters::GetColumns(const Apache::Hadoop::Hive::Table& table) {
     std::vector<Ydb::Column> columns;
     TSet<TString> columnNames;
-    for (const auto& hiveColumn: table.sd.cols) {
+    for (const auto& hiveColumn : table.sd.cols) {
         if (columnNames.contains(hiveColumn.name)) {
             continue;
         }
-        columnNames.insert(TString{hiveColumn.name});
+        columnNames.insert(TString{ hiveColumn.name });
         Ydb::Column ydbColumn;
-        ydbColumn.set_name(TString{hiveColumn.name});
+        ydbColumn.set_name(TString{ hiveColumn.name });
         *ydbColumn.mutable_type() = GetType(hiveColumn.type);
         columns.push_back(ydbColumn);
     }
-    for (const auto& hiveColumn: table.partitionKeys) {
+    for (const auto& hiveColumn : table.partitionKeys) {
         if (columnNames.contains(hiveColumn.name)) {
             continue;
         }
-        columnNames.insert(TString{hiveColumn.name});
+        columnNames.insert(TString{ hiveColumn.name });
         Ydb::Column ydbColumn;
-        ydbColumn.set_name(TString{hiveColumn.name});
+        ydbColumn.set_name(TString{ hiveColumn.name });
         *ydbColumn.mutable_type() = GetType(hiveColumn.type);
         columns.push_back(ydbColumn);
     }
@@ -165,18 +166,18 @@ std::vector<Ydb::Column> THiveMetastoreConverters::GetColumns(const Apache::Hado
 std::vector<TString> THiveMetastoreConverters::GetPartitionedColumns(const Apache::Hadoop::Hive::Table& table) {
     std::vector<TString> columns;
     TSet<TString> columnNames;
-    for (const auto& hiveColumn: table.partitionKeys) {
+    for (const auto& hiveColumn : table.partitionKeys) {
         if (columnNames.contains(hiveColumn.name)) {
             continue;
         }
-        columnNames.insert(TString{hiveColumn.name});
-        columns.push_back(TString{hiveColumn.name});
+        columnNames.insert(TString{ hiveColumn.name });
+        columns.push_back(TString{ hiveColumn.name });
     }
     return columns;
 }
 
 TString THiveMetastoreConverters::GetPartitionsFilter(const NYql::NConnector::NApi::TPredicate&) {
-    return TString{}; // TODO: push down filter
+    return TString{};   // TODO: push down filter
 }
 
 THiveMetastoreConverters::TStatistics THiveMetastoreConverters::GetStatistics(const Apache::Hadoop::Hive::TableStatsResult& statistics) {
@@ -272,12 +273,12 @@ THiveMetastoreConverters::TStatistics THiveMetastoreConverters::GetStatistics(co
         }
     }
 
-    return TStatistics{rowsCount, sizeCount};
+    return TStatistics{ rowsCount, sizeCount };
 }
 
 THiveMetastoreConverters::TStatistics THiveMetastoreConverters::GetStatistics(const std::vector<Apache::Hadoop::Hive::Partition>& partitions) {
     THiveMetastoreConverters::TStatistics statistics;
-    for (const auto& partition: partitions) {
+    for (const auto& partition : partitions) {
         auto it = partition.parameters.find("numRows");
         if (it != partition.parameters.end()) {
             statistics.Rows = statistics.Rows.GetOrElse(0) + std::stoi(it->second);
@@ -291,4 +292,4 @@ THiveMetastoreConverters::TStatistics THiveMetastoreConverters::GetStatistics(co
     return statistics;
 }
 
-}
+}   // namespace NKikimr::NExternalSource

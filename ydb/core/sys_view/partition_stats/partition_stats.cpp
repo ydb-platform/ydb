@@ -463,13 +463,21 @@ private:
         auto now = TActivationContext::Now();
         auto nowUs = now.MicroSeconds();
 
+        auto getLeaderStats = [](const auto& followerStats) -> const NKikimrSysView::TPartitionStats& {
+            // Follower stats may arrive before the first stats from the leader
+            auto leaderFound = followerStats.find(0);
+            return leaderFound != followerStats.end()
+                ? leaderFound->second
+                : NKikimrSysView::TPartitionStats::default_instance();
+        };
+
         size_t count = 0;
         auto sendEvent = MakeHolder<TEvSysView::TEvSendTopPartitions>();
         for (const auto& entry : sortedByCpu) {
             const auto& table = domainTables.Stats[entry.PathId];
             const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
             const auto& partition = followerStats.at(entry.FollowerId);
-            const auto& leaderPartition = followerStats.at(0);
+            const auto& leaderPartition = getLeaderStats(followerStats);
 
             auto* result = sendEvent->Record.AddPartitionsByCpu();
             result->SetTabletId(partition.GetTabletId());
@@ -491,7 +499,7 @@ private:
             const auto& table = domainTables.Stats[entry.PathId];
             const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
             const auto& partition = followerStats.at(entry.FollowerId);
-            const auto& leaderPartition = followerStats.at(0);
+            const auto& leaderPartition = getLeaderStats(followerStats);
 
             auto* result = sendEvent->Record.AddPartitionsByTli();
             result->SetTabletId(partition.GetTabletId());

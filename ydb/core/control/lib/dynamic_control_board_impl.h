@@ -20,6 +20,9 @@ public:
 
     void RestoreDefault(TString name);
 
+    // Restore a named control and report its value transition if it exists.
+    bool RestoreDefault(TString name, TAtomicBase& outPrevValue, TAtomicBase& outNewValue);
+
     bool SetValue(TString name, TAtomic value, TAtomic &outPrevValue);
 
     // Only for tests

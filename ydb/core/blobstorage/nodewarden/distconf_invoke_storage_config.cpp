@@ -298,6 +298,23 @@ namespace NKikimr::NStorage {
         TActivationContext::Send(handle.release());
     }
 
+    NKikimrConfig::TBridgeConfig GetMergedBridgeConfig(const NJson::TJsonValue& mainConfig,
+            const NJson::TJsonValue *storageConfig, bool allowUnknownFields) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        for (const NJson::TJsonValue *item : {&mainConfig, storageConfig}) {
+            const NJson::TJsonValue *config;
+            const NJson::TJsonValue *bridgeConfig;
+            if (item && item->GetValuePointer("config", &config) &&
+                    config->GetValuePointer("bridge_config", &bridgeConfig)) {
+                json["bridge_config"] = *bridgeConfig;
+                break; // main config has precedence, the same way as when the node starts
+            }
+        }
+        NKikimrConfig::TAppConfig appConfig;
+        NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknownFields), appConfig, false);
+        return appConfig.GetBridgeConfig();
+    }
+
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
@@ -381,6 +398,25 @@ namespace NKikimr::NStorage {
 
                 if (TString errorReason; !DeriveStorageConfig(appConfig, &config, &errorReason)) {
                     throw TExError() << "Error while deriving StorageConfig: " << errorReason;
+                }
+            }
+
+            // nodes take bridge config from the main config merged with the storage one, so piles are checked against
+            // this view whichever of the configs is replaced; bridged cluster can't lose its bridge config
+            if (config.HasClusterState()) {
+                state = "checking bridge config";
+                auto parse = [](const TString& yaml) { return NYaml::Yaml2Json(YAML::Load(yaml), true); };
+                if (!NewYaml && Self->MainConfigYaml) {
+                    main = parse(Self->MainConfigYaml);
+                }
+                const bool dedicatedStorageSection = request.GetDedicatedStorageSectionConfigMode();
+                if (!NewStorageYaml && dedicatedStorageSection && Self->StorageConfigYaml) {
+                    storage = parse(*Self->StorageConfigYaml);
+                }
+                const auto bridgeConfig = GetMergedBridgeConfig(main, dedicatedStorageSection ? &storage : nullptr,
+                    request.GetAllowUnknownFields());
+                if (auto error = UpdatePileRegistry(bridgeConfig, &config, Self->Cfg->BridgeConfig.get())) {
+                    throw TExError() << *error;
                 }
             }
         } catch (const TExError& ex) {

@@ -118,7 +118,17 @@ struct Schema: NIceDb::Schema {
         TxDependencies = 16,
         TxStates = 17,
         TxEvents = 18,
-        TableInfoV1 = 19
+        TableInfoV1 = 19,
+        CutHistoryRequests = 20
+    };
+
+    struct CutHistoryRequests: Table<(ui32)ECommonTables::CutHistoryRequests> {
+        struct Sequence: Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct RequestProto: Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Sequence>;
+        using TColumns = TableColumns<Sequence, RequestProto>;
     };
 
     // Tablet tables
@@ -779,7 +789,8 @@ struct Schema: NIceDb::Schema {
         TableInfo, TableVersionInfo, LongTxWrites, BlobsToKeep, BlobsToDelete, BlobsToDeleteWT, InsertTable, IndexGranules, IndexColumns,
         IndexCounters, SmallBlobs, OneToOneEvictedBlobs, Operations, TierBlobsDraft, TierBlobsToDelete, TierBlobsToDeleteWT, IndexIndexes,
         SharedBlobIds, BorrowedBlobIds, SourceSessions, DestinationSessions, OperationTxIds, IndexPortions, BackgroundSessions, ShardingInfo,
-        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1>;
+        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1,
+        CutHistoryRequests>;
 
     //
 

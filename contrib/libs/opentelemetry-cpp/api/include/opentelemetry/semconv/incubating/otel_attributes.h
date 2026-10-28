@@ -114,22 +114,22 @@ static constexpr const char *kOtelStatusDescription = "otel.status_description";
 namespace OtelComponentTypeValues
 {
 /**
-  The builtin SDK batching span processor
+  The built-in SDK batching span processor
  */
 static constexpr const char *kBatchingSpanProcessor = "batching_span_processor";
 
 /**
-  The builtin SDK simple span processor
+  The built-in SDK simple span processor
  */
 static constexpr const char *kSimpleSpanProcessor = "simple_span_processor";
 
 /**
-  The builtin SDK batching log record processor
+  The built-in SDK batching log record processor
  */
 static constexpr const char *kBatchingLogProcessor = "batching_log_processor";
 
 /**
-  The builtin SDK simple log record processor
+  The built-in SDK simple log record processor
  */
 static constexpr const char *kSimpleLogProcessor = "simple_log_processor";
 
@@ -169,7 +169,7 @@ static constexpr const char *kOtlpHttpLogExporter = "otlp_http_log_exporter";
 static constexpr const char *kOtlpHttpJsonLogExporter = "otlp_http_json_log_exporter";
 
 /**
-  The builtin SDK periodically exporting metric reader
+  The built-in SDK periodically exporting metric reader
  */
 static constexpr const char *kPeriodicMetricReader = "periodic_metric_reader";
 

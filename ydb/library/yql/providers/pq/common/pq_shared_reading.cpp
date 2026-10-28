@@ -12,4 +12,4 @@ bool HasSharedReading(const ::google::protobuf::Any& maybePqTopicSource) {
     return source.GetSharedReading();
 }
 
-} // namespace NYql
+}   // namespace NYql

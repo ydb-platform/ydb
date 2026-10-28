@@ -1,11 +1,10 @@
-#include "manager.h"
 #include "checker.h"
+#include "manager.h"
 #include "object.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -13,16 +12,19 @@ namespace {
 
 using namespace NResourcePool;
 
-NMetadata::NInternal::TTableRecord GetResourcePoolClassifierRecord(const NYql::TObjectSettingsImpl& settings, const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context) {
+NMetadata::NInternal::TTableRecord GetResourcePoolClassifierRecord(
+    const NYql::TObjectSettingsImpl& settings, const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context) {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(context.GetExternalData().GetDatabaseId()));
+    result.SetColumn(
+        TResourcePoolClassifierConfig::TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(context.GetExternalData().GetDatabaseId()));
     result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Name, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     return result;
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
+NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::DoBuildPatchFromSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
     try {
         switch (context.GetActivityType()) {
             case EActivityType::Create:
@@ -36,11 +38,15 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
                 return TConclusionStatus::Fail("Undefined operation for RESOURCE_POOL_CLASSIFIER object");
         }
     } catch (...) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL_CLASSIFIER modification operation: " << CurrentExceptionMessage());
+        return TConclusionStatus::Fail(
+            TStringBuilder()
+            << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL_CLASSIFIER modification operation: "
+            << CurrentExceptionMessage());
     }
 }
 
-NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::FillResourcePoolClassifierInfo(const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) const {
+NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::FillResourcePoolClassifierInfo(
+    const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) const {
     NMetadata::NInternal::TTableRecord result = GetResourcePoolClassifierRecord(settings, context);
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
@@ -75,7 +81,8 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         static const TString extraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
         const auto& name = settings.GetObjectId();
         if (const auto brokenAt = PathPartBrokenAt(name, extraPathSymbolsAllowed); brokenAt != name.end()) {
-            return TConclusionStatus::Fail(TStringBuilder()<< "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
+            return TConclusionStatus::Fail(
+                TStringBuilder() << "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
         }
 
         if (auto error = classifierSettings.Validate()) {
@@ -104,11 +111,14 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
     return result;
 }
 
-NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::FillDropInfo(const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) const {
+NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManager::FillDropInfo(
+    const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) const {
     return GetResourcePoolClassifierRecord(settings, context);
 }
 
-void TResourcePoolClassifierManager::DoPrepareObjectsBeforeModification(std::vector<TResourcePoolClassifierConfig>&& patchedObjects, NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller, const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) const {
+void TResourcePoolClassifierManager::DoPrepareObjectsBeforeModification(std::vector<TResourcePoolClassifierConfig>&& patchedObjects,
+    NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr controller,
+    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& alterContext) const {
     auto* actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
         controller->OnPreparationProblem("This place needs an actor system. Please contact internal support");
@@ -118,4 +128,4 @@ void TResourcePoolClassifierManager::DoPrepareObjectsBeforeModification(std::vec
     actorSystem->Register(CreateResourcePoolClassifierPreparationActor(std::move(patchedObjects), std::move(controller), context, alterContext));
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -1,23 +1,22 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <fmt/format.h>
 #include <library/cpp/testing/hook/hook.h>
-
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/string/escape.h>
 #include <util/system/env.h>
-
-#include <fmt/format.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -42,7 +41,8 @@ TString Exec(const TString& cmd) {
 TString GetExternalPort(const TString& service, const TString& port) {
     auto dockerComposeBin = BinaryPath("library/recipes/docker_compose/bin/docker-compose");
     auto composeFileYml = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "docker-compose.yml");
-    auto result = StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
+    auto result =
+        StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
     return result ? Strip(result.back()) : TString{};
 }
 
@@ -57,8 +57,10 @@ void WaitBucket(std::shared_ptr<TKikimrRunner> kikimr, const TString& externalDa
                     value Utf8 NOT NULL
                 )
             )
-        )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        )", "external_source"_a = externalDataSourceName))
+                                            .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
         UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
@@ -98,10 +100,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 AWS_REGION="ru-central-1"
             );
             GRANT ALL ON `{external_source}` TO `root1@builtin`;
-            )",
-            "external_source"_a = externalDataSourceName,
-            "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/"
-            );
+            )", "external_source"_a = externalDataSourceName, "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/");
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         WaitBucket(kikimr, externalDataSourceName);
@@ -115,8 +114,10 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                         value Utf8 NOT NULL
                     )
                 )
-            )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            )", "external_source"_a = externalDataSourceName))
+                                                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
             UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
@@ -144,8 +145,10 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                         value Utf8 NOT NULL
                     )
                 )
-            )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            )", "external_source"_a = externalDataSourceName))
+                                                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
             UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
@@ -175,17 +178,17 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                             value Utf8 NOT NULL
                         )
                     )
-                )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+                )", "external_source"_a = externalDataSourceName))
+                                                    .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
                 UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
-                NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+                NYdb::NQuery::TScriptExecutionOperation readyOp =
+                    WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(
-                    readyOp.Status().GetIssues().ToString(),
-                    "secrets `/Root/id`, `/Root/key` not found",
-                    readyOp.Status().GetIssues().ToString()
-                );
+                UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(), "secrets `/Root/id`, `/Root/key` not found",
+                    readyOp.Status().GetIssues().ToString());
             }
             {
                 const TString query = R"(
@@ -204,11 +207,14 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                             value Utf8 NOT NULL
                         )
                     )
-                )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+                )", "external_source"_a = externalDataSourceName))
+                                                    .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
                 UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
-                NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+                NYdb::NQuery::TScriptExecutionOperation readyOp =
+                    WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
                 TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
                 UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
@@ -232,11 +238,14 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                             value Utf8 NOT NULL
                         )
                     )
-                )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+                )", "external_source"_a = externalDataSourceName))
+                                                    .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
                 UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
-                NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+                NYdb::NQuery::TScriptExecutionOperation readyOp =
+                    WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
                 TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
                 UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
@@ -256,15 +265,17 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
                     INSERT INTO `{external_source}`.`exp_folder/` WITH (FORMAT = "csv_with_names")
                     SELECT "Hello, world!" AS Data
-                )", "external_source"_a = externalDataSourceName)).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+                )", "external_source"_a = externalDataSourceName))
+                                                    .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
                 UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
-                NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
-                UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());             
+                NYdb::NQuery::TScriptExecutionOperation readyOp =
+                    WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+                UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
             }
         }
-        
     }
 
     Y_UNIT_TEST(TestInsertEscaping) {
@@ -285,10 +296,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 AWS_SECRET_ACCESS_KEY_SECRET_PATH="key",
                 AWS_REGION="ru-central-1"
             );
-            )",
-            "external_source"_a = externalDataSourceName,
-            "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/"
-            );
+            )", "external_source"_a = externalDataSourceName, "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/");
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -311,8 +319,10 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                         value Utf8 NOT NULL
                     )
                 )
-            )", "external_source"_a = externalDataSourceName, "path"_a = path)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            )", "external_source"_a = externalDataSourceName, "path"_a = path))
+                                                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
             UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
@@ -328,8 +338,10 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                         value Utf8 NOT NULL
                     )
                 )
-            )", "external_source"_a = externalDataSourceName, "path"_a = path)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            )", "external_source"_a = externalDataSourceName, "path"_a = path))
+                                                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
             UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
@@ -355,15 +367,18 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                     `with_infer`="true",
                     `data.datetime.format`="%Y-%m-%dT%H-%M"
                 )
-            )", "external_source"_a = externalDataSourceName, "path"_a = path)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            )", "external_source"_a = externalDataSourceName, "path"_a = path))
+                                                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
             UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(), "parameter is not supported with type inference: data.datetime.format", readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(),
+                "parameter is not supported with type inference: data.datetime.format", readyOp.Status().GetIssues().ToString());
         }
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

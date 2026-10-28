@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <type_traits>
 #include <utility>
 
@@ -430,8 +430,11 @@ public:
    *
    * @param severity severity of the log
    * @param event_id event identifier of the log
-   * @param format an utf-8 string following https://messagetemplates.org/
+   * @param format a UTF-8 string stored as the log record body
    * @param attributes key value pairs of the log
+   *
+   * @note The @p format string is not interpolated with values from
+   *       @p attributes. Pass structured data through @p attributes.
    */
   virtual void Log(Severity severity,
                    const EventId &event_id,

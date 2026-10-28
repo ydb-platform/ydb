@@ -30,16 +30,13 @@ TIntrusivePtr<IOperator> TRewriteRightJoinRule::SimpleMatchAndApply(const TIntru
     }
 
     // Swap join keys
-    TVector<TJoinKey> newJoinKeys;
-    for (const auto& joinKey : join->JoinKeys) {
-        const auto& leftKey = joinKey.Left;
-        const auto& rightKey = joinKey.Right;
-        newJoinKeys.emplace_back(rightKey, leftKey, joinKey.EqualNulls);
+    TJoinIUs newJoinKeys;
+    for (const auto& [leftKey, rightKey, equalNulls] : join->JoinKeys.Items()) {
+        newJoinKeys.Add({rightKey, leftKey, equalNulls});
     }
 
     // Swap arguments
-    return MakeIntrusive<TOpJoin>(join->GetRightInput(), join->GetLeftInput(), join->Pos, newJoinKind, newJoinKeys,
-                                  join->JoinFilters);
+    return MakeIntrusive<TOpJoin>(join->GetRightInput(), join->GetLeftInput(), join->Pos, newJoinKind, std::move(newJoinKeys), join->JoinFilters);
 }
 
 }

@@ -14,7 +14,7 @@ By default, {{ ydb-short-name }} splits a table partition when it reaches 2 GB i
 
 A [scheme shard](../../../concepts/glossary.md#scheme-shard) takes approximately 15 seconds to assess whether a data shard requires splitting. By default, the CPU usage threshold for splitting a data shard is set at 50%.
 
-When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. TThe corresponding data shards are also consolidated into a single data shard to manage the new partition.
+When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. The corresponding data shards are also consolidated into a single data shard to manage the new partition.
 
 For merging to occur, data shards must have existed for at least 10 minutes, and their CPU usage over the last hour must not exceed 35%.
 

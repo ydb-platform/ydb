@@ -1,4 +1,6 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/tablet_flat/flat_mem_snapshot.h>
+#include <ydb/core/tablet_flat/flat_redo_player.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 
@@ -1075,6 +1077,99 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(41).ReadVer({ 1, 50 }).Select(table1).HasN(1_u64, 11_u64, 12_u64);
         me.To(42).ReadVer({ 1, 51 }).Select(table1).HasN(1_u64, 21_u64, 22_u64);
+    }
+
+    size_t CountRedoEvents(const TString& redo, NRedo::ERedo event) {
+        size_t count = 0;
+        NRedo::TReader reader(redo);
+        while (auto chunk = reader.Next()) {
+            if (reinterpret_cast<const NRedo::TChunk*>(chunk.data())->Event == event) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    // The least ABI evolution required to read the redo chunk, as written in its EvBegin
+    ui32 GetRedoRequiredEvolution(const TString& redo) {
+        NRedo::TReader reader(redo);
+        auto chunk = reader.Next();
+        UNIT_ASSERT(chunk);
+        UNIT_ASSERT(reinterpret_cast<const NRedo::TChunk*>(chunk.data())->Event == NRedo::ERedo::Begin);
+        UNIT_ASSERT(chunk.size() >= sizeof(NRedo::TEvBegin_v1));
+        return reinterpret_cast<const NRedo::TEvBegin_v1*>(chunk.data())->Tail;
+    }
+
+    // Savepoint seq nums of every update in the chain of each key, newest first
+    THashMap<ui64, TVector<ui32>> CollectSavepointSeqNums(TDbExec& me, ui32 table) {
+        me.Snap(table);
+
+        THashMap<ui64, TVector<ui32>> result;
+        auto subset = me->Subset(table, TEpoch::Max(), { }, { });
+        for (const auto& mem : subset->Frozen) {
+            auto it = mem.Snapshot.Iterator();
+            for (it.SeekFirst(); it.IsValid(); it.Next()) {
+                auto& chain = result[it.GetKey()[0].AsValue<ui64>()];
+                for (const auto* update = it.GetValue(); update; update = update->Next) {
+                    chain.push_back(update->SavepointSeqNum);
+                }
+            }
+        }
+        return result;
+    }
+
+    Y_UNIT_TEST(UncommittedChangesSavepointSeqNum) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        // Without savepoint seq nums redo chunks stay readable by older versions
+        me.To(13).Begin();
+        me.To(14).WriteTx(345).PutN(table1, 3_u64, 14_u64, ECellOp::Empty);
+        me.To(15).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTxSavepointSeqNum), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), ui32(ECompatibility::Head));
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(22).WriteTx(123, 5).PutN(table1, 1_u64, ECellOp::Empty, 22_u64);
+        me.To(23).WriteTx(123, 7).PutN(table1, 2_u64, 23_u64, ECellOp::Empty);
+        me.To(24).Commit();
+
+        // The new redo event is only written for a non-zero savepoint seq num
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTx), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::UpdateTxSavepointSeqNum), 2u);
+
+        // A redo chunk with savepoint seq nums requires a newer evolution, so older versions
+        // fail on it with an explicit ABI incompatibility
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
+
+        const auto check = [&]() {
+            auto seqNums = CollectSavepointSeqNums(me, table1);
+            UNIT_ASSERT_VALUES_EQUAL(seqNums.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(seqNums[1], (TVector<ui32>{ 5, 0 }));
+            UNIT_ASSERT_VALUES_EQUAL(seqNums[2], (TVector<ui32>{ 7 }));
+            UNIT_ASSERT_VALUES_EQUAL(seqNums[3], (TVector<ui32>{ 0 }));
+        };
+
+        check();
+        me.To(30).Replay(EPlay::Boot);
+        check();
+        me.To(31).Replay(EPlay::Redo);
+        check();
+
+        // Savepoint seq nums don't affect visibility yet
+        me.To(40).Select(table1).NoKeyN(1_u64).NoKeyN(2_u64);
+        me.To(41).ReadTx(123).Select(table1).HasN(1_u64, 21_u64, 22_u64).HasN(2_u64, 23_u64, 10005_u64);
     }
 
     Y_UNIT_TEST(ReplayNewTable) {

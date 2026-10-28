@@ -3,7 +3,6 @@
 #include <ydb/library/yql/providers/pq/common/pq_shared_reading.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 bool UsesSharedReading(const NKqpProto::TKqpPhyQuery& phyQuery) {
@@ -26,4 +25,4 @@ bool UsesSharedReading(const NKqpProto::TKqpPhyQuery& phyQuery) {
     return false;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -8,15 +8,14 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -25,7 +24,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TResourcesCleanerActor : public TBaseComputeActor<TResourcesCleanerActor> {
+class TResourcesCleanerActor: public TBaseComputeActor<TResourcesCleanerActor> {
 public:
     enum ERequestType {
         RT_FORGET_OPERATION,
@@ -33,9 +32,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("ForgetOperation") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests =
+            CreateArray<RT_MAX, TComputeRequestCountersPtr>({ { MakeIntrusive<TComputeRequestCounters>("ForgetOperation") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -43,7 +41,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -53,7 +51,8 @@ public:
         }
     };
 
-    TResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+        const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "ResourcesCleaner")
         , Params(params)
         , Parent(parent)
@@ -61,12 +60,15 @@ public:
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_RESOURCES_CLEANER_ACTOR";
 
     void SendForgetOperation(const TDuration& delay = TDuration::Zero()) {
-        Register(new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), delay, SelfId(), Connector, OperationId));
+        Register(
+            new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(
+                Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
     void Start() {
@@ -130,12 +132,9 @@ private:
     NKikimr::TBackoffTimer BackoffTimer;
 };
 
-std::unique_ptr<NActors::IActor> CreateResourcesCleanerActor(const TRunActorParams& params,
-                                                             const TActorId& parent,
-                                                             const TActorId& connector,
-                                                             const NYdb::TOperation::TOperationId& operationId,
-                                                             const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+    const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TResourcesCleanerActor>(params, parent, connector, operationId, queryCounters);
 }
 
-}
+}   // namespace NFq

@@ -10,6 +10,8 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
+    using TPageOffset = NPage::TPageOffset;
+
     enum class EUsage : ui8 {
         None    = 0,
         Seen    = 1,    /* Page has been used by reference  */
@@ -24,10 +26,14 @@ namespace NFwd {
     };
 
     struct TPage {
-        TPage(TPageId pageId, ui64 size, ui16 tag, TPageId refer)
-            : Size(size), PageId(pageId), Refer(refer), Tag(tag)
+        TPage(TPageOffset offset, ui64 size, ui16 tag, TPageId refer, ui32 crc32 = 0)
+            : Size(size), Offset(offset), Refer(refer), Crc32(crc32), Tag(tag)
         {
+        }
 
+        TPage(NTable::NPage::TPageLocation loc, ui16 tag, TPageId refer)
+            : Size(loc.Size), Offset(loc.Offset), Refer(refer), Crc32(loc.Crc32), Tag(tag)
+        {
         }
 
         ~TPage()
@@ -36,7 +42,7 @@ namespace NFwd {
 
         explicit operator bool() const
         {
-            return bool(Data) && PageId != Max<ui32>();
+            return bool(Data) && bool(Offset);
         }
 
         bool Ready() const noexcept
@@ -44,9 +50,9 @@ namespace NFwd {
             return Fetch == EFetch::None || Fetch == EFetch::Done;
         }
 
-        bool operator<(TPageId pageId) const
+        bool operator<(TPageOffset offset) const
         {
-            return PageId < pageId;
+            return Offset < offset;
         }
 
         const TSharedData* Plain() const noexcept
@@ -58,8 +64,8 @@ namespace NFwd {
         {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
-            if (PageId != page.PageId) {
-                Y_TABLET_ERROR("Settling page with different reference number");
+            if (Offset != page.Location.Offset) {
+                Y_TABLET_ERROR("Settling page with different reference offset");
             } else if (Size != page.Data.size()) {
                 Y_TABLET_ERROR("Requested and obtained page sizes are not the same");
             } else if (was == EFetch::Drop) {
@@ -74,9 +80,9 @@ namespace NFwd {
             return Data.size();
         }
 
-        const TSharedData* Touch(TPageId pageId, TStat &stat)
+        const TSharedData* Touch(TPageOffset offset, TStat &stat)
         {
-            if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
+            if (Offset != offset || (!Data && Fetch == EFetch::Done)) {
                 Y_TABLET_ERROR("Touching page that doesn't fit to this action");
             } else {
                 auto to = Fetch == EFetch::None ? EUsage::Seen : EUsage::Keep;
@@ -93,7 +99,7 @@ namespace NFwd {
             Fetch = Max(Fetch, EFetch::Drop);
 
             SharedPageRef.Drop();
-            
+
             return std::exchange(Data, { });
         }
 
@@ -103,8 +109,9 @@ namespace NFwd {
         }
 
         const ui64 Size = 0;
-        const ui32 PageId = Max<ui32>();
+        const TPageOffset Offset;
         const ui32 Refer = 0;
+        const ui32 Crc32 = 0;
         const ui16 Tag  = Max<ui16>();
         EUsage Usage    = EUsage::None;
         EFetch Fetch    = EFetch::None;

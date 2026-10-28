@@ -37,6 +37,7 @@
 #include "src/core/lib/event_engine/utils.h"
 #include "src/core/lib/event_engine/windows/grpc_polled_fd_windows.h"
 #include "src/core/lib/event_engine/windows/iocp.h"
+#include "src/core/lib/event_engine/windows/native_windows_dns_resolver.h"
 #include "src/core/lib/event_engine/windows/windows_endpoint.h"
 #include "src/core/lib/event_engine/windows/windows_engine.h"
 #include "src/core/lib/event_engine/windows/windows_listener.h"
@@ -204,17 +205,17 @@ WindowsEventEngine::WindowsDNSResolver::WindowsDNSResolver(
 void WindowsEventEngine::WindowsDNSResolver::LookupHostname(
     LookupHostnameCallback on_resolve, y_absl::string_view name,
     y_absl::string_view default_port) {
-  ares_resolver_->LookupHostname(name, default_port, std::move(on_resolve));
+  ares_resolver_->LookupHostname(std::move(on_resolve), name, default_port);
 }
 
 void WindowsEventEngine::WindowsDNSResolver::LookupSRV(
     LookupSRVCallback on_resolve, y_absl::string_view name) {
-  ares_resolver_->LookupSRV(name, std::move(on_resolve));
+  ares_resolver_->LookupSRV(std::move(on_resolve), name);
 }
 
 void WindowsEventEngine::WindowsDNSResolver::LookupTXT(
     LookupTXTCallback on_resolve, y_absl::string_view name) {
-  ares_resolver_->LookupTXT(name, std::move(on_resolve));
+  ares_resolver_->LookupTXT(std::move(on_resolve), name);
 }
 
 #endif  // GRPC_ARES == 1 && defined(GRPC_WINDOWS_SOCKET_ARES_EV_DRIVER)
@@ -233,10 +234,9 @@ WindowsEventEngine::GetDNSResolver(
   return std::make_unique<WindowsEventEngine::WindowsDNSResolver>(
       std::move(*ares_resolver));
 #else   // GRPC_ARES == 1 && defined(GRPC_WINDOWS_SOCKET_ARES_EV_DRIVER)
-  // TODO(yijiem): Implement a basic A/AAAA-only native resolver in
-  // WindowsEventEngine.
-  (void)options;
-  grpc_core::Crash("unimplemented");
+  GRPC_EVENT_ENGINE_DNS_TRACE(
+      "WindowsEventEngine:%p creating NativeWindowsDNSResolver", this);
+  return std::make_unique<NativeWindowsDNSResolver>(shared_from_this());
 #endif  // GRPC_ARES == 1 && defined(GRPC_WINDOWS_SOCKET_ARES_EV_DRIVER)
 }
 

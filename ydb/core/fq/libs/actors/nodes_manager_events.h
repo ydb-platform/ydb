@@ -8,7 +8,7 @@ namespace NFq {
 
 struct TEvNodesManager {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvGetNodesRequest = YqEventSubspaceBegin(TYqEventSubspace::NodesManager),
         EvGetNodesResponse,
         EvEnd,
@@ -16,12 +16,11 @@ struct TEvNodesManager {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(TYqEventSubspace::NodesManager), "All events must be in their subspace");
 
-    struct TEvGetNodesRequest : NActors::TEventLocal<TEvGetNodesRequest, EvGetNodesRequest> {
-    };
+    struct TEvGetNodesRequest: NActors::TEventLocal<TEvGetNodesRequest, EvGetNodesRequest> {};
 
-    struct TEvGetNodesResponse : NActors::TEventLocal<TEvGetNodesResponse, EvGetNodesResponse> {
+    struct TEvGetNodesResponse: NActors::TEventLocal<TEvGetNodesResponse, EvGetNodesResponse> {
         std::vector<ui32> NodeIds;
     };
 };
 
-} // namespace NFq
+}   // namespace NFq

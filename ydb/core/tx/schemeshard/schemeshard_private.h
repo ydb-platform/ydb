@@ -58,6 +58,8 @@ namespace TEvPrivate {
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
         EvPeriodicTableStatsParsed,
+        EvRevisitSplitMerge,
+        EvExportCompletionUploadResult,
         EvEnd
     };
 
@@ -191,6 +193,20 @@ namespace TEvPrivate {
         {}
     };
 
+    struct TEvExportCompletionUploadResult: public TEventLocal<TEvExportCompletionUploadResult, EvExportCompletionUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx; // Max<ui32>() denotes the operation marker.
+        const bool Success;
+        const TString Error;
+
+        TEvExportCompletionUploadResult(ui64 exportId, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(exportId)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
         TEvServerlessStorageBilling()
         {}
@@ -269,6 +285,12 @@ namespace TEvPrivate {
 
     struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
         TEvPersistTableStats() = default;
+    };
+
+    // Self-event: a split/merge slot may have freed -- re-evaluate deferred candidates fairly
+    // (round-robin across tables). At most one is in flight (coalesced via SplitMergeRevisitScheduled).
+    struct TEvRevisitSplitMerge: public TEventLocal<TEvRevisitSplitMerge, EvRevisitSplitMerge> {
+        TEvRevisitSplitMerge() = default;
     };
 
     struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {

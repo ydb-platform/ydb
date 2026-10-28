@@ -139,7 +139,7 @@ void PeriodicExportingMetricReader::DoBackgroundWork()
         is_force_wakeup_background_worker_.store(false, std::memory_order_release);
         return true;
       }
-      return IsShutdown();
+      return is_stop_requested_.load(std::memory_order_acquire);
     });
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
@@ -148,7 +148,7 @@ void PeriodicExportingMetricReader::DoBackgroundWork()
       worker_thread_instrumentation_->AfterWait();
     }
 #endif /* ENABLE_THREAD_INSTRUMENTATION_PREVIEW */
-  } while (IsShutdown() != true);
+  } while (!is_stop_requested_.load(std::memory_order_acquire));
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
   if (worker_thread_instrumentation_ != nullptr)
@@ -212,7 +212,11 @@ bool PeriodicExportingMetricReader::OnForceFlush(std::chrono::microseconds timeo
   std::uint64_t current_sequence =
       force_flush_pending_sequence_.fetch_add(1, std::memory_order_release) + 1;
   auto break_condition = [this, current_sequence]() {
-    if (IsShutdown())
+    // Give up rather than wait if a shutdown is already in progress -- checking
+    // is_stop_requested_ here (rather than IsShutdown()) matters because OnShutDown() runs
+    // its own internal OnForceFlush() drain, and only signals is_stop_requested_ afterwards,
+    // before MetricReader::Shutdown() marks the reader as shut down.
+    if (is_stop_requested_.load(std::memory_order_acquire))
     {
       return true;
     }
@@ -221,7 +225,12 @@ bool PeriodicExportingMetricReader::OnForceFlush(std::chrono::microseconds timeo
     if (force_flush_pending_sequence_.load(std::memory_order_acquire) >
         force_flush_notified_sequence_.load(std::memory_order_acquire))
     {
-      is_force_wakeup_background_worker_.store(true, std::memory_order_release);
+      {
+        // Acquiring cv_m_ guarantees that the worker thread either is not currently waiting on cv_,
+        // or the notify below will cause it to re-check the wait condition.
+        std::lock_guard<std::mutex> cv_guard{cv_m_};
+        is_force_wakeup_background_worker_.store(true, std::memory_order_release);
+      }
       cv_.notify_all();
     }
     return force_flush_notified_sequence_.load(std::memory_order_acquire) >= current_sequence;
@@ -281,12 +290,56 @@ bool PeriodicExportingMetricReader::OnForceFlush(std::chrono::microseconds timeo
 
 bool PeriodicExportingMetricReader::OnShutDown(std::chrono::microseconds timeout) noexcept
 {
-  if (worker_thread_.joinable())
+  const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+  const bool has_worker_thread                      = worker_thread_.joinable();
+  bool flush_status                                 = true;
+
+  if (has_worker_thread)
   {
-    cv_.notify_all();
+    // Reuses OnForceFlush()'s existing wake-the-worker-and-wait machinery (with its correct
+    // timeout accounting) to drain any metrics recorded since the last periodic tick, so they
+    // aren't silently dropped on shutdown. This must run while the worker thread is still alive
+    // and looping normally -- i.e. before is_stop_requested_ is set below, since
+    // OnForceFlush()'s break_condition treats that as "shutting down, nothing to do" and bails
+    // out immediately.
+    flush_status = OnForceFlush(timeout);
+  }
+
+  {
+    // Set even when no worker thread was ever started -- OnInitialized() only runs once a
+    // producer is registered -- so that a later ForceFlush() sees the shutdown and gives up,
+    // instead of waiting to be serviced by a worker that will never run (indefinitely, with the
+    // default timeout).
+    //
+    // Acquiring cv_m_ guarantees that the next time the worker thread checks the wait condition
+    // on cv_ (either from notify below or any other reason) it will see is_stop_requested_
+    // return true.
+    std::lock_guard<std::mutex> cv_guard{cv_m_};
+    is_stop_requested_.store(true, std::memory_order_release);
+  }
+  cv_.notify_all();
+
+  if (has_worker_thread)
+  {
     worker_thread_.join();
   }
-  return exporter_->Shutdown(timeout);
+
+  // The exporter only gets what is left of the caller's budget after the flush and join above,
+  // rather than a second full one. `microseconds::max()`, and a non-positive timeout, both mean
+  // "no timeout" by the convention used throughout this class (see OnForceFlush above), and are
+  // passed on untouched. An exhausted budget is deliberately clamped to the smallest positive
+  // value rather than allowed to reach zero, since zero would otherwise be read as that same
+  // "wait indefinitely" signal.
+  std::chrono::microseconds exporter_timeout = timeout;
+  if (timeout != (std::chrono::microseconds::max)() && timeout > std::chrono::microseconds::zero())
+  {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - start);
+    exporter_timeout = (elapsed < timeout) ? (timeout - elapsed) : std::chrono::microseconds(1);
+  }
+
+  const bool exporter_status = exporter_->Shutdown(exporter_timeout);
+  return flush_status && exporter_status;
 }
 
 }  // namespace metrics

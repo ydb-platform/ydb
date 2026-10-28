@@ -9,6 +9,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    compute
     control_plane_storage
     http_api
     mem_alloc

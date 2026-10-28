@@ -1,4 +1,5 @@
-from typing import Final, Literal as L
+from typing import Final
+from typing import Literal as L
 
 import numpy as np
 
@@ -95,6 +96,5 @@ lagcompanion: _FuncCompanion[L["lagcompanion"]]
 lagroots: _FuncRoots[L["lagroots"]]
 laggauss: _FuncGauss[L["laggauss"]]
 lagweight: _FuncWeight[L["lagweight"]]
-
 
 class Laguerre(ABCPolyBase[L["L"]]): ...

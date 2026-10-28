@@ -1,9 +1,9 @@
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -13,15 +13,14 @@ using namespace NYdb;
 namespace {
 
 const IQueryClassifier::TReject& AssertReject(const IQueryClassifier::TPreCompileClassifyResult& result) {
-    UNIT_ASSERT_C(std::holds_alternative<IQueryClassifier::TReject>(result),
-        TStringBuilder() << "Expected TReject, got variant index " << result.index());
+    UNIT_ASSERT_C(
+        std::holds_alternative<IQueryClassifier::TReject>(result), TStringBuilder() << "Expected TReject, got variant index " << result.index());
     return std::get<IQueryClassifier::TReject>(result);
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierActionReject) {
-
     Y_UNIT_TEST(ShouldRejectWhenActionSet) {
         TClassifyTestCase tc;
         tc.ClassifierAction = NResourcePool::EClassifierAction::Reject;
@@ -53,13 +52,13 @@ Y_UNIT_TEST_SUITE(TQueryClassifierActionReject) {
 }
 
 Y_UNIT_TEST_SUITE(ActionRejectDdl) {
-
     Y_UNIT_TEST(TestActionRejectClassifier) {
         auto ydb = TYdbSetupSettings().Create();
 
         const TString& userSID = "test@user";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                                 << R"(` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL CLASSIFIER cl_reject WITH (
                 MEMBER_NAME=")" << userSID << R"(",
                 ACTION="reject",
@@ -71,9 +70,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier reject", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
-                && errorString.Contains("Request is rejected by classifier 'cl_reject'")
-                && errorString.Contains("rank=100");
+            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED &&
+                   errorString.Contains("Request is rejected by classifier 'cl_reject'") && errorString.Contains("rank=100");
         });
     }
 
@@ -82,7 +80,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
 
         const TString& userSID = "test@user";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                                 << R"(` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL CLASSIFIER cl_reject_ci WITH (
                 MEMBER_NAME=")" << userSID << R"(",
                 ACTION="REJECT",
@@ -94,8 +93,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier reject (case-insensitive action)", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
-                && errorString.Contains("Request is rejected by classifier 'cl_reject_ci'");
+            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED &&
+                   errorString.Contains("Request is rejected by classifier 'cl_reject_ci'");
         });
     }
 
@@ -104,7 +103,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
 
         const TString& userSID = "test@user";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                                 << R"(` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL CLASSIFIER cl_reject_no_pool WITH (
                 MEMBER_NAME=")" << userSID << R"(",
                 ACTION="reject",
@@ -116,8 +116,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier reject (no pool)", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
-                && errorString.Contains("Request is rejected by classifier 'cl_reject_no_pool'");
+            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED &&
+                   errorString.Contains("Request is rejected by classifier 'cl_reject_no_pool'");
         });
     }
 
@@ -138,7 +138,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
 
         auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER cl_bad_action WITH (
-                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID
+                                                         << R"(",
                 ACTION="not_a_real_action"
             );
         )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
@@ -150,14 +151,14 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
 
         auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER cl_reject_conflict WITH (
-                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID
+                                                         << R"(",
                 ACTION="reject",
                 RANK=100
             );
         )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
-            "Property resource_pool must not be set when action='reject'");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Property resource_pool must not be set when action='reject'");
     }
 
     Y_UNIT_TEST(TestAlterActionRejectWithResourcePoolConflict) {
@@ -165,9 +166,11 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
 
         const TString& userSID = "test@user";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                                 << R"(` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL CLASSIFIER cl_alter_conflict WITH (
-                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID
+                                                 << R"(",
                 MEMBER_NAME=")" << userSID << R"(",
                 RANK=100
             );
@@ -176,12 +179,12 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
             ALTER RESOURCE POOL CLASSIFIER cl_alter_conflict SET (
                 ACTION="reject",
-                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"("
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID
+                                                         << R"("
             );
         )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(),
-            "Property resource_pool must not be set when action='reject'");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Property resource_pool must not be set when action='reject'");
     }
 
     Y_UNIT_TEST(TestAlterSetActionRejectAlone) {
@@ -190,7 +193,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         const TString& userSID = "test@user";
         const TString& poolId = "prior_pool";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                                 << R"(` TO `)" << userSID << R"(`;
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=10
             );
@@ -208,8 +212,8 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier reject (via alter)", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
-                && errorString.Contains("Request is rejected by classifier 'cl_alter_to_reject'");
+            return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED &&
+                   errorString.Contains("Request is rejected by classifier 'cl_alter_to_reject'");
         });
 
         // Verify the ALTER also cleared resource_pool from the stored config for Reject classifiers.
@@ -220,10 +224,9 @@ Y_UNIT_TEST_SUITE(ActionRejectDdl) {
         UNIT_ASSERT_VALUES_EQUAL(sysview.GetStatus(), EStatus::SUCCESS);
         NYdb::TResultSetParser row(sysview.GetResultSet(0));
         UNIT_ASSERT(row.TryNextRow());
-        UNIT_ASSERT_C(!row.ColumnParser("ResourcePool").GetOptionalUtf8().has_value(),
-            "ResourcePool must be NULL for Reject classifiers");
+        UNIT_ASSERT_C(!row.ColumnParser("ResourcePool").GetOptionalUtf8().has_value(), "ResourcePool must be NULL for Reject classifiers");
         UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("Action").GetOptionalUtf8(), "reject");
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

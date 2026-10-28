@@ -502,6 +502,9 @@ class TRealBlockDevice : public IBlockDevice {
             }
 
             const ui64 opSize = op->GetSize();
+            if (opSize && event->Result == EIoResult::Ok) {
+                Device.Mon.DeviceIoCompletionGeneration->fetch_add(1, std::memory_order_relaxed);
+            }
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
             Device.DecrementMonInFlight(op->GetType(), opSize);

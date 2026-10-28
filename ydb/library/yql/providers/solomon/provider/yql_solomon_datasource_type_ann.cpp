@@ -1,11 +1,11 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include <util/string/strip.h>
 #include <util/string/split.h>
+#include <util/string/strip.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
@@ -16,25 +16,26 @@ namespace {
 bool ValidateDatetimeFormat(TStringBuf settingName, const TExprNode& settingValue, TExprContext& ctx) {
     TInstant unused;
     if (!TInstant::TryParseIso8601(settingValue.Content(), unused)) {
-        ctx.AddError(TIssue(ctx.GetPosition(settingValue.Pos()), TStringBuilder() << settingName << " must be correct datetime, e.g. 2010-03-27T21:27:00Z, but has " << settingValue.Content()));
+        ctx.AddError(TIssue(ctx.GetPosition(settingValue.Pos()),
+            TStringBuilder() << settingName << " must be correct datetime, e.g. 2010-03-27T21:27:00Z, but has " << settingValue.Content()));
         return false;
     }
     return true;
 }
 
-}
+}   // namespace
 
-class TSolomonDataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TSolomonDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     explicit TSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
         using TSelf = TSolomonDataSourceTypeAnnotationTransformer;
-        AddHandler({TSoReadObject::CallableName()}, Hndl(&TSelf::HandleRead));
-        AddHandler({TSoObject::CallableName()}, Hndl(&TSelf::HandleSoObject));
-        AddHandler({TSoSourceSettings::CallableName()}, Hndl(&TSelf::HandleSoSourceSettings));
-        AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
+        AddHandler({ TSoReadObject::CallableName() }, Hndl(&TSelf::HandleRead));
+        AddHandler({ TSoObject::CallableName() }, Hndl(&TSelf::HandleSoObject));
+        AddHandler({ TSoSourceSettings::CallableName() }, Hndl(&TSelf::HandleSoSourceSettings));
+        AddHandler({ TCoConfigure::CallableName() }, Hndl(&TSelf::HandleConfig));
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -52,7 +53,8 @@ public:
         }
 
         if (!TCoSecureParam::Match(input->Child(TSoSourceSettings::idx_Token))) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TSoSourceSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TSoSourceSettings::idx_Token)->Pos()),
+                TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
             return TStatus::Error;
         }
 
@@ -80,7 +82,7 @@ public:
         if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
             return TStatus::Error;
         }
-        
+
         auto& from = *input->Child(TSoSourceSettings::idx_From);
         if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from", from, ctx)) {
             return TStatus::Error;
@@ -215,7 +217,8 @@ public:
             for (auto& child : order.ChildrenList()) {
                 TStringBuf col = child->Content();
                 if (!uniqs.emplace(col).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Duplicate column '" << col << "' in column order list"));
+                    ctx.AddError(
+                        TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Duplicate column '" << col << "' in column order list"));
                     return TStatus::Error;
                 }
                 columnOrder.push_back(ToString(col));
@@ -224,10 +227,8 @@ public:
         }
 
         const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            input->Child(TSoReadObject::idx_World)->GetTypeAnn(),
-            ctx.MakeType<TListExprType>(type)
-        }));
+        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{ input->Child(TSoReadObject::idx_World)->GetTypeAnn(), ctx.MakeType<TListExprType>(type) }));
 
         return TStatus::Ok;
     }
@@ -257,4 +258,4 @@ THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransforme
     return THolder(new TSolomonDataSourceTypeAnnotationTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

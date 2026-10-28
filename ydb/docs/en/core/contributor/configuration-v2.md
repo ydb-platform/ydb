@@ -66,7 +66,7 @@ After the successful completion or cancellation of the operation, the FSM return
 
 ### Configuration Management via InvokeOnRoot
 
-[`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L177) requests are a unified mechanism for any cluster configuration changes. These commands can be initiated by both a **system administrator** (for example, via the CLI) and **other YDB components** in automatic mode (for example, by the `BlobStorageController` tablet during the `Self-Heal` process).
+[`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L177) requests are a unified mechanism for any cluster configuration changes. These commands can be initiated by both a **system administrator** (for example, via the CLI) and **other YDB components** in automatic mode (for example, by the `BlobStorageController` tablet during the `SelfHeal` process).
 
 Regardless of the source, any such request is processed according to the same scenario:
 
@@ -96,9 +96,10 @@ In addition to the main processes, Distconf works closely with other system comp
 - **Database nodes**
 
   Database nodes subscribe to [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75) events to receive real-time configuration updates.
-- **Self-Heal**
 
-  When using Distconf for a [static group](../concepts/glossary.md#static-group), [Self-Heal](../maintenance/manual/selfheal.md) works similarly to [dynamic groups](../concepts/glossary.md#dynamic-group).
+- **SelfHeal**
+
+  When using Distconf for a [static group](../concepts/glossary.md#static-group), [SelfHeal](../devops/concepts/selfheal-storage.md) works similarly to [dynamic groups](../concepts/glossary.md#dynamic-group).
 
 - **Local YAML files on nodes**
 

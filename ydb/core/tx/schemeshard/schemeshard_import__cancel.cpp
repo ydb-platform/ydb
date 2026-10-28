@@ -49,6 +49,26 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         TImportInfo::TPtr importInfo = it->second;
         NIceDb::TNiceDb db(txc.DB);
 
+        // A manual cancel must stop the import's helper actors: each of them holds
+        // a TImportInfo::TPtr, so leftover actors pin the whole import state in RAM
+        // and their late replies would otherwise resurrect the cancelled import.
+        auto killHelperActors = [&]() {
+            if (auto schemaMappingGetter = std::exchange(importInfo->SchemaMappingGetter, {})) {
+                Send(schemaMappingGetter, new TEvents::TEvPoisonPill());
+                Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
+            }
+            for (auto& item : importInfo->Items) {
+                if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
+                    Send(schemeGetter, new TEvents::TEvPoisonPill());
+                    Self->RunningImportSchemeGetters.erase(schemeGetter);
+                }
+                if (auto schemeQueryExecutor = std::exchange(item.SchemeQueryExecutor, {})) {
+                    Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+                    Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
+                }
+            }
+        };
+
         switch (importInfo->State) {
         case TImportInfo::EState::Done:
         case TImportInfo::EState::Cancelled:
@@ -86,6 +106,8 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                     break;
                 }
             }
+
+            killHelperActors();
 
             if (importInfo->State == TImportInfo::EState::Cancelled) {
                 importInfo->EndTime = TAppData::TimeProvider->Now();

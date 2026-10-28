@@ -23,7 +23,7 @@
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NApi {
 
@@ -34,7 +34,7 @@ namespace NYT::NApi {
 /*
  *  This interface contains methods shared by IClient and ITransaction.
  *
- *  Thread affinity: single
+ *  Thread affinity: any
  */
 struct IClientBase
     : public virtual TRefCounted
@@ -119,7 +119,7 @@ public:
     TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override;
 
 private:
-    NThreading::TAtomicObject<std::optional<std::string>> ClusterName_;
+    TAtomicObject<std::optional<std::string>> ClusterName_;
 
     TFuture<std::optional<std::string>> FetchClusterNameFromMasterCache();
 };

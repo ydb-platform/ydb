@@ -51,7 +51,8 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop(SideEffects, !ForceStop);
+                // a restart with a preferred node is a move, see RecordTabletMove for who initiated it
+                tablet->InitiateStop(SideEffects, PreferredNodeId != 0 ? EHiveEventReason::Move : EHiveEventReason::RestartRequest, !ForceStop);
             }
             if (tablet->IsLeader() && tablet->AsLeader().ChannelProfileNewGroup.any()) {
                 tablet->AsLeader().InitiateAssignTabletGroups();

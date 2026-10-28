@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
             UNIT_ASSERT(native->GetChunkedArray());   // read-back document reconstruction must not abort
             const auto assertExact = [&](const std::shared_ptr<TSubColumnsArray>& arr) {
                 auto it = arr->GetColumnsData().BuildIterator(0);
-                auto bj = ArrayElementToBinaryJson(it.GetArray(), it.GetLocalIndex(), EValueType::Double);
+            auto bj = it.GetValue().ToBinaryJson();
                 auto reader = NBinaryJson::TBinaryJsonReader::Make(bj);
                 UNIT_ASSERT_VALUES_EQUAL(reader->GetRootCursor().GetElement(0).GetNumber(), expected);
             };

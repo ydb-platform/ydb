@@ -1,7 +1,9 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstring>
+#include <limits>
 #include <vector>
 #include <queue>
 
@@ -91,6 +93,21 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         *dst[ind] = x;
         x >>= 8;
     }
+}
+
+// Branchless on purpose: zero keys are common enough to make a branch mispredict.
+template <typename TFloat, typename TBits>
+Y_FORCE_INLINE void CanonicalizeFloatKey(ui8* data) {
+    static_assert(sizeof(TFloat) == sizeof(TBits));
+    constexpr TBits signMask = TBits(1) << (sizeof(TBits) * 8 - 1);
+    constexpr TBits infBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::infinity());
+    constexpr TBits nanBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::quiet_NaN());
+
+    const TBits bits = ReadUnaligned<TBits>(data);
+    const TBits magnitude = bits & ~signMask;
+    TBits canonical = magnitude == 0 ? TBits(0) : bits;
+    canonical = magnitude > infBits ? nanBits : canonical;
+    WriteUnaligned<TBits>(data, canonical);
 }
 
 } // namespace
@@ -241,6 +258,40 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     return false;
 }
 
+void TTupleLayout::StashFloatOriginals(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            ui8* row = rows + i * rowSize;
+            std::memcpy(row + orig.PayloadOffset, row + orig.KeyOffset, orig.Size);
+        }
+    }
+}
+
+void TTupleLayout::RestoreFloatOriginalsImpl(ui8** columns, const ui8* rows, ui32 start, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            std::memcpy(columns[orig.OriginalIndex] + (start + i) * orig.Size,
+                        rows + i * rowSize + orig.PayloadOffset, orig.Size);
+        }
+    }
+}
+
+void TTupleLayout::CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const ui32 offset : FloatKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<float, ui32>(rows + i * rowSize + offset);
+        }
+    }
+    for (const ui32 offset : DoubleKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<double, ui64>(rows + i * rowSize + offset);
+        }
+    }
+}
+
 void TTupleLayout::NormalizeEqualNullsFixedKeys(ui8* res) const {
     if (Y_LIKELY(!HasEqualNullsKeys)) {
         return;
@@ -360,7 +411,16 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         col.Offset = currOffset;
         Columns.push_back(col);
         currOffset += col.DataSize;
+
+        if (col.FloatingPoint) {
+            Y_ENSURE(col.SizeType == EColumnSizeType::Fixed &&
+                         (col.DataSize == sizeof(float) || col.DataSize == sizeof(double)),
+                     "floating point key column must be a fixed Float or Double");
+            auto& offsets = col.DataSize == sizeof(float) ? FloatKeyOffsets : DoubleKeyOffsets;
+            offsets.push_back(col.Offset);
+        }
     }
+    HasFloatingPointKeys = !FloatKeyOffsets.empty() || !DoubleKeyOffsets.empty();
 
     KeyColumnsEnd = currOffset;
 
@@ -393,6 +453,17 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         col.Offset = currOffset;
         Columns.push_back(col);
         currOffset += col.DataSize;
+    }
+
+    // Original float/double key bytes. Not a real column: the null bitmask and
+    // column index space stay sized by the input columns. Unpack writes this
+    // slot back over the canonical key.
+    for (const auto& key : KeyColumns) {
+        if (!key.FloatingPoint) {
+            continue;
+        }
+        FloatOriginals.push_back({key.Offset, currOffset, key.DataSize, key.OriginalIndex});
+        currOffset += key.DataSize;
     }
 
     PayloadEnd = currOffset;
@@ -713,6 +784,7 @@ void TTupleLayoutFallback::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
         NormalizeEqualNullsFixedKeys(res);
 
         ui32 hash = CalculateCRC32<TTraits>(
@@ -777,6 +849,9 @@ void TTupleLayoutFallback::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
+    const ui8* const rows = res;
+    const ui32 rowStart = start;
+    const ui32 rowCount = count;
     std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
 
     {
@@ -900,6 +975,8 @@ void TTupleLayoutFallback::Unpack(
                                  dataOffset + size);
         }
     }
+
+    RestoreFloatOriginals(columns, rows, rowStart, rowCount);
 }
 
 void TTupleLayoutFallback::BucketPack(
@@ -996,6 +1073,7 @@ void TTupleLayoutFallback::BucketPack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
         NormalizeEqualNullsFixedKeys(res);
 
         ui32 hash = CalculateCRC32<TTraits>(
@@ -1066,9 +1144,6 @@ void TTupleLayoutFallback::BucketPack(
     }
 }
 
-#define MULTI_8_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
-#define MULTI_8(C, A) C(A, 0) C(A, 1) C(A, 2) C(A, 3)
-
 template <typename TTraits>
 void TTupleLayoutSIMD<TTraits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -1084,26 +1159,14 @@ void TTupleLayoutSIMD<TTraits>::Pack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1185,6 +1248,8 @@ void TTupleLayoutSIMD<TTraits>::Pack(
 
             edge_mask_transpose(cur_block_size);
         }
+
+        CanonicalizeFloatKeys(res, cur_block_size);
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
              ++block_row_ind) {
@@ -1274,26 +1339,16 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template UnpackTupleOr<i + 1, j + 1>(               \
-            res + SIMDSmallTuple_.RowOffset, block_columns.data() + cols_past, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data() + (i + 1) * (j + 1), start);                 \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::UnpackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                res + SIMDSmallTuple_.RowOffset,
+                block_columns.data() + cols_past, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data() + SIMDSmallTuple_.InnerLoopIters *
+                    SIMDSmallTuple_.Cols,
+                start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1428,6 +1483,8 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
             }
         }
 
+        RestoreFloatOriginals(columns, res, start, cur_block_size);
+
         start += cur_block_size;
         res += cur_block_size * TotalRowSize;
     }
@@ -1469,26 +1526,14 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1570,6 +1615,8 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 
             edge_mask_transpose(cur_block_size);
         }
+
+        CanonicalizeFloatKeys(res, cur_block_size);
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
             ++block_row_ind) {
@@ -1654,6 +1701,13 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 }
 
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx2")))
+TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::TTupleLayoutSIMD(
+    const std::vector<TColumnDesc> &columns);
+template __attribute__((target("sse4.2")))
+TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::TTupleLayoutSIMD(
+    const std::vector<TColumnDesc> &columns);
+
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,

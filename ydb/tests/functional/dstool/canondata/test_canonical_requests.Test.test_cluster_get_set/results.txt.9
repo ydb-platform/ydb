@@ -1,8 +1,28 @@
-dstool -e <endpoint> --mon-port <mon_port> cluster set --enable-self-heal --enable-donor-mode
-Exit Status: 1
+dstool -e <endpoint> --mon-port <mon_port> cluster get -A --format=json
+Exit Status: 0
 ===== stdout =====
-To see more info run 'dstool cluster set --help'
-
-===== stderr =====
-dstool [global options ...] cluster set [set options ...]
-Presented mutually exclusive options: --enable-self-heal,--enable-donor-mode
+[
+  {
+    "DefaultMaxSlots": 4,
+    "EnableSelfHeal": false,
+    "EnableDonorMode": false,
+    "ScrubPeriodicitySeconds": 0,
+    "PDiskSpaceMarginPromille": 1000,
+    "GroupReserveMin": 0,
+    "GroupReservePartPPM": 0,
+    "MaxScrubbedDisksAtOnce": 4294967295,
+    "EnableGroupLayoutSanitizer": true,
+    "PDiskSpaceColorBorder": "LIGHT_YELLOW",
+    "DatabaseSpaceBlockColor": "YELLOW",
+    "DatabaseSpaceUnblockColor": "LIGHT_YELLOW"
+  }
+]
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReadSettings {
+    }
+  }
+}

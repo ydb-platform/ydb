@@ -210,13 +210,6 @@ void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {
-    if (CompactionOverloadReported) {
-        auto* actorSystem = NActors::TActivationContext::ActorSystem();
-        if (actorSystem) {
-            NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), false);
-            CompactionOverloadReported = false;
-        }
-    }
     Owner->Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(WriteTasks.size());
 }
 

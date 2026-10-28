@@ -24,9 +24,10 @@ Y_UNIT_TEST(CombineAtoms) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
@@ -45,11 +46,12 @@ Y_UNIT_TEST(RecursiveLambda) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
     for (size_t i = 0U; i < 0x100; ++i) {
-        UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+        UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     }
 
     const auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
@@ -69,9 +71,10 @@ Y_UNIT_TEST(ApplyWideLambda) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
@@ -90,9 +93,10 @@ Y_UNIT_TEST(ApplyThinLambda) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
@@ -437,11 +441,12 @@ Y_UNIT_TEST(ApplyDeepLambda) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
     while (true) {
-        const auto ret = ExpandApply(exprRoot, exprRoot, exprCtx);
+        const auto ret = ExpandApply(exprRoot, exprRoot, exprCtx, types);
         if (ret.Level != IGraphTransformer::TStatus::Repeat) {
             UNIT_ASSERT_EQUAL(ret.Level, IGraphTransformer::TStatus::Ok);
             break;
@@ -462,9 +467,10 @@ Y_UNIT_TEST(Nth) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
@@ -480,9 +486,10 @@ Y_UNIT_TEST(NthLargeIndex) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:3:17: Error: Index too large: (3 >= 3).\n", exprCtx.IssueManager.GetIssues().ToString());
 }
 
@@ -495,9 +502,10 @@ Y_UNIT_TEST(NthWrongIndex) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:3:17: Error: Index 'Z' isn't UI32.\n", exprCtx.IssueManager.GetIssues().ToString());
 }
 
@@ -510,9 +518,10 @@ Y_UNIT_TEST(NthArg) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
 
     auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
@@ -528,9 +537,10 @@ Y_UNIT_TEST(NthArgLargeIndex) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:2:17: Error: Index too large: (2 >= 2).\n", exprCtx.IssueManager.GetIssues().ToString());
 }
 
@@ -543,9 +553,10 @@ Y_UNIT_TEST(NthArgWrongIndex) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:2:17: Error: Index 'bad' isn't UI32.\n", exprCtx.IssueManager.GetIssues().ToString());
 }
 
@@ -558,9 +569,10 @@ Y_UNIT_TEST(NthArgNotCallable) {
     const auto astRes = ParseAst(s);
     UNIT_ASSERT(astRes.IsOk());
     TExprContext exprCtx;
+    TTypeAnnotationContext types;
     TExprNode::TPtr exprRoot;
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
-    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
+    UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx, types).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:2:20: Error: Expected callable, but got: Atom\n", exprCtx.IssueManager.GetIssues().ToString());
 }
 } // Y_UNIT_TEST_SUITE(TOptimizeYqlExpr)

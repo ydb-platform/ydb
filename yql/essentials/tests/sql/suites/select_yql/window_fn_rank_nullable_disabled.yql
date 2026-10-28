@@ -1,0 +1,22 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA DisableAnsiRankForNullableKeys;
+
+SELECT
+    pos,
+    key,
+    Rank() OVER w AS rank,
+    DenseRank() OVER w AS dense_rank,
+    PercentRank() OVER w AS percent_rank,
+    Rank(key) OVER w_pos AS explicit_rank,
+    Rank(pos) OVER w AS explicit_nonnullable_rank
+FROM AS_TABLE([
+    <|pos: 1, key: NULL|>,
+    <|pos: 2, key: NULL|>,
+    <|pos: 3, key: 1|>,
+    <|pos: 4, key: 1|>,
+    <|pos: 5, key: 2|>
+])
+WINDOW
+    w AS (ORDER BY key),
+    w_pos AS (ORDER BY pos)
+ORDER BY pos;

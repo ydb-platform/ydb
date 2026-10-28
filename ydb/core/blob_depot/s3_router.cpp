@@ -13,10 +13,12 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 
+#include <array>
 #include <atomic>
 #include <deque>
 
@@ -25,6 +27,8 @@
 namespace NKikimr::NBlobDepot {
 
     namespace {
+
+    static constexpr size_t BalancerHostBucketCount = 16;
 
     struct TRouteMonCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Requests;
@@ -47,6 +51,13 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr IsUsingProxy;
         NMonitoring::THistogramPtr BalancerResolveLatency;
         NMonitoring::THistogramPtr PendingLatency;
+
+        struct THostBucket {
+            NMonitoring::TDynamicCounters::TCounterPtr Selections;
+            NMonitoring::THistogramPtr Latency;
+        };
+
+        std::array<THostBucket, BalancerHostBucketCount> BalancerHostBuckets;
     };
 
     static NMonitoring::IHistogramCollectorPtr MakeLatencyHistogram() {
@@ -251,10 +262,10 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SetupCounters() {
-            auto group = GetServiceCounters(AppData()->Counters, "tablets")
+            auto root = GetServiceCounters(AppData()->Counters, "tablets")
                 ->GetSubgroup("subsystem", "blob_depot")
-                ->GetSubgroup("module_id", "s3_router")
-                ->GetSubgroup("tablet", ::ToString(TabletId));
+                ->GetSubgroup("module_id", "s3_router");
+            auto group = root->GetSubgroup("tablet", ToString(TabletId));
 
             Mon.Balancer = MakeRouteMonCounters(group->GetSubgroup("route", "Balancer"));
             Mon.NonBalancer = MakeRouteMonCounters(group->GetSubgroup("route", "NonBalancer"));
@@ -271,6 +282,19 @@ namespace NKikimr::NBlobDepot {
             Mon.PendingLatency = group->GetSubgroup("component", "Pending")->GetHistogram("LatencyMs", MakeLatencyHistogram());
             Mon.RetiringWrappersAborted = group->GetCounter("RetiringWrappersAborted", true);
             Mon.IsUsingProxy = group->GetCounter("IsUsingProxy", false);
+
+            auto hostBuckets = root->GetSubgroup("component", "BalancerResolveByHostBucket");
+            for (size_t i = 0; i < Mon.BalancerHostBuckets.size(); ++i) {
+                auto bucket = hostBuckets->GetSubgroup("host_bucket", ToString(i));
+                Mon.BalancerHostBuckets[i].Selections = bucket->GetCounter("Selections", true);
+                Mon.BalancerHostBuckets[i].Latency = bucket->GetHistogram("LatencyMs", MakeLatencyHistogram());
+            }
+        }
+
+        void RecordBalancerHostSelection(TStringBuf host, TDuration latency) {
+            const size_t bucket = THash<TStringBuf>{}(host) % Mon.BalancerHostBuckets.size();
+            IncCounter(Mon.BalancerHostBuckets[bucket].Selections);
+            CollectHistogram(Mon.BalancerHostBuckets[bucket].Latency, latency.MilliSeconds());
         }
 
         TIntrusivePtr<TRouteCounters> MakeRouteCounters(bool nonBalancer) {
@@ -547,6 +571,8 @@ namespace NKikimr::NBlobDepot {
                         TryFromString(p, port);
                         host = TString(h);
                     }
+
+                    RecordBalancerHostSelection(host, latency);
 
                     const TString endpoint = TStringBuilder() << host << ':' << port;
                     if (endpoint != CurrentEndpoint) {

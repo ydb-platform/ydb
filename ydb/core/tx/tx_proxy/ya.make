@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     ydb/public/sdk/cpp
@@ -59,8 +59,6 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

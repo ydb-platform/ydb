@@ -45,6 +45,9 @@ public:
 
         status = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnWrite(status);
 
+        // Record free space before the status branch so a failed put still updates channel weights.
+        WriteController->UpdateChannelApproximateFreeSpace(*msg);
+
         if (status != NKikimrProto::OK) {
             YDB_LOG_ERROR_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                 {"event", "TEvPutResult"},

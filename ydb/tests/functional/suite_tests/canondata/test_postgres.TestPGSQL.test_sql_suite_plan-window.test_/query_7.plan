@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Sort",
+                                        "Node Type": "Limit-WideSort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -46,8 +46,8 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "Sort",
-                                                "SortBy": "[item.depname,item.salary]"
+                                                "Name": "WideSort",
+                                                "SortBy": "depname asc, salary desc"
                                             }
                                         ],
                                         "PlanNodeId": 4,

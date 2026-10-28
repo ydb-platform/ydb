@@ -1,5 +1,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
+#include <atomic>
+
 namespace NYdb::NPersQueue::NTests {
 
 Y_UNIT_TEST_SUITE(CompressExecutor) {
@@ -31,6 +33,8 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
         auto memUsageLimit = 1_KB;
         config.MaxMemoryUsage(memUsageLimit);
         config.CompressionExecutor(executor);
+        auto counters = MakeIntrusive<TWriterCounters>(new ::NMonitoring::TDynamicCounters());
+        config.Counters(counters);
         auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
         config.RetryPolicy(retryPolicy);
@@ -67,15 +71,20 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
             ++seqNo;
         };
         doWrite();
+        UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), message.size());
         waitEventFuture = writer->WaitEvent();
         waitEventFuture.Wait(TDuration::Seconds(3));
         UNIT_ASSERT(!waitEventFuture.HasValue());
         queue->Enqueue(1);
         event = *writer->GetEvent(true);
+        auto ackEvent = *writer->GetEvent(true);
+        // The ACK can arrive before the transport completion releases memory.
+        if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
+            std::swap(event, ackEvent);
+        }
         UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
         continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-        event = *writer->GetEvent(true);
-        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event));
+        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TAcksEvent>(ackEvent));
 
         Cerr << "===Will now kick tablets\n";
         setup->KickTablets();
@@ -99,6 +108,32 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
 
         writer = nullptr;
         retryPolicy = nullptr;
+    }
+    Y_UNIT_TEST(TestSyncCompressionReentrantWrite) {
+        auto firstToken = NThreading::NewPromise<TContinuationToken>();
+        auto writeDone = NThreading::NewPromise<void>();
+        std::atomic<size_t> readyCount{0};
+        std::shared_ptr<IWriteSession> writer;
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto config = setup.GetWriteSessionSettings();
+        config.Codec(ECodec::GZIP).MaxMemoryUsage(10_KB).BatchFlushInterval(TDuration::Zero());
+        config.CompressionExecutor(CreateSyncExecutor());
+        config.EventHandlers_.HandlersExecutor(CreateSyncExecutor());
+        config.EventHandlers_.ReadyToAcceptHandler([&](TWriteSessionEvent::TReadyToAcceptEvent& event) {
+            const auto index = readyCount.fetch_add(1);
+            if (index == 0) {
+                firstToken.SetValue(std::move(event.ContinuationToken));
+            } else if (index == 1) {
+                writer->Write(std::move(event.ContinuationToken), "next");
+                writeDone.SetValue();
+            }
+        });
+
+        writer = setup.GetPersQueueClient().CreateWriteSession(config);
+        UNIT_ASSERT(firstToken.GetFuture().Wait(TDuration::Seconds(10)));
+        writer->Write(firstToken.GetFuture().ExtractValueSync(), TString(100_KB, 'x'));
+        UNIT_ASSERT(writeDone.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
     }
 }
 };

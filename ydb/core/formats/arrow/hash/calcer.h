@@ -51,8 +51,11 @@ private:
             }
         }
         if (columns.empty()) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")(
-                "field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
+            YDB_LOG_WARN_COMP(NKikimrServices::ARROW_HELPER, "",
+                {"event", "cannot_read_all_columns"},
+                {"reason", "fields_not_found"},
+                {"fieldNames", JoinSeq(",", ColumnNames)},
+                {"batchFields", JoinSeq(",", batch->schema()->field_names())});
         }
         return columns;
     }

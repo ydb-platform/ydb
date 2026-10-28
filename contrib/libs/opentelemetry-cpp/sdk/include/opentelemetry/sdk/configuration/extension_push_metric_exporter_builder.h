@@ -6,12 +6,16 @@
 #include <memory>
 
 #include "opentelemetry/sdk/configuration/extension_push_metric_exporter_configuration.h"
-#include "opentelemetry/sdk/metrics/push_metric_exporter.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
+namespace metrics
+{
+class PushMetricExporter;
+}  // namespace metrics
+
 namespace configuration
 {
 

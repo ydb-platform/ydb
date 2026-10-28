@@ -14,6 +14,8 @@
 #include <util/generic/queue.h>
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NMeta {
 
 using namespace NHttp;
@@ -143,16 +145,22 @@ public:
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
         auto itRequest = OutgoingRequests.find(event->Get()->Request.Get());
         if (itRequest == OutgoingRequests.end()) {
-            ALOG_ERROR(HttpLog, "Cache received response to unknown request " << event->Get()->Request->Host << event->Get()->Request->URL);
+            YDB_LOG_ERROR("Cache received response to unknown request",
+                {"host", event->Get()->Request->Host},
+                {"URL", event->Get()->Request->URL});
             return;
         }
         if (event->Get()->Error.empty() && event->Get()->Response) {
-            ALOG_DEBUG(HttpLog, "Cache received successfull (" << event->Get()->Response->Status << ") response for " << event->Get()->Request->URL);
+            YDB_LOG_DEBUG("Cache received successfull response",
+                {"status", event->Get()->Response->Status},
+                {"URL", event->Get()->Request->URL});
             TEvHttpProxy::TEvHttpIncomingRequest::TPtr requestEvent = std::move(itRequest->second);
             THttpOutgoingResponsePtr response = event->Get()->Response->Reverse(requestEvent->Get()->Request);
             Send(requestEvent->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(response), 0, requestEvent->Cookie);
         } else {
-            ALOG_WARN(HttpLog, "Cache received failed response with error \"" << event->Get()->Error << "\" for " << event->Get()->Request->URL << " - retrying locally");
+            YDB_LOG_WARN("Cache received failed response with error - retrying locally",
+                {"error", event->Get()->Error},
+                {"URL", event->Get()->Request->URL});
             TActorId handler = GetRequestHandler(itRequest->second->Get()->Request);
             if (handler) {
                 Send(itRequest->second->Forward(handler));
@@ -188,18 +196,24 @@ public:
         auto it = Cache.find(key);
         if (it != Cache.end()) {
             if (!it->second.Waiters.empty()) {
-                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " keep waiting (waiters=" << it->second.Waiters.size() << ")");
+                YDB_LOG_DEBUG("IncomingForward keep waiting",
+                    {"URL", request->URL},
+                    {"waitersCount", it->second.Waiters.size()});
                 it->second.Waiters.emplace_back(std::move(event));
                 return;
             }
             if (it->second.CacheOwnership.ForwardUrl.empty()) {
-                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " locally");
+                YDB_LOG_DEBUG("IncomingForward locally",
+                    {"URL", request->URL});
                 TActorId handler = GetRequestHandler(event->Get()->Request);
                 if (handler) {
                     Send(event->Forward(handler));
                 }
             } else {
-                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " to " << it->second.GetForwardUrlForDebug() << " timeout " << it->second.Timeout);
+                YDB_LOG_DEBUG("IncomingForward",
+                    {"URL", request->URL},
+                    {"forwardURLForDebug", it->second.GetForwardUrlForDebug()},
+                    {"timeout", it->second.Timeout});
                 THttpOutgoingRequestPtr newRequest = request->Forward(it->second.CacheOwnership.ForwardUrl);
                 OutgoingRequests[newRequest.Get()] = std::move(event);
                 Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(newRequest, it->second.Timeout));
@@ -213,7 +227,7 @@ public:
                 actorSystem->Send(actorId, new TEvPrivate::TEvUpdateUrlState(key, ownership));
             };
             if (!GetCacheOwnership(key, std::move(callback))) {
-                ALOG_WARN(HttpLog, "RefreshGetCacheOwnership failed");
+                YDB_LOG_WARN("RefreshGetCacheOwnership failed");
             }
         }
     }
@@ -224,7 +238,7 @@ public:
         const auto& ownership(ev->Get()->CacheOwnership);
         auto it = Cache.find(id);
         if (it == Cache.end()) {
-            ALOG_WARN(HttpLog, "Cache record not found");
+            YDB_LOG_WARN("Cache record not found");
             return;
         }
         if (!ownership.ForwardUrl.empty() || ownership.Deadline > it->second.CacheOwnership.Deadline || it->second.CacheOwnership.Deadline < now) {
@@ -232,13 +246,20 @@ public:
             if (it->second.CacheOwnership.ForwardUrl.empty() && it->second.CacheOwnership.Deadline == TInstant()) {
                 it->second.CacheOwnership.Deadline = now + TDuration::Seconds(60);
             }
-            ALOG_DEBUG(HttpLog, "Updating ownership " << it->second.CacheOwnership.GetForwardUrlForDebug() << " with deadline " << it->second.CacheOwnership.Deadline);
+            YDB_LOG_DEBUG("Updating ownership with deadline",
+                {"forwardURLForDebug", it->second.CacheOwnership.GetForwardUrlForDebug()},
+                {"deadline", it->second.CacheOwnership.Deadline});
         } else {
-            ALOG_DEBUG(HttpLog, "Keeping ownership " << it->second.CacheOwnership.GetForwardUrlForDebug() << " with deadline " << it->second.CacheOwnership.Deadline);
+            YDB_LOG_DEBUG("Keeping ownership with deadline",
+                {"forwardURLForDebug", it->second.CacheOwnership.GetForwardUrlForDebug()},
+                {"deadline", it->second.CacheOwnership.Deadline});
 
         }
         auto refreshTime = std::max(now + TDuration::Seconds(10), it->second.GetRefreshTime(now));
-        ALOG_DEBUG(HttpLog, "SetRefreshTime \"" << id << "\" to " << refreshTime << " (+" << refreshTime - now << ")");
+        YDB_LOG_DEBUG("SetRefreshTime",
+            {"id", id},
+            {"refreshTime", refreshTime},
+            {"timePeriod", refreshTime - now});
         RefreshQueue.push({
             .Key = id,
             .RefreshTime = refreshTime,
@@ -257,17 +278,19 @@ public:
             RefreshQueue.pop();
             auto it = Cache.find(key);
             if (it != Cache.end()) {
-                ALOG_DEBUG(HttpLog, "Refresh with deadline " << it->second.CacheOwnership.Deadline);
+                YDB_LOG_DEBUG("Refresh with deadline",
+                    {"deadline", it->second.CacheOwnership.Deadline});
                 NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
                 NActors::TActorIdentity actorId = SelfId();
                 auto callback = [actorSystem, actorId, key](TCacheOwnership ownership) {
                     actorSystem->Send(actorId, new TEvPrivate::TEvUpdateUrlState(key, ownership));
                 };
                 if (!GetCacheOwnership(key, std::move(callback))) {
-                    ALOG_WARN(HttpLog, "RefreshGetCacheOwnership failed");
+                    YDB_LOG_WARN("RefreshGetCacheOwnership failed");
                 }
             } else {
-                ALOG_WARN(HttpLog, "Refresh key \"" << key << "\"not found");
+                YDB_LOG_WARN("Refresh key not found",
+                    {"key", key});
             }
         }
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());

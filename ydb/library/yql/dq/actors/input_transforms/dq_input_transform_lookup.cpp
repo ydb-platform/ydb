@@ -1,16 +1,15 @@
 #include "dq_input_transform_lookup.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/minikql/mkql_node_serialization.h>
-#include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/minikql/mkql_node_builder.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/minikql/computation/mkql_key_payload_value_lru_cache.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
+
+#include <yql/essentials/minikql/computation/mkql_key_payload_value_lru_cache.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <chrono>
 
@@ -18,30 +17,28 @@ namespace NYql::NDq {
 
 namespace {
 
-enum class EOutputRowItemSource{None, InputKey, InputOther, LookupKey, LookupOther};
-using TOutputRowColumnOrder = std::vector<std::pair<EOutputRowItemSource, ui64>>; //i -> {source, indexInSource}
+enum class EOutputRowItemSource {
+    None,
+    InputKey,
+    InputOther,
+    LookupKey,
+    LookupOther
+};
+using TOutputRowColumnOrder = std::vector<std::pair<EOutputRowItemSource, ui64>>;   //i -> {source, indexInSource}
 
 //Design note: Base implementation is optimized for wide channels
 template <typename TInputTransformStreamLookupDerivedBase>
-class TInputTransformStreamLookupCommonBase
-        : public NActors::TActor<TInputTransformStreamLookupDerivedBase>
-        , public NYql::NDq::IDqComputeActorAsyncInput
-{
+class TInputTransformStreamLookupCommonBase: public NActors::TActor<TInputTransformStreamLookupDerivedBase>,
+                                             public NYql::NDq::IDqComputeActorAsyncInput {
     using TDerived = TInputTransformStreamLookupDerivedBase;
     using TActor = NActors::TActor<TInputTransformStreamLookupDerivedBase>;
     friend TDerived;
+
 public:
-    TInputTransformStreamLookupCommonBase(
-        IDqAsyncIoFactory::TInputTransformArguments&& args,
-        IDqAsyncIoFactory* factory,
-        NDqProto::TDqInputTransformLookupSettings&& settings,
-        TVector<size_t>&& lookupInputIndexes,
-        TVector<size_t>&& otherInputIndexes,
-        const NMiniKQL::TMultiType* inputRowType,
-        const NMiniKQL::TStructType* lookupKeyType,
-        const NMiniKQL::TStructType* lookupPayloadType,
-        const NMiniKQL::TMultiType* outputRowType,
-        TOutputRowColumnOrder&& outputRowColumnOrder)
+    TInputTransformStreamLookupCommonBase(IDqAsyncIoFactory::TInputTransformArguments&& args, IDqAsyncIoFactory* factory,
+        NDqProto::TDqInputTransformLookupSettings&& settings, TVector<size_t>&& lookupInputIndexes, TVector<size_t>&& otherInputIndexes,
+        const NMiniKQL::TMultiType* inputRowType, const NMiniKQL::TStructType* lookupKeyType, const NMiniKQL::TStructType* lookupPayloadType,
+        const NMiniKQL::TMultiType* outputRowType, TOutputRowColumnOrder&& outputRowColumnOrder)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(std::move(args.Alloc))
         , HolderFactory(args.HolderFactory)
@@ -65,12 +62,13 @@ public:
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , WatermarksTracker(args.WatermarksTracker)
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
-        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(std::max(Settings.GetCacheLimit(), ui64(1)), lookupKeyType))
+        , LruCache(
+              std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(std::max(Settings.GetCacheLimit(), ui64(1)), lookupKeyType))
         , DisableLruCache(Settings.GetCacheLimit() < 1)
         , MaxDelayedRows(Settings.GetMaxDelayedRows())
         , CacheTtl(std::chrono::seconds(Settings.GetCacheTtlSeconds()))
         , IsMultiMatches(Settings.GetIsMultiMatches())
-        , MinimumRowSize(OutputRowColumnOrder.size()*sizeof(NUdf::TUnboxedValuePod))
+        , MinimumRowSize(OutputRowColumnOrder.size() * sizeof(NUdf::TUnboxedValuePod))
         , PayloadExtraSize(0)
         , ReadyQueue(OutputRowType)
         , LastLruSize(0)
@@ -88,7 +86,7 @@ public:
     }
 
     ~TInputTransformStreamLookupCommonBase() override {
-        if (TaskCountersGroup && TaskCountersRoot)  {
+        if (TaskCountersGroup && TaskCountersRoot) {
             // XXX Group will be removed by each task of query (repeatedly);
             // Should be mostly harmless (as all of them removed approximately at once,
             // even though not completely synchronously);
@@ -104,18 +102,20 @@ protected:
 
     void Handle(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr ev) {
         auto evptr = ev->Get();
-        this->Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
-                                  InputIndex,
-                                  evptr->Issues,
-                                  evptr->FatalCode));
+        this->Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, evptr->Issues, evptr->FatalCode));
     }
 
     // checkpointing waits until there are no state to save
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
-    void LoadState(const NYql::NDq::TSourceState&) final {}
-    void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {
+    }
 
-private: //IDqComputeActorAsyncInput
+    void LoadState(const NYql::NDq::TSourceState&) final {
+    }
+
+    void CommitState(const NYql::NDqProto::TCheckpoint&) final {
+    }
+
+private:   //IDqComputeActorAsyncInput
     ui64 GetInputIndex() const final {
         return InputIndex;
     }
@@ -127,7 +127,7 @@ private: //IDqComputeActorAsyncInput
     void PassAway() final {
         InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
         this->Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
-        static_cast<TDerived *>(this)->Free();
+        static_cast<TDerived*>(this)->Free();
         TActor::PassAway();
     }
 
@@ -180,11 +180,11 @@ private: //IDqComputeActorAsyncInput
         }
     }
 
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() {   // must be called with mkql allocator
         if (!KeysForLookup) {
             Y_ENSURE(this->SelfId());
             Y_ENSURE(!LookupSourceId);
-            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
+            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs{
                 .Alloc = Alloc,
                 .KeyTypeHelper = KeyTypeHelper,
                 .ParentId = this->SelfId(),
@@ -195,17 +195,20 @@ private: //IDqComputeActorAsyncInput
                 .TypeEnv = TypeEnv,
                 .HolderFactory = HolderFactory,
                 .SecureParams = SecureParams,
-                .MaxKeysInRequest = 1000, // TODO configure me
+                .MaxKeysInRequest = 1000,   // TODO configure me
                 .IsMultiMatches = IsMultiMatches,
                 .StatsLevel = StatsLevel,
             };
-            auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+            auto [lookupSource, lookupSourceActor] =
+                Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
             LookupSourceId = this->RegisterWithSameMailbox(lookupSourceActor);
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(
+                MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
             FullscanRowLimit = Min(FullscanRowLimit, lookupSource->GetMaxSupportedFullscanRequest());
             if (FullscanRowLimit > 0) {
-                FullscanRequest = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(FullscanRowLimit, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+                FullscanRequest = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(
+                    FullscanRowLimit, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
                 FullscanExpireTime = std::chrono::steady_clock::now();
             } else {
                 FullscanRequested = true;
@@ -233,12 +236,11 @@ private: //IDqComputeActorAsyncInput
                 TaskCounters = nullptr;
                 return;
             case TCollectStatsLevel::Profile:
-                TaskCountersGroup = std::pair { "tx_id", ToString(txId) };
+                TaskCountersGroup = std::pair{ "tx_id", ToString(txId) };
                 // XXX this nests counters twice by $TxId, ("operation_id", $TxId)->("tx_id", $TxId) in (obsolete) yqv1
-                TaskCounters = TaskCounters
-                    ->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)
-                    ->GetSubgroup("task_id", ToString(args.TaskId))
-                    ->GetSubgroup("input", ToString(args.InputIndex));
+                TaskCounters = TaskCounters->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)
+                                   ->GetSubgroup("task_id", ToString(args.TaskId))
+                                   ->GetSubgroup("input", ToString(args.InputIndex));
                 break;
             case TCollectStatsLevel::Full:
                 break;
@@ -287,7 +289,7 @@ protected:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
+    ui64 InputIndex;   // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
     const TCollectStatsLevel StatsLevel;
@@ -297,6 +299,7 @@ protected:
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
     const THashMap<TString, TString> SecureParams;
+
 protected:
     NActors::TActorId LookupSourceId;
     size_t MaxKeysInRequest;
@@ -304,9 +307,9 @@ protected:
     const TVector<size_t> LookupInputIndexes;
     const TVector<size_t> OtherInputIndexes;
     const NMiniKQL::TMultiType* const InputRowType;
-    const NMiniKQL::TStructType* const LookupKeyType; //key column types in LookupTable
+    const NMiniKQL::TStructType* const LookupKeyType;   //key column types in LookupTable
     std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
-    const NMiniKQL::TStructType* const LookupPayloadType; //other column types in LookupTable
+    const NMiniKQL::TStructType* const LookupPayloadType;   //other column types in LookupTable
     const NMiniKQL::TMultiType* const OutputRowType;
     const TOutputRowColumnOrder OutputRowColumnOrder;
 
@@ -316,10 +319,11 @@ protected:
     const bool DisableLruCache;
     size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
-    static constexpr auto MinFullscanFailureTtl = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours(1)); // TODO make tuneable
+    static constexpr auto MinFullscanFailureTtl =
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours(1));   // TODO make tuneable
     const bool IsMultiMatches;
-    size_t MinimumRowSize; // only account for unboxed parts
-    size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
+    size_t MinimumRowSize;   // only account for unboxed parts
+    size_t PayloadExtraSize;   // non-embedded part of strings in ReadyQueue
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> ReadyWatermark;
@@ -339,24 +343,25 @@ protected:
     TDuration CpuTime;
 };
 
-class TInputTransformStreamLookupBase : public TInputTransformStreamLookupCommonBase<TInputTransformStreamLookupBase>
-{
+class TInputTransformStreamLookupBase: public TInputTransformStreamLookupCommonBase<TInputTransformStreamLookupBase> {
     using TCommon = TInputTransformStreamLookupCommonBase<TInputTransformStreamLookupBase>;
     friend TCommon;
+
 public:
     using TCommon::TCommon;
+
     ~TInputTransformStreamLookupBase() override {
         Free();
     }
 
-private: //events
+private:   //events
     STRICT_STFUNC(StateFunc,
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, TCommon::Handle);
     )
 
 private:
-    void AddSingleReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, const NUdf::TUnboxedValue *lookupPayload) {
+    void AddSingleReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, const NUdf::TUnboxedValue* lookupPayload) {
         NUdf::TUnboxedValue* outputRowItems;
         NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
         for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
@@ -389,7 +394,7 @@ private:
         ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
 
-    void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
+    void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue* lookupPayload) {
         if (lookupPayload && !*lookupPayload) {
             lookupPayload = nullptr;
         }
@@ -425,14 +430,14 @@ private:
                 AddReadyQueue(lookupKey, inputOther, lookupPayload);
             }
             PushReadyWatermark();
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived{ InputIndex });
         } else if (!IsMultiMatches) {
-#if 0 // TODO
-            // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
+#if 0   // TODO \
+    // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
 #endif
-#if 0 // TODO
-            // Opportunistially populate LRU cache with partial fullscan results
-            // (again, in case of MultiMatches, we cannot use partial results)
+#if 0   // TODO                                                          \
+    // Opportunistially populate LRU cache with partial fullscan results \
+    // (again, in case of MultiMatches, we cannot use partial results)
             if (!DisableLruCache) {
                 for (auto& [k, v]: *lookupResult) {
                     Y_DEBUG_ABORT_UNLESS(v);
@@ -451,26 +456,26 @@ private:
             } else {
                 FullscanExpireTime = now + CacheTtl;
                 FullscanReady = true;
-#if 0 // TODO
+#if 0   // TODO
                 LruCache->Clear(); // Erase now-useless LRU cache
 #endif
             }
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);
             lookupResult.reset();
-            if (!FullscanReady && !DisableLruCache) { // don't populate LRU cache when we have (complete) fullscan results
-                for (auto& [k, v]: *KeysForLookup) {
+            if (!FullscanReady && !DisableLruCache) {   // don't populate LRU cache when we have (complete) fullscan results
+                for (auto& [k, v] : *KeysForLookup) {
                     LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
                 }
             }
-            KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end()); // don't ->clear();, it's O(reserved) instead of O(size)
+            KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end());   // don't ->clear();, it's O(reserved) instead of O(size)
         }
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
         LastLruSize = (i64)LruCache->Size();
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
-            LruSize->Add(deltaLruSize); // Note: there can be several streamlookup tied to same counter, so Add instead of Set
+            LruSize->Add(deltaLruSize);   // Note: there can be several streamlookup tied to same counter, so Add instead of Set
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
     }
@@ -499,10 +504,8 @@ private:
             LruCache->Prune(now);
             size_t rowLimit = std::numeric_limits<size_t>::max();
             size_t row = 0;
-            while (
-                row < rowLimit &&
-                (KeysForLookup->size() < MaxKeysInRequest) &&
-                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
+            while (row < rowLimit && (KeysForLookup->size() < MaxKeysInRequest) &&
+                   ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
                 NUdf::TUnboxedValue* otherItems;
@@ -529,16 +532,14 @@ private:
                     if (!FullscanRequested && now >= FullscanExpireTime) {
                         Y_DEBUG_ABORT_UNLESS(FullscanRowLimit > 0);
                         FullscanRequested = true;
-                        FullscanRequest->erase(FullscanRequest->begin(), FullscanRequest->end()); // don't ->clear();!
+                        FullscanRequest->erase(FullscanRequest->begin(), FullscanRequest->end());   // don't ->clear();!
                         Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(FullscanRequest, FullscanRowLimit));
                     }
                     if (AwaitingQueue.empty()) {
                         // look ahead at most MaxDelayedRows after first missing
                         rowLimit = row + MaxDelayedRows;
                     }
-                    AwaitingQueue.emplace_back(
-                            KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{}).first->first,
-                            std::move(other));
+                    AwaitingQueue.emplace_back(KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{}).first->first, std::move(other));
                 }
                 ++row;
             }
@@ -562,7 +563,7 @@ private:
         if (CpuTimeUs) {
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
-        finished = static_cast<TDerived *>(this)->IsFinished();
+        finished = static_cast<TDerived*>(this)->IsFinished();
         if (batch.empty()) {
             // Use non-zero value to signal presence of pending request
             // (value is NOT used for used space accounting)
@@ -576,9 +577,11 @@ private:
             return usedSpace;
         }
     }
+
 private:
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
-    using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
+    using TAwaitingQueue = std::deque<TInputKeyOtherPair,
+        NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>;   //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
 
     bool IsFinished() const {
@@ -588,12 +591,15 @@ private:
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {
     using TBase = TInputTransformStreamLookupBase;
+
 public:
     using TBase::TBase;
+
 protected:
     NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
         return InputFlow.WideFetch(inputRowItems, InputRowType->GetElementsCount());
     }
+
     void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
         batch.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
@@ -601,8 +607,10 @@ protected:
 
 class TInputTransformStreamLookupNarrow: public TInputTransformStreamLookupBase {
     using TBase = TInputTransformStreamLookupBase;
+
 public:
     using TBase::TBase;
+
 protected:
     NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
         NUdf::TUnboxedValue row;
@@ -614,6 +622,7 @@ protected:
         }
         return result;
     }
+
     void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
         NUdf::TUnboxedValue* narrowOutputRowItems;
         NUdf::TUnboxedValue narrowOutputRow = HolderFactory.CreateDirectArrayHolder(OutputRowType->GetElementsCount(), narrowOutputRowItems);
@@ -624,18 +633,18 @@ protected:
     }
 };
 
-class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase>
-{
+class TInputTransformStreamMultiLookupBase: public TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase> {
     using TCommon = TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase>;
     friend TCommon;
 
 public:
     using TCommon::TCommon;
+
     virtual ~TInputTransformStreamMultiLookupBase() override {
         Free();
     }
 
-private: //events
+private:   //events
     STRICT_STFUNC(StateFunc,
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, TCommon::Handle);
@@ -650,7 +659,7 @@ private: //events
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
         Y_ABORT_UNLESS(lookupResult == KeysForLookup);
-        const size_t limit = LastRequestedIncomplete ? 1 : 0; // Incomplete part requires special processing
+        const size_t limit = LastRequestedIncomplete ? 1 : 0;   // Incomplete part requires special processing
         for (; AwaitingQueue.size() > limit; AwaitingQueue.pop_front()) {
             auto& output = AwaitingQueue.front();
             for (auto& [subKey, subIndex] : output.MissingKeysAndIndexes) {
@@ -667,9 +676,10 @@ private: //events
             auto& output = AwaitingQueue.front();
             Y_DEBUG_ABORT_UNLESS(LastRequestedIncomplete->ProcessedPosition < LastRequestedIncomplete->RequestedPosition);
             Y_DEBUG_ABORT_UNLESS(LastRequestedIncomplete->RequestedPosition <= output.MissingKeysAndIndexes.size());
-            for (; LastRequestedIncomplete->ProcessedPosition < LastRequestedIncomplete->RequestedPosition; ++LastRequestedIncomplete->ProcessedPosition) {
+            for (; LastRequestedIncomplete->ProcessedPosition < LastRequestedIncomplete->RequestedPosition;
+                 ++LastRequestedIncomplete->ProcessedPosition) {
                 auto& [subKey, subIndex] = output.MissingKeysAndIndexes[LastRequestedIncomplete->ProcessedPosition];
-                if (subIndex == UINT32_MAX) { // index already filled from LRU
+                if (subIndex == UINT32_MAX) {   // index already filled from LRU
                     continue;
                 }
                 auto lookupPayload = lookupResult->find(subKey);
@@ -688,7 +698,7 @@ private: //events
             PushReadyWatermark();
         }
         if (!DisableLruCache) {
-            for (auto&& [k, v]: *lookupResult) {
+            for (auto&& [k, v] : *lookupResult) {
                 LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
             }
         }
@@ -697,11 +707,11 @@ private: //events
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
-            LruSize->Add(deltaLruSize); // Note: there can be several streamlookup tied to same counter, so Add instead of Set
+            LruSize->Add(deltaLruSize);   // Note: there can be several streamlookup tied to same counter, so Add instead of Set
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
         LastLruSize += deltaLruSize;
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived{ InputIndex });
     }
 
     void Free() {
@@ -744,17 +754,18 @@ public:
             const auto now = std::chrono::steady_clock::now();
             Y_DEBUG_ABORT_UNLESS(AwaitingQueue.size() == 1);
             auto& output = AwaitingQueue.front();
-            for (; LastRequestedIncomplete->RequestedPosition < output.MissingKeysAndIndexes.size(); ++LastRequestedIncomplete->RequestedPosition) {
+            for (; LastRequestedIncomplete->RequestedPosition < output.MissingKeysAndIndexes.size();
+                 ++LastRequestedIncomplete->RequestedPosition) {
                 auto& [subKey, subIndex] = output.MissingKeysAndIndexes[LastRequestedIncomplete->RequestedPosition];
                 if (auto lookupPayload = LruCache->Get(subKey, now)) {
                     // key was just added to LRU in previous round of Incomplete
                     FillOutputRow(output.OutputListItems, subIndex, subKey, *lookupPayload);
                     subKey = {};
-                    subIndex = UINT32_MAX; // mark as replaced
+                    subIndex = UINT32_MAX;   // mark as replaced
                     ++hits;
                 } else if (KeysForLookup->size() < MaxKeysInRequest) {
                     auto [it, inserted] = KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{});
-                    subKey = it->first; // deduplicate
+                    subKey = it->first;   // deduplicate
                     if (inserted) {
                         ++miss;
                     } else {
@@ -763,7 +774,7 @@ public:
                 } else {
                     if (auto it = KeysForLookup->find(subKey); it != KeysForLookup->end()) {
                         // skip until key not in pending lookup
-                        subKey = it->first; // deduplicate
+                        subKey = it->first;   // deduplicate
                         ++hits;
                         continue;
                     }
@@ -790,10 +801,8 @@ public:
             size_t rowLimit = std::numeric_limits<size_t>::max();
             size_t row = 0;
             const auto outputColumns = OutputRowType->GetElementsCount();
-            while (
-                row < rowLimit &&
-                (KeysForLookup->size() < MaxKeysInRequest) &&
-                ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
+            while (row < rowLimit && (KeysForLookup->size() < MaxKeysInRequest) &&
+                   ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
                 NUdf::TUnboxedValue* otherItems;
@@ -839,9 +848,8 @@ public:
                     } else if (KeysForLookup->size() < MaxKeysInRequest) {
                         // we can add key to KeysForLookup
                         auto [it, inserted] = KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{});
-                        output.MissingKeysAndIndexes.emplace_back(
-                                it->first, // deduplicated
-                                subKeyIdx);
+                        output.MissingKeysAndIndexes.emplace_back(it->first,   // deduplicated
+                            subKeyIdx);
                         if (inserted) {
                             ++miss;
                         } else {
@@ -849,21 +857,18 @@ public:
                         }
                     } else {
                         if (auto it = KeysForLookup->find(subKey); it != KeysForLookup->end()) {
-                            subKey = it->first; // deduplicate
+                            subKey = it->first;   // deduplicate
                             if (!LastRequestedIncomplete) {
                                 // delay Incomplete transition until first key not in KeysForLookup
                                 ++hits;
                             }
                         } else if (!LastRequestedIncomplete) {
-                            LastRequestedIncomplete.emplace(
-                                TIncompleteState {
-                                    .RequestedPosition = static_cast<ui32>(output.MissingKeysAndIndexes.size()),
-                                    .ProcessedPosition = 0,
-                                });
+                            LastRequestedIncomplete.emplace(TIncompleteState{
+                                .RequestedPosition = static_cast<ui32>(output.MissingKeysAndIndexes.size()),
+                                .ProcessedPosition = 0,
+                            });
                         }
-                        output.MissingKeysAndIndexes.emplace_back(
-                                std::move(subKey),
-                                subKeyIdx);
+                        output.MissingKeysAndIndexes.emplace_back(std::move(subKey), subKeyIdx);
                     }
                 }
                 if (output.MissingKeysAndIndexes.empty()) {
@@ -925,7 +930,9 @@ private:
         std::vector<NUdf::TUnboxedValue*> OutputListItems;
         std::vector<std::pair<NUdf::TUnboxedValue, ui32>> MissingKeysAndIndexes;
     };
+
     using TAwaitingQueue = std::deque<TAwaitingRow, NKikimr::NMiniKQL::TMKQLAllocator<TAwaitingRow>>;
+
     struct TIncompleteState {
         ui32 RequestedPosition;
         ui32 ProcessedPosition;
@@ -969,7 +976,8 @@ private:
         }
     }
 
-    void FillOutputRow(std::vector<NUdf::TUnboxedValue*>& outputListItems, ui32 subRowIdx, const NUdf::TUnboxedValue& lookupSubKey, NUdf::TUnboxedValue& lookupPayload) {
+    void FillOutputRow(std::vector<NUdf::TUnboxedValue*>& outputListItems, ui32 subRowIdx, const NUdf::TUnboxedValue& lookupSubKey,
+        NUdf::TUnboxedValue& lookupPayload) {
         if (!lookupPayload) {
             return;
         }
@@ -983,14 +991,12 @@ private:
                 case EOutputRowItemSource::LookupKey:
                     outputListItems[i][subRowIdx] = lookupSubKey.GetElement(index);
                     break;
-                case EOutputRowItemSource::LookupOther:
-                    {
-                        auto& item = outputListItems[i][subRowIdx] = lookupPayload.GetElement(index);
-                        if (item.IsString()) {
-                            PayloadExtraSize += item.AsStringRef().size();
-                        }
+                case EOutputRowItemSource::LookupOther: {
+                    auto& item = outputListItems[i][subRowIdx] = lookupPayload.GetElement(index);
+                    if (item.IsString()) {
+                        PayloadExtraSize += item.AsStringRef().size();
                     }
-                    break;
+                } break;
                 case EOutputRowItemSource::None:
                     Y_ABORT();
                     break;
@@ -1005,12 +1011,15 @@ private:
 
 class TInputTransformStreamMultiLookupWide: public TInputTransformStreamMultiLookupBase {
     using TBase = TInputTransformStreamMultiLookupBase;
+
 public:
     using TBase::TBase;
+
 protected:
     NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
         return InputFlow.WideFetch(inputRowItems, InputRowType->GetElementsCount());
     }
+
     void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
         batch.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
@@ -1018,8 +1027,10 @@ protected:
 
 class TInputTransformStreamMultiLookupNarrow: public TInputTransformStreamMultiLookupBase {
     using TBase = TInputTransformStreamMultiLookupBase;
+
 public:
     using TBase::TBase;
+
 protected:
     NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
         NUdf::TUnboxedValue row;
@@ -1031,6 +1042,7 @@ protected:
         }
         return result;
     }
+
     void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
         NUdf::TUnboxedValue* narrowOutputRowItems;
         NUdf::TUnboxedValue narrowOutputRow = HolderFactory.CreateDirectArrayHolder(OutputRowType->GetElementsCount(), narrowOutputRowItems);
@@ -1041,16 +1053,14 @@ protected:
     }
 };
 
-std::pair<
-    const NMiniKQL::TStructType*, //lookup key, may contain several columns
-    const NMiniKQL::TStructType*  //lookup result(payload) the rest columns
-> SplitLookupTableColumns(
-    const NMiniKQL::TStructType* rowType,
-    const THashMap<TStringBuf, size_t>& keyColumns,
-    const NMiniKQL::TTypeEnvironment& typeEnv
-) {
-    NKikimr::NMiniKQL::TStructTypeBuilder key{typeEnv};
-    NKikimr::NMiniKQL::TStructTypeBuilder payload{typeEnv};
+std::
+    pair<const NMiniKQL::TStructType*,   //lookup key, may contain several columns
+        const NMiniKQL::TStructType*   //lookup result(payload) the rest columns
+        >
+    SplitLookupTableColumns(
+        const NMiniKQL::TStructType* rowType, const THashMap<TStringBuf, size_t>& keyColumns, const NMiniKQL::TTypeEnvironment& typeEnv) {
+    NKikimr::NMiniKQL::TStructTypeBuilder key{ typeEnv };
+    NKikimr::NMiniKQL::TStructTypeBuilder payload{ typeEnv };
     for (ui32 i = 0; i != rowType->GetMembersCount(); ++i) {
         if (keyColumns.find(rowType->GetMemberName(i)) != keyColumns.end()) {
             key.Add(rowType->GetMemberName(i), rowType->GetMemberType(i));
@@ -1058,12 +1068,12 @@ std::pair<
             payload.Add(rowType->GetMemberName(i), rowType->GetMemberType(i));
         }
     }
-    return {key.Build(), payload.Build()};
+    return { key.Build(), payload.Build()};
 }
 
 const NMiniKQL::TType* DeserializeType(TStringBuf s, const NMiniKQL::TTypeEnvironment& env) {
     const auto node = NMiniKQL::DeserializeNode(s, env);
-    return static_cast<const  NMiniKQL::TType*>(node);
+    return static_cast<const NMiniKQL::TType*>(node);
 }
 
 const NMiniKQL::TStructType* DeserializeStructType(TStringBuf s, const NMiniKQL::TTypeEnvironment& env) {
@@ -1072,69 +1082,51 @@ const NMiniKQL::TStructType* DeserializeStructType(TStringBuf s, const NMiniKQL:
     return static_cast<const NMiniKQL::TStructType*>(type);
 }
 
-std::tuple<const NMiniKQL::TMultiType*, const NMiniKQL::TMultiType*, bool> DeserializeAsMulti(TStringBuf input, TStringBuf output, const NMiniKQL::TTypeEnvironment& env) {
+std::tuple<const NMiniKQL::TMultiType*, const NMiniKQL::TMultiType*, bool> DeserializeAsMulti(
+    TStringBuf input, TStringBuf output, const NMiniKQL::TTypeEnvironment& env) {
     const auto inputType = DeserializeType(input, env);
     const auto outputType = DeserializeType(output, env);
     Y_ABORT_UNLESS(inputType->IsMulti() == outputType->IsMulti());
     if (inputType->IsMulti()) {
-        return {
-            static_cast<const NMiniKQL::TMultiType*>(inputType),
-            static_cast<const NMiniKQL::TMultiType*>(outputType),
-            true
-        };
+        return { static_cast<const NMiniKQL::TMultiType*>(inputType), static_cast<const NMiniKQL::TMultiType*>(outputType), true };
     } else {
         Y_ABORT_UNLESS(inputType->IsStruct() && outputType->IsStruct());
         const auto inputStruct = static_cast<const NMiniKQL::TStructType*>(inputType);
         std::vector<const NMiniKQL::TType*> inputItems(inputStruct->GetMembersCount());
-        for(size_t i = 0; i != inputItems.size(); ++i) {
+        for (size_t i = 0; i != inputItems.size(); ++i) {
             inputItems[i] = inputStruct->GetMemberType(i);
         }
         const auto outputStruct = static_cast<const NMiniKQL::TStructType*>(outputType);
         std::vector<const NMiniKQL::TType*> outputItems(outputStruct->GetMembersCount());
-        for(size_t i = 0; i != outputItems.size(); ++i) {
+        for (size_t i = 0; i != outputItems.size(); ++i) {
             outputItems[i] = outputStruct->GetMemberType(i);
         }
 
-        return {
-            NMiniKQL::TMultiType::Create(inputItems.size(), const_cast<NMiniKQL::TType *const*>(inputItems.data()), env),
-            NMiniKQL::TMultiType::Create(outputItems.size(), const_cast<NMiniKQL::TType *const*>(outputItems.data()), env),
-            false
-        };
+        return { NMiniKQL::TMultiType::Create(inputItems.size(), const_cast<NMiniKQL::TType* const*>(inputItems.data()), env),
+            NMiniKQL::TMultiType::Create(outputItems.size(), const_cast<NMiniKQL::TType* const*>(outputItems.data()), env), false };
     }
 }
 
-std::pair<
-    TOutputRowColumnOrder,
-    TVector<size_t>
-> CategorizeOutputRowItems(
-    const NMiniKQL::TStructType* type,
-    TStringBuf leftLabel,
-    TStringBuf rightLabel,
-    const auto& rightNames,
-    const THashMap<TStringBuf, size_t>& leftJoinColumns,
-    const THashMap<TStringBuf, size_t>& lookupKeyColumns,
-    const THashMap<TStringBuf, size_t>& lookupPayloadColumns,
-    const THashMap<TStringBuf, size_t>& inputColumns
-)
+std::pair<TOutputRowColumnOrder, TVector<size_t>> CategorizeOutputRowItems(const NMiniKQL::TStructType* type, TStringBuf leftLabel,
+    TStringBuf rightLabel, const auto& rightNames, const THashMap<TStringBuf, size_t>& leftJoinColumns,
+    const THashMap<TStringBuf, size_t>& lookupKeyColumns, const THashMap<TStringBuf, size_t>& lookupPayloadColumns,
+    const THashMap<TStringBuf, size_t>& inputColumns)
 {
     TOutputRowColumnOrder result(type->GetMembersCount());
     TVector<size_t> otherInputIndexes;
     for (ui32 i = 0; i != type->GetMembersCount(); ++i) {
         const auto prefixedName = type->GetMemberName(i);
-        if (prefixedName.starts_with(leftLabel) &&
-            prefixedName.length() > leftLabel.length() &&
-            prefixedName[leftLabel.length()] == '.') {
-            const auto name = prefixedName.SubStr(leftLabel.length() + 1); //skip prefix and dot
+        if (prefixedName.starts_with(leftLabel) && prefixedName.length() > leftLabel.length() && prefixedName[leftLabel.length()] == '.') {
+            const auto name = prefixedName.SubStr(leftLabel.length() + 1);   //skip prefix and dot
             if (auto j = leftJoinColumns.FindPtr(name)) {
                 result[i] = { EOutputRowItemSource::InputKey, lookupKeyColumns.at(rightNames[*j]) };
             } else {
                 result[i] = { EOutputRowItemSource::InputOther, otherInputIndexes.size() };
                 otherInputIndexes.push_back(inputColumns.at(name));
             }
-        } else if (prefixedName.starts_with(rightLabel) &&
-                   prefixedName.length() > rightLabel.length() &&
+        } else if (prefixedName.starts_with(rightLabel) && prefixedName.length() > rightLabel.length() &&
                    prefixedName[rightLabel.length()] == '.') {
-            const auto name = prefixedName.SubStr(rightLabel.length() + 1); //skip prefix and dot
+            const auto name = prefixedName.SubStr(rightLabel.length() + 1);   //skip prefix and dot
             if (auto j = lookupKeyColumns.FindPtr(name)) {
                 result[i] = { EOutputRowItemSource::LookupKey, *j };
             } else {
@@ -1167,7 +1159,8 @@ THashMap<TStringBuf, size_t> GetNameToIndex(TIndex size, TGetter&& getter) {
 }
 
 THashMap<TStringBuf, size_t> GetNameToIndex(const ::google::protobuf::RepeatedPtrField<TProtoStringType>& names) {
-    return GetNameToIndex(names.size(), [&names](auto idx) {
+    // the map keys are views: return the proto strings by reference, not as temporaries
+    return GetNameToIndex(names.size(), [&names](auto idx) -> const TProtoStringType& {
         return names[idx];
     });
 }
@@ -1191,8 +1184,9 @@ TVector<size_t> GetJoinColumnIndexes(TIndex size, TGetter&& getter, const THashM
 }
 
 [[maybe_unused]]
-TVector<size_t> GetJoinColumnIndexes(const ::google::protobuf::RepeatedPtrField<TProtoStringType>& names, const THashMap<TStringBuf, size_t>& joinColumns) {
-    return GetJoinColumnIndexes(names.size(), [&names](auto idx) {
+TVector<size_t> GetJoinColumnIndexes(
+    const ::google::protobuf::RepeatedPtrField<TProtoStringType>& names, const THashMap<TStringBuf, size_t>& joinColumns) {
+    return GetJoinColumnIndexes(names.size(), [&names](auto idx) -> const TProtoStringType& {
         return names[idx];
     }, joinColumns);
 }
@@ -1203,13 +1197,10 @@ TVector<size_t> GetJoinColumnIndexes(const NMiniKQL::TStructType* type, const TH
     }, joinColumns);
 }
 
-} // namespace
+}   // namespace
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStreamLookup(
-    IDqAsyncIoFactory* factory,
-    NDqProto::TDqInputTransformLookupSettings&& settings,
-    IDqAsyncIoFactory::TInputTransformArguments&& args
-)
+    IDqAsyncIoFactory* factory, NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args)
 {
     const auto narrowInputRowType = DeserializeStructType(settings.GetNarrowInputRowType(), args.TypeEnv);
     const auto narrowOutputRowType = DeserializeStructType(settings.GetNarrowOutputRowType(), args.TypeEnv);
@@ -1223,7 +1214,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     auto leftJoinColumns = GetNameToIndex(settings.GetLeftJoinKeyNames());
     auto rightJoinColumns = GetNameToIndex(settings.GetRightJoinKeyNames());
 
-    auto rightJoinColumnIndexes  = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
+    auto rightJoinColumnIndexes = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
     Y_ABORT_UNLESS(rightJoinColumnIndexes.size() == rightJoinColumns.size());
 
     auto&& [lookupKeyType, lookupPayloadType] = SplitLookupTableColumns(rightRowType, rightJoinColumns, args.TypeEnv);
@@ -1231,77 +1222,29 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     auto lookupKeyColumns = GetNameToIndex(lookupKeyType);
     auto lookupPayloadColumns = GetNameToIndex(lookupPayloadType);
 
-    auto lookupKeyInputIndexes = GetJoinColumnIndexes(
-            lookupKeyType->GetMembersCount(),
-            [&leftJoinKeyNames = settings.GetLeftJoinKeyNames(),
-             &rightJoinColumns, &lookupKeyType = lookupKeyType](auto idx) {
-                return leftJoinKeyNames[rightJoinColumns.at(lookupKeyType->GetMemberName(idx))];
-            }, inputColumns);
+    auto lookupKeyInputIndexes = GetJoinColumnIndexes(lookupKeyType->GetMembersCount(),
+        [&leftJoinKeyNames = settings.GetLeftJoinKeyNames(), &rightJoinColumns, &lookupKeyType = lookupKeyType](auto idx) {
+            return leftJoinKeyNames[rightJoinColumns.at(lookupKeyType->GetMemberName(idx))];
+        }, inputColumns);
 
-    auto&& [outputColumnsOrder, otherInputIndexes] = CategorizeOutputRowItems(
-        narrowOutputRowType,
-        settings.GetLeftLabel(),
-        settings.GetRightLabel(),
-        settings.GetRightJoinKeyNames(),
-        leftJoinColumns,
-        lookupKeyColumns,
-        lookupPayloadColumns,
-        inputColumns
-    );
+    auto&& [outputColumnsOrder, otherInputIndexes] = CategorizeOutputRowItems(narrowOutputRowType, settings.GetLeftLabel(),
+        settings.GetRightLabel(), settings.GetRightJoinKeyNames(), leftJoinColumns, lookupKeyColumns, lookupPayloadColumns, inputColumns);
     if (settings.GetIsMultiget()) {
-        auto actor = isWide ?
-            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
-                std::move(args),
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
-                outputRowType,
-                std::move(outputColumnsOrder)
-            ) :
-            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
-                std::move(args),
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
-                outputRowType,
-                std::move(outputColumnsOrder)
-            );
-        return {actor, actor};
+        auto actor = isWide ? (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(std::move(args), factory,
+                                  std::move(settings), std::move(lookupKeyInputIndexes), std::move(otherInputIndexes), inputRowType,
+                                  lookupKeyType, lookupPayloadType, outputRowType, std::move(outputColumnsOrder))
+                            : (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(std::move(args), factory,
+                                  std::move(settings), std::move(lookupKeyInputIndexes), std::move(otherInputIndexes), inputRowType,
+                                  lookupKeyType, lookupPayloadType, outputRowType, std::move(outputColumnsOrder));
+        return { actor, actor };
     }
-    auto actor = isWide ?
-        (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
-            std::move(args),
-            factory,
-            std::move(settings),
-            std::move(lookupKeyInputIndexes),
-            std::move(otherInputIndexes),
-            inputRowType,
-            lookupKeyType,
-            lookupPayloadType,
-            outputRowType,
-            std::move(outputColumnsOrder)
-        ) :
-        (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
-            std::move(args),
-            factory,
-            std::move(settings),
-            std::move(lookupKeyInputIndexes),
-            std::move(otherInputIndexes),
-            inputRowType,
-            lookupKeyType,
-            lookupPayloadType,
-            outputRowType,
-            std::move(outputColumnsOrder)
-        );
-    return {actor, actor};
+    auto actor = isWide ? (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(std::move(args), factory, std::move(settings),
+                              std::move(lookupKeyInputIndexes), std::move(otherInputIndexes), inputRowType, lookupKeyType, lookupPayloadType,
+                              outputRowType, std::move(outputColumnsOrder))
+                        : (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(std::move(args), factory, std::move(settings),
+                              std::move(lookupKeyInputIndexes), std::move(otherInputIndexes), inputRowType, lookupKeyType, lookupPayloadType,
+                              outputRowType, std::move(outputColumnsOrder));
+    return { actor, actor };
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

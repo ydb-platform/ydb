@@ -31,4 +31,4 @@ void TInitializer::DoPrepare(IInitializerInput::TPtr controller) const {
     controller->OnPreparationFinished(result);
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

@@ -92,8 +92,6 @@ public:
     using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
-
-    virtual bool SupportsSizedAllocators() const = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////

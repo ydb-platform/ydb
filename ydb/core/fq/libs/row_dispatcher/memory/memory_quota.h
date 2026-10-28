@@ -2,16 +2,16 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 
-#include <yql/essentials/minikql/mkql_alloc.h>
-
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NFq::NRowDispatcher {
 
 // Retain reservations until destruction; Resize tracks usage without releasing quota.
-class TMemoryQuota : private TNonCopyable {
+class TMemoryQuota: private TNonCopyable {
 public:
-    explicit TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager = {}, TString memoryName = "BufferMemory", NMonitoring::TDynamicCounterPtr counters = {});
+    explicit TMemoryQuota(
+        NYql::NDq::IMemoryQuotaManager::TPtr manager = {}, TString memoryName = "BufferMemory", NMonitoring::TDynamicCounterPtr counters = {});
     ~TMemoryQuota();
 
     void Add(ui64 delta);
@@ -28,6 +28,7 @@ private:
 };
 
 TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededException& error, TStringBuf context = {});
-void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName = "MkqlAlloc", NMonitoring::TDynamicCounterPtr counters = {});
+void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager,
+    TString memoryName = "MkqlAlloc", NMonitoring::TDynamicCounterPtr counters = {});
 
-} // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

@@ -2351,6 +2351,70 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
     }
 
+    Y_UNIT_TEST(TestSessionCloseCommand) {
+        // Client-initiated session garbage collection: TEvUpdateConsumptionState with
+        // CloseSession=true must destroy the session cleanly, be idempotent, keep the
+        // PipeServerIdToSession index consistent (so a later pipe disconnect does not
+        // crash), and allow a fresh session on resubscribe.
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100.0);
+        ctx.AddQuoterResource("Root", cfg);
+
+        const TActorId edge = ctx.Runtime->AllocateEdgeActor();
+        TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
+
+        auto subscribe = [&](const TActorId& pipe) -> ui64 {
+            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+            ActorIdToProto(edge, req->Record.MutableActorID());
+            auto* reqRes = req->Record.AddResources();
+            reqRes->SetResourcePath("Root");
+            reqRes->SetStartConsuming(true);
+            reqRes->SetInitialAmount(std::numeric_limits<double>::infinity());
+            ctx.Runtime->SendToPipe(
+                ctx.TabletId, edge, req.Release(), 0, GetPipeConfigWithRetries(), pipe, 0);
+            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvSubscribeOnResourcesResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResultsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                result->Record.GetResults(0).GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            return result->Record.GetResults(0).GetResourceId();
+        };
+
+        const ui64 resourceId = subscribe(sessionPipe);
+
+        // The session should be consuming the whole resource.
+        {
+            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                result->Record.GetResourcesInfo(0).GetStateNotification().GetStatus(),
+                Ydb::StatusIds::SUCCESS);
+        }
+
+        // Client asks Kesus to destroy the session.
+        ctx.CloseQuoterSession(edge, edge, resourceId);
+
+        // Idempotent: closing an already-closed session is a silent no-op (still acked).
+        ctx.CloseQuoterSession(edge, edge, resourceId);
+
+        // Killing the pipe after the session was closed must not crash the tablet:
+        // the session must have been removed from the PipeServerIdToSession index.
+        ctx.Runtime->Send(new IEventHandle(sessionPipe, edge, new TEvents::TEvPoisonPill()));
+
+        // A fresh subscribe on a new pipe re-establishes the session without errors.
+        sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
+        const ui64 resourceId2 = subscribe(sessionPipe);
+        UNIT_ASSERT_VALUES_EQUAL(resourceId2, resourceId);
+
+        auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result->Record.GetResourcesInfo(0).GetStateNotification().GetStatus(),
+            Ydb::StatusIds::SUCCESS);
+    }
+
     Y_UNIT_TEST(TestQuoterTotalCounters) {
         TTestContext ctx;
         ctx.Setup();

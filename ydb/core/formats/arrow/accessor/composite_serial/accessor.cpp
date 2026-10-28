@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/prof/tag.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NAccessor {
 
 IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
@@ -13,8 +15,11 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
         return TLocalChunkedArrayAddress(PredefinedArray, 0, 0);
     }
     if (Counter.Inc() > 1) {
-        AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "many_deserializations")("counter", Counter.Val())("size", Data.size())(
-            "buffer", DataBuffer.size());
+        YDB_LOG_WARN("",
+            {"event", "many_deserializations"},
+            {"counter", Counter.Val()},
+            {"size", Data.size()},
+            {"buffer", DataBuffer.size()});
     }
     if (!!Data) {
         auto result = Loader->ApplyConclusion(Data, GetRecordsCount(), std::nullopt, AdditionalAccessorData);

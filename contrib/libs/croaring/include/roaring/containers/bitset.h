@@ -24,7 +24,7 @@
 #include <roaring/containers/container_defs.h>  // container_t, perfparameters
 #include <roaring/portability.h>
 #include <roaring/roaring_types.h>  // roaring_iterator
-#include <roaring/utilasm.h>        // ASM_XXX macros
+#include <roaring/utilasm.h>        // CROARING_ASM_XXX macros
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,9 +85,9 @@ static inline void bitset_container_set(bitset_container_t *bitset,
     uint64_t shift = 6;
     uint64_t offset;
     uint64_t p = pos;
-    ASM_SHIFT_RIGHT(p, shift, offset);
+    CROARING_ASM_SHIFT_RIGHT(p, shift, offset);
     uint64_t load = bitset->words[offset];
-    ASM_SET_BIT_INC_WAS_CLEAR(load, p, bitset->cardinality);
+    CROARING_ASM_SET_BIT_INC_WAS_CLEAR(load, p, bitset->cardinality);
     bitset->words[offset] = load;
 }
 
@@ -97,9 +97,9 @@ static inline void bitset_container_set(bitset_container_t *bitset,
     uint64_t shift = 6;
     uint64_t offset;
     uint64_t p = pos;
-    ASM_SHIFT_RIGHT(p, shift, offset);
+    CROARING_ASM_SHIFT_RIGHT(p, shift, offset);
     uint64_t load = bitset->words[offset];
-    ASM_CLEAR_BIT_DEC_WAS_SET(load, p, bitset->cardinality);
+    CROARING_ASM_CLEAR_BIT_DEC_WAS_SET(load, p, bitset->cardinality);
     bitset->words[offset] = load;
 }*/
 
@@ -110,11 +110,11 @@ static inline bool bitset_container_add(bitset_container_t *bitset,
     uint64_t shift = 6;
     uint64_t offset;
     uint64_t p = pos;
-    ASM_SHIFT_RIGHT(p, shift, offset);
+    CROARING_ASM_SHIFT_RIGHT(p, shift, offset);
     uint64_t load = bitset->words[offset];
     // could be possibly slightly further optimized
     const int32_t oldcard = bitset->cardinality;
-    ASM_SET_BIT_INC_WAS_CLEAR(load, p, bitset->cardinality);
+    CROARING_ASM_SET_BIT_INC_WAS_CLEAR(load, p, bitset->cardinality);
     bitset->words[offset] = load;
     return bitset->cardinality - oldcard;
 }
@@ -126,11 +126,11 @@ static inline bool bitset_container_remove(bitset_container_t *bitset,
     uint64_t shift = 6;
     uint64_t offset;
     uint64_t p = pos;
-    ASM_SHIFT_RIGHT(p, shift, offset);
+    CROARING_ASM_SHIFT_RIGHT(p, shift, offset);
     uint64_t load = bitset->words[offset];
     // could be possibly slightly further optimized
     const int32_t oldcard = bitset->cardinality;
-    ASM_CLEAR_BIT_DEC_WAS_SET(load, p, bitset->cardinality);
+    CROARING_ASM_CLEAR_BIT_DEC_WAS_SET(load, p, bitset->cardinality);
     bitset->words[offset] = load;
     return oldcard - bitset->cardinality;
 }
@@ -140,7 +140,7 @@ inline bool bitset_container_get(const bitset_container_t *bitset,
                                  uint16_t pos) {
     uint64_t word = bitset->words[pos >> 6];
     const uint64_t p = pos;
-    ASM_INPLACESHIFT_RIGHT(word, p);
+    CROARING_ASM_INPLACESHIFT_RIGHT(word, p);
     return word & 1;
 }
 

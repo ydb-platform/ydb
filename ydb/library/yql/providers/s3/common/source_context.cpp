@@ -76,7 +76,7 @@ void TSourceContext::Sub(ui64 delta) {
     if (TaskQueueDataSize) {
         TaskQueueDataSize->Sub(delta);
     }
-    if (Value.load() * 4 < Limit * 3) { // l.eq.t 75%
+    if (Value.load() * 4 < Limit * 3) {   // l.eq.t 75%
         Notify();
     }
 }
@@ -130,4 +130,4 @@ void TSourceContext::UpdateProgress(ui64 deltaDownloadedBytes, ui64 deltaDecoded
     DecodedRows += deltaDecodedRows;
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

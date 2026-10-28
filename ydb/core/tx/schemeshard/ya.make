@@ -90,7 +90,7 @@ RECURSE_FOR_TESTS(
     ut_view
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -236,6 +236,7 @@ SRCS(
     schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
+    schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
@@ -418,8 +419,6 @@ PEERDIR(
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(

@@ -1,5 +1,6 @@
 #include "collection.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -117,17 +118,47 @@ std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(c
     return result;
 }
 
-TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const std::vector<ui32>& columnIds, const bool concatenate) const {
+TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(
+    const std::vector<ui32>& columnIds, const bool concatenate, const bool allowDictionaryValuesExtraction) const {
     if (columnIds.empty()) {
         return TChunkedArguments::Empty();
     }
     TChunkedArguments result;
+    std::shared_ptr<IChunkedArray> specialArgument;
+    std::optional<ui32> specialArgumentIndex;
+    if (allowDictionaryValuesExtraction) {
+        for (ui32 index = 0; index < columnIds.size(); ++index) {
+            const ui32 columnId = columnIds[index];
+            const auto& accessor = GetAccessorOptional(columnId);
+            if (!accessor) {
+                continue;
+            }
+            if (!specialArgument && (accessor->GetType() == IChunkedArray::EType::Dictionary ||
+                                        accessor->GetType() == IChunkedArray::EType::CompositeChunkedArray)) {
+                specialArgument = accessor;
+                specialArgumentIndex = index;
+            } else {
+                specialArgument.reset();
+                specialArgumentIndex.reset();
+                break;
+            }
+        }
+    }
     //    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("ids", JoinSeq(",", columnIds))("records_count", RecordsCountActual)(
     //        "use_filter", UseFilter)("filter", Filter->DebugString());
-    for (auto&& i : columnIds) {
+    for (ui32 index = 0; index < columnIds.size(); ++index) {
+        const ui32 i = columnIds[index];
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {
             result.AddScalar(GetConstantScalarVerified(i));
+        } else if (specialArgument) {
+            AFL_VERIFY(specialArgumentIndex);
+            AFL_VERIFY(*specialArgumentIndex == index);
+            if (specialArgument->GetType() == IChunkedArray::EType::Dictionary) {
+                result.AddDictionary(std::static_pointer_cast<TDictionaryArray>(specialArgument), index);
+            } else {
+                result.AddComposite(std::static_pointer_cast<TCompositeChunkedArray>(specialArgument)->GetChunks(), index);
+            }
         } else {
             result.AddArray(it->second.GetData(), i);
         }

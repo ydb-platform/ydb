@@ -14,17 +14,9 @@ class TDqWatermarkGeneratorTracker {
 public:
     using TNotifyHandler = std::function<void(TInstant)>;
 
-    TDqWatermarkGeneratorTracker(
-        const TString& logPrefix,
-        const ::NMonitoring::TDynamicCounterPtr& counters = {}
-    );
+    TDqWatermarkGeneratorTracker(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {});
 
-    void SetSettings(
-        TDuration granularity,
-        bool idlePartitionsEnabled,
-        TDuration lateArrivalDelay,
-        TDuration idleTimeout
-    );
+    void SetSettings(TDuration granularity, bool idlePartitionsEnabled, TDuration lateArrivalDelay, TDuration idleTimeout);
 
     [[nodiscard]] const TString& GetLogPrefix() const;
     void SetLogPrefix(const TString& logPrefix);
@@ -35,11 +27,7 @@ public:
 
     bool ProcessIdlenessCheck(TInstant systemTime);
 
-    TMaybe<TInstant> NotifyNewPartitionTime(
-        const TPartitionKey& partitionKey,
-        TInstant partitionTime,
-        TInstant systemTime
-    );
+    TMaybe<TInstant> NotifyNewPartitionTime(const TPartitionKey& partitionKey, TInstant partitionTime, TInstant systemTime);
 
     TMaybe<TInstant> HandleIdleness(TInstant systemTime);
 
@@ -59,4 +47,4 @@ private:
     TNotifyHandler NotifyHandler_;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

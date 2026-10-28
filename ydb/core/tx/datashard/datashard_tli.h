@@ -66,8 +66,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
 
 // Log victim detection in DataShard (when a transaction detects its locks were broken)
 inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
-                              TMaybe<ui64> victimQuerySpanId = Nothing(),
-                              TMaybe<ui64> currentQuerySpanId = Nothing()) {
+                              TMaybe<ui64> victimQuerySpanId = Nothing()) {
     // Check if logging is enabled before formatting (performance optimization)
     const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
     const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
@@ -83,10 +82,6 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     if (victimQuerySpanId && *victimQuerySpanId != 0) {
         YDB_LOG_UPDATE_MESSAGE(stlogMessage,
             {"victimQuerySpanId", ToString(*victimQuerySpanId)});
-    }
-    if (currentQuerySpanId && *currentQuerySpanId != 0) {
-        YDB_LOG_UPDATE_MESSAGE(stlogMessage,
-            {"currentQuerySpanId", ToString(*currentQuerySpanId)});
     }
 
     // Log to TLI service

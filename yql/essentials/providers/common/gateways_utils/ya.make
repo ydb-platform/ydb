@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
     SRCS(
         gateways_utils.cpp

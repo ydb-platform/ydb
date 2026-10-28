@@ -51,6 +51,17 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TYqlWithout {
+    struct TColumn {
+        TPosition Position;
+        TString Source;
+        TString Name;
+    };
+
+    TVector<TColumn> Columns;
+    bool IsIfExists = false;
+};
+
 struct TGroupingSets {
     struct TRollup {
         TVector<TNodePtr> Expressions;
@@ -71,6 +82,7 @@ struct TGroupBy {
         TGroupingSets::TCube>;
 
     TVector<TElement> Elements;
+    bool IsCompact = false;
 };
 
 struct TOrderBy {
@@ -88,6 +100,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Key;
+    TViewDescription View;
     bool IsAnonymous = false;
 };
 
@@ -99,6 +112,7 @@ struct TYqlSetItemArgs {
     TPosition Position;
     bool Distinct = false;
     TProjection Projection;
+    TMaybe<TYqlWithout> Without;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
     TMaybe<TGroupBy> GroupBy;

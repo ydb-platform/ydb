@@ -2,19 +2,21 @@
 
 #include "fq_local_grpc_events.h"
 
-#include <library/cpp/retry/retry_policy.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-template<typename TDerived, typename TReq>
-class TRpcStreamingBase : public TActorBootstrapped<TDerived> {
+template <typename TDerived, typename TReq>
+class TRpcStreamingBase: public TActorBootstrapped<TDerived> {
 public:
     TRpcStreamingBase(IRequestNoOpCtx* request)
-        : Request_{request}
-    {}
+        : Request_{ request }
+    {
+    }
 
     using TRequest = typename TReq::TRequest;
     using TResponse = typename TReq::TResponse;
@@ -54,7 +56,9 @@ public:
         return TReq::GetProtoRequest(Request_);
     }
 
-    IRequestNoOpCtx& Request() noexcept { return *Request_; }
+    IRequestNoOpCtx& Request() noexcept {
+        return *Request_;
+    }
 
 private:
     void FinishStream(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
@@ -66,34 +70,29 @@ protected:
     std::shared_ptr<IRequestNoOpCtx> Request_ = nullptr;
 };
 
-
 template <typename TDerived, typename TReq, typename TResp, bool IsOp = true>
-class TRpcBase
-    : public std::conditional_t<IsOp,
-            TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
-            TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>
-        >
-    , public NLocalGrpc::TCaller {
+class TRpcBase: public std::conditional_t<IsOp, TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
+                    TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>>,
+                public NLocalGrpc::TCaller {
 public:
-    using TBase = std::conditional_t<IsOp,
-            TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
-            TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>>;
+    using TBase = std::conditional_t<IsOp, TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
+        TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>>;
     using TRequestCtx = std::conditional_t<IsOp, IRequestOpCtx, IRequestNoOpCtx>;
 
     TRpcBase(TRequestCtx* request, TActorId grpcProxyId)
-        : TBase{request}
-        , TCaller{grpcProxyId}
-    {}
+        : TBase{ request }
+        , TCaller{ grpcProxyId }
+    {
+    }
 
     using TBase::Become;
-    using TBase::Send;
-    using TBase::PassAway;
     using TBase::GetProtoRequest;
-    using TBase::SelfId;
+    using TBase::PassAway;
     using TBase::Request_;
+    using TBase::SelfId;
+    using TBase::Send;
 
 protected:
-
     // create query
 
     STRICT_STFUNC(CreateQueryState,
@@ -128,9 +127,11 @@ protected:
     using WaitRetryPolicy = IRetryPolicy<FederatedQuery::QueryMeta::ComputeStatus>;
 
     static WaitRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return WaitRetryPolicy::GetExponentialBackoffPolicy([](FederatedQuery::QueryMeta::ComputeStatus status) {
-            return NFq::IsTerminalStatus(status) ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
-        }, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5))->CreateRetryState();
+        return WaitRetryPolicy::GetExponentialBackoffPolicy(
+            [](FederatedQuery::QueryMeta::ComputeStatus status) {
+                return NFq::IsTerminalStatus(status) ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
+            }, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5))
+            ->CreateRetryState();
     }
 
     TEvFqGetQueryStatusRequest* CreateStatusRequest(const TString& queryId) {
@@ -168,8 +169,9 @@ protected:
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
                 TBase::Reply(Ydb::StatusIds_StatusCode_TIMEOUT,
-                    TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: " <<
-                    FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                    TStringBuilder{} << "Created query " << QueryId_ << ", couldn't wait for finish, final status: "
+                                     << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                    ctx);
                 return;
             }
             ctx.Schedule(*delay, CreateStatusRequest(QueryId_));
@@ -242,11 +244,11 @@ protected:
         TStringBuf QueryId_ = "";
 
         NActors::NStructuredLog::TStructuredMessage ToStructuredMessage() const {
-            auto result = YDB_LOG_CREATE_MESSAGE({"actorId", Owner_.SelfId()});
+            auto result = YDB_LOG_CREATE_MESSAGE({ "actorId", Owner_.SelfId() });
             if (!QueryId_.empty()) {
-                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", QueryId_});
+                YDB_LOG_UPDATE_MESSAGE(result, { "queryId", QueryId_ });
             } else if (!Owner_.QueryId_.empty()) {
-                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", Owner_.QueryId_});
+                YDB_LOG_UPDATE_MESSAGE(result, { "queryId", Owner_.QueryId_ });
             }
             return result;
         }
@@ -258,4 +260,4 @@ private:
     TString QueryId_;
 };
 
-} // namespace NKikimr::NGRpcService::NYdbOverFq
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

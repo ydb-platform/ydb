@@ -59,7 +59,7 @@ private:
     const TActionQueuePtr ControlQueue_;
     const IInvokerPtr ControlInvoker_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CallbackProviderLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, CallbackProviderLock_);
 
     std::vector<ISuspendableActionQueuePtr> Workers_;
     std::vector<IInvokerPtr> Invokers_;

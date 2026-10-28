@@ -8,7 +8,7 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 namespace NYT::NConcurrency {
 
@@ -18,7 +18,7 @@ class TNotifyManager
 {
 public:
     TNotifyManager(
-        TIntrusivePtr<NThreading::TEventCount> eventCount,
+        TIntrusivePtr<TEventCount> eventCount,
         const NProfiling::TTagSet& counterTagSet,
         TDuration pollingPeriod);
 
@@ -31,11 +31,11 @@ public:
     // Must be called after DoCancelWait.
     void NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMinEnqueuedAt);
 
-    void Wait(NThreading::TEventCount::TCookie cookie, std::function<bool()> isStopping);
+    void Wait(TEventCount::TCookie cookie, std::function<bool()> isStopping);
 
     void CancelWait();
 
-    NThreading::TEventCount* GetEventCount();
+    TEventCount* GetEventCount();
 
     void SetPollingPeriod(TDuration pollingPeriod);
 
@@ -43,7 +43,7 @@ private:
     static constexpr TCpuInstant UnlockedNotifyInstant = 0;
     static constexpr TCpuInstant SentinelMinEnqueuedAtInstant = std::numeric_limits<TCpuInstant>::max();
 
-    const TIntrusivePtr<NThreading::TEventCount> EventCount_;
+    const TIntrusivePtr<TEventCount> EventCount_;
     const NProfiling::TCounter WakeupCounter_;
     const NProfiling::TCounter WakeupByTimeoutCounter_;
 

@@ -1,6 +1,7 @@
 #include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
@@ -11,6 +12,7 @@
 #include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -79,7 +81,7 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
         txc.DB.NoMoreReadsForTx();
 
         ISubOperation::TPtr part = CreateTxCancelTx(Ev);
-        TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+        TProposeContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
         auto fakeResponse = part->Propose(TString(), context);
         Y_UNUSED(fakeResponse);
 
@@ -104,7 +106,7 @@ bool TSchemeShard::ProcessOperationParts(
     bool prevProposeUndoSafe,
     TOperation::TPtr& operation,
     THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
-    TOperationContext& context)
+    TProposeContext& context)
 {
     auto selfId = TabletID();
     const TString owner = record.GetOwner().empty() ? BUILTIN_ACL_ROOT : record.GetOwner();
@@ -112,6 +114,20 @@ bool TSchemeShard::ProcessOperationParts(
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation
         context.IsAllowedPrivateTables = true;
+
+        // Suboperations with RequiresSinglePartTransaction have undo-unsafe
+        // Propose: on a failed propose in a multi-part transaction the already
+        // accepted parts could not be reverted. Forbid them here, at ignite time.
+        for (const auto& part : parts) {
+            Y_VERIFY_S(!DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }),
+                "IgniteOperation, single-part direct-write suboperation in a multi-part transaction"
+                    << ", subop: " << part->Name()
+                    << ", subopType: " << NKikimrSchemeOp::EOperationType_Name(part->GetModifyScheme().GetOperationType())
+                    << ", total subops count: " << parts.size()
+                    << ", txId: " << txId
+                    << ", schemeshard: " << selfId
+            );
+        }
     }
 
     for (auto& part : parts) {
@@ -166,19 +182,28 @@ bool TSchemeShard::ProcessOperationParts(
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
             TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
 
-            Y_VERIFY_S(context.IsUndoChangesSafe(),
-                "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
-                    << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                    << ", accepted subops count: " << operation->Parts.size()
-                    << ", total subops count: " << parts.size()
-                    << ", txId: " << txId
-                    << ", failed subop: " << operation->GetTxId()
-                    << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                    << ", fail reason: " << response->Record.GetReason()
-                    << ", first GetDB called at: " << locationInfo
-                    << ", modifyScheme tx: " << SecureDebugString(record)
-                    << ", schemeshard:  " << selfId
-            );
+            // A single-part direct-write suboperation failing its own propose
+            // is a documented exception: the transaction aborts with zero
+            // accepted parts and the direct writes are rolled back by the txc.
+            const bool singlePartDirectWrite =
+                parts.size() == 1
+                && DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; });
+
+            if (!singlePartDirectWrite) {
+                Y_VERIFY_S(context.IsUndoChangesSafe(),
+                    "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", accepted subops count: " << operation->Parts.size()
+                        << ", total subops count: " << parts.size()
+                        << ", txId: " << txId
+                        << ", failed subop: " << operation->GetTxId()
+                        << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                        << ", fail reason: " << response->Record.GetReason()
+                        << ", first GetDB called at: " << locationInfo
+                        << ", modifyScheme tx: " << SecureDebugString(record)
+                        << ", schemeshard:  " << selfId
+                );
+            }
 
             AbortOperationPropose(txId, context);
 
@@ -186,7 +211,10 @@ bool TSchemeShard::ProcessOperationParts(
         }
 
         // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
-        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+        // Single-part direct-write suboperations are a documented exception, do not warn about them.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()
+            && !DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }))
+        {
             prevProposeUndoSafe = false;
 
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
@@ -202,7 +230,7 @@ bool TSchemeShard::ProcessOperationParts(
     return true;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context) {
+THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context) {
     using namespace NGenerated;
     THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
 
@@ -214,6 +242,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
         response->SetError(NKikimrScheme::StatusAccepted, "An operation with the same txId is already in flight. This should not happen. Note that the transaction body is not guaranteed to be identical — StatusAccepted is simply returned for retries.");
         return response;
+    }
+
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+    {
+        return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+            "Client schema modifications are disabled for non-administrators");
     }
 
     TOperation::TPtr operation = new TOperation(txId);
@@ -321,7 +359,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     return response;
 }
 
-void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& context) {
+void TSchemeShard::AbortOperationPropose(const TTxId txId, TProposeContext& context) {
     Y_ABORT_UNLESS(Operations.contains(txId));
     TOperation::TPtr operation = Operations.at(txId);
 
@@ -351,7 +389,7 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     Operations.erase(txId);
 }
 
-void AbortOperation(TOperationContext& context, const TTxId txId, const TString& reason) {
+void AbortOperation(TProposeContext& context, const TTxId txId, const TString& reason) {
     YDB_LOG_ERROR_CTX(context.Ctx, "TTxOperationPropose Execute: operation rejected and changes reverted",
         {"txId", txId},
         {"reason", reason},
@@ -427,7 +465,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
-        TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
+        TProposeContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
         context.PeerName = PeerName;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
@@ -543,7 +581,7 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
 
         ISubOperation::TPtr part = operation->Parts.at(ui64(OpId.GetSubTxId()));
 
-        TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+        TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
 
         {
             YDB_LOG_CREATE_CONTEXT(
@@ -668,7 +706,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
         ISubOperation::TPtr part = findActiveSubOperation(OperationId);
 
         {
-            TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+            TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
 
             if (part) {
                 YDB_LOG_CREATE_CONTEXT(
@@ -764,7 +802,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                     continue;
                 }
 
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
                 THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
                 TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
                             context.SS->SelfId(), context.SS->SelfId(), msg.Release());

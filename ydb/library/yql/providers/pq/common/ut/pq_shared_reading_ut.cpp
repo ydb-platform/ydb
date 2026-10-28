@@ -1,16 +1,12 @@
 #include <ydb/library/yql/providers/pq/common/pq_shared_reading.h>
-
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <google/protobuf/any.pb.h>
-
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(THasSharedReading) {
-
     Y_UNIT_TEST(EmptyAnyHasNoSharedReading) {
         google::protobuf::Any empty;
         UNIT_ASSERT(!HasSharedReading(empty));
@@ -39,7 +35,6 @@ Y_UNIT_TEST_SUITE(THasSharedReading) {
         any.PackFrom(source);
         UNIT_ASSERT(HasSharedReading(any));
     }
-
 }
 
-} // namespace NYql
+}   // namespace NYql

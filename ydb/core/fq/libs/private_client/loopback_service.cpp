@@ -1,24 +1,22 @@
 #include "loopback_service.h"
 
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
-
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_config/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
 
 namespace NFq {
 
-class TLoopbackService : public NActors::TActorBootstrapped<TLoopbackService> {
+class TLoopbackService: public NActors::TActorBootstrapped<TLoopbackService> {
 public:
-    TLoopbackService(
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+    TLoopbackService(const ::NMonitoring::TDynamicCounterPtr& counters)
         : ServiceCounters(counters->GetSubgroup("subsystem", "LoopbackService"))
     {
     }
@@ -53,7 +51,8 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest(std::move(request)), 0,
+            Cookie);
     }
 
     void Handle(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
@@ -63,7 +62,8 @@ private:
                 Send(it->second, new TEvInternalService::TEvHealthCheckResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -98,7 +98,8 @@ private:
                 Send(it->second, new TEvInternalService::TEvGetTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -122,7 +123,8 @@ private:
                 Send(it->second, new TEvInternalService::TEvPingTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvPingTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvPingTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -134,7 +136,8 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, Cookie);
+        Send(
+            NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, Cookie);
     }
 
     void Handle(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
@@ -144,7 +147,8 @@ private:
                 Send(it->second, new TEvInternalService::TEvWriteResultResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -156,17 +160,20 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest(std::move(request)),
+            0, Cookie);
     }
 
     void Handle(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+                Send(
+                    it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -178,17 +185,20 @@ private:
         Senders[Cookie] = ev->Sender;
         OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
-        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest(std::move(request)),
+            0, Cookie);
     }
 
     void Handle(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+                Send(
+                    it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+                Send(it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0,
+                    OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);
@@ -203,9 +213,8 @@ private:
     NFq::TTenantInfo::TPtr TenantInfo;
 };
 
-NActors::IActor* CreateLoopbackServiceActor(
-    const ::NMonitoring::TDynamicCounterPtr& counters) {
-        return new TLoopbackService(counters);
+NActors::IActor* CreateLoopbackServiceActor(const ::NMonitoring::TDynamicCounterPtr& counters) {
+    return new TLoopbackService(counters);
 }
 
-} /* NFq */
+}   // namespace NFq

@@ -1,9 +1,10 @@
 """URL parsing utilities."""
 
+import codecs
 import re
 import unicodedata
 from functools import lru_cache
-from urllib.parse import scheme_chars, uses_netloc
+from urllib.parse import parse_qsl, scheme_chars, uses_netloc
 
 from ._quoters import QUOTER, UNQUOTER_PLUS
 
@@ -218,15 +219,36 @@ def make_netloc(
     return f"{user}@{ret}" if user else ret
 
 
-def query_to_pairs(query_string: str) -> list[tuple[str, str]]:
-    """Parse a query given as a string argument.
+def query_to_pairs(
+    query_string: str, *, max_fields: int | None = None, encoding: str = "utf-8"
+) -> list[tuple[str, str]]:
+    """Parse a query string into a list of decoded name, value pairs.
 
-    Works like urllib.parse.parse_qsl with keep empty values.
+    The result is the same as
+    ``urllib.parse.parse_qsl(query_string, keep_blank_values=True,
+    encoding=encoding, max_num_fields=max_fields)``.
+
+    Raises :exc:`ValueError` if *max_fields* is not ``None`` and the
+    query string has more than *max_fields* fields. An empty query string
+    returns an empty list on every Python version, even when *max_fields*
+    is ``0``, where ``parse_qsl`` on Python 3.10 raises instead.
     """
-    pairs: list[tuple[str, str]] = []
     if not query_string:
+        return []
+    if max_fields is not None and query_string.count("&") >= max_fields:
+        raise ValueError("Max number of fields exceeded")
+    pairs: list[tuple[str, str]] = []
+    if "%" not in query_string:
+        # Nothing to decode except '+', which is the same in every encoding
+        for name_value in query_string.replace("+", " ").split("&"):
+            if name_value:
+                name, _, value = name_value.partition("=")
+                pairs.append((name, value))
         return pairs
-    for k_v in query_string.split("&"):
-        k, _, v = k_v.partition("=")
-        pairs.append((UNQUOTER_PLUS(k), UNQUOTER_PLUS(v)))
+    if encoding != "utf-8" and codecs.lookup(encoding).name != "utf-8":
+        return parse_qsl(query_string, keep_blank_values=True, encoding=encoding)
+    for name_value in query_string.split("&"):
+        if name_value:
+            name, _, value = name_value.partition("=")
+            pairs.append((UNQUOTER_PLUS(name), UNQUOTER_PLUS(value)))
     return pairs

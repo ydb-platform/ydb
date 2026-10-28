@@ -9,33 +9,9 @@ IF (MKQL_RUNTIME_VERSION)
 ENDIF()
 
 PEERDIR(
-    yql/essentials/public/udf
-    yql/essentials/public/udf/arrow
-    yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg_dummy
-
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/minikql/codegen/llvm16
-    yql/essentials/minikql/invoke_builtins/llvm16
-
-    yql/essentials/ast
-    yql/essentials/core
-    yql/essentials/providers/common/arrow_resolve
-    yql/essentials/providers/common/mkql
-    yql/essentials/providers/common/udf_resolve
-
-    library/cpp/testing/unittest
-
-    ydb/core/kqp/runtime
-
-    ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/dq/comp_nodes/ut/utils
-
     contrib/libs/apache/arrow
-
-    contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
+    contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/Linker
     contrib/libs/llvm16/lib/Passes
     contrib/libs/llvm16/lib/Target/X86
@@ -43,6 +19,24 @@ PEERDIR(
     contrib/libs/llvm16/lib/Target/X86/Disassembler
     contrib/libs/llvm16/lib/Transforms/IPO
     contrib/libs/llvm16/lib/Transforms/ObjCARC
+    library/cpp/testing/unittest
+    ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/common
+    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/comp_nodes/ut/utils
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/minikql/codegen/llvm16
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/providers/common/arrow_resolve
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/udf_resolve
+    yql/essentials/public/udf
+    yql/essentials/public/udf/arrow
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 IF (ARCH_X86_64)
@@ -58,13 +52,13 @@ SRCS(
     dq_block.cpp
     dq_combine_vs.cpp
     factories.cpp
+    fs_utils.cpp
     printout.cpp
     simple.cpp
     simple_grace_join.cpp
     simple_last.cpp
-    subprocess.cpp
     streams.cpp
-    fs_utils.cpp
+    subprocess.cpp
 )
 
 END()

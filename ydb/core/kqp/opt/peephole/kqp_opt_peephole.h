@@ -22,6 +22,8 @@ class TExprBase;
 
 namespace NKikimr::NKqp::NOpt {
 
+struct TKqpOptimizeContext;
+
 std::unordered_set<std::string_view> GetNonDeterministicFunctions();
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTxPeepholeTransformer(
@@ -32,8 +34,9 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTxPeepholeTransformer(
 );
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTxsPeepholeTransformer(
-    NYql::TTypeAnnotationContext& typesCtx, 
-    const TIntrusivePtr<NYql::TKikimrConfiguration>& config
+    NYql::TTypeAnnotationContext& typesCtx,
+    const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
 );
 
 NYql::IGraphTransformer::TStatus PeepHoleOptimize(const NYql::NNodes::TExprBase& program, NYql::TExprNode::TPtr& newProgram, NYql::TExprContext& ctx,

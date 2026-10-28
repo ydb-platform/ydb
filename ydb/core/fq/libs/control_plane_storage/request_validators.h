@@ -4,8 +4,8 @@
 
 #include <ydb/core/external_sources/object_storage.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
+
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/scheme/scheme.h>
@@ -13,12 +13,13 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <regex>
 
 namespace NFq {
 
-template<class P>
+template <class P>
 NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
 {
     const auto& request = ev->Get()->Request;
@@ -41,7 +42,8 @@ NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
     }
 
     if (byteSize > maxSize) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "request size exceeded " << maxSize << " bytes. Request size: " << byteSize));
+        issues.AddIssue(MakeErrorIssue(
+            TIssuesIds::BAD_REQUEST, TStringBuilder{} << "request size exceeded " << maxSize << " bytes. Request size: " << byteSize));
     }
 
     TString error;
@@ -52,7 +54,7 @@ NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
     return issues;
 }
 
-template<typename T>
+template <typename T>
 NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
 {
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -80,8 +82,9 @@ NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
 
 NYql::TIssues ValidateEntityName(const TString& name);
 
-template<typename T>
-NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQuery::BindingSetting::BindingCase>& availableBindings, size_t pathsLimit)
+template <typename T>
+NYql::TIssues ValidateBinding(
+    const T& ev, size_t maxSize, const TSet<FederatedQuery::BindingSetting::BindingCase>& availableBindings, size_t pathsLimit)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -104,26 +107,27 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
         }
 
         switch (setting.binding_case()) {
-        case FederatedQuery::BindingSetting::kDataStreams: {
-            const FederatedQuery::DataStreamsBinding dataStreams = setting.data_streams();
-            if (!dataStreams.has_schema()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
+            case FederatedQuery::BindingSetting::kDataStreams: {
+                const FederatedQuery::DataStreamsBinding dataStreams = setting.data_streams();
+                if (!dataStreams.has_schema()) {
+                    issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
+                }
+                issues.AddIssues(NKikimr::NExternalSource::ValidateDateFormatSetting(dataStreams.format_setting(), true));
+                issues.AddIssues(NKikimr::NExternalSource::ValidateRawFormat(
+                    dataStreams.format(), dataStreams.schema(), google::protobuf::RepeatedPtrField<TString>()));
+                break;
             }
-            issues.AddIssues(NKikimr::NExternalSource::ValidateDateFormatSetting(dataStreams.format_setting(), true));
-            issues.AddIssues(NKikimr::NExternalSource::ValidateRawFormat(dataStreams.format(), dataStreams.schema(), google::protobuf::RepeatedPtrField<TString>()));
-            break;
-        }
-        case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set"));
-            break;
-        }
-            // Do not replace with default. Adding a new binding should cause a compilation error
-        case FederatedQuery::BindingSetting::kObjectStorage:
-            const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
-            for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit, subset.path_pattern()));
+            case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set"));
+                break;
             }
-            break;
+                // Do not replace with default. Adding a new binding should cause a compilation error
+            case FederatedQuery::BindingSetting::kObjectStorage:
+                const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
+                for (const auto& subset : objectStorage.subset()) {
+                    issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit, subset.path_pattern()));
+                }
+                break;
         }
     } else {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content field is not specified"));
@@ -132,19 +136,12 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
     return issues;
 }
 
-NYql::TIssues ValidateConnectionSetting(
-    const FederatedQuery::ConnectionSetting& setting,
-    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections,
-    bool disableCurrentIam,
-    bool passwordRequired = true);
+NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting& setting,
+    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam, bool passwordRequired = true);
 
-template<typename T>
-NYql::TIssues ValidateConnection(
-    const T& ev,
-    size_t maxSize,
-    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections,
-    bool disableCurrentIam,
-    bool passwordRequired = true)
+template <typename T>
+NYql::TIssues ValidateConnection(const T& ev, size_t maxSize,
+    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam, bool passwordRequired = true)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -169,4 +166,4 @@ NYql::TIssues ValidateConnection(
     return issues;
 }
 
-} // namespace NFq
+}   // namespace NFq

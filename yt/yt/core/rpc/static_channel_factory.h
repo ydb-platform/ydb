@@ -4,7 +4,7 @@
 #include "channel.h"
 #include "helpers.h"
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NRpc {
 
@@ -18,7 +18,7 @@ public:
     IChannelPtr CreateChannel(const std::string& address) override;
 
 private:
-    NThreading::TAtomicObject<THashMap<std::string, IChannelPtr>> ChannelMap;
+    TAtomicObject<THashMap<std::string, IChannelPtr>> ChannelMap;
 };
 
 DEFINE_REFCOUNTED_TYPE(TStaticChannelFactory)

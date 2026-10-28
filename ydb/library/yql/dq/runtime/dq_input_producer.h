@@ -37,6 +37,8 @@ struct TDqMeteringStats {
     }
 };
 
+// useReadySet: visit the inputs when they are marked rather than polling them, see TDqInputReadySet; all the inputs
+// must support it (IDqInput::BindReadySet), or the union polls them all as before
 NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(
     const NKikimr::NMiniKQL::TType* type,
     TVector<IDqInput::TPtr>&& inputs,
@@ -45,7 +47,8 @@ NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(
     TInstant& startTs,
     ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
-    TDqComputeActorWatermarks* watermarksTracker
+    TDqComputeActorWatermarks* watermarksTracker,
+    bool useReadySet = false
 );
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(

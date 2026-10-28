@@ -1,5 +1,6 @@
 #include "datashard_ut_common_kqp.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
@@ -311,6 +312,121 @@ Y_UNIT_TEST_SUITE(DataShardDiskQuotas) {
                 UPSERT INTO `/Root/table2` (key, value) VALUES (4, 4);
                 )"),
             "<empty>");
+    }
+
+    Y_UNIT_TEST(StorageSpaceExhausted) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+
+        // Storage pools of the root domain are not bound to it by ScopeId, so BS_CONTROLLER always reports it as not
+        // exhausted; drop these reports and inject the state from the test instead
+        TBlockEvents<TEvBlobStorage::TEvControllerDatabaseSpaceState> fromNodeWarden(runtime,
+            [&](const auto& ev) { return ev->Sender != sender; });
+
+        const ui64 schemeShardId = ChangeStateStorage(Tests::SchemeRoot, serverSettings.Domain);
+
+        auto setExhausted = [&](bool exhausted) {
+            // root path of the root schemeshard is the domain key of the root domain
+            ForwardToTablet(runtime, schemeShardId, sender,
+                new TEvBlobStorage::TEvControllerDatabaseSpaceState(TPathId(schemeShardId, 1), exhausted));
+        };
+
+        auto describeRootState = [&] {
+            ForwardToTablet(runtime, schemeShardId, sender, new TEvSchemeShard::TEvDescribeScheme("/Root"));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+            return ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetDomainState();
+        };
+
+        auto waitRootState = [&](bool exhausted) {
+            for (int i = 0; i < 10; ++i) {
+                const auto state = describeRootState();
+                if (state.GetStorageSpaceExhausted() == exhausted) {
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetDiskQuotaExceeded(), exhausted);
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("root domain state has not become StorageSpaceExhausted# " << exhausted);
+        };
+
+        auto upsert = [&](int key) {
+            return KqpSimpleExec(runtime, Sprintf("UPSERT INTO `/Root/table` (key, value) VALUES (%d, %d);", key, key));
+        };
+
+        auto waitUpsertResult = [&](int key, const TString& expected) {
+            TString result;
+            for (int i = 0; i < 30; ++i) {
+                result = upsert(key);
+                if (result == expected) {
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_FAIL("unexpected upsert result# " << result << " expected# " << expected);
+        };
+
+        Cerr << "... Adding storage pool to the root domain" << Endl;
+        ui64 txId = AsyncAlterSubDomain(server, sender, "/", "Root", R"(
+                StoragePools {
+                    Name: "/Root:test"
+                    Kind: "test"
+                }
+            )");
+        WaitTxNotification(server, sender, txId);
+
+        Cerr << "... Creating the table" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(upsert(1), "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(upsert(2), "<empty>");
+
+        Cerr << "... Reporting storage space exhausted" << Endl;
+        setExhausted(true);
+        waitRootState(true);
+        waitUpsertResult(3, "ERROR: UNAVAILABLE");
+
+        Cerr << "... Reading and erasing are still allowed" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT key FROM `/Root/table` WHERE key = 1;"),
+            "{ items { int32_value: 1 } }");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "DELETE FROM `/Root/table` WHERE key = 2;"),
+            "<empty>");
+
+        Cerr << "... The state survives schemeshard restart" << Endl;
+        RebootTablet(runtime, schemeShardId, sender);
+        waitRootState(true);
+
+        Cerr << "... The state survives altering the database" << Endl;
+        txId = AsyncAlterSubDomain(server, sender, "/", "Root", R"(
+                StoragePools {
+                    Name: "/Root:test"
+                    Kind: "test"
+                }
+                DatabaseQuotas {
+                    data_size_hard_quota: 1000000000
+                }
+            )");
+        WaitTxNotification(server, sender, txId);
+        waitRootState(true);
+        UNIT_ASSERT_VALUES_EQUAL(upsert(3), "ERROR: UNAVAILABLE");
+
+        Cerr << "... Reporting storage space is available again" << Endl;
+        setExhausted(false);
+        waitRootState(false);
+        waitUpsertResult(3, "<empty>");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardDiskQuotas)

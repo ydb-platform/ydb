@@ -1,10 +1,10 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stddef.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -108,7 +108,8 @@ void BatchLogRecordProcessor::OnEmit(std::unique_ptr<Recordable> &&record) noexc
   size_t buffer_size = buffer_.size();
   if (buffer_size >= max_queue_size_ / 2 || buffer_size >= max_export_batch_size_)
   {
-    // signal the worker thread
+    // Notified without lock to reduce contention for log emit. If this notify is lost,
+    // the worker thread may wait until next schedule or until the next notify attempt.
     synchronization_data_->is_force_wakeup_background_worker.store(true, std::memory_order_release);
     synchronization_data_->cv.notify_all();
   }
@@ -138,6 +139,7 @@ bool BatchLogRecordProcessor::ForceFlush(std::chrono::microseconds timeout) noex
     if (synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire) >
         synchronization_data_->force_flush_notified_sequence.load(std::memory_order_acquire))
     {
+      std::lock_guard<std::mutex> cv_lock(synchronization_data_->cv_m);
       synchronization_data_->is_force_wakeup_background_worker.store(true,
                                                                      std::memory_order_release);
       synchronization_data_->cv.notify_all();
@@ -199,18 +201,24 @@ void BatchLogRecordProcessor::DoBackgroundWork()
     }
 #endif /* ENABLE_THREAD_INSTRUMENTATION_PREVIEW */
 
-    // Wait for `timeout` milliseconds
-    std::unique_lock<std::mutex> lk(synchronization_data_->cv_m);
-    synchronization_data_->cv.wait_for(lk, timeout, [this] {
-      if (synchronization_data_->is_force_wakeup_background_worker.load(std::memory_order_acquire))
-      {
-        return true;
-      }
+    // This scope is important! `cv_m` must be released before acquiring `force_flush_cv_m`.
+    // Since `Export()` calls `NotifyCompletion()` which takes `force_flush_cv_m`,
+    // holding `cv_m` while calling `Export()` can lead to a ABBA deadlock.
+    {
+      // Wait for `timeout` milliseconds.
+      std::unique_lock<std::mutex> lk(synchronization_data_->cv_m);
+      synchronization_data_->cv.wait_for(lk, timeout, [this] {
+        if (synchronization_data_->is_force_wakeup_background_worker.load(
+                std::memory_order_acquire))
+        {
+          return true;
+        }
 
-      return !buffer_.empty();
-    });
-    synchronization_data_->is_force_wakeup_background_worker.store(false,
-                                                                   std::memory_order_release);
+        return !buffer_.empty();
+      });
+      synchronization_data_->is_force_wakeup_background_worker.store(false,
+                                                                     std::memory_order_release);
+    }
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
     if (worker_thread_instrumentation_ != nullptr)
@@ -320,6 +328,7 @@ void BatchLogRecordProcessor::NotifyCompletion(
       exporter->ForceFlush(timeout);
     }
 
+    std::lock_guard<std::mutex> lock(synchronization_data->force_flush_cv_m);
     std::uint64_t notified_sequence =
         synchronization_data->force_flush_notified_sequence.load(std::memory_order_acquire);
     while (notify_force_flush > notified_sequence)
@@ -388,8 +397,12 @@ bool BatchLogRecordProcessor::InternalShutdown(std::chrono::microseconds timeout
 
   if (worker_thread_.joinable())
   {
-    synchronization_data_->is_force_wakeup_background_worker.store(true, std::memory_order_release);
-    synchronization_data_->cv.notify_all();
+    {
+      std::lock_guard<std::mutex> cv_lock(synchronization_data_->cv_m);
+      synchronization_data_->is_force_wakeup_background_worker.store(true,
+                                                                     std::memory_order_release);
+      synchronization_data_->cv.notify_all();
+    }
     worker_thread_.join();
   }
 

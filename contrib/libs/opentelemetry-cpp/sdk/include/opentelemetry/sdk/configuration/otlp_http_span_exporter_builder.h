@@ -6,12 +6,16 @@
 #include <memory>
 
 #include "opentelemetry/sdk/configuration/otlp_http_span_exporter_configuration.h"
-#include "opentelemetry/sdk/trace/exporter.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
+namespace trace
+{
+class SpanExporter;
+}  // namespace trace
+
 namespace configuration
 {
 

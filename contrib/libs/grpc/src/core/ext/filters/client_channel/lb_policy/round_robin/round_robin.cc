@@ -126,14 +126,14 @@ class OldRoundRobin : public LoadBalancingPolicy {
       : public SubchannelList<RoundRobinSubchannelList,
                               RoundRobinSubchannelData> {
    public:
-    RoundRobinSubchannelList(OldRoundRobin* policy, ServerAddressList addresses,
+    RoundRobinSubchannelList(OldRoundRobin* policy,
+                             EndpointAddressesIterator* addresses,
                              const ChannelArgs& args)
         : SubchannelList(policy,
                          (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)
                               ? "RoundRobinSubchannelList"
                               : nullptr),
-                         std::move(addresses), policy->channel_control_helper(),
-                         args) {
+                         addresses, policy->channel_control_helper(), args) {
       // Need to maintain a ref to the LB policy as long as we maintain
       // any references to subchannels, since the subchannels'
       // pollset_sets will include the LB policy's pollset_set.
@@ -278,13 +278,12 @@ void OldRoundRobin::ResetBackoffLocked() {
 }
 
 y_absl::Status OldRoundRobin::UpdateLocked(UpdateArgs args) {
-  ServerAddressList addresses;
+  EndpointAddressesIterator* addresses = nullptr;
   if (args.addresses.ok()) {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
-      gpr_log(GPR_INFO, "[RR %p] received update with %" PRIuPTR " addresses",
-              this, args.addresses->size());
+      gpr_log(GPR_INFO, "[RR %p] received update", this);
     }
-    addresses = std::move(*args.addresses);
+    addresses = args.addresses->get();
   } else {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
       gpr_log(GPR_INFO, "[RR %p] received update with address error: %s", this,
@@ -300,8 +299,8 @@ y_absl::Status OldRoundRobin::UpdateLocked(UpdateArgs args) {
     gpr_log(GPR_INFO, "[RR %p] replacing previous pending subchannel list %p",
             this, latest_pending_subchannel_list_.get());
   }
-  latest_pending_subchannel_list_ = MakeRefCounted<RoundRobinSubchannelList>(
-      this, std::move(addresses), args.args);
+  latest_pending_subchannel_list_ =
+      MakeRefCounted<RoundRobinSubchannelList>(this, addresses, args.args);
   latest_pending_subchannel_list_->StartWatchingLocked(args.args);
   // If the new list is empty, immediately promote it to
   // subchannel_list_ and report TRANSIENT_FAILURE.
@@ -406,7 +405,8 @@ void OldRoundRobin::RoundRobinSubchannelList::
     }
     p->channel_control_helper()->UpdateState(
         GRPC_CHANNEL_CONNECTING, y_absl::Status(),
-        MakeRefCounted<QueuePicker>(p->Ref(DEBUG_LOCATION, "QueuePicker")));
+        MakeRefCounted<QueuePicker>(
+            p->RefAsSubclass<OldRoundRobin>(DEBUG_LOCATION, "QueuePicker")));
   } else if (num_transient_failure_ == num_subchannels()) {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
       gpr_log(GPR_INFO,
@@ -525,14 +525,14 @@ class RoundRobin : public LoadBalancingPolicy {
   class RoundRobinEndpointList : public EndpointList {
    public:
     RoundRobinEndpointList(RefCountedPtr<RoundRobin> round_robin,
-                           const EndpointAddressesList& endpoints,
+                           EndpointAddressesIterator* endpoints,
                            const ChannelArgs& args)
         : EndpointList(std::move(round_robin),
                        GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)
                            ? "RoundRobinEndpointList"
                            : nullptr) {
       Init(endpoints, args,
-           [&](RefCountedPtr<RoundRobinEndpointList> endpoint_list,
+           [&](RefCountedPtr<EndpointList> endpoint_list,
                const EndpointAddresses& addresses, const ChannelArgs& args) {
              return MakeOrphanable<RoundRobinEndpoint>(
                  std::move(endpoint_list), addresses, args,
@@ -543,7 +543,7 @@ class RoundRobin : public LoadBalancingPolicy {
    private:
     class RoundRobinEndpoint : public Endpoint {
      public:
-      RoundRobinEndpoint(RefCountedPtr<RoundRobinEndpointList> endpoint_list,
+      RoundRobinEndpoint(RefCountedPtr<EndpointList> endpoint_list,
                          const EndpointAddresses& addresses,
                          const ChannelArgs& args,
                          std::shared_ptr<WorkSerializer> work_serializer)
@@ -688,13 +688,12 @@ void RoundRobin::ResetBackoffLocked() {
 }
 
 y_absl::Status RoundRobin::UpdateLocked(UpdateArgs args) {
-  EndpointAddressesList addresses;
+  EndpointAddressesIterator* addresses = nullptr;
   if (args.addresses.ok()) {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
-      gpr_log(GPR_INFO, "[RR %p] received update with %" PRIuPTR " endpoints",
-              this, args.addresses->size());
+      gpr_log(GPR_INFO, "[RR %p] received update", this);
     }
-    addresses = std::move(*args.addresses);
+    addresses = args.addresses->get();
   } else {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
       gpr_log(GPR_INFO, "[RR %p] received update with address error: %s", this,
@@ -711,8 +710,8 @@ y_absl::Status RoundRobin::UpdateLocked(UpdateArgs args) {
             latest_pending_endpoint_list_.get());
   }
   latest_pending_endpoint_list_ = MakeOrphanable<RoundRobinEndpointList>(
-      Ref(DEBUG_LOCATION, "RoundRobinEndpointList"), std::move(addresses),
-      args.args);
+      RefAsSubclass<RoundRobin>(DEBUG_LOCATION, "RoundRobinEndpointList"),
+      addresses, args.args);
   // If the new list is empty, immediately promote it to
   // endpoint_list_ and report TRANSIENT_FAILURE.
   if (latest_pending_endpoint_list_->size() == 0) {
@@ -749,15 +748,13 @@ void RoundRobin::RoundRobinEndpointList::RoundRobinEndpoint::OnStateUpdate(
   auto* rr_endpoint_list = endpoint_list<RoundRobinEndpointList>();
   auto* round_robin = policy<RoundRobin>();
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
-    gpr_log(GPR_INFO,
-            "[RR %p] connectivity changed for child %p, endpoint_list %p "
-            "(index %" PRIuPTR " of %" PRIuPTR
-            "): prev_state=%s new_state=%s "
-            "(%s)",
-            round_robin, this, rr_endpoint_list, Index(),
-            rr_endpoint_list->size(),
-            (old_state.has_value() ? ConnectivityStateName(*old_state) : "N/A"),
-            ConnectivityStateName(new_state), status.ToString().c_str());
+    gpr_log(
+        GPR_INFO,
+        "[RR %p] connectivity changed for child %p, endpoint_list %p "
+        "(index %" PRIuPTR " of %" PRIuPTR "): prev_state=%s new_state=%s (%s)",
+        round_robin, this, rr_endpoint_list, Index(), rr_endpoint_list->size(),
+        (old_state.has_value() ? ConnectivityStateName(*old_state) : "N/A"),
+        ConnectivityStateName(new_state), status.ToString().c_str());
   }
   if (new_state == GRPC_CHANNEL_IDLE) {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {

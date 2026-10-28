@@ -1,17 +1,16 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NWorkloadManager {
 
 class TCpuQuotaManager {
     struct TCounters {
         const ::NMonitoring::TDynamicCounterPtr SubComponent;
+
         struct TCommonMetrics {
             ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
             ::NMonitoring::TDynamicCounters::TCounterPtr Error;
@@ -39,7 +38,8 @@ public:
     };
 
 public:
-    TCpuQuotaManager(TDuration monitoringRequestDelay, TDuration averageLoadInterval, TDuration idleTimeout, double defaultQueryLoad, bool strict, ui64 cpuNumber, const ::NMonitoring::TDynamicCounterPtr& subComponent);
+    TCpuQuotaManager(TDuration monitoringRequestDelay, TDuration averageLoadInterval, TDuration idleTimeout, double defaultQueryLoad,
+        bool strict, ui64 cpuNumber, const ::NMonitoring::TDynamicCounterPtr& subComponent);
 
     double GetInstantLoad() const;
     double GetAverageLoad() const;
@@ -74,4 +74,4 @@ private:
     bool Ready = false;
 };
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

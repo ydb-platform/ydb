@@ -189,8 +189,6 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         TDescribeTestServer server{};
         auto* runtime = server.GetRuntime();
 
-        runtime->GetAppData().FeatureFlags.SetEnableIcNodeCache(true);
-        runtime->SetUseRealInterconnect();
         const auto edge = runtime->AllocateEdgeActor();
 
         TString currentTopicName = topicName;

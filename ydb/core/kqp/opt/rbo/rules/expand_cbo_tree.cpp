@@ -1,7 +1,7 @@
 #include "kqp_rules_include.h"
 
 namespace {
-    
+
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 

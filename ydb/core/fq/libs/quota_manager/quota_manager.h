@@ -1,10 +1,9 @@
 #pragma once
 
-#include <ydb/core/mon/mon.h>
-
-#include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/config/protos/quotas_manager.pb.h>
+#include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/mon/mon.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -36,13 +35,8 @@ namespace NFq {
 
 NActors::TActorId MakeQuotaServiceActorId(ui32 nodeId);
 
-NActors::IActor* CreateQuotaServiceActor(
-    const NConfig::TQuotasManagerConfig& config,
-    const NConfig::TYdbStorageConfig& storageConfig,
-    const TYqSharedResources::TPtr& yqSharedResources,
-    NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    std::vector<TQuotaDescription> quotaDesc,
-    NActors::TMon* monitoring = nullptr);
+NActors::IActor* CreateQuotaServiceActor(const NConfig::TQuotasManagerConfig& config, const NConfig::TYdbStorageConfig& storageConfig,
+    const TYqSharedResources::TPtr& yqSharedResources, NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters, std::vector<TQuotaDescription> quotaDesc, NActors::TMon* monitoring = nullptr);
 
-} /* NFq */
+}   // namespace NFq

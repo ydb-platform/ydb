@@ -91,7 +91,7 @@ TMaybe<TColumnOrder> InferOrderForUnionAll(
     return Nothing();
 }
 
-IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
+IGraphTransformer::TStatus OrderForSqlSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
         return IGraphTransformer::TStatus::Ok;
@@ -133,6 +133,8 @@ IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprN
             columnOrder.AddColumn(alias);
         }
     }
+
+    FilterColumnOrderByType(columnOrder, *node->GetTypeAnn());
 
     return ctx.Types.SetColumnOrder(*node, columnOrder, ctx.Expr);
 }

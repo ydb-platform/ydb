@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_settings.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 
+#include <util/generic/size_literals.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -16,8 +17,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include <util/generic/size_literals.h>
 
 namespace NYql {
 
@@ -30,16 +29,17 @@ struct TPushdownSettings: public NPushdown::TSettings {
         : NPushdown::TSettings(NLog::EComponent::ProviderS3)
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
-        Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
+        Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes |
+               EFlag::TimestampCtor | EFlag::UuidType);
     }
 };
 
 using namespace NYql::NS3Details;
 
-void RebuildPredicateForPruning(const TExprNode::TPtr& pred, const TExprNode& arg, const TStructExprType& extraType,
-                                TExprNode::TPtr& prunedPred, TExprNode::TPtr& extraPred, TExprContext& ctx)
+void RebuildPredicateForPruning(const TExprNode::TPtr& pred, const TExprNode& arg, const TStructExprType& extraType, TExprNode::TPtr& prunedPred,
+    TExprNode::TPtr& extraPred, TExprContext& ctx)
 {
-    if (pred->IsCallable({"And", "Or"})) {
+    if (pred->IsCallable({ "And", "Or" })) {
         TExprNodeList childPruned;
         TExprNodeList childExtra;
         for (auto& child : pred->ChildrenList()) {
@@ -107,7 +107,7 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
     optimizeExprSettings.VisitChanges = true;
     OptimizeExpr(pred, pred, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
         if (node->IsCallable("Not")) {
-            if (node->Head().IsCallable({"And", "Or"})) {
+            if (node->Head().IsCallable({ "And", "Or" })) {
                 auto children = node->Head().ChildrenList();
                 for (auto& child : children) {
                     child = ctx.NewCallable(child->Pos(), "Not", { child });
@@ -130,6 +130,7 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
     TExprNode::TPtr filteredPathList;
     if (extraPred) {
         auto source = flatMap.Input().Cast<TDqSourceWrap>().Input().Cast<TS3SourceSettingsBase>();
+        // clang-format off
         filteredPathList = ctx.Builder(pred->Pos())
             .Callable("EvaluateExpr")
                 .Callable(0, "OrderedFilter")
@@ -148,11 +149,13 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     auto newLambda = flatMap.Lambda();
     if (filteredPathList) {
         auto cvBase = flatMap.Lambda().Body().Cast<TCoConditionalValueBase>();
+        // clang-format off
         newLambda = Build<TCoLambda>(ctx, flatMap.Lambda().Pos())
             .Args(flatMap.Lambda().Args())
             .Body<TCoConditionalValueBase>()
@@ -161,8 +164,10 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
                 .Value(cvBase.Value())
             .Build()
             .Done();
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoFlatMapBase>(ctx, flatMap.Pos())
         .CallableName(flatMap.CallableName())
         .Input<TDqSourceWrap>()
@@ -171,15 +176,16 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
         .Build()
         .Lambda(newLambda)
         .Done();
+    // clang-format on
 }
 
-class TS3LogicalOptProposalTransformer : public TOptimizeTransformerBase {
+class TS3LogicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
     TS3LogicalOptProposalTransformer(TS3State::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderS3, {})
         , State_(state)
     {
-#define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TS3LogicalOptProposalTransformer::name)
+#define HNDL(name) "LogicalOptimizer-" #name, Hndl(&TS3LogicalOptProposalTransformer::name)
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(TryPrunePaths));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(ApplyPrunedPath));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSource));
@@ -218,6 +224,7 @@ public:
             return node;
         }
 
+        // clang-format off
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
             .Input<TCoRight>()
@@ -227,6 +234,7 @@ public:
                     .Build()
                 .Build()
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> PushFilterToDqSourceWrap(TExprBase node, TExprContext& ctx) const {
@@ -257,6 +265,7 @@ public:
             return node;
         }
 
+        // clang-format off
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
             .Input<TDqSourceWrap>()
@@ -267,17 +276,18 @@ public:
                     .Build()
                 .Build()
             .Done();
+        // clang-format on
     }
 
-   static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
-                                                                TExprContext& ctx, TPositionHandle pos)
+    static NPushdown::TPredicateNode SplitForPartialPushdown(
+        const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos)
     {
         if (predicateTree.CanBePushed) {
             return predicateTree;
         }
 
         if (predicateTree.Op != NPushdown::EBoolOp::And) {
-            return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
+            return NPushdown::TPredicateNode();   // Not valid, => return the same node from optimizer
         }
 
         std::vector<NPushdown::TPredicateNode> pushable;
@@ -297,13 +307,14 @@ public:
         YQL_CLOG(TRACE, ProviderS3) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
 
         auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-        if (!maybeOptionalIf.IsValid()) { // Nothing to push
+        if (!maybeOptionalIf.IsValid()) {   // Nothing to push
             return {};
         }
 
         TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
         NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-        NPushdown::CollectPredicates(ctx, optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), TPushdownSettings());
+        NPushdown::CollectPredicates(
+            ctx, optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), TPushdownSettings());
         YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
 
         NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
@@ -311,6 +322,7 @@ public:
             return {};
         }
 
+        // clang-format off
         auto newFilterLambda = Build<TCoLambda>(ctx, pos)
             .Args({"filter_row"})
             .Body<TExprApplier>()
@@ -318,6 +330,7 @@ public:
                 .With(TExprBase(lambdaArg), "filter_row")
                 .Build()
             .Done();
+        // clang-format on
 
         YQL_CLOG(INFO, ProviderS3) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
         return newFilterLambda;
@@ -360,7 +373,7 @@ public:
         bool hasErr = false;
         size_t count = 0;
         size_t totalSize = 0;
-        VisitExpr(input, [&] (const TExprNode::TPtr& n) {
+        VisitExpr(input, [&](const TExprNode::TPtr& n) {
             TExprBase node(n);
             if (auto maybeSource = node.Maybe<TDqSourceWrap>()) {
                 const TDqSourceWrap dqSource = node.Cast<TDqSourceWrap>();
@@ -403,7 +416,8 @@ public:
                                 const ui64 bytesUsed = std::min(entry.Size, userSizeLimit);
                                 if (bytesUsed > fileSizeLimit) {
                                     ctx.AddError(TIssue(ctx.GetPosition(batch.Pos()),
-                                        TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
+                                        TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size
+                                                         << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
                                     hasErr = true;
                                     return false;
                                 }
@@ -422,11 +436,10 @@ public:
             return TStatus::Error;
         }
 
-        const auto maxFiles = std::max(
-            State_->Configuration->MaxFilesPerQuery,
-            State_->Configuration->MaxDirectoriesAndFilesPerQuery);
+        const auto maxFiles = std::max(State_->Configuration->MaxFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
         if (count > maxFiles) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
+            ctx.AddError(TIssue(
+                ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
             return TStatus::Error;
         }
 
@@ -466,10 +479,7 @@ public:
         auto newSettings = ReplaceSetting(dqSource.Settings().Ref(), prunedPathSetting->Pos(), "prunedPaths", nullptr, ctx);
         if (beforeEntries == afterEntries) {
             YQL_CLOG(INFO, ProviderS3) << "No S3 paths are pruned: " << afterEntries << " entries";
-            return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-                .InitFrom(dqSource)
-                .Settings(newSettings)
-                .Done();
+            return Build<TDqSourceWrap>(ctx, dqSource.Pos()).InitFrom(dqSource).Settings(newSettings).Done();
         }
 
         YQL_CLOG(INFO, ProviderS3) << "Pruning S3 Paths: " << beforeEntries << " -> " << afterEntries << " entries";
@@ -483,6 +493,7 @@ public:
             TPathList paths;
             UnpackPathsList(packed, isTextEncoded, paths);
 
+            // clang-format off
             newExtraColumnsExtents.push_back(
                 ctx.Builder(batch.ExtraColumns().Pos())
                     .Callable("Replicate")
@@ -493,19 +504,16 @@ public:
                     .Seal()
                     .Build()
             );
+            // clang-format on
         }
 
         newSettings = ReplaceSetting(*newSettings, newSettings->Pos(), "extraColumns",
-                                     ctx.NewCallable(newSettings->Pos(), "OrderedExtend", std::move(newExtraColumnsExtents)), ctx);
+            ctx.NewCallable(newSettings->Pos(), "OrderedExtend", std::move(newExtraColumnsExtents)), ctx);
         auto oldSrc = dqSource.Input().Cast<TS3SourceSettingsBase>();
-        auto newSrc = ctx.ChangeChild(dqSource.Input().Ref(), TS3SourceSettingsBase::idx_Paths,
-                                      ctx.NewList(oldSrc.Paths().Pos(), prunedPaths->ChildrenList()));
+        auto newSrc = ctx.ChangeChild(
+            dqSource.Input().Ref(), TS3SourceSettingsBase::idx_Paths, ctx.NewList(oldSrc.Paths().Pos(), prunedPaths->ChildrenList()));
 
-        return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-            .InitFrom(dqSource)
-            .Input(newSrc)
-            .Settings(newSettings)
-            .Done();
+        return Build<TDqSourceWrap>(ctx, dqSource.Pos()).InitFrom(dqSource).Input(newSrc).Settings(newSettings).Done();
     }
 
     TMaybeNode<TExprBase> TryPrunePaths(TExprBase node, TExprContext& ctx) const {
@@ -576,9 +584,12 @@ public:
             }
 
             if (auto extraColumnsSetting = GetSetting(settings.Cast().Ref(), "extraColumns")) {
-                const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                const TStructExprType* extraType =
+                    extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
                 auto extraTypeItems = extraType->GetItems();
-                EraseIf(extraTypeItems, [&](const TItemExprType* item) { return !extractMembers.contains(item->GetName()); });
+                EraseIf(extraTypeItems, [&](const TItemExprType* item) {
+                    return !extractMembers.contains(item->GetName());
+                });
                 if (extraTypeItems.size() < extraType->GetSize()) {
                     auto originalPaths = maybeS3SourceSettings.Cast().Paths().Ptr();
                     auto originalExtra = extraColumnsSetting->TailPtr();
@@ -591,7 +602,9 @@ public:
                         auto extra = batch.ExtraColumns();
                         YQL_ENSURE(TCoAsStruct::Match(extra.Raw()));
                         TExprNodeList children = extra.Ref().ChildrenList();
-                        EraseIf(children, [&](const TExprNode::TPtr& child) { return !extractMembers.contains(child->Head().Content()); });
+                        EraseIf(children, [&](const TExprNode::TPtr& child) {
+                            return !extractMembers.contains(child->Head().Content());
+                        });
                         auto newStruct = ctx.ChangeChildren(extra.Ref(), std::move(children));
 
                         TStringBuf packed = batch.Data().Literal().Value();
@@ -600,6 +613,7 @@ public:
                         TPathList paths;
                         UnpackPathsList(packed, isTextEncoded, paths);
 
+                        // clang-format off
                         newExtraColumnsExtents.push_back(
                             ctx.Builder(batch.ExtraColumns().Pos())
                                 .Callable("Replicate")
@@ -610,14 +624,16 @@ public:
                                 .Seal()
                                 .Build()
                         );
+                        // clang-format on
                         newPathItems.push_back(ctx.ChangeChild(batch.Ref(), TS3Path::idx_ExtraColumns, std::move(newStruct)));
                     }
 
                     newPaths = ctx.ChangeChildren(maybeS3SourceSettings.Cast().Paths().Ref(), std::move(newPathItems));
 
                     TExprNode::TPtr newExtra = ctx.NewCallable(extraColumnsSetting->Pos(), "OrderedExtend", std::move(newExtraColumnsExtents));
-                    newSettings = TExprBase(extraTypeItems.empty() ? RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx) :
-                        ReplaceSetting(settings.Cast().Ref(), extraColumnsSetting->Pos(), "extraColumns", newExtra, ctx));
+                    newSettings = TExprBase(extraTypeItems.empty() ? RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx)
+                                                                   : ReplaceSetting(settings.Cast().Ref(), extraColumnsSetting->Pos(),
+                                                                         "extraColumns", newExtra, ctx));
                 }
             }
         }
@@ -628,6 +644,7 @@ public:
         YQL_CLOG(INFO, ProviderS3) << "ExtractMembers over DqSource with " << maybeS3SourceSettings.Cast().CallableName();
 
         if (maybeS3SourceSettings.Cast().CallableName() == TS3SourceSettings::CallableName()) {
+            // clang-format off
             return Build<TDqSourceWrap>(ctx, dqSource.Pos())
                 .InitFrom(dqSource)
                 .Input<TS3SourceSettings>()
@@ -637,11 +654,13 @@ public:
                 .RowType(outputRowTypeNode)
                 .Settings(newSettings)
                 .Done();
+            // clang-format on
         }
 
         const auto parseSettings = dqSource.Input().Maybe<TS3ParseSettings>().Cast();
 
-        const TStructExprType* readRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const TStructExprType* readRowType =
+            parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         TVector<const TItemExprType*> readRowDataItems = readRowType->GetItems();
         TVector<const TItemExprType*> outputRowDataItems = outputRowType->GetItems();
@@ -653,7 +672,9 @@ public:
                     YQL_ENSURE(ps->Child(i)->IsAtom());
                     cols.insert(ps->Child(i)->Content());
                 }
-                auto isPartitionedBy = [&](const auto& item) { return cols.contains(item->GetName()); };
+                auto isPartitionedBy = [&](const auto& item) {
+                    return cols.contains(item->GetName());
+                };
                 EraseIf(readRowDataItems, isPartitionedBy);
                 EraseIf(outputRowDataItems, isPartitionedBy);
             }
@@ -664,11 +685,12 @@ public:
             const TStructExprType* readRowDataType = ctx.MakeType<TStructExprType>(readRowDataItems);
             auto item = GetLightColumn(*readRowDataType);
             YQL_ENSURE(item);
-            readRowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{item});
+            readRowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{ item });
         } else {
             readRowType = outputRowType;
         }
 
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, dqSource.Pos())
             .InitFrom(dqSource)
             .Input<TS3ParseSettings>()
@@ -679,6 +701,7 @@ public:
             .RowType(outputRowTypeNode)
             .Settings(newSettings)
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> MergeS3Paths(TExprBase node, TExprContext& ctx) const {
@@ -737,6 +760,7 @@ public:
             TString packedPaths;
             PackPathsList(paths, packedPaths, isTextEncoded);
 
+            // clang-format off
             newPathItems.emplace_back(
                 Build<TS3Path>(ctx, origBatch.Pos())
                     .Data<TCoString>()
@@ -750,7 +774,9 @@ public:
                     .ExtraColumns(extra)
                 .Done().Ptr()
             );
+            // clang-format on
 
+            // clang-format off
             newExtraColumnsExtents.push_back(
                 ctx.Builder(extra.Pos())
                     .Callable("Replicate")
@@ -761,6 +787,7 @@ public:
                     .Seal()
                     .Build()
             );
+            // clang-format on
 
             group.clear();
         }
@@ -778,11 +805,7 @@ public:
         auto sourceSettings = ctx.ChangeChild(maybeS3SourceSettings.Cast().Ref(), TS3SourceSettingsBase::idx_Paths,
             ctx.NewList(maybeS3SourceSettings.Cast().Paths().Pos(), std::move(newPathItems)));
 
-        return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-            .InitFrom(dqSource)
-            .Input(sourceSettings)
-            .Settings(newSettings)
-            .Done();
+        return Build<TDqSourceWrap>(ctx, dqSource.Pos()).InitFrom(dqSource).Input(sourceSettings).Settings(newSettings).Done();
     }
 
     TMaybeNode<TExprBase> CleanupExtraColumns(TExprBase node, TExprContext& ctx) const {
@@ -797,23 +820,22 @@ public:
         }
 
         if (auto extraColumnsSetting = GetSetting(settings.Cast().Ref(), "extraColumns")) {
-            const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            const TStructExprType* extraType =
+                extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             auto extraTypeItems = extraType->GetItems();
             if (!extraTypeItems) {
-                auto newSettings =  TExprBase(RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx));
-                return Build<TDqSourceWrap>(ctx, dqSource.Pos())
-                    .InitFrom(dqSource)
-                    .Settings(newSettings)
-                    .Done();
+                auto newSettings = TExprBase(RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx));
+                return Build<TDqSourceWrap>(ctx, dqSource.Pos()).InitFrom(dqSource).Settings(newSettings).Done();
             }
         }
 
         return node;
-
     }
 
     template <class TSettings>
-    TMaybeNode<TExprBase> ConstructNodeForPushDownLimit(TCoTake take, TDqSourceWrap source, TSettings settings, TCoUint64 count, TExprContext& ctx) const {
+    TMaybeNode<TExprBase> ConstructNodeForPushDownLimit(
+        TCoTake take, TDqSourceWrap source, TSettings settings, TCoUint64 count, TExprContext& ctx) const {
+        // clang-format off
         return Build<TCoTake>(ctx, take.Pos())
             .InitFrom(take)
             .Input<TDqSourceWrap>()
@@ -824,6 +846,7 @@ public:
                     .Build()
             .Build()
         .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> PushDownLimit(TExprBase node, TExprContext& ctx) const {
@@ -866,10 +889,10 @@ private:
     const TS3State::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreateS3LogicalOptProposalTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3LogicalOptProposalTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

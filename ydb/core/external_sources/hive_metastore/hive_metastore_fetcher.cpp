@@ -15,13 +15,15 @@ using namespace NKikimr::NExternalSource;
 
 namespace {
 
-class THiveMetastoreFetcherActor : public NActors::TActor<THiveMetastoreFetcherActor> {
+class THiveMetastoreFetcherActor: public NActors::TActor<THiveMetastoreFetcherActor> {
 public:
     using TBase = NActors::TActor<THiveMetastoreFetcherActor>;
+
     THiveMetastoreFetcherActor(const TString& host, int32_t port)
         : TBase(&THiveMetastoreFetcherActor::StateFunc)
         , Client(host, port)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvHiveMetastore::TEvGetTable, Handle);
@@ -33,7 +35,8 @@ public:
     )
 
     void Handle(TEvHiveMetastore::TEvGetTable::TPtr& ev) {
-        Client.GetTable(ev->Get()->DatbaseName, ev->Get()->TableName).Apply([actorSystem = NActors::TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
+        Client.GetTable(ev->Get()->DatbaseName, ev->Get()->TableName).Apply([actorSystem = NActors::TActivationContext::ActorSystem(),
+                                                                                self = SelfId()](const auto& future) {
             auto result = std::make_unique<TEvHiveMetastore::TEvHiveGetTableResult>();
             try {
                 auto table = future.GetValue();
@@ -53,22 +56,24 @@ public:
         request.__set_tblName(ev->Get()->TableName);
         request.__set_colNames(ev->Get()->Columns);
 
-        Client.GetTableStatistics(request).Apply([actorSystem = NActors::TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
-            auto result = std::make_unique<TEvHiveMetastore::TEvHiveGetTableStatisticsResult>();
-            try {
-                auto statistics = future.GetValue();
-                result->Statistics = statistics;
-                actorSystem->Send(self, result.release(), 0, 0);
-            } catch (...) {
-                result->Issues.AddIssue(CurrentExceptionMessage());
-                actorSystem->Send(self, result.release(), 0, 0);
-            }
-        });
+        Client.GetTableStatistics(request).Apply(
+            [actorSystem = NActors::TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
+                auto result = std::make_unique<TEvHiveMetastore::TEvHiveGetTableStatisticsResult>();
+                try {
+                    auto statistics = future.GetValue();
+                    result->Statistics = statistics;
+                    actorSystem->Send(self, result.release(), 0, 0);
+                } catch (...) {
+                    result->Issues.AddIssue(CurrentExceptionMessage());
+                    actorSystem->Send(self, result.release(), 0, 0);
+                }
+            });
         Requests.emplace<1>(ev);
     }
 
     void Handle(TEvHiveMetastore::TEvGetPartitions::TPtr& ev) {
-        SendGetPartitions(ev.Get()->Get()->DatbaseName, ev.Get()->Get()->TableName, THiveMetastoreConverters::GetPartitionsFilter(ev.Get()->Get()->Predicate));
+        SendGetPartitions(
+            ev.Get()->Get()->DatbaseName, ev.Get()->Get()->TableName, THiveMetastoreConverters::GetPartitionsFilter(ev.Get()->Get()->Predicate));
         Requests.emplace<2>(ev);
     }
 
@@ -116,7 +121,7 @@ public:
             return;
         }
 
-        request->Get()->Promise.SetValue(TEvHiveMetastore::TStatistics{statistics.Rows, statistics.Size});
+        request->Get()->Promise.SetValue(TEvHiveMetastore::TStatistics{ statistics.Rows, statistics.Size });
         PassAway();
     }
 
@@ -143,12 +148,12 @@ public:
         try {
             TEvHiveMetastore::TPartitions partitions;
             const auto& hiveMetastorePartitions = ev.Get()->Get()->Partitions;
-            for (const auto& partition: hiveMetastorePartitions) {
+            for (const auto& partition : hiveMetastorePartitions) {
                 std::vector<TString> values;
-                for (const auto& value: partition.values) {
-                    values.push_back(TString{value});
+                for (const auto& value : partition.values) {
+                    values.push_back(TString{ value });
                 }
-                partitions.Partitions.push_back(TEvHiveMetastore::TPartitions::TPartition{TString{partition.sd.location}, values});
+                partitions.Partitions.push_back(TEvHiveMetastore::TPartitions::TPartition{ TString{ partition.sd.location }, values });
             }
             request->Get()->Promise.SetValue(partitions);
         } catch (...) {
@@ -175,13 +180,14 @@ public:
             return;
         }
 
-        request->Get()->Promise.SetValue(TEvHiveMetastore::TStatistics{statistics.Rows, statistics.Size});
+        request->Get()->Promise.SetValue(TEvHiveMetastore::TStatistics{ statistics.Rows, statistics.Size });
         PassAway();
     }
 
 private:
     void SendGetPartitions(const TString& databaseName, const TString& tableName, const TString& filter) {
-        Client.GetPartitionsByFilter(databaseName, tableName, filter).Apply([actorSystem = NActors::TActivationContext::ActorSystem(), self = SelfId()](const auto& future) {
+        Client.GetPartitionsByFilter(databaseName, tableName, filter).Apply([actorSystem = NActors::TActivationContext::ActorSystem(),
+                                                                                self = SelfId()](const auto& future) {
             auto result = std::make_unique<TEvHiveMetastore::TEvHiveGetPartitionsResult>();
             try {
                 auto partitions = future.GetValue();
@@ -196,13 +202,14 @@ private:
 
 private:
     NKikimr::NExternalSource::THiveMetastoreClient Client;
-    std::variant<TEvHiveMetastore::TEvGetTable::TPtr, TEvHiveMetastore::TEvGetStatistics::TPtr, TEvHiveMetastore::TEvGetPartitions::TPtr> Requests;
+    std::variant<TEvHiveMetastore::TEvGetTable::TPtr, TEvHiveMetastore::TEvGetStatistics::TPtr, TEvHiveMetastore::TEvGetPartitions::TPtr>
+        Requests;
 };
 
-}
+}   // namespace
 
 std::unique_ptr<NActors::IActor> CreateHiveMetastoreFetcherActor(const TString& host, int32_t port) {
     return std::make_unique<THiveMetastoreFetcherActor>(host, port);
 }
 
-}
+}   // namespace NKikimr::NExternalSource

@@ -1,7 +1,7 @@
-#include <fmt/format.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -9,6 +9,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+
+#include <fmt/format.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
@@ -20,7 +22,8 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
-    bool FetchRows(TQueryClient& queryClient, const TOperation& scriptExecutionOperation, TFetchScriptResultsSettings& settings, size_t& rowsFetched, const TString& rowContent) {
+    bool FetchRows(TQueryClient & queryClient, const TOperation& scriptExecutionOperation, TFetchScriptResultsSettings& settings,
+        size_t& rowsFetched, const TString& rowContent) {
         TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToOneLineString());
 
@@ -37,12 +40,12 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         return !fetchToken.empty();
     }
 
-    void WaitRemoveScriptResults(TQueryClient& queryClient, const std::string& executionId) {
+    void WaitRemoveScriptResults(TQueryClient & queryClient, const std::string& executionId) {
         const TString countResultsQuery = fmt::format(R"(
                 SELECT COUNT(*)
                 FROM `.metadata/result_sets`
                 WHERE database = "/Root" AND execution_id = "{execution_id}" AND expire_at > CurrentUtcTimestamp();
-            )", "execution_id"_a=executionId);
+            )", "execution_id"_a = executionId);
 
         const TInstant forgetChecksStart = TInstant::Now();
         while (TInstant::Now() - forgetChecksStart <= TDuration::Minutes(1)) {
@@ -88,10 +91,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="NONE"
-            ))",
-            "external_source"_a = externalDataSourceName,
-            "location"_a = GetBucketLocation(bucket)
-        );
+            ))", "external_source"_a = externalDataSourceName, "location"_a = GetBucketLocation(bucket));
 
         const auto schemeResult = queryClient.ExecuteQuery(schemeQuery, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToOneLineString());
@@ -104,12 +104,11 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
                     id Uint64 NOT NULL,
                     data String NOT NULL
                 )
-            ))",
-            "external_source"_a=externalDataSourceName
-        );
+            ))", "external_source"_a = externalDataSourceName);
 
         auto scriptExecutionOperation = queryClient.ExecuteScript(query).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToOneLineString());
 
         // Wait script execution
         NOperation::TOperationClient operationClient(kikimr->GetDriver());
@@ -126,12 +125,14 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             }
 
             const auto& meta = scriptExecutionOperation.Metadata();
-            UNIT_ASSERT_C(IsIn({NYdb::NQuery::EExecStatus::Unspecified, NYdb::NQuery::EExecStatus::Starting, NYdb::NQuery::EExecStatus::Running}, meta.ExecStatus), meta.ExecStatus);
+            UNIT_ASSERT_C(IsIn({ NYdb::NQuery::EExecStatus::Unspecified, NYdb::NQuery::EExecStatus::Starting,
+                                   NYdb::NQuery::EExecStatus::Running }, meta.ExecStatus), meta.ExecStatus);
 
             if (const auto& resultsMeta = meta.ResultSetsMeta; !resultsMeta.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(resultsMeta.size(), 1);
                 const auto& resultMeta = resultsMeta[0];
-                Cerr << "Rows saved: " << resultMeta.RowsCount << ", rows fetched: " << rowsFetched << ", elapsed time: " << TInstant::Now() - waitStart << "\n";
+                Cerr << "Rows saved: " << resultMeta.RowsCount << ", rows fetched: " << rowsFetched
+                     << ", elapsed time: " << TInstant::Now() - waitStart << "\n";
 
                 if (resultMeta.Finished) {
                     UNIT_ASSERT_VALUES_EQUAL(resultMeta.RowsCount, numberRows);
@@ -139,10 +140,13 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
                     UNIT_ASSERT_GE(numberRows, resultMeta.RowsCount);
                 }
 
-                while (rowsFetched < resultMeta.RowsCount && FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
+                while (
+                    rowsFetched < resultMeta.RowsCount && FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {
+                }
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS,
+                scriptExecutionOperation.Status().GetIssues().ToOneLineString());
             Sleep(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT_EQUAL(scriptExecutionOperation.Metadata().ExecStatus, EExecStatus::Completed);
@@ -157,7 +161,8 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         UNIT_ASSERT_C(rowsFetched > 0, "Expected intermediate results");
 
         if (!settings.FetchToken_.empty()) {
-            while (FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
+            while (FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
@@ -219,4 +224,4 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

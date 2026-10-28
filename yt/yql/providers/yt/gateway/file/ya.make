@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_file_comp_nodes.cpp
@@ -47,7 +47,5 @@ PEERDIR(
     yt/yql/providers/yt/provider
     yql/essentials/parser/pg_wrapper
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

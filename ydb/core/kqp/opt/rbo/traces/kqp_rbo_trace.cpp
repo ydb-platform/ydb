@@ -11,47 +11,18 @@
 namespace NKikimr {
 namespace NKqp {
 
-TString FormatSortColumns(const TVector<std::pair<TInfoUnit, bool>>& sortColumns) {
+TString FormatSortElements(const TSortIUs& columns, const TInfoUnitRegistry& registry) {
     TStringBuilder result;
-    for (size_t i = 0; i < sortColumns.size(); ++i) {
-        if (i) {
-            result << ", ";
-        }
-        result << FormatInfoUnit(sortColumns[i].first) << (sortColumns[i].second ? " ASC" : " DESC");
+    TStringBuf separator;
+    for (const auto& [id, order] : columns.Items()) {
+        result << separator << FormatInfoUnit(id, registry) << (order.Ascending ? " asc " : " desc ")
+               << (order.NullsFirst ? "nulls first" : "nulls last");
+        separator = ", ";
     }
     return result;
 }
 
-TString FormatSortElements(const TVector<TSortElement>& sortElements) {
-    TStringBuilder result;
-    for (size_t i = 0; i < sortElements.size(); ++i) {
-        if (i) {
-            result << ", ";
-        }
-        result << sortElements[i].ToString();
-    }
-    return result;
-}
-
-std::vector<std::string> MakeSortColumnItems(const TVector<std::pair<TInfoUnit, bool>>& sortColumns) {
-    std::vector<std::string> items;
-    items.reserve(sortColumns.size());
-    for (const auto& [unit, ascending] : sortColumns) {
-        items.push_back(ToStdString(TStringBuilder() << FormatInfoUnit(unit) << (ascending ? " ASC" : " DESC")));
-    }
-    return items;
-}
-
-std::vector<std::string> MakeSortElementItems(const TVector<TSortElement>& sortElements) {
-    std::vector<std::string> items;
-    items.reserve(sortElements.size());
-    for (const auto& sortElement : sortElements) {
-        items.push_back(ToStdString(sortElement.ToString()));
-    }
-    return items;
-}
-
-std::string FormatTypeForInfoUnit(const IOperator& op, const TInfoUnit& unit) {
+std::string FormatTypeForInfoUnit(const IOperator& op, TInfoUnitId unit) {
     if (!op.Type || op.Type->GetKind() != ETypeAnnotationKind::List) {
         return "type unknown";
     }
@@ -61,7 +32,7 @@ std::string FormatTypeForInfoUnit(const IOperator& op, const TInfoUnit& unit) {
         return "type unknown";
     }
 
-    const auto* columnType = itemType->Cast<TStructExprType>()->FindItemType(unit.GetFullName());
+    const auto* columnType = itemType->Cast<TStructExprType>()->FindItemType(::ToString(unit));
     return columnType ? ToStdString(FormatType(columnType)) : "type unknown";
 }
 
@@ -73,26 +44,28 @@ std::string FormatOutputType(const IOperator& op) {
     return ToStdString(FormatType(op.Type));
 }
 
-std::vector<std::pair<std::string, std::string>> MakeTypedInfoUnitItems(const IOperator& op, const TVector<TInfoUnit>& units) {
+template <class TRange>
+std::vector<std::pair<std::string, std::string>> MakeTypedInfoUnitItems(const IOperator& op, const TRange& units, const TInfoUnitRegistry& registry) {
     std::vector<std::pair<std::string, std::string>> items;
-    items.reserve(units.size());
     for (const auto& unit : units) {
-        items.emplace_back(ToStdString(FormatInfoUnit(unit)), FormatTypeForInfoUnit(op, unit));
+        items.emplace_back(ToStdString(FormatInfoUnit(unit, registry)), FormatTypeForInfoUnit(op, unit));
     }
     return items;
 }
 
+template <class TRange>
 optimizer_trace::Field& AddInfoUnitField(
     optimizer_trace::Node& node,
     const std::string& key,
     const std::string& title,
-    const TVector<TInfoUnit>& units,
+    const TRange& units,
+    const TInfoUnitRegistry& registry,
     const IOperator* typedBy = nullptr)
 {
-    auto items = MakeInfoUnitItems(units);
+    auto items = MakeInfoUnitItems(units, registry);
     auto& field = node.field(key, FormatCountedSummary(items));
     if (typedBy) {
-        field.detail(optimizer_trace::Widget::list(title, MakeTypedInfoUnitItems(*typedBy, units)).monospaceList());
+        field.detail(optimizer_trace::Widget::list(title, MakeTypedInfoUnitItems(*typedBy, units, registry)).monospaceList());
     } else {
         field.detail(optimizer_trace::Widget::list(title, items).monospaceListText());
     }
@@ -179,13 +152,13 @@ std::string FormatOrderEnforcerReason(EOrderEnforcerReason reason) {
     return "Unknown";
 }
 
-std::vector<std::pair<std::string, std::string>> BuildOrderEnforcerRows(const TOrderEnforcer& enforcer) {
+std::vector<std::pair<std::string, std::string>> BuildOrderEnforcerRows(const TOrderEnforcer& enforcer, const TInfoUnitRegistry& registry) {
     std::vector<std::pair<std::string, std::string>> rows = {
         {"Action", FormatOrderEnforcerAction(enforcer.Action)},
         {"Reason", FormatOrderEnforcerReason(enforcer.Reason)}
     };
-    if (!enforcer.SortElements.empty()) {
-        rows.emplace_back("Sort", ToStdString(FormatSortElements(enforcer.SortElements)));
+    if (!enforcer.SortElements.Items().empty()) {
+        rows.emplace_back("Sort", ToStdString(FormatSortElements(enforcer.SortElements, registry)));
     }
     return rows;
 }
@@ -204,13 +177,13 @@ optimizer_trace::Widget BuildColumnTable(
     return optimizer_trace::Widget::table(title, rows).monospaceTable();
 }
 
-std::string FormatOrderEnforcer(const TOrderEnforcer& enforcer) {
+std::string FormatOrderEnforcer(const TOrderEnforcer& enforcer, const TInfoUnitRegistry& registry) {
     std::vector<std::string> parts = {
         FormatOrderEnforcerAction(enforcer.Action),
         FormatOrderEnforcerReason(enforcer.Reason)
     };
-    if (!enforcer.SortElements.empty()) {
-        parts.push_back(ToStdString(FormatSortElements(enforcer.SortElements)));
+    if (!enforcer.SortElements.Items().empty()) {
+        parts.push_back(ToStdString(FormatSortElements(enforcer.SortElements, registry)));
     }
     return JoinStrings(parts);
 }
@@ -219,20 +192,21 @@ void AddShuffleDecisionField(
     optimizer_trace::Node& node,
     const std::string& key,
     const std::string& title,
-    const std::optional<TVector<TInfoUnit>>& shuffleBy,
+    const std::optional<TOrderedIUs<>>& shuffleBy,
+    const TInfoUnitRegistry& registry,
     const IOperator* typedBy)
 {
     if (!shuffleBy) {
         return;
     }
 
-    if (shuffleBy->empty()) {
+    if (shuffleBy->Items().empty()) {
         node.field(key, "eliminated")
             .detail(optimizer_trace::Widget::warning(title, "Shuffle is eliminated for this input.", "info"));
         return;
     }
 
-    AddInfoUnitField(node, key, title, *shuffleBy, typedBy);
+    AddInfoUnitField(node, key, title, shuffleBy->Items(), registry, typedBy);
 }
 
 std::string FormatSubplanType(ESubplanType type) {
@@ -246,36 +220,22 @@ std::string FormatSubplanType(ESubplanType type) {
 
 std::string FormatLineageSource(const TColumnLineageEntry& entry) {
     return ToStdString(TStringBuilder()
-        << "/" << entry.GetCannonicalAlias()
+        << "/" << entry.GetRawAlias()
+        << "#" << entry.Relation
         << "/" << entry.ColumnName);
 }
 
 std::vector<std::pair<std::string, std::string>> BuildLineageRows(
     const TColumnLineage& lineage,
-    const TVector<TInfoUnit>& outputIUs)
+    const TUnorderedIUs& outputIUs,
+    const TInfoUnitRegistry& registry)
 {
     std::vector<std::pair<std::string, std::string>> rows;
-    TInfoUnitSet emitted;
-
     for (const auto& unit : outputIUs) {
-        const auto it = lineage.Mapping.find(unit);
-        if (it == lineage.Mapping.end()) {
-            continue;
-        }
-        emitted.insert(unit);
-        rows.emplace_back(ToStdString(FormatInfoUnit(unit)), FormatLineageSource(it->second));
-    }
-
-    TVector<TInfoUnit> extra;
-    for (const auto& [unit, _] : lineage.Mapping) {
-        if (!emitted.contains(unit)) {
-            extra.push_back(unit);
+        if (const auto* entry = lineage.Find(unit)) {
+            rows.emplace_back(ToStdString(FormatInfoUnit(unit, registry)), FormatLineageSource(*entry));
         }
     }
-    for (const auto& unit : SortInfoUnits(std::move(extra))) {
-        rows.emplace_back(ToStdString(FormatInfoUnit(unit)), FormatLineageSource(lineage.Mapping.at(unit)));
-    }
-
     return rows;
 }
 
@@ -293,119 +253,6 @@ std::string FormatPairSummary(const std::vector<std::pair<std::string, std::stri
         return "(0)";
     }
     return "(" + std::to_string(rows.size()) + ") " + JoinStrings(items);
-}
-
-TInfoUnit GetCanonicalAlias(const TPlanAliases::TCandidates& candidates) {
-    Y_ENSURE(!candidates.empty());
-    const auto* best = &candidates.front();
-    for (const auto& candidate : candidates) {
-        if (candidate.Priority < best->Priority ||
-            (candidate.Priority == best->Priority && candidate.IU.GetFullName() < best->IU.GetFullName())) {
-            best = &candidate;
-        }
-    }
-    return best->IU;
-}
-
-std::string FormatAliasCandidate(const TAliasCandidate& candidate) {
-    std::string result = ToStdString(FormatInfoUnit(candidate.IU));
-    if (candidate.Priority != 0) {
-        result += " (priority " + std::to_string(candidate.Priority) + ")";
-    }
-    return result;
-}
-
-std::vector<std::pair<std::string, std::string>> BuildAliasRows(const TPlanAliases::TAliasMap& aliases) {
-    TVector<TInfoUnit> keys;
-    keys.reserve(aliases.size());
-    for (const auto& [unit, _] : aliases) {
-        keys.push_back(unit);
-    }
-
-    std::vector<std::pair<std::string, std::string>> rows;
-    TInfoUnitSet emittedCanonicals;
-    for (const auto& unit : SortInfoUnits(std::move(keys))) {
-        const auto it = aliases.find(unit);
-        Y_ENSURE(it != aliases.end());
-        if (it->second.empty()) {
-            continue;
-        }
-
-        const auto canonical = GetCanonicalAlias(it->second);
-        if (!emittedCanonicals.insert(canonical).second) {
-            continue;
-        }
-
-        auto candidates = it->second;
-        std::sort(candidates.begin(), candidates.end(), [](const TAliasCandidate& lhs, const TAliasCandidate& rhs) {
-            if (lhs.Priority != rhs.Priority) {
-                return lhs.Priority < rhs.Priority;
-            }
-            return lhs.IU.GetFullName() < rhs.IU.GetFullName();
-        });
-
-        if (candidates.size() == 1 && candidates.front().IU == canonical && candidates.front().Priority == 0) {
-            continue;
-        }
-
-        std::vector<std::string> candidateItems;
-        candidateItems.reserve(candidates.size());
-        for (const auto& candidate : candidates) {
-            candidateItems.push_back(FormatAliasCandidate(candidate));
-        }
-        rows.emplace_back(ToStdString(FormatInfoUnit(canonical)), JoinStrings(candidateItems));
-    }
-    return rows;
-}
-
-struct TForbiddenEntry {
-    std::vector<std::string> Columns;
-    bool AllExcept = false;
-};
-
-TForbiddenEntry MakeForbiddenEntry(const TInfoUnitConstraintSet& forbidden) {
-    return {
-        MakeInfoUnitItems(SortInfoUnitSet(forbidden.GetUnits())),
-        forbidden.IsAllExcept()
-    };
-}
-
-std::optional<TForbiddenEntry> BuildForbiddenEntry(const IOperator& op) {
-    if (!op.Props.Analysis.NameConstraints) {
-        return std::nullopt;
-    }
-
-    const auto& forbidden = op.Props.Analysis.NameConstraints->GetForbidden();
-    if (forbidden.Empty()) {
-        return std::nullopt;
-    }
-    return MakeForbiddenEntry(forbidden);
-}
-
-std::string BuildForbiddenSummaryItem(const TForbiddenEntry& entry) {
-    const auto prefix = entry.AllExcept ? "all except " : "";
-    return prefix + FormatCountedSummary(entry.Columns);
-}
-
-optimizer_trace::Widget BuildForbiddenWidget(const TForbiddenEntry& entry) {
-    const auto title = entry.AllExcept ? "Forbidden (all except)" : "Forbidden";
-    return optimizer_trace::Widget::list(title, entry.Columns).monospaceListText();
-}
-
-std::vector<std::string> FindDuplicateOutputColumns(const TVector<TInfoUnit>& outputIUs) {
-    THashMap<TInfoUnit, ui32, TInfoUnit::THashFunction> counts;
-    for (const auto& unit : outputIUs) {
-        ++counts[unit];
-    }
-
-    std::vector<std::string> duplicates;
-    for (const auto& [unit, count] : counts) {
-        if (count > 1) {
-            duplicates.push_back(ToStdString(TStringBuilder() << FormatInfoUnit(unit) << " x" << count));
-        }
-    }
-    std::sort(duplicates.begin(), duplicates.end());
-    return duplicates;
 }
 
 std::vector<std::pair<std::string, std::string>> BuildStageRows(const TStageGraph& graph, ui32 stageId) {
@@ -469,30 +316,30 @@ std::string FormatConnectionLabel(const TConnection& connection) {
     return ToStdString(connection.Type) + " connection";
 }
 
-std::string FormatConnectionDetails(const TConnection& connection) {
+std::string FormatConnectionDetails(const TConnection& connection, const TInfoUnitRegistry& registry) {
     std::vector<std::string> details = {
         "type=" + ToStdString(connection.Type),
         "outputIndex=" + std::to_string(connection.GetOutputIndex())
     };
 
     if (const auto* shuffle = dynamic_cast<const TShuffleConnection*>(&connection)) {
-        if (!shuffle->Keys.empty()) {
-            details.push_back("hashKeys=" + ToStdString(FormatInfoUnits(shuffle->Keys)));
+        if (!shuffle->Keys.Items().empty()) {
+            details.push_back("hashKeys=" + ToStdString(FormatInfoUnits(shuffle->Keys.Items(), registry)));
         }
         if (shuffle->HashFuncType) {
             details.push_back("hashFunc=" + ToStdString(ToString(*shuffle->HashFuncType)));
         }
         details.push_back("useSpilling=" + FormatBool(shuffle->UseSpilling));
     } else if (const auto* merge = dynamic_cast<const TMergeConnection*>(&connection)) {
-        if (!merge->Order.empty()) {
-            details.push_back("mergeOrder=" + ToStdString(FormatSortElements(merge->Order)));
+        if (!merge->Order.Items().empty()) {
+            details.push_back("mergeOrder=" + ToStdString(FormatSortElements(merge->Order, registry)));
         }
     }
 
     return JoinStrings(details);
 }
 
-optimizer_trace::Widget BuildStageGraphDetailsWidget(const TStageGraph& graph) {
+optimizer_trace::Widget BuildStageGraphDetailsWidget(const TStageGraph& graph, const TInfoUnitRegistry& registry) {
     std::vector<std::pair<std::string, std::string>> rows;
 
     for (const auto stageId : graph.StageIds) {
@@ -509,7 +356,7 @@ optimizer_trace::Widget BuildStageGraphDetailsWidget(const TStageGraph& graph) {
     for (const auto& edge : CollectStageEdges(graph)) {
         rows.emplace_back(
             "Connection " + std::to_string(edge.From) + " -> " + std::to_string(edge.To) + " #" + std::to_string(edge.Index),
-            FormatConnectionDetails(*edge.Connection));
+            FormatConnectionDetails(*edge.Connection, registry));
     }
 
     return BuildColumnValueTable("Stage graph details", rows);
@@ -634,35 +481,35 @@ struct TJoinOrderJson {
     bool HasJoin = false;
 };
 
-TJoinOrderJson BuildJoinOrderJson(const TIntrusivePtr<IOperator>& op) {
+TJoinOrderJson BuildJoinOrderJson(const IOperator* op) {
     if (!op) {
         return {NJson::TJsonValue("null"), false};
     }
 
     if (op->Kind == EOperator::Source) {
-        return {NJson::TJsonValue(FormatReadNameForJoinOrder(*static_cast<TOpRead*>(op.Get()))), false};
+        return {NJson::TJsonValue(FormatReadNameForJoinOrder(*static_cast<const TOpRead*>(op))), false};
     }
 
     if (op->Kind == EOperator::CBOTree) {
-        const auto* cboTree = static_cast<const TOpCBOTree*>(op.Get());
-        return BuildJoinOrderJson(cboTree->TreeRoot);
+        const auto* cboTree = static_cast<const TOpCBOTree*>(op);
+        return BuildJoinOrderJson(cboTree->TreeRoot.get());
     }
 
     if (op->Kind == EOperator::Join) {
         NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& child : op->Children) {
+        for (const auto& child : op->GetChildren()) {
             children.AppendValue(BuildJoinOrderJson(child).Json);
         }
         return {std::move(children), true};
     }
 
-    if (op->Children.size() == 1) {
-        return BuildJoinOrderJson(op->Children.front());
+    if (op->GetChildren().size() == 1) {
+        return BuildJoinOrderJson(op->GetChildren().front());
     }
 
     bool hasJoin = false;
     NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto& child : op->Children) {
+    for (const auto& child : op->GetChildren()) {
         auto childOrder = BuildJoinOrderJson(child);
         hasJoin = hasJoin || childOrder.HasJoin;
         children.AppendValue(std::move(childOrder.Json));
@@ -678,11 +525,11 @@ TJoinOrderJson BuildJoinOrderJson(const TIntrusivePtr<IOperator>& op) {
 }
 
 std::optional<optimizer_trace::Widget> BuildJoinOrderWidget(const TOpRoot& root) {
-    if (root.Children.empty()) {
+    if (root.GetChildren().empty()) {
         return std::nullopt;
     }
 
-    auto joinOrder = BuildJoinOrderJson(root.Children.front());
+    auto joinOrder = BuildJoinOrderJson(root.GetChildren().front());
     if (!joinOrder.HasJoin) {
         return std::nullopt;
     }
@@ -735,11 +582,11 @@ optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TT
     return optimizer_trace::Widget::graph("Stage graph", stageGraph).monospaceGraphEdges();
 }
 
-optimizer_trace::Widget BuildStageGraphSwitcher(const TStageGraph& graph, const TTraceBuildState& state) {
+optimizer_trace::Widget BuildStageGraphSwitcher(const TStageGraph& graph, const TTraceBuildState& state, const TInfoUnitRegistry& registry) {
     return optimizer_trace::Widget::switcher("Stage graph")
         .defaultOption("graph")
         .option("graph", "Graph", {BuildStageGraphWidget(graph, state)})
-        .option("details", "Details", {BuildStageGraphDetailsWidget(graph)});
+        .option("details", "Details", {BuildStageGraphDetailsWidget(graph, registry)});
 }
 
 std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const TTraceBuildState& state) {
@@ -748,7 +595,7 @@ std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const
         return widgets;
     }
 
-    widgets.push_back(BuildStageGraphSwitcher(root.PlanProps.StageGraph, state));
+    widgets.push_back(BuildStageGraphSwitcher(root.PlanProps.StageGraph, state, root.PlanProps.InfoUnitRegistry));
     return widgets;
 }
 
@@ -772,32 +619,33 @@ void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, con
     }
 }
 
-void AttachPlanOverview(TTraceBuildState* state, const TIntrusivePtr<IOperator>& op) {
+void AttachPlanOverview(TTraceBuildState* state, IOperator* op) {
     if (!state) {
         return;
     }
 
     EnsureOverviewNode(state, *op);
-    for (const auto& child : op->Children) {
+    for (const auto& child : op->GetChildren()) {
         AttachOverviewEdge(state, *op, *child);
     }
 }
 
 optimizer_trace::Node BuildPlanNode(
-    const TIntrusivePtr<IOperator>& op,
+    IOperator* op,
     TExprContext& ctx,
     TPlanProps& planProps,
     ui32 opts,
     const std::string& id,
     TTraceBuildState* state)
 {
-    optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx)));
+    const auto& registry = planProps.InfoUnitRegistry;
+    optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx, registry)));
     AttachStageTarget(state, *op, id);
     AttachOperatorTarget(state, *op, id);
     AttachPlanOverview(state, op);
 
-    const auto outputIUs = op->GetOutputIUs();
-    AddInfoUnitField(node, "OutputColumns", "Output columns", outputIUs, op.Get());
+    const auto& outputIUs = op->GetOutputIUs();
+    AddInfoUnitField(node, "OutputColumns", "Output columns", outputIUs, registry, op);
     if (const auto outputType = FormatOutputType(*op); !outputType.empty()) {
         node.field("OutputType", outputType);
     }
@@ -815,14 +663,13 @@ optimizer_trace::Node BuildPlanNode(
         node.field("JoinAlgo", FormatJoinAlgo(*op->Props.JoinAlgo));
     }
 
-    AddShuffleDecisionField(node, "LeftShuffleBy", "Left shuffle by", op->Props.LeftShuffleBy, op.Get());
-    AddShuffleDecisionField(node, "RightShuffleBy", "Right shuffle by", op->Props.RightShuffleBy, op.Get());
+    AddShuffleDecisionField(node, "LeftShuffleBy", "Left shuffle by", op->Props.LeftShuffleBy, registry, op);
+    AddShuffleDecisionField(node, "RightShuffleBy", "Right shuffle by", op->Props.RightShuffleBy, registry, op);
 
     if (op->Props.OrderEnforcer) {
-        node.field("OrderEnforcer", FormatOrderEnforcer(*op->Props.OrderEnforcer))
-            .detail(BuildColumnValueTable("Order enforcer", BuildOrderEnforcerRows(*op->Props.OrderEnforcer)));
+        node.field("OrderEnforcer", FormatOrderEnforcer(*op->Props.OrderEnforcer, registry))
+            .detail(BuildColumnValueTable("Order enforcer", BuildOrderEnforcerRows(*op->Props.OrderEnforcer, registry)));
     }
-
 
     if ((opts & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata))
         && op->Props.Metadata.has_value()) {
@@ -832,77 +679,30 @@ optimizer_trace::Node BuildPlanNode(
             node.field("Storage", FormatStorageType(meta.StorageType));
         }
 
-        if (!meta.KeyColumns.empty()) {
-            AddInfoUnitField(node, "KeyColumns", "Key columns", meta.KeyColumns, op.Get());
+        if (!meta.KeyColumns.Items().empty()) {
+            AddInfoUnitField(node, "KeyColumns", "Key columns", meta.KeyColumns.Items(), registry, op);
         }
 
-        if (!meta.SortColumns.empty()) {
-            AddStringListField(node, "SortBy", "Sort by", MakeSortColumnItems(meta.SortColumns));
-        }
-
-        if (!meta.ShuffledByColumns.empty()) {
-            AddInfoUnitField(node, "ShuffledBy", "Shuffled by", meta.ShuffledByColumns, op.Get());
-        }
-
-        if (meta.ShufflingOrderingIdx) {
-            node.field("ShufflingOrderingIdx", std::to_string(*meta.ShufflingOrderingIdx))
-                .detail(BuildColumnValueTable("Shuffling ordering", {
-                    {"Ordering index", std::to_string(*meta.ShufflingOrderingIdx)},
-                    {"Shuffled by", ToStdString(FormatInfoUnits(meta.ShuffledByColumns))}
-                }));
-        }
-
-        if (meta.SortingOrderingIdx) {
-            node.field("SortingOrderingIdx", std::to_string(*meta.SortingOrderingIdx))
-                .detail(BuildColumnValueTable("Sorting ordering", {
-                    {"Ordering index", std::to_string(*meta.SortingOrderingIdx)},
-                    {"Sort by", ToStdString(FormatSortColumns(meta.SortColumns))}
-                }));
+        if (!meta.ShuffledByColumns.Items().empty()) {
+            AddInfoUnitField(node, "ShuffledBy", "Shuffled by", meta.ShuffledByColumns.Items(), registry, op);
         }
 
         node.field("Type", FormatStatisticsType(meta.Type));
         node.field("LogicalCard", FormatLogicalCardinality(meta.LogicalCard));
 
-        if (!meta.ColumnLineage.Mapping.empty()) {
-            const auto rows = BuildLineageRows(meta.ColumnLineage, outputIUs);
+        if (const auto rows = BuildLineageRows(planProps.ColumnLineage, outputIUs, registry); !rows.empty()) {
             node.field("Lineage", FormatPairSummary(rows))
                 .detail(BuildColumnTable("Lineage", rows));
         }
     }
 
     if (op->Props.Analysis.LiveOut) {
-        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.Analysis.LiveOut));
+        AddInfoUnitField(node, "LiveOut", "Live out", *op->Props.Analysis.LiveOut, registry);
     }
 
-    const auto usedIUs = SortInfoUnits(UniqueInfoUnits(op->GetUsedIUs(planProps)));
-    if (!usedIUs.empty()) {
-        AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, op.Get());
-    }
-
-    if (op->Props.Analysis.Aliases) {
-        const auto rows = BuildAliasRows(*op->Props.Analysis.Aliases);
-        if (!rows.empty()) {
-            node.field("Aliases", FormatPairSummary(rows))
-                .detail(BuildColumnTable("Aliases at output", rows));
-        }
-    }
-
-    const auto forbiddenEntry = BuildForbiddenEntry(*op);
-    if (forbiddenEntry) {
-        node.field("Forbidden", BuildForbiddenSummaryItem(*forbiddenEntry))
-            .detail(BuildForbiddenWidget(*forbiddenEntry));
-    }
-
-    const auto duplicateOutputColumns = FindDuplicateOutputColumns(outputIUs);
-    if (!duplicateOutputColumns.empty()) {
-        node.field("OutputConflicts", FormatCountedSummary(duplicateOutputColumns))
-            .details({
-                optimizer_trace::Widget::warning(
-                    "Output conflicts",
-                    "The operator output contains duplicate information unit names.",
-                    "warning"),
-                optimizer_trace::Widget::list("Duplicate output columns", duplicateOutputColumns).monospaceListText()
-            });
+    const auto usedIUs = op->GetUsedIUs(planProps);
+    if (!usedIUs.Empty()) {
+        AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, registry, op);
     }
 
     if ((opts & (EPrintPlanOptions::PrintBasicStatistics | EPrintPlanOptions::PrintFullStatistics))
@@ -923,33 +723,34 @@ optimizer_trace::Node BuildPlanNode(
         node.field("Cost", costStr.str());
     }
 
-    for (size_t i = 0; i < op->Children.size(); ++i) {
-        node.child(BuildPlanNode(op->Children[i], ctx, planProps, opts, id + "-" + std::to_string(i), state));
+    for (size_t i = 0; i < op->GetChildren().size(); ++i) {
+        node.child(BuildPlanNode(op->GetChildren()[i], ctx, planProps, opts, id + "-" + std::to_string(i), state));
     }
     return node;
 }
 
 optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts, TTraceBuildState* state) {
+    const auto& registry = root.PlanProps.InfoUnitRegistry;
     const auto& subplans = root.PlanProps.Subplans;
     if (subplans.Empty()) {
-        return BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-0", state);
+        return BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-0", state);
     }
     optimizer_trace::Node container("n", "Plan", "Plan");
     size_t index = 0;
     for (const auto& [iu, subplan] : subplans) {
         const std::string subplanId = "n-" + std::to_string(index++);
-        optimizer_trace::Node sub(subplanId, "Subplan", "Subplan [" + std::string(iu.GetFullName().c_str()) + "]");
+        optimizer_trace::Node sub(subplanId, "Subplan", "Subplan [" + ToStdString(FormatInfoUnit(iu, registry)) + "]");
         sub.field("SubplanType", FormatSubplanType(subplan.Type));
-        if (!subplan.Tuple.empty()) {
-            AddInfoUnitField(sub, "SubplanTuple", "Subplan tuple", subplan.Tuple);
+        if (!subplan.Tuple.Items().empty()) {
+            AddInfoUnitField(sub, "SubplanTuple", "Subplan tuple", subplan.Tuple.Items(), registry);
         }
-        if (!subplan.DependentIUs.empty()) {
-            AddInfoUnitField(sub, "SubplanDependentIUs", "Subplan dependent IUs", subplan.DependentIUs);
+        if (!subplan.DependentIUs.Empty()) {
+            AddInfoUnitField(sub, "SubplanDependentIUs", "Subplan dependent IUs", subplan.DependentIUs, registry);
         }
-        sub.child(BuildPlanNode(CastOperator<IOperator>(subplan.Plan), ctx, root.PlanProps, opts, subplanId + "-0", state));
+        sub.child(BuildPlanNode(subplan.Plan.Get(), ctx, root.PlanProps, opts, subplanId + "-0", state));
         container.child(sub);
     }
-    container.child(BuildPlanNode(root.GetInput(), ctx, root.PlanProps, opts, "n-" + std::to_string(index), state));
+    container.child(BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-" + std::to_string(index), state));
     return container;
 }
 
@@ -968,18 +769,12 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"OrderEnforcer", "Order"},
         {"Storage", "Storage"},
         {"KeyColumns", "Key columns"},
-        {"SortBy", "Sort by"},
         {"ShuffledBy", "Shuffled by"},
-        {"ShufflingOrderingIdx", "Shuffle ordering"},
-        {"SortingOrderingIdx", "Sort ordering"},
         {"Type", "Type"},
         {"LogicalCard", "Logical card"},
         {"Lineage", "Lineage"},
         {"LiveOut", "Live out"},
         {"UsedIUs", "Used IUs"},
-        {"Aliases", "Aliases"},
-        {"Forbidden", "Forbidden"},
-        {"OutputConflicts", "Conflicts"},
         {"ERows", "Rows"},
         {"EBytes", "Bytes"},
         {"Selectivity", "Selectivity"},

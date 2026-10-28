@@ -5,7 +5,11 @@ import pytest
 import time
 
 from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints, read_and_check_data, MessageAcceptor
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -26,7 +30,7 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
-            "enable_streaming_queries_counters"
+            "enable_streaming_queries_counters",
         ]
 
         if min(self.versions) >= (26, 1) and min(self.versions) < (26, 2):
@@ -44,7 +48,8 @@ class StreamingTestBase:
                 'STREAMS_STORAGE_SERVICE': LogLevels.TRACE,
                 'FQ_ROW_DISPATCHER': LogLevels.TRACE,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTER': LogLevels.DEBUG},
+                'KQP_EXECUTER': LogLevels.DEBUG,
+            },
         )
 
     def create_objects(self, external: bool, with_precompute: bool = True):
@@ -375,7 +380,15 @@ class StreamingTestBase:
         time.sleep(2)
         logger.debug("write data to stream")
         write_stream(path=self.input_topic, data=input, database=self.database_path, endpoint=endpoint)
-        read_and_check_data(self, f"/Root/{self.query_name}", acceptor, endpoint, self.database_path, self.consumer_name, self.output_topic)
+        read_and_check_data(
+            self,
+            f"/Root/{self.query_name}",
+            acceptor,
+            endpoint,
+            self.database_path,
+            self.consumer_name,
+            self.output_topic,
+        )
 
     def do_test_part1(self, extra_suffix='') -> MessageAcceptor:
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix
@@ -384,7 +397,8 @@ class StreamingTestBase:
             '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}',
-            '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}']
+            '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}',
+        ]
         acceptor = MessageAcceptor()
         acceptor.accept(['{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix], ordered_group=2)
         acceptor.accept(['{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix], ordered_group=1)
@@ -396,7 +410,8 @@ class StreamingTestBase:
         input = [
             '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
-            '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}']
+            '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}',
+        ]
         acceptor.accept(['{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix], ordered_group=2)
         acceptor.accept(['{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix], ordered_group=1)
         self.do_write_read(input, acceptor)

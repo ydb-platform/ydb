@@ -9,9 +9,15 @@ from .multi_shard import MultiShard
 from .shard import Shard
 
 import grpc
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import \
-    DataServiceServicer, add_DataServiceServicer_to_server
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import ReadRequest, ReadResponse, MetricType
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import (
+    DataServiceServicer,
+    add_DataServiceServicer_to_server,
+)
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import (
+    ReadRequest,
+    ReadResponse,
+    MetricType,
+)
 
 routes = web.RouteTableDef()
 logger = logging.getLogger(__name__)
@@ -24,20 +30,20 @@ def _parse_selectors(selectors):
     result = dict()
 
     match = re.search(r".*{(.*)}.*", selectors)
-    if (not match):
+    if not match:
         return (result, False)
 
     group = match[1]
-    if (len(group) == 0):
+    if len(group) == 0:
         return (result, True)
 
     for selector in group.split(","):
         eq_pos = selector.find("=")
-        if (eq_pos == -1):
+        if eq_pos == -1:
             return (result, False)
 
         key = selector[:eq_pos].strip()
-        value = selector[eq_pos + 1:].strip('=').strip().strip('"')
+        value = selector[eq_pos + 1 :].strip('=').strip().strip('"')
         result[key] = value
 
     return (result, True)
@@ -306,11 +312,11 @@ class DataService(DataServiceServicer):
 
     @staticmethod
     def _map_metric_type(kind):
-        if (kind == "DGAUGE"):
+        if kind == "DGAUGE":
             return MetricType.DGAUGE
-        elif (kind == "IGAUGE"):
+        elif kind == "IGAUGE":
             return MetricType.IGAUGE
-        elif (kind == "COUNTER"):
+        elif kind == "COUNTER":
             return MetricType.COUNTER
         else:
             return MetricType.RATE
@@ -352,29 +358,29 @@ class DataService(DataServiceServicer):
 
 def create_web_app(emulator):
     webapp = web.Application()
-    webapp.add_routes([
-        web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
-        web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
-        web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
-        web.get("/api/calls", emulator.get_api_calls),
-        web.get("/metrics/get", emulator.metrics_get),
-        web.get("/ping", emulator.get_ping),
-        web.post("/api/v2/push", emulator.api_v2_push),
-        web.post("/monitoring/v2/data/write", emulator.data_write),
-        web.post("/metrics/post", emulator.metrics_post),
-        web.post("/cleanup", emulator.cleanup),
-        web.post("/cleanup/api/calls", emulator.cleanup_api_calls),
-        web.post("/fail/push", emulator.fail_push)
-    ])
+    webapp.add_routes(
+        [
+            web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
+            web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
+            web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
+            web.get("/api/calls", emulator.get_api_calls),
+            web.get("/metrics/get", emulator.metrics_get),
+            web.get("/ping", emulator.get_ping),
+            web.post("/api/v2/push", emulator.api_v2_push),
+            web.post("/monitoring/v2/data/write", emulator.data_write),
+            web.post("/metrics/post", emulator.metrics_post),
+            web.post("/cleanup", emulator.cleanup),
+            web.post("/cleanup/api/calls", emulator.cleanup_api_calls),
+            web.post("/fail/push", emulator.fail_push),
+        ]
+    )
 
     return webapp
 
 
 def create_grpc_server(emulator, port):
     grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    add_DataServiceServicer_to_server(
-        DataService(emulator), grpc_server
-    )
+    add_DataServiceServicer_to_server(DataService(emulator), grpc_server)
     grpc_server.add_insecure_port(f'[::]:{port}')
 
     return grpc_server

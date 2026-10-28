@@ -74,6 +74,10 @@ public:
             {
             }
 
+            ui64 GetMemory() const {
+                return Memory;
+            }
+
             virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) override;
         };
 

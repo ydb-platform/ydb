@@ -11,7 +11,7 @@ using namespace NProfiling;
 ////////////////////////////////////////////////////////////////////////////////
 
 TSchedulerThread::TSchedulerThread(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     std::string threadGroupName,
     std::string threadName,
     NThreading::TThreadOptions options)

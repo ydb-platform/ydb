@@ -1,8 +1,10 @@
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>  // for TSchemeShard
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>  // for MakeTestBlob
 #include <ydb/core/scheme_types/scheme_type_info.h>  // for NTypeIds and TTypeInfo
@@ -4210,6 +4212,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             NLs::PathExist,
             NLs::HasNoEffectiveRight(connectRight),
         });
+    }
+
+    Y_UNIT_TEST(StorageSpaceStateOfHostedSubDomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // subscriptions the schemeshard makes through the local NodeWarden; they are dropped, so that no state from the
+        // real BS_CONTROLLER interferes with the injected ones
+        std::vector<NKikimrBlobStorage::TEvControllerSubscribeDatabaseSpace> requests;
+        auto observer = runtime.AddObserver<TEvBlobStorage::TEvControllerSubscribeDatabaseSpace>([&](auto& ev) {
+            requests.push_back(ev->Get()->Record);
+            ev.Reset();
+        });
+        auto hasScope = [&](auto getScopes, ui64 pathId) {
+            for (const auto& request : requests) {
+                for (const auto& scope : getScopes(request)) {
+                    if (TPathId::FromProto(scope) == TPathId(TTestTxConfig::SchemeShard, pathId)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto subscribes = [](const auto& request) { return request.GetSubscribe(); };
+        auto unsubscribes = [](const auto& request) { return request.GetUnsubscribe(); };
+
+        // a database hosted by the root schemeshard itself (not an external subdomain)
+        TestCreateSubDomain(runtime, txId++,  "/MyRoot",
+                            "PlanResolution: 50 "
+                            "Coordinators: 1 "
+                            "Mediators: 1 "
+                            "TimeCastBucketsPerMediator: 2 "
+                            "Name: \"USER_0\"");
+        env.TestWaitNotification(runtime, txId - 1);
+        const ui64 subDomainPathId = DescribePath(runtime, "/MyRoot/USER_0").GetPathId();
+        UNIT_ASSERT(hasScope(subscribes, subDomainPathId));
+
+        // BS_CONTROLLER reports its storage exhausted
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto setExhausted = [&](bool exhausted) {
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, new TEvBlobStorage::TEvControllerDatabaseSpaceState(
+                TPathId(TTestTxConfig::SchemeShard, subDomainPathId), exhausted));
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        };
+        auto checkState = [](bool exhausted) {
+            return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
+                UNIT_ASSERT_VALUES_EQUAL(state.GetStorageSpaceExhausted(), exhausted);
+                UNIT_ASSERT_VALUES_EQUAL(state.GetDiskQuotaExceeded(), exhausted);
+            };
+        };
+        const TString counter = "SchemeShard/StorageSpaceExhausted";
+        setExhausted(true);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {checkState(true)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {checkState(false)}); // other databases are not affected
+        CheckSimpleCounter(runtime, counter, 1);
+
+        setExhausted(false);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {checkState(false)});
+        CheckSimpleCounter(runtime, counter, 0);
+
+        // the subscription is dropped when the database is removed, and so is its contribution to the counter
+        setExhausted(true);
+        CheckSimpleCounter(runtime, counter, 1);
+        UNIT_ASSERT(!hasScope(unsubscribes, subDomainPathId));
+        TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId - 1);
+        runtime.WaitFor("unsubscription", [&] { return hasScope(unsubscribes, subDomainPathId); });
+        CheckSimpleCounter(runtime, counter, 0);
     }
 }
 

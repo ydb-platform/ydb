@@ -6,6 +6,18 @@ void TLagProvider::AddPendingLag(ui64 childId) {
     Pending.insert(childId);
 }
 
+void TLagProvider::RemoveLag(const TItemWithLag& child, ui64 childId) {
+    Pending.erase(childId);
+    if (child.Lag) {
+        auto it = ChildrenByLag.find(*child.Lag);
+        Y_ABORT_UNLESS(it != ChildrenByLag.end());
+        it->second.erase(childId);
+        if (it->second.empty()) {
+            ChildrenByLag.erase(it);
+        }
+    }
+}
+
 bool TLagProvider::UpdateLag(TItemWithLag& child, ui64 childId, TDuration lag) {
     bool updated = false;
 

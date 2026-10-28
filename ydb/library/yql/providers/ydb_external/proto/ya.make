@@ -1,0 +1,15 @@
+PROTO_LIBRARY()
+
+PROTOC_FATAL_WARNINGS()
+
+ONLY_TAGS(CPP_PROTO)
+
+SRCS(source.proto)
+
+PEERDIR(ydb/public/api/protos)
+
+IF (NOT PY_PROTOS_FOR)
+    EXCLUDE_TAGS(GO_PROTO)
+ENDIF()
+
+END()

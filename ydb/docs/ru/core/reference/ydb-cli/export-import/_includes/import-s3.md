@@ -18,6 +18,12 @@
 
 При необходимости догрузки данных в существующие таблицы из S3 вы можете скопировать содержимое S3 в файловую систему (например, с помощью [S3cmd](https://s3tools.org/s3cmd)) и воспользоваться [командой `tools restore`](../tools-restore.md).
 
+{% note warning %}
+
+Команда `tools restore` загружает данные только в [строковые таблицы](../../../../concepts/datamodel/table.md#row-oriented-tables). Для догрузки в существующие [колоночные таблицы](../../../../concepts/datamodel/table.md#column-oriented-tables) используйте [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
+
+{% endnote %}
+
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:

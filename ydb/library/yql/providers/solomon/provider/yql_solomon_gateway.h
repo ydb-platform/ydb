@@ -1,20 +1,18 @@
 #pragma once
 
+#include <library/cpp/threading/future/future.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
-#include <library/cpp/threading/future/future.h>
-
 namespace NYql {
 
-struct TSolomonMetadata : public TThrRefBase
-{
+struct TSolomonMetadata: public TThrRefBase {
     using TPtr = TIntrusivePtr<TSolomonMetadata>;
 
     bool DoesExist = false;
 };
 
-class ISolomonGateway : public TThrRefBase {
+class ISolomonGateway: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<ISolomonGateway>;
 
@@ -23,18 +21,17 @@ public:
         TString Name;
     };
 
-    struct TGetMetaResult : public NCommon::TOperationResult {
+    struct TGetMetaResult: public NCommon::TOperationResult {
         TSolomonMetadata::TPtr Meta;
     };
 
     virtual ~ISolomonGateway() = default;
 
-    virtual NThreading::TFuture<TGetMetaResult> GetMeta(
-        const TGetMetaRequest& request) const = 0;
+    virtual NThreading::TFuture<TGetMetaResult> GetMeta(const TGetMetaRequest& request) const = 0;
 
     virtual void AddCluster(const TSolomonClusterConfig& cluster) = 0;
     virtual TMaybe<TSolomonClusterConfig> GetClusterConfig(const TStringBuf cluster) const = 0;
     virtual bool HasCluster(const TStringBuf cluster) const = 0;
 };
 
-} // namespace NYql
+}   // namespace NYql

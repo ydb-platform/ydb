@@ -1,12 +1,11 @@
 #pragma once
-#include "table_record.h"
 #include "modification_controller.h"
+#include "table_record.h"
 #include "ydb_value_operator.h"
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/services/metadata/request/request_actor.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/services/metadata/request/request_actor.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -30,7 +29,8 @@ public:
     }
 
     TModificationStage(Ydb::Table::ExecuteDataQueryRequest request)
-        : Request(std::move(request)) {
+        : Request(std::move(request))
+    {
     }
 
     virtual ~TModificationStage() = default;
@@ -68,6 +68,7 @@ protected:
     NInternal::TTableRecords Objects;
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const = 0;
     virtual TString GetModifyType() const = 0;
+
     virtual TModificationStage::TPtr DoBuildRequestDirect(Ydb::Table::ExecuteDataQueryRequest query) const {
         return std::make_shared<TModificationStage>(std::move(query));
     }
@@ -92,7 +93,8 @@ protected:
         if (UserToken) {
             Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyUserId"), NInternal::TYDBValue::Utf8(UserToken->GetUserSID()));
         }
-        Objects.AddColumn(NInternal::TYDBColumn::UInt64("historyInstant"), NInternal::TYDBValue::UInt64(TActivationContext::Now().MicroSeconds()));
+        Objects.AddColumn(
+            NInternal::TYDBColumn::UInt64("historyInstant"), NInternal::TYDBValue::UInt64(TActivationContext::Now().MicroSeconds()));
         Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyAction"), NInternal::TYDBValue::Utf8(GetModifyType()));
         Ydb::Table::ExecuteDataQueryRequest request = Objects.BuildInsertQuery(TObject::GetBehaviour()->GetStorageHistoryTablePath());
         FillRequestSettings(request);
@@ -156,7 +158,8 @@ public:
         Y_ABORT_UNLESS(Stages.size());
         Stages.back()->SetCommit();
 
-        TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogYQLRequest>(Stages.front()->GetRequest(), SystemUserToken, TBase::SelfId()));
+        TBase::Register(
+            new NRequest::TYDBCallbackRequest<NRequest::TDialogYQLRequest>(Stages.front()->GetRequest(), SystemUserToken, TBase::SelfId()));
     }
 };
 
@@ -164,13 +167,16 @@ template <class TObject>
 class TUpsertObjectsActor: public TModifyObjectsActor<TObject> {
 private:
     using TBase = TModifyObjectsActor<TObject>;
+
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         return TBase::Objects.BuildUpsertQuery(TObject::GetBehaviour()->GetStorageTablePath());
     }
+
     virtual TString GetModifyType() const override {
         return "upsert";
     }
+
 public:
     using TBase::TBase;
 };
@@ -179,13 +185,16 @@ template <class TObject>
 class TUpdateObjectsActor: public TModifyObjectsActor<TObject> {
 private:
     using TBase = TModifyObjectsActor<TObject>;
+
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         return TBase::Objects.BuildUpdateQuery(TObject::GetBehaviour()->GetStorageTablePath());
     }
+
     virtual TString GetModifyType() const override {
         return "update";
     }
+
 public:
     using TBase::TBase;
 };
@@ -194,6 +203,7 @@ template <class TObject>
 class TDeleteObjectsActor: public TModifyObjectsActor<TObject> {
 private:
     using TBase = TModifyObjectsActor<TObject>;
+
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         auto manager = TObject::GetBehaviour()->GetOperationsManager();
@@ -201,9 +211,11 @@ protected:
         auto objectIds = TBase::Objects.SelectColumns(manager->GetSchema().GetPKColumnIds());
         return objectIds.BuildDeleteQuery(TObject::GetBehaviour()->GetStorageTablePath());
     }
+
     virtual TString GetModifyType() const override {
         return "delete";
     }
+
 public:
     using TBase::TBase;
 };
@@ -221,7 +233,9 @@ public:
     }
 
     TStageInsertObjects(Ydb::Table::ExecuteDataQueryRequest request, const bool existingOk)
-        : TModificationStage(std::move(request)), ExistingOk(existingOk) {
+        : TModificationStage(std::move(request))
+        , ExistingOk(existingOk)
+    {
     }
 };
 
@@ -230,10 +244,12 @@ class TInsertObjectsActor: public TModifyObjectsActor<TObject> {
 private:
     using TBase = TModifyObjectsActor<TObject>;
     bool ExistingOk = false;
+
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         return TBase::Objects.BuildInsertQuery(TObject::GetBehaviour()->GetStorageTablePath());
     }
+
     virtual TString GetModifyType() const override {
         return "insert";
     }
@@ -241,13 +257,15 @@ protected:
     TModificationStage::TPtr DoBuildRequestDirect(Ydb::Table::ExecuteDataQueryRequest query) const override {
         return std::make_shared<TStageInsertObjects>(std::move(query), ExistingOk);
     }
+
 public:
-    TInsertObjectsActor(NInternal::TTableRecords&& objects, const NACLib::TUserToken& systemUserToken, IModificationObjectsController::TPtr controller, const TString& sessionId,
-        const TString& transactionId, const std::optional<NACLib::TUserToken>& userToken, const std::vector<TModificationStage::TPtr>& preconditions, bool existingOk)
+    TInsertObjectsActor(NInternal::TTableRecords&& objects, const NACLib::TUserToken& systemUserToken,
+        IModificationObjectsController::TPtr controller, const TString& sessionId, const TString& transactionId,
+        const std::optional<NACLib::TUserToken>& userToken, const std::vector<TModificationStage::TPtr>& preconditions, bool existingOk)
         : TBase(std::move(objects), systemUserToken, std::move(controller), sessionId, transactionId, userToken, preconditions)
         , ExistingOk(existingOk)
     {
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

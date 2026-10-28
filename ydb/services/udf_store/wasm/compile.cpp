@@ -33,14 +33,10 @@ WAVM::IR::Module ParseWasmModule(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFor
         case NYdb::NWasm::EBytecodeFormat::Binary: {
             WAVM::IR::Module irModule(featureSpec);
             auto loadError = WAVM::WASM::LoadError();
-            const bool parsed = WAVM::WASM::loadBinaryModule(
-                std::bit_cast<const WAVM::U8*>(wasmBytes.data()),
-                wasmBytes.size(),
-                irModule,
-                &loadError);
+            const bool parsed =
+                WAVM::WASM::loadBinaryModule(std::bit_cast<const WAVM::U8*>(wasmBytes.data()), wasmBytes.size(), irModule, &loadError);
             if (!parsed) {
-                ythrow yexception() << "Failed to parse wasm binary for object-code compilation: "
-                                    << loadError.message;
+                ythrow yexception() << "Failed to parse wasm binary for object-code compilation: " << loadError.message;
             }
             return irModule;
         }
@@ -48,7 +44,7 @@ WAVM::IR::Module ParseWasmModule(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFor
     ythrow yexception() << "Unsupported wasm bytecode format";
 }
 
-} // namespace
+}   // namespace
 
 NYdb::NWasm::EBytecodeFormat DetectBytecodeFormat(TStringBuf extension) {
     if (extension == "wat" || extension == "wast") {
@@ -74,9 +70,7 @@ TString CompileModuleObjectCode(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeForm
     auto irModule = ParseWasmModule(wasmBytes, format);
     auto compiled = WAVM::Runtime::compileModule(irModule);
     auto objectCode = WAVM::Runtime::getObjectCode(compiled);
-    return TString(
-        std::bit_cast<const char*>(objectCode.data()),
-        objectCode.size());
+    return TString(std::bit_cast<const char*>(objectCode.data()), objectCode.size());
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

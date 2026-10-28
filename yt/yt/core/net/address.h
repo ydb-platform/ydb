@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
+#include <library/cpp/yt/system/local_host.h>
+
 #include <util/generic/hash.h>
 
 #ifdef _WIN32
@@ -269,7 +271,7 @@ private:
 
 // Expected format: sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net, or noqpmfiudzbb4hvs.man.yp-c.yandex.net.
 // YP pod id must not contain a '.' in its name.
-std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName);
+using ::NYT::InferYPClusterFromHostNameRaw;
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName);
 
 ////////////////////////////////////////////////////////////////////////////////

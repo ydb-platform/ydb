@@ -13,10 +13,7 @@ EWebAssemblyValueType InferType();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWebAssemblyRuntimeType GetTypeId(
-    bool intrinsic,
-    EWebAssemblyValueType returnType,
-    TRange<EWebAssemblyValueType> argumentTypes);
+TWebAssemblyRuntimeType GetTypeId(bool intrinsic, EWebAssemblyValueType returnType, TRange<EWebAssemblyValueType> argumentTypes);
 
 template <typename THead, typename... TTail>
 Y_FORCE_INLINE void InferTypesImpl(TMutableRange<EWebAssemblyValueType> range)
@@ -48,4 +45,4 @@ Y_FORCE_INLINE TWebAssemblyRuntimeType TFunctionTypeBuilder<IsIntrinsic, TResult
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

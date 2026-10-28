@@ -281,9 +281,23 @@ template <typename TEvent>
     return false;
 }
 
+// Attaches the payload. A non-empty checksums vector is the caller's
+// checksums and is sent verbatim. An empty vector is a temporary fallback:
+// compute the checksums after the copy when checksums are enabled.
 template <typename TRequest>
-void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+void AttachPayload(
+    TRequest& request,
+    TRope rope,
+    const TBlockChecksums& checksums,
+    bool enableChecksums)
 {
+    if (!checksums.empty()) {
+        Y_DEBUG_ABORT_UNLESS(
+            checksums.size() == rope.size() / ChecksumUnitSize);
+        request.AddPayloadWithChecksum(std::move(rope), checksums);
+        return;
+    }
+
     if (enableChecksums) {
         request.AddPayloadThenChecksum(std::move(rope));
     } else {
@@ -322,6 +336,7 @@ TICDirectStorageTransport::WriteToPBuffer(
     const ui64 lsn,
     const NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
@@ -334,6 +349,7 @@ TICDirectStorageTransport::WriteToPBuffer(
             lsn,
             instruction,
             data,
+            checksums,
             span);
     }
 
@@ -355,7 +371,7 @@ TICDirectStorageTransport::WriteToPBuffer(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    AttachPayload(*request, std::move(rope), EnableChecksums);
+    AttachPayload(*request, std::move(rope), checksums, EnableChecksums);
 
     auto promise = NewPromise<TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
@@ -390,6 +406,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
     TDuration replyTimeout,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
@@ -405,6 +422,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
             std::move(persistentBufferIds),
             replyTimeout,
             data,
+            checksums,
             std::move(span),
             std::move(callback));
         return;
@@ -440,7 +458,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    AttachPayload(*request, std::move(rope), EnableChecksums);
+    AttachPayload(*request, std::move(rope), checksums, EnableChecksums);
 
     auto handler = MakeIntrusive<TWriteToManyReplyHandler>(
         std::move(wrappedCallback),
@@ -469,6 +487,7 @@ TICDirectStorageTransport::WriteToDDisk(
     const NDDisk::TBlockSelector& selector,
     const NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::DDisk);
@@ -480,6 +499,7 @@ TICDirectStorageTransport::WriteToDDisk(
             selector,
             instruction,
             data,
+            checksums,
             span);
     }
 
@@ -500,7 +520,7 @@ TICDirectStorageTransport::WriteToDDisk(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    AttachPayload(*request, std::move(rope), EnableChecksums);
+    AttachPayload(*request, std::move(rope), checksums, EnableChecksums);
 
     auto promise = NewPromise<TEvWriteResult>();
     auto future = promise.GetFuture();

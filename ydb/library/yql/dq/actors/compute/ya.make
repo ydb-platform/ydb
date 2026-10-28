@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_async_compute_actor.cpp
@@ -36,8 +36,6 @@ PEERDIR(
     library/cpp/html/escape
     library/cpp/time_provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

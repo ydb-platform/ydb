@@ -16,5 +16,8 @@ FROM (
     sales
 )
 GROUP BY
-    ROLLUP (make, model)
+    ROLLUP (
+        make,
+        model
+    )
 ;

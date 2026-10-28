@@ -35,11 +35,11 @@
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/event_engine/memory_allocator.h>
 
-#include "src/core/lib/event_engine/ares_resolver.h"
 #include "src/core/lib/event_engine/handle_containers.h"
 #include "src/core/lib/event_engine/posix.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/timer_manager.h"
+#include "src/core/lib/event_engine/ref_counted_dns_resolver_interface.h"
 #include "src/core/lib/event_engine/thread_pool/thread_pool.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -142,11 +142,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
  public:
   class PosixDNSResolver : public EventEngine::DNSResolver {
    public:
-    PosixDNSResolver() = delete;
-#if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
     explicit PosixDNSResolver(
-        grpc_core::OrphanablePtr<AresResolver> ares_resolver);
-#endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
+        grpc_core::OrphanablePtr<RefCountedDNSResolverInterface> dns_resolver);
     void LookupHostname(LookupHostnameCallback on_resolve,
                         y_absl::string_view name,
                         y_absl::string_view default_port) override;
@@ -155,10 +152,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
     void LookupTXT(LookupTXTCallback on_resolve,
                    y_absl::string_view name) override;
 
-#if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
    private:
-    grpc_core::OrphanablePtr<AresResolver> ares_resolver_;
-#endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
+    grpc_core::OrphanablePtr<RefCountedDNSResolverInterface> dns_resolver_;
   };
 
 #ifdef GRPC_POSIX_SOCKET_TCP
@@ -204,7 +199,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   bool CancelConnect(ConnectionHandle handle) override;
   bool IsWorkerThread() override;
   y_absl::StatusOr<std::unique_ptr<DNSResolver>> GetDNSResolver(
-      const DNSResolver::ResolverOptions& options) override;
+      GRPC_UNUSED const DNSResolver::ResolverOptions& options) override;
   void Run(Closure* closure) override;
   void Run(y_absl::AnyInvocable<void()> closure) override;
   // Caution!! The timer implementation cannot create any fds. See #20418.

@@ -293,12 +293,12 @@ create_tcmalloc_libraries(
         "//tcmalloc/internal:environment",
         "//tcmalloc/internal:explicitly_constructed",
         "//tcmalloc/internal:exponential_biased",
+        "//tcmalloc/internal:gwp_asan_state",
         "//tcmalloc/internal:linked_list",
         "//tcmalloc/internal:logging",
         "//tcmalloc/internal:memory_stats",
         "//tcmalloc/internal:memory_tag",
         "//tcmalloc/internal:mincore",
-        "//tcmalloc/internal:mismatched_delete_state",
         "//tcmalloc/internal:numa",
         "//tcmalloc/internal:optimization",
         "//tcmalloc/internal:page_size",
@@ -308,6 +308,7 @@ create_tcmalloc_libraries(
         "//tcmalloc/internal:percpu_tcmalloc",
         "//tcmalloc/internal:prefetch",
         "//tcmalloc/internal:range_tracker",
+        "//tcmalloc/internal:residency",
         "//tcmalloc/internal:sampled_allocation",
         "//tcmalloc/internal:sampled_allocation_recorder",
         "//tcmalloc/internal:stacktrace_filter",
@@ -317,8 +318,10 @@ create_tcmalloc_libraries(
         "//tcmalloc/selsan",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/base:malloc_internal",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/base:dynamic_annotations",
+        "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/container:fixed_array",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/debugging:stacktrace",
@@ -326,6 +329,7 @@ create_tcmalloc_libraries(
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:bits",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
@@ -355,7 +359,30 @@ cc_library(
     name = "want_disable_tcmalloc_big_span",
     srcs = ["want_disable_tcmalloc_big_span.cc"],
     copts = ["-g0"] + TCMALLOC_DEFAULT_COPTS,
+    visibility = [
+        "//tcmalloc/testing:__pkg__",
+    ],
+    deps = ["@com_google_absl//absl/base:core_headers"],
+    alwayslink = 1,
+)
+
+cc_library(
+    # TODO(b/394569259):  Remove this opt-out.
+    name = "want_disable_dense_trackers_sorted_on_spans_allocated",
+    srcs = ["want_disable_dense_trackers_sorted_on_spans_allocated.cc"],
+    copts = ["-g0"] + TCMALLOC_DEFAULT_COPTS,
     visibility = ["//visibility:public"],
+    deps = ["@com_google_absl//absl/base:core_headers"],
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "want_disable_wider_slabs",
+    srcs = ["want_disable_wider_slabs.cc"],
+    copts = ["-g0"] + TCMALLOC_DEFAULT_COPTS,
+    visibility = [
+        "//tcmalloc/testing:__pkg__",
+    ],
     deps = ["@com_google_absl//absl/base:core_headers"],
     alwayslink = 1,
 )
@@ -614,8 +641,10 @@ cc_library(
     deps = [
         ":common_8k_pages",
         ":mock_central_freelist",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -882,14 +911,18 @@ cc_test(
         "//tcmalloc/internal:clock",
         "//tcmalloc/internal:config",
         "//tcmalloc/internal:logging",
+        "//tcmalloc/internal:range_tracker",
+        "//tcmalloc/internal:residency",
         "@com_github_google_benchmark//:benchmark",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
@@ -1047,6 +1080,7 @@ cc_library(
     hdrs = ["metadata_allocator.h"],
     copts = TCMALLOC_DEFAULT_COPTS,
     deps = [
+        "//tcmalloc/internal:config",
         "@com_google_absl//absl/base:core_headers",
     ],
 )

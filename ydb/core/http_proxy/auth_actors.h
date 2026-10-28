@@ -13,7 +13,7 @@ namespace NKikimr::NHttpProxy {
 
 struct THttpRequestContext;
 
-NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint, bool enableV2Interface);
+NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint);
 NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint);
 NActors::IActor* CreateIamAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature);
 

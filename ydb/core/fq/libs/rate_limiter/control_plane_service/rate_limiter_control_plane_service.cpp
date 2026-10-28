@@ -1,7 +1,6 @@
 #include "rate_limiter_control_plane_service.h"
 #include "update_limit_actor.h"
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
@@ -13,9 +12,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
 
 #include <deque>
 #include <variant>
@@ -36,10 +34,8 @@ ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
     }
 
     const NYdb::EStatus st = status.GetStatus();
-    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE ||
-        st == NYdb::EStatus::TIMEOUT || st == NYdb::EStatus::BAD_SESSION ||
-        st == NYdb::EStatus::SESSION_EXPIRED ||
-        st == NYdb::EStatus::SESSION_BUSY) {
+    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE || st == NYdb::EStatus::TIMEOUT ||
+        st == NYdb::EStatus::BAD_SESSION || st == NYdb::EStatus::SESSION_EXPIRED || st == NYdb::EStatus::SESSION_BUSY) {
         return ERetryErrorClass::ShortRetry;
     }
 
@@ -51,7 +47,8 @@ ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
 }
 
 TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
-    static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
+    static auto policy =
+        TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
     return policy;
 }
 
@@ -112,122 +109,78 @@ private:
         {
         }
 
-        using TOriginalRequestType = std::variant<TEvRateLimiter::TEvCreateResource::TPtr, TEvRateLimiter::TEvDeleteResource::TPtr, TEvQuotaService::TQuotaLimitChangeRequest::TPtr>;
+        using TOriginalRequestType = std::variant<TEvRateLimiter::TEvCreateResource::TPtr, TEvRateLimiter::TEvDeleteResource::TPtr,
+            TEvQuotaService::TQuotaLimitChangeRequest::TPtr>;
         TOriginalRequestType OriginalRequest;
     };
 
 private:
     void ProcessRequest(ui64 cookie, TRequest& req) {
-        std::visit([cookie, &req, this](auto& ev) { ProcessRequest(cookie, req, ev); }, req.OriginalRequest);
+        std::visit([cookie, &req, this](auto& ev) {
+            ProcessRequest(cookie, req, ev);
+        }, req.OriginalRequest);
     }
 
     void ProcessRequest(ui64 cookie, TRequest& req, TEvRateLimiter::TEvCreateResource::TPtr& ev) {
         Y_UNUSED(req);
         TString path;
         std::vector<TMaybe<double>> limits;
-        if (!ev->Get()->Scope && !ev->Get()->QueryId && !ev->Get()->QueryLimit) { // cloud
+        if (!ev->Get()->Scope && !ev->Get()->QueryId && !ev->Get()->QueryLimit) {   // cloud
             path = GetRateLimiterResourcePath(ev->Get()->CloudId);
-            limits = {ev->Get()->CloudLimit};
-        } else { // query
+            limits = { ev->Get()->CloudLimit };
+        } else {   // query
             path = GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId);
-            limits = {Nothing(), Nothing(), ev->Get()->QueryLimit}; // imply that cloud resource must already have been created
+            limits = { Nothing(), Nothing(), ev->Get()->QueryLimit };   // imply that cloud resource must already have been created
         }
         NActors::TActivationContext::AsActorContext().Register(
-            MakeCreateRateLimiterResourceActor(
-                NActors::TActivationContext::AsActorContext().SelfID,
-                NKikimrServices::YQ_RATE_LIMITER,
-                Connection,
-                RateLimiterPath,
-                path,
-                limits,
-                MakeSchemaRetryPolicy(),
-                cookie
-            )
-        );
+            MakeCreateRateLimiterResourceActor(NActors::TActivationContext::AsActorContext().SelfID, NKikimrServices::YQ_RATE_LIMITER,
+                Connection, RateLimiterPath, path, limits, MakeSchemaRetryPolicy(), cookie));
     }
 
     void ProcessRequest(ui64 cookie, TRequest& req, TEvRateLimiter::TEvDeleteResource::TPtr& ev) {
         Y_UNUSED(req);
-        NActors::TActivationContext::AsActorContext().Register(
-            MakeDeleteRateLimiterResourceActor(
-                NActors::TActivationContext::AsActorContext().SelfID,
-                NKikimrServices::YQ_RATE_LIMITER,
-                Connection,
-                RateLimiterPath,
-                GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId),
-                MakeSchemaRetryPolicy(),
-                cookie
-            )
-        );
+        NActors::TActivationContext::AsActorContext().Register(MakeDeleteRateLimiterResourceActor(
+            NActors::TActivationContext::AsActorContext().SelfID, NKikimrServices::YQ_RATE_LIMITER, Connection, RateLimiterPath,
+            GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId), MakeSchemaRetryPolicy(), cookie));
     }
 
     void ProcessRequest(ui64 cookie, TRequest& req, TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
         Y_UNUSED(req);
         NActors::TActivationContext::AsActorContext().Register(
-            MakeUpdateCloudRateLimitActor(
-                NActors::TActivationContext::AsActorContext().SelfID,
-                Connection,
-                RateLimiterPath,
-                ev->Get()->SubjectId,
-                ev->Get()->LimitRequested,
-                MakeSchemaRetryPolicy(),
-                cookie
-            )
-        );
+            MakeUpdateCloudRateLimitActor(NActors::TActivationContext::AsActorContext().SelfID, Connection, RateLimiterPath,
+                ev->Get()->SubjectId, ev->Get()->LimitRequested, MakeSchemaRetryPolicy(), cookie));
     }
 
     void ProcessResponse(TRequest& req, TEvents::TEvSchemaCreated::TPtr& ev) {
         TEvRateLimiter::TEvCreateResource::TPtr& originalRequest = std::get<TEvRateLimiter::TEvCreateResource::TPtr>(req.OriginalRequest);
         if (IsResourceCreationSuccess(ev)) {
-            NActors::TActivationContext::AsActorContext().Send(
-                originalRequest->Sender,
-                new TEvRateLimiter::TEvCreateResourceResponse(
-                    RateLimiterPath,
-                    NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
-                ),
-                0, // flags
-                originalRequest->Cookie
-            );
+            NActors::TActivationContext::AsActorContext().Send(originalRequest->Sender,
+                new TEvRateLimiter::TEvCreateResourceResponse(RateLimiterPath, NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())), 0,
+                // flags
+                originalRequest->Cookie);
         } else {
-            NActors::TActivationContext::AsActorContext().Send(
-                originalRequest->Sender,
-                new TEvRateLimiter::TEvCreateResourceResponse(
-                    NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
-                ),
-                0, // flags
-                originalRequest->Cookie
-            );
+            NActors::TActivationContext::AsActorContext().Send(originalRequest->Sender,
+                new TEvRateLimiter::TEvCreateResourceResponse(NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())), 0,   // flags
+                originalRequest->Cookie);
         }
     }
 
     void ProcessResponse(TRequest& req, TEvents::TEvSchemaDeleted::TPtr& ev) {
         TEvRateLimiter::TEvDeleteResource::TPtr& originalRequest = std::get<TEvRateLimiter::TEvDeleteResource::TPtr>(req.OriginalRequest);
-        NActors::TActivationContext::AsActorContext().Send(
-            originalRequest->Sender,
+        NActors::TActivationContext::AsActorContext().Send(originalRequest->Sender,
             new TEvRateLimiter::TEvDeleteResourceResponse(
-                ev->Get()->Result.IsSuccess(),
-                NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())
-            ),
-            0, // flags
-            originalRequest->Cookie
-        );
+                ev->Get()->Result.IsSuccess(), NYdb::NAdapters::ToYqlIssues(ev->Get()->Result.GetIssues())), 0,   // flags
+            originalRequest->Cookie);
     }
 
     void ProcessResponse(TRequest& req, TEvents::TEvSchemaUpdated::TPtr& ev) {
-        TEvQuotaService::TQuotaLimitChangeRequest::TPtr& originalRequest = std::get<TEvQuotaService::TQuotaLimitChangeRequest::TPtr>(req.OriginalRequest);
+        TEvQuotaService::TQuotaLimitChangeRequest::TPtr& originalRequest =
+            std::get<TEvQuotaService::TQuotaLimitChangeRequest::TPtr>(req.OriginalRequest);
         auto& record = *originalRequest->Get();
-        NActors::TActivationContext::AsActorContext().Send(
-            originalRequest->Sender,
-            new TEvQuotaService::TQuotaLimitChangeResponse(
-                record.SubjectType,
-                record.SubjectId,
-                record.MetricName,
-                ev->Get()->Result.IsSuccess() ? record.LimitRequested : record.Limit,
-                record.LimitRequested
-            ),
-            0, // flags
-            originalRequest->Cookie
-        );
+        NActors::TActivationContext::AsActorContext().Send(originalRequest->Sender,
+            new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName,
+                ev->Get()->Result.IsSuccess() ? record.LimitRequested : record.Limit, record.LimitRequested), 0,   // flags
+            originalRequest->Cookie);
     }
 
     static bool IsResourceCreationSuccess(TEvents::TEvSchemaCreated::TPtr& ev) {
@@ -256,16 +209,14 @@ private:
     ui64 NextCookie;
 };
 
-} // namespace
+}   // namespace
 
-class TRateLimiterControlPlaneService : public NActors::TActorBootstrapped<TRateLimiterControlPlaneService> {
+class TRateLimiterControlPlaneService: public NActors::TActorBootstrapped<TRateLimiterControlPlaneService> {
 public:
     static constexpr char ActorName[] = "YQ_RATE_LIMITER_CONTROL_PLANE";
 
-    TRateLimiterControlPlaneService(
-        const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-        const NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    TRateLimiterControlPlaneService(const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+        const NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
         : Config(rateLimiterConfig)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credentialsProviderFactory)
@@ -371,8 +322,8 @@ public:
     void HandleOff(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
         auto& record = *ev->Get();
 
-        Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName,
-            record.LimitRequested, record.LimitRequested));
+        Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(
+                             record.SubjectType, record.SubjectId, record.MetricName, record.LimitRequested, record.LimitRequested));
     }
 
     void HandleQuotaUsage(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
@@ -434,12 +385,10 @@ private:
     std::vector<TRateLimiterRequestsQueue> RateLimiters;
 };
 
-NActors::IActor* CreateRateLimiterControlPlaneService(
-    const NConfig::TRateLimiterConfig& rateLimiterConfig,
-    const TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+NActors::IActor* CreateRateLimiterControlPlaneService(const NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
 {
     return new TRateLimiterControlPlaneService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory);
 }
 
-} // namespace NFq
+}   // namespace NFq

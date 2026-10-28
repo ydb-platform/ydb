@@ -12,19 +12,27 @@ int Main(int argc, const char** argv)
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
     json.BeginList();
-    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
+    NSQLTranslationV1::EnumerateBuiltins([&](auto name, const NSQLTranslationV1::TFuncInfo& meta) {
         json.BeginObject();
         json.WriteKey("name");
         json.WriteString(name);
         json.WriteKey("kind");
-        json.WriteString(kind);
-        if (minLangVer != NYql::UnknownLangVersion) {
-            json.WriteKey("minLangVer");
-            json.WriteString(NYql::FormatLangVersion(minLangVer).GetRef());
+        json.WriteString(meta.Kind);
+        if (meta.ArgCount) {
+            json.WriteKey("argCount");
+            json.WriteULongLong(*meta.ArgCount);
         }
-        if (maxLangVer != NYql::UnknownLangVersion) {
+        if (meta.OptionalArgCount.GetOrElse(0) > 0) {
+            json.WriteKey("optionalArgCount");
+            json.WriteULongLong(*meta.OptionalArgCount);
+        }
+        if (meta.MinLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("minLangVer");
+            json.WriteString(NYql::FormatLangVersion(meta.MinLangVer).GetRef());
+        }
+        if (meta.MaxLangVer != NYql::UnknownLangVersion) {
             json.WriteKey("maxLangVer");
-            json.WriteString(NYql::FormatLangVersion(maxLangVer).GetRef());
+            json.WriteString(NYql::FormatLangVersion(meta.MaxLangVer).GetRef());
         }
         json.EndObject();
     });

@@ -345,6 +345,7 @@ void TDDiskDataCopier::OnRangeRead(
         Destination,
         copyRangeState->Range,
         copyRangeState->GetSgList(),
+        TBlockChecksums(),
         NWilson::TTraceId());
     auto l = [weakSelf = weak_from_this(),
               copyRangeState = std::move(copyRangeState)]   //

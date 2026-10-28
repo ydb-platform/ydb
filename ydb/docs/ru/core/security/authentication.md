@@ -218,7 +218,13 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {{ ydb-short-name }} может аутентифицировать пользователей по [JWT-токенам](https://www.rfc-editor.org/rfc/rfc7519), выпущенным внешним [провайдером идентификации](https://csrc.nist.gov/glossary/term/identity_provider) (Identity Provider, IdP), который поддерживает протокол [OpenID Connect](https://openid.net/developers/how-connect-works/) (OIDC). Провайдер отвечает за аутентификацию пользователя и выдачу токена, а {{ ydb-short-name }} проверяет подпись и утверждения (claims) о субъекте и условиях действия токена и формирует SID пользователя и его групп.
 
-Получение и обновление JWT-токена выполняются на стороне клиента и IdP. {{ ydb-short-name }} не перенаправляет пользователя на страницу входа IdP и не обменивает `authorization code` на токены. Клиент передаёт уже полученный JWT-токен как Bearer-токен при каждом запросе.
+Получение и обновление JWT-токена выполняются на стороне клиента и IdP. Сервер {{ ydb-short-name }} не перенаправляет пользователя на страницу входа IdP и не обменивает `authorization code` на токены. Клиент передаёт уже полученный JWT-токен как Bearer-токен при каждом запросе.
+
+{% note info %}
+
+Единый вход (Single Sign-On, SSO) через внешний IdP в веб-интерфейс доступен через [{{ ydb-short-name }} Enterprise Manager](../devops/enterprise-manager/index.md). Подробнее о настройке — в статье [{#T}](../devops/enterprise-manager/sso.md).
+
+{% endnote %}
 
 ### Принцип работы
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_activation_groups.cpp
@@ -22,7 +22,6 @@ PEERDIR(
     yql/essentials/providers/common/proto
 )
 
-YQL_LAST_ABI_VERSION()
 
 END()
 

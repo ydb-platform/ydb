@@ -154,9 +154,7 @@ TYtRunTool::TYtRunTool(TString name)
         });
     });
 
-    GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
-        Y_UNUSED(res);
-
+    GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult&) {
         if (!GetRunOptions().GatewaysConfig) {
             GetRunOptions().GatewaysConfig = MakeHolder<TGatewaysConfig>();
         }
@@ -169,17 +167,22 @@ TYtRunTool::TYtRunTool(TString name)
         auto ytConfig = GetRunOptions().GatewaysConfig->MutableYt();
         auto staticYtConfig = GetRunOptions().StaticGatewaysConfig->MutableYt();
         ytConfig->SetGatewayThreads(NumYtThreads_);
-        if (MrJobBin_.empty()) {
-            staticYtConfig->ClearMrJobBin();
-        } else {
-            staticYtConfig->SetMrJobBin(MrJobBin_);
-            staticYtConfig->SetMrJobBinMd5(MD5::File(MrJobBin_));
+        if (MrJobBin_.Defined()) {
+            if (MrJobBin_->empty()) {
+                staticYtConfig->ClearMrJobBin();
+                staticYtConfig->ClearMrJobBinMd5();
+            } else {
+                staticYtConfig->SetMrJobBin(*MrJobBin_);
+                staticYtConfig->SetMrJobBinMd5(MD5::File(*MrJobBin_));
+            }
         }
 
-        if (MrJobUdfsDir_.empty()) {
-            staticYtConfig->ClearMrJobUdfsDir();
-        } else {
-            staticYtConfig->SetMrJobUdfsDir(MrJobUdfsDir_);
+        if (MrJobUdfsDir_.Defined()) {
+            if (MrJobUdfsDir_->empty()) {
+                staticYtConfig->ClearMrJobUdfsDir();
+            } else {
+                staticYtConfig->SetMrJobUdfsDir(*MrJobUdfsDir_);
+            }
         }
         auto attr = ytConfig->MutableDefaultSettings()->Add();
         attr->SetName("KeepTempTables");

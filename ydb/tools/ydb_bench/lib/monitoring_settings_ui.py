@@ -15,6 +15,22 @@ min-height:2.3rem;color:var(--muted);border-bottom:2px solid transparent}
 """
 
 JS = r"""
+let grafanaConfigCache={value:null,pending:null,expires:0};
+function invalidateGrafanaConfig(){grafanaConfigCache={value:null,pending:null,expires:0}}
+function loadGrafanaConfig(){
+  const cache=grafanaConfigCache;
+  if(cache.expires>Date.now())return Promise.resolve(cache.value);
+  if(!cache.pending)cache.pending=api('/api/grafana/config').then(value=>{
+    if(cache!==grafanaConfigCache)return loadGrafanaConfig();
+    cache.value=value;cache.expires=Date.now()+30000;return value;
+  },error=>{
+    if(cache!==grafanaConfigCache)return loadGrafanaConfig();
+    cache.expires=Date.now()+10000;
+    if(cache.value)return cache.value;
+    throw error;
+  }).finally(()=>{cache.pending=null});
+  return cache.pending;
+}
 function grafanaLink(base,uid,runId,host,selection,from,to,datasource,scoped){
   const url=new URL(base.replace(/\/$/,'')+'/d/'+encodeURIComponent(uid));
   url.searchParams.set('from',String(Math.floor(from)));
@@ -29,12 +45,13 @@ function grafanaLink(base,uid,runId,host,selection,from,to,datasource,scoped){
 async function mountGrafana(container,runId,selection,from,to){
   if(!container?.isConnected)return;
   const ticket={};container.grafanaTicket=ticket;
-  container.replaceChildren();
-  if(!Number.isFinite(from)||!Number.isFinite(to))return;
+  if(!Number.isFinite(from)||!Number.isFinite(to)){container.replaceChildren();return}
   try{
-    const config=await api('/api/grafana/config');
-    if(!container.isConnected||container.grafanaTicket!==ticket||!config.configured)return;
-    const button=document.createElement('button');button.textContent='Open in Grafana';container.append(button);
+    const config=await loadGrafanaConfig();
+    if(!container.isConnected||container.grafanaTicket!==ticket||!config)return;
+    if(!config.configured){container.replaceChildren();return}
+    let button=container.querySelector('button');
+    if(!button){button=document.createElement('button');button.textContent='Open in Grafana';container.append(button)}
     button.onclick=()=>showGrafanaChooser(button,runId,selection,from,to,config.local_id);
   }catch{}
 }
@@ -125,6 +142,7 @@ async function renderMonitoringSettings(){
   const route=location.hash;
   try{
     const [value,directory]=await Promise.all([api('/api/monitoring-settings'),api('/api/hosts')]);
+    invalidateGrafanaConfig();
     if(location.hash!==route)return;
     const names=new Map([directory.local,...directory.hosts].map(h=>[h.id,h.name]));
     const owner=names.get(value.owner_id)||value.owner_id;
@@ -170,6 +188,7 @@ async function renderMonitoringSettings(){
           grafana_api_url:form.querySelector('#monitoring-grafana-api').value.trim(),
           grafana_token:removeGrafanaToken?'':(form.querySelector('#monitoring-grafana-token').value||null),
           grafana_datasource_uid:form.querySelector('#monitoring-grafana-datasource').value.trim()}}));
+        invalidateGrafanaConfig();
         if(location.hash!==route)return;
         await renderMonitoringSettings();
         if(location.hash===route)app.querySelector('#monitoring-message').textContent='Saved. Peer synchronization may take up to 30 seconds.';
@@ -178,7 +197,7 @@ async function renderMonitoringSettings(){
     };
     form.querySelector('#monitoring-refresh').onclick=async event=>{
       event.currentTarget.disabled=true;
-      try{await api('/api/monitoring-settings/refresh',jsonOptions({}));if(location.hash===route)await renderMonitoringSettings()}
+      try{await api('/api/monitoring-settings/refresh',jsonOptions({}));invalidateGrafanaConfig();if(location.hash===route)await renderMonitoringSettings()}
       catch(error){if(form.isConnected){form.querySelector('#monitoring-error').textContent=error.message;form.querySelector('#monitoring-refresh').disabled=false}}
     };
   }catch(error){if(location.hash===route)app.innerHTML=shell('settings',displayError(error))}

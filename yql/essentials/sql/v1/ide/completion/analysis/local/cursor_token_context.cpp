@@ -7,7 +7,7 @@ namespace NSQLComplete {
 
 namespace {
 
-bool Tokenize(const ILexer::TPtr& lexer, TCompletionInput input, TParsedTokenList& tokens) {
+bool Tokenize(const ILexer::TPtr& lexer, NSQLPureAST::TCursorText input, TParsedTokenList& tokens) {
     NYql::TIssues issues;
     return NSQLTranslation::Tokenize(
         *lexer, TString(input.Text), /* queryName = */ "",
@@ -139,7 +139,7 @@ TMaybe<TRichParsedToken> TCursorTokenContext::MatchCursorPrefix(const TVector<TS
 bool GetStatement(
     const ILexer::TPtr& lexer,
     const TMaterializedInput& input,
-    TCompletionInput& output,
+    NSQLPureAST::TCursorText& output,
     size_t& output_position)
 {
     TVector<TString> statements;
@@ -155,10 +155,8 @@ bool GetStatement(
     cursor = 0;
     for (const auto& statement : statements) {
         if (input.CursorPosition < cursor + statement.size()) {
-            output = {
-                .Text = TStringBuf(input.Text).SubStr(cursor, statement.size()),
-                .CursorPosition = input.CursorPosition - cursor,
-            };
+            output.Text = TStringBuf(input.Text).SubStr(cursor, statement.size());
+            output.CursorPosition = input.CursorPosition - cursor;
             return true;
         }
         cursor += statement.size();
@@ -169,7 +167,7 @@ bool GetStatement(
     return true;
 }
 
-bool GetCursorTokenContext(const ILexer::TPtr& lexer, TCompletionInput input, TCursorTokenContext& context) {
+bool GetCursorTokenContext(const ILexer::TPtr& lexer, NSQLPureAST::TCursorText input, TCursorTokenContext& context) {
     TParsedTokenList tokens;
     if (!Tokenize(lexer, input, tokens)) {
         return false;

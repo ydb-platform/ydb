@@ -1,23 +1,19 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/actorid.h>
-
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/grpc/server/grpc_server.h>
-
 #include <ydb/public/api/grpc/draft/fq_v1.grpc.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-class TGRpcFederatedQueryService
-    : public NYdbGrpc::TGrpcServiceBase<FederatedQuery::V1::FederatedQueryService>
-{
+class TGRpcFederatedQueryService: public NYdbGrpc::TGrpcServiceBase<FederatedQuery::V1::FederatedQueryService> {
 public:
-    TGRpcFederatedQueryService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id);
+    TGRpcFederatedQueryService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
@@ -28,5 +24,5 @@ private:
     NActors::TActorId GRpcRequestProxyId_;
 };
 
-} // namespace NGRpcService
-} // namespace NKikimr
+}   // namespace NGRpcService
+}   // namespace NKikimr

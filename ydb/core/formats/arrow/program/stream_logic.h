@@ -18,6 +18,7 @@ private:
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
     TConclusion<bool> AddMonoValue(
         const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const;
+    TConclusion<bool> CombineInput(const ui32 inputId, const TProcessorContext& context) const;
 
     virtual bool IsAggregation() const override {
         return false;
@@ -26,7 +27,7 @@ private:
     TConclusion<std::optional<bool>> GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const;
     TConclusion<bool> GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
-    bool IsFinishDatum(const arrow::Datum& datum) const;
+    bool IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const;
     virtual ui64 DoGetWeight() const override;
 
 public:

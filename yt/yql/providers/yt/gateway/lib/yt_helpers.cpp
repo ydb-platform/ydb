@@ -913,6 +913,90 @@ TMaybe<ui32> GenerateInputQueryComparison(const TCoCompare& op, const TMaybe<boo
     }
 }
 
+TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result);
+
+struct TInputQueryLogicalOperand {
+    TString Expression;
+    ui32 Depth;
+};
+
+using TInputQueryLogicalOperands = TVector<TInputQueryLogicalOperand>;
+
+ui32 GenerateInputQueryBalancedLogicalExpression(
+    TInputQueryLogicalOperands::const_iterator begin,
+    TInputQueryLogicalOperands::const_iterator end,
+    TStringBuf op,
+    TStringBuilder& result)
+{
+    YQL_ENSURE(begin != end);
+    if (end - begin == 1) {
+        result << begin->Expression;
+        return begin->Depth;
+    }
+
+    const auto middle = begin + (end - begin) / 2;
+    result << "(";
+    const auto leftDepth = GenerateInputQueryBalancedLogicalExpression(begin, middle, op, result);
+    result << ") " << op << " (";
+    const auto rightDepth = GenerateInputQueryBalancedLogicalExpression(middle, end, op, result);
+    result << ")";
+    return 1 + Max(leftDepth, rightDepth);
+}
+
+ui32 GetInputQueryLinearLogicalExpressionDepth(const TInputQueryLogicalOperands& operands) {
+    YQL_ENSURE(!operands.empty());
+    ui32 depth = operands.front().Depth;
+    for (auto it = operands.cbegin() + 1; it != operands.cend(); ++it) {
+        depth = 1 + Max(depth, it->Depth);
+    }
+    return depth;
+}
+
+void GenerateInputQueryLinearLogicalExpression(
+    const TInputQueryLogicalOperands& operands,
+    TStringBuf op,
+    TStringBuilder& result)
+{
+    YQL_ENSURE(!operands.empty());
+    result << "(" << operands.front().Expression << ")";
+    for (auto it = operands.cbegin() + 1; it != operands.cend(); ++it) {
+        result << " " << op << " (" << it->Expression << ")";
+    }
+}
+
+TMaybe<ui32> GenerateInputQueryLogicalExpression(
+    const TExprNode::TListType& operandNodes,
+    TStringBuf op,
+    TStringBuilder& result)
+{
+    TInputQueryLogicalOperands operands;
+    operands.reserve(operandNodes.size());
+    for (const auto& operandNode : operandNodes) {
+        TStringBuilder expression;
+        const auto depth = GenerateInputQueryWhereExpression(operandNode, expression);
+        if (!depth) {
+            return {};
+        }
+        operands.push_back({std::move(expression), *depth});
+    }
+
+    TStringBuilder balancedExpression;
+    const ui32 balancedDepth = GenerateInputQueryBalancedLogicalExpression(
+        operands.cbegin(),
+        operands.cend(),
+        op,
+        balancedExpression);
+    const ui32 linearDepth = GetInputQueryLinearLogicalExpressionDepth(operands);
+
+    if (balancedDepth <= linearDepth) {
+        result << balancedExpression;
+        return balancedDepth;
+    }
+
+    GenerateInputQueryLinearLogicalExpression(operands, op, result);
+    return linearDepth;
+}
+
 TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
     if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
         return GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
@@ -946,23 +1030,7 @@ TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStr
         return *childDepth + 2;
     } else if (node->IsCallable({"And", "Or"})) {
         const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
-        result << "(";
-        auto depth = GenerateInputQueryWhereExpression(node->Child(0), result);
-        if (!depth) {
-            return {};
-        }
-        result << ")";
-        const auto size = node->ChildrenSize();
-        for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
-            result << " " << op << " (";
-            const auto childDepth = GenerateInputQueryWhereExpression(node->Child(i), result);
-            if (!childDepth) {
-                return {};
-            }
-            result << ")";
-            depth = 1 + Max(*depth, *childDepth);
-        };
-        return depth;
+        return GenerateInputQueryLogicalExpression(node->ChildrenList(), op, result);
     } else if (node->IsCallable("Coalesce")) {
         YQL_ENSURE(node->ChildrenSize() == 2);
         const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();

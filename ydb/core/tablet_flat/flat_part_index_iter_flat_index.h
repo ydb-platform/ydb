@@ -116,10 +116,10 @@ public:
         return EndRowId;
     }
 
-    TPageId GetPageId() const override {
+    TPageLocation GetLocation() const override {
         Y_ENSURE(Index);
         Y_ENSURE(Iter);
-        return Iter->GetPageId();
+        return Part->GetPageLocation(Iter->GetPageId(), GroupId);
     }
 
     TRowId GetRowId() const override {
@@ -184,7 +184,8 @@ private:
             return &*Index;
         }
         auto pageId = Part->IndexPages.GetFlat(GroupId);
-        auto page = Env->TryGetPage(Part, pageId, {});
+        auto location = Part->GetPageLocation(pageId, {});
+        auto page = Env->TryGetPage(Part, location, {});
         if (page) {
             Index = TIndex(*page);
             Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");

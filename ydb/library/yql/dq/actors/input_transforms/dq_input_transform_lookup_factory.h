@@ -6,4 +6,4 @@ namespace NYql::NDq {
 
 void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory, NMonitoring::TDynamicCounterPtr counters = {});
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

@@ -567,6 +567,144 @@ Y_UNIT_TEST(TestBlock42PutStatusErrorWith_1_2_VdiskErrors) {
     TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 8, NKikimrProto::ERROR);
 }
 
+void TestWrittenBeyondBarrier(ui32 flaggedReplies) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::ErasureMirror3dc, 0, 0);
+    TTestState testState(runtime, env.Info);
+    TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    TBlobTestSet::TBlob blob(blobId, AlphaData(blobId.BlobSize()));
+    auto request = testState.CreatePutRequest(blob, TEvBlobStorage::TEvPut::TacticDefault,
+        NKikimrBlobStorage::TabletLog);
+    runtime.Register(env.CreatePutRequestActor(request).release());
+    runtime.Register(CreateRequestReportingThrottler(1, 60000, 1));
+
+    // All three replies are successful, one per realm. Vary which of them
+    // reports a GC barrier and observe the client-visible result.
+    for (ui32 i = 0; i < 3; ++i) {
+        auto put = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+        const auto disk = VDiskIDFromVDiskID(put->Get()->Record.GetVDiskID());
+        const auto status = testState.GetGroupMock().OnVPut(*put->Get());
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        auto response = testState.CreateEventResultPtr(put, status, disk);
+        response->Get()->Record.SetWrittenBeyondBarrier(flaggedReplies & (1u << i));
+        runtime.Send(response.Release());
+    }
+    auto result = testState.GrabEventPtr<TEvBlobStorage::TEvPutResult>();
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, blobId);
+    UNIT_ASSERT_C(result->Get()->WrittenBeyondBarrier == bool(flaggedReplies),
+        "flaggedReplies# " << flaggedReplies << " client WrittenBeyondBarrier# "
+        << result->Get()->WrittenBeyondBarrier);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierFirstReply) {
+    TestWrittenBeyondBarrier(1);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierMiddleReply) {
+    TestWrittenBeyondBarrier(2);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierLastReply) {
+    TestWrittenBeyondBarrier(4);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierAllReplies) {
+    TestWrittenBeyondBarrier(7);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierNoReplies) {
+    TestWrittenBeyondBarrier(0);
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierAllReplyMasks) {
+    for (ui32 mask = 0; mask != 8; ++mask) {
+        TestWrittenBeyondBarrier(mask);
+    }
+}
+
+void TestBatchedWrittenBeyondBarrier(ui32 firstMask, ui32 secondMask) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::ErasureMirror3dc, 0, 0);
+    TTestState testState(runtime, env.Info);
+
+    // Select three distinct blobs with the same subgroup, so every VMultiPut
+    // contains both independently flagged blobs and an unflagged control.
+    TVector<TBlobTestSet::TBlob> blobs;
+    TBlobStorageGroupInfo::TVDiskIds subgroup;
+    for (ui32 cookie = 0; blobs.size() != 3 && cookie != 10000; ++cookie) {
+        TLogoBlobID id(72075186224047637, 1, 863, 1, 786, cookie);
+        TBlobStorageGroupInfo::TVDiskIds disks;
+        env.Info->PickSubgroup(id.Hash(), &disks, nullptr);
+        if (blobs.empty()) {
+            subgroup = disks;
+        }
+        if (disks == subgroup) {
+            blobs.emplace_back(id, AlphaData(id.BlobSize()));
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(blobs.size(), 3);
+    TBatchedVec<TEvBlobStorage::TEvPut::TPtr> requests;
+    testState.CreatePutRequests(blobs, std::back_inserter(requests),
+        TEvBlobStorage::TEvPut::TacticDefault, NKikimrBlobStorage::TabletLog);
+    runtime.Register(env.CreatePutRequestActor(requests, TEvBlobStorage::TEvPut::TacticDefault,
+        NKikimrBlobStorage::TabletLog).release());
+    runtime.Register(CreateRequestReportingThrottler(1, 60000, 1));
+
+    const ui32 masks[] = {firstMask, secondMask, 0};
+    for (ui32 reply = 0; reply != 3; ++reply) {
+        auto put = testState.GrabEventPtr<TEvBlobStorage::TEvVMultiPut>();
+        const auto disk = VDiskIDFromVDiskID(put->Get()->Record.GetVDiskID());
+        const auto statuses = testState.GetGroupMock().OnVMultiPut(*put->Get());
+        UNIT_ASSERT_VALUES_EQUAL(statuses.size(), blobs.size());
+        for (auto status : statuses) {
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        }
+        auto response = testState.CreateEventResultPtr(put, NKikimrProto::OK, statuses, disk);
+        for (auto& item : *response->Get()->Record.MutableItems()) {
+            const auto id = LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID();
+            bool found = false;
+            for (ui32 i = 0; i != blobs.size(); ++i) {
+                if (id == blobs[i].Id) {
+                    item.SetWrittenBeyondBarrier(masks[i] & (1u << reply));
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+        runtime.Send(response.Release());
+    }
+    std::set<TLogoBlobID> received;
+    for (ui32 resultIdx = 0; resultIdx != blobs.size(); ++resultIdx) {
+        auto result = testState.GrabEventPtr<TEvBlobStorage::TEvPutResult>();
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(received.insert(result->Get()->Id).second);
+        bool found = false;
+        for (ui32 i = 0; i != blobs.size(); ++i) {
+            if (result->Get()->Id == blobs[i].Id) {
+                UNIT_ASSERT_C(result->Get()->WrittenBeyondBarrier == bool(masks[i]),
+                    "firstMask# " << firstMask << " secondMask# " << secondMask << " blob# " << i);
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+}
+
+Y_UNIT_TEST(WrittenBeyondBarrierBatchedAllReplyMasks) {
+    for (ui32 firstMask = 0; firstMask != 8; ++firstMask) {
+        for (ui32 secondMask = 0; secondMask != 8; ++secondMask) {
+            TestBatchedWrittenBeyondBarrier(firstMask, secondMask);
+        }
+    }
+}
+
 Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_0_0_0_VdiskErrors) {
     TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, {}, 3, NKikimrProto::OK);
 }

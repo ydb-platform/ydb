@@ -2,10 +2,11 @@ import asyncio
 import os
 import tempfile
 import unittest
+from unittest import mock
 import yaml
 
 import ydb.tools.mnc.scheme as scheme
-from ydb.tools.mnc.lib import configs, deploy_ctx
+from ydb.tools.mnc.lib import common, configs, deploy_ctx
 from ydb.tools.mnc.lib.exceptions import CliError
 from ydb.tools.mnc.scheme import multinode
 
@@ -32,6 +33,43 @@ class ConfigsTest(unittest.TestCase):
                 ],
             },
         })
+
+    def test_node_layout_accepts_datacenter_count(self):
+        config = self._apply_multinode_scheme({
+            "hosts": ["host1"],
+            "erasure": "mirror-3-dc",
+            "node_layout": {
+                "num_datacenters": 4,
+                "nodes_per_rack": 1,
+                "shuffle_locations": False,
+            },
+        })
+        self.assertEqual(config["node_layout"]["num_datacenters"], 4)
+        self.assertIsNone(config["node_layout"]["piles"])
+
+    def test_node_layout_accepts_pile_count(self):
+        config = self._apply_multinode_scheme({
+            "hosts": ["host1"],
+            "erasure": "mirror-3-dc",
+            "node_layout": {"piles": 2, "datacenters_per_pile": 3},
+        })
+        self.assertEqual(config["node_layout"]["piles"], 2)
+        self.assertEqual(config["node_layout"]["datacenters_per_pile"], 3)
+        self.assertIsNone(config["node_layout"]["num_datacenters"])
+
+    def test_node_layout_requires_exactly_one_topology(self):
+        for layout, expected_error in [
+            ({}, "There aren't any of keys"),
+            ({"piles": 2, "num_datacenters": 4}, "There are more than 1 key"),
+        ]:
+            with self.subTest(layout=layout):
+                config, errors = scheme.apply_scheme({
+                    "hosts": ["host1"],
+                    "erasure": "mirror-3-dc",
+                    "node_layout": layout,
+                }, multinode.scheme)
+                self.assertIsNone(config)
+                self.assertTrue(any(expected_error in error for error in errors), errors)
 
     def test_nbs_database_is_counted_as_dynamic_node(self):
         config = {
@@ -196,3 +234,97 @@ class ConfigsTest(unittest.TestCase):
 
         self.assertNotIn("grpc_config", generated["config"])
         self.assertNotIn("nbs_config", generated["config"])
+
+
+class ConfigDiskPartsTest(unittest.IsolatedAsyncioTestCase):
+    def _labels(self):
+        return [f"kikimr_nvme_{disk:02}_{part}" for part in range(4) for disk in range(4)]
+
+    def _disk_reply(self, device):
+        disk = int(device.partlabel.split("_")[2])
+        return {
+            "partlabel": device.partlabel,
+            "device": device.path,
+            "path": f"/dev/nvme{disk}n1",
+            "parts": [{"id": "1", "label": "primary"}] + [
+                {"id": str(part + 2), "label": f"kikimr_nvme_{disk:02}_{part}"} for part in range(5)
+            ],
+        }
+
+    async def test_ready_partitions_preserve_selection_and_order(self):
+        devices = [common.Device(label, None) for label in self._labels()]
+        response = {"disks": [self._disk_reply(device) for device in devices]}
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value=response) as post:
+            paths = await configs.get_parts("host1", devices, 4, "never", 100, "NONE")
+
+        self.assertEqual(paths, [f"/dev/disk/by-partlabel/{label}" for label in self._labels()])
+        self.assertEqual(len(set(paths)), 16)
+        post.assert_awaited_once_with("host1", "/disks/info", {
+            "devices": [{"partlabel": device.partlabel, "device": None} for device in devices],
+        })
+
+    async def test_whole_disk_keeps_all_named_data_partitions(self):
+        device = common.Device("kikimr_nvme_00", "/dev/nvme0n1")
+        disk = self._disk_reply(device)
+        disk["parts"].append({"id": "7", "label": ""})
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value={"disks": [disk]}):
+            paths = await configs.get_parts("host1", [device], 1, "never", 100, "NONE")
+        self.assertEqual(paths, [f"/dev/disk/by-partlabel/kikimr_nvme_00_{part}" for part in range(5)])
+
+    async def test_missing_partition_fails_without_using_other_partitions(self):
+        device = common.Device("kikimr_nvme_00_9", None)
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value={"disks": [self._disk_reply(device)]}), \
+                self.assertRaisesRegex(CliError, "Partition kikimr_nvme_00_9 not found"):
+            await configs.get_parts("host1", [device], 4, "if_needed", 100, "NONE")
+
+    async def test_incomplete_disk_info_fails(self):
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value={"disks": []}), \
+                self.assertRaisesRegex(CliError, "Incomplete disk info"):
+            await configs.get_parts("host1", [common.Device("kikimr_nvme_00_0", None)], 4, "never", 100, "NONE")
+
+    async def test_agent_failure_is_reported(self):
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value=None), \
+                self.assertRaisesRegex(CliError, "Failed to receive disk info"):
+            await configs.get_parts("host1", [common.Device("kikimr_nvme_00_0", None)], 4, "never", 100, "NONE")
+
+    async def test_disk_error_is_reported(self):
+        response = {"disks": [{"partlabel": "kikimr_nvme_00_0", "error": "parted failed"}]}
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value=response), \
+                self.assertRaisesRegex(CliError, "parted failed"):
+            await configs.get_parts("host1", [common.Device("kikimr_nvme_00_0", None)], 4, "never", 100, "NONE")
+
+    async def test_sector_maps_do_not_probe_disks(self):
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock) as post:
+            paths = await configs.get_parts("host1", [], 4, "always", 100, "NONE")
+        post.assert_not_awaited()
+        self.assertEqual(paths, [f"SectorMap:map_{part}:100:NONE" for part in range(4)])
+
+    async def test_sector_maps_fill_only_missing_devices(self):
+        device = common.Device("kikimr_nvme_00_0", None)
+        with mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value={"disks": [self._disk_reply(device)]}):
+            paths = await configs.get_parts("host1", [device], 4, "if_needed", 100, "NONE")
+        self.assertEqual(paths, ["/dev/disk/by-partlabel/kikimr_nvme_00_0"] + [f"SectorMap:map_{part}:100:NONE" for part in range(3)])
+
+    async def test_generated_nodes_have_four_distinct_pdisks(self):
+        labels = self._labels()
+        config, errors = scheme.apply_scheme({
+            "hosts": ["host1"],
+            "nodes_per_host": 4,
+            "erasure": "mirror-3-dc",
+            "sector_map": {"use": "never"},
+            "disks": [{"hosts": ["host1"], "disks_for_use": [{"partlabel": label} for label in labels]}],
+        }, multinode.scheme)
+        self.assertEqual(errors, [])
+        hosts = common.get_host_disks(config)
+        response = {"disks": [self._disk_reply(device) for device in hosts["host1"]]}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(deploy_ctx, "work_directory", directory), \
+                mock.patch.object(configs.agent_client, "post_json", new_callable=mock.AsyncMock, return_value=response):
+            self.assertTrue(await configs.gen_yaml("config.yaml", hosts, config, 1, 4, 1, False))
+            with open(os.path.join(directory, "config.yaml")) as config_file:
+                generated = yaml.safe_load(config_file)["config"]
+
+        self.assertEqual(len(generated["hosts"]), 4)
+        self.assertEqual(len(generated["host_configs"]), 4)
+        for node, host_config in enumerate(generated["host_configs"]):
+            self.assertEqual(list(host_config["ssd"]), [f"/dev/disk/by-partlabel/{label}" for label in labels[node * 4:node * 4 + 4]])

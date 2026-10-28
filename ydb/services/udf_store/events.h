@@ -17,28 +17,34 @@ enum EEv {
     EvEnd
 };
 
-struct TEvStoreInitialized : public NActors::TEventLocal<TEvStoreInitialized, EvStoreInitialized> {
+struct TEvStoreInitialized: public NActors::TEventLocal<TEvStoreInitialized, EvStoreInitialized> {
     TEvStoreInitialized(const TString& kvVolumePath)
         : KvVolumePath(kvVolumePath)
-    {}
+    {
+    }
+
     TString KvVolumePath;
 };
 
-struct TEvArtifactTableInitialized : public NActors::TEventLocal<TEvArtifactTableInitialized, EvArtifactTableInitialized> {
+struct TEvArtifactTableInitialized: public NActors::TEventLocal<TEvArtifactTableInitialized, EvArtifactTableInitialized> {
     explicit TEvArtifactTableInitialized(TString artifactTablePath)
         : ArtifactTablePath(std::move(artifactTablePath))
-    {}
+    {
+    }
+
     TString ArtifactTablePath;
 };
 
-struct TEvStoreInitFailed : public NActors::TEventLocal<TEvStoreInitFailed, EvStoreInitFailed> {
+struct TEvStoreInitFailed: public NActors::TEventLocal<TEvStoreInitFailed, EvStoreInitFailed> {
     explicit TEvStoreInitFailed(TString errorMessage)
         : ErrorMessage(std::move(errorMessage))
-    {}
+    {
+    }
+
     TString ErrorMessage;
 };
 
-struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, EvReadBodyResponse> {
+struct TEvReadBodyResponse: public NActors::TEventLocal<TEvReadBodyResponse, EvReadBodyResponse> {
     bool Success;
     TString Name;
     //! Which pending queue the reply belongs to. Native bodies and WASM
@@ -54,28 +60,26 @@ struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, Ev
         , Name(name)
         , Type(type)
         , ErrorMessage(errorMessage)
-    {}
+    {
+    }
 };
 
-struct TEvWasmCompileResponse : public NActors::TEventLocal<TEvWasmCompileResponse, EvWasmCompileResponse> {
+struct TEvWasmCompileResponse: public NActors::TEventLocal<TEvWasmCompileResponse, EvWasmCompileResponse> {
     bool Success;
     bool Deferred = false;
     TString Name;
     TString ErrorMessage;
 
-    TEvWasmCompileResponse(
-        bool success,
-        const TString& name,
-        const TString& errorMessage = {},
-        bool deferred = false)
+    TEvWasmCompileResponse(bool success, const TString& name, const TString& errorMessage = {}, bool deferred = false)
         : Success(success)
         , Deferred(deferred)
         , Name(name)
         , ErrorMessage(errorMessage)
-    {}
+    {
+    }
 };
 
-struct TEvLibraryCompileResponse : public NActors::TEventLocal<TEvLibraryCompileResponse, EvLibraryCompileResponse> {
+struct TEvLibraryCompileResponse: public NActors::TEventLocal<TEvLibraryCompileResponse, EvLibraryCompileResponse> {
     bool Success;
     //! The library was re-uploaded while this compile ran, so its result is for
     //! an upload nobody wants any more. Separate from a real failure because
@@ -84,16 +88,13 @@ struct TEvLibraryCompileResponse : public NActors::TEventLocal<TEvLibraryCompile
     TString LibraryName;
     TString ErrorMessage;
 
-    TEvLibraryCompileResponse(
-        bool success,
-        const TString& libraryName,
-        const TString& errorMessage = {},
-        bool deferred = false)
+    TEvLibraryCompileResponse(bool success, const TString& libraryName, const TString& errorMessage = {}, bool deferred = false)
         : Success(success)
         , Deferred(deferred)
         , LibraryName(libraryName)
         , ErrorMessage(errorMessage)
-    {}
+    {
+    }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

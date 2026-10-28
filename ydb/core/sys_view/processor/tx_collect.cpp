@@ -18,7 +18,7 @@ struct TSysViewProcessor::TTxCollect : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        if (!Self->NodesInFlight.empty() || !Self->NodesToRequest.empty()) {
+        if (!Self->RequestsInFlight.empty() || !Self->NodesToRequest.empty()) {
             Self->PersistQueryResults(db);
         }
         Self->PersistPartitionResults(db);

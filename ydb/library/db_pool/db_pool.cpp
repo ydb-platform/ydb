@@ -3,8 +3,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -36,10 +36,11 @@ struct TFunctionRequest {
         : Sender(sender)
         , Cookie(cookie)
         , Handler(std::move(handler))
-    {}
+    {
+    }
 };
 
-class TDbPoolActor : public TActor<TDbPoolActor> {
+class TDbPoolActor: public TActor<TDbPoolActor> {
     using TBase = TActor<TDbPoolActor>;
 
     struct TCounters {
@@ -94,7 +95,8 @@ public:
         : TBase(&TThis::WorkingState)
         , TableClient(std::move(tableClient))
         , Counters(std::move(counters))
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_DB_POOL";
 
@@ -111,17 +113,20 @@ private:
             {"logPrefix", LogPrefix()},
             {"inflight", RequestInProgress});
 
-        Request = TFunctionRequest{ev->Sender, ev->Cookie, std::move(ev->Get()->Handler)};
+        Request = TFunctionRequest{ ev->Sender, ev->Cookie, std::move(ev->Get()->Handler) };
         RequestInProgress = true;
         ReportStats();
 
-        TableClient.RetryOperation([request = Request](NYdb::NTable::TSession session) {
-            return request.Handler(session);
-        }).Subscribe([state = std::weak_ptr<int>(State), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), cookie = Request.Cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
-            if (state.lock()) {
-                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
-            }
-        });
+        TableClient
+            .RetryOperation([request = Request](NYdb::NTable::TSession session) {
+                return request.Handler(session);
+            })
+            .Subscribe([state = std::weak_ptr<int>(State), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(),
+                           cookie = Request.Cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
+                if (state.lock()) {
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
+                }
+            });
     }
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
@@ -165,7 +170,7 @@ private:
     bool WakeupScheduled = false;
 };
 
-class TDbPoolProxyActor : public TActor<TDbPoolProxyActor> {
+class TDbPoolProxyActor: public TActor<TDbPoolProxyActor> {
     using TBase = TActor<TDbPoolProxyActor>;
 
     struct TCounters {
@@ -180,13 +185,14 @@ class TDbPoolProxyActor : public TActor<TDbPoolProxyActor> {
 
         TCounters(NMonitoring::TDynamicCounterPtr counters)
             : CountersSubGroup(counters->GetSubgroup("subcomponent", "DbPool"))
-            , InFlight(CountersSubGroup->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 3)))
+            , InFlight(CountersSubGroup->GetHistogram("InFlight", NMonitoring::ExponentialHistogram(10, 2, 3)))
             , TotalInFlight(CountersSubGroup->GetCounter("TotalInflight"))
             , QueueSize(CountersSubGroup->GetCounter("QueueSize"))
             , QueuedTime(CountersSubGroup->GetHistogram("QueuedTimeMs", NMonitoring::ExponentialHistogram(6, 3, 10)))
             , IncomingRate(CountersSubGroup->GetCounter("IncomingRate", true))
             , TotalQueuedTime(CountersSubGroup->GetCounter("TotalQueuedTimeUs", true))
-        {}
+        {
+        }
 
         void ReportStats(ui64 newQueuedRequests) {
             const auto now = TInstant::Now();
@@ -205,7 +211,8 @@ public:
         : TBase(&TThis::WorkingState)
         , Counters(std::move(counters))
         , FreeWorkers(std::move(actors))
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_DB_POOL_PROXY";
 
@@ -242,7 +249,7 @@ private:
 
         Counters.IncomingRate->Inc();
         Counters.QueueSize->Inc();
-        Requests.emplace_back(TFunctionRequest{sender, ev->Cookie, std::move(ev->Get()->Handler)});
+        Requests.emplace_back(TFunctionRequest{ sender, ev->Cookie, std::move(ev->Get()->Handler) });
         ReportStats();
         ProcessQueue();
     }
@@ -343,7 +350,7 @@ private:
     bool WakeupScheduled = false;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 class TDbPool {
     const TActorId ProxyActorId;
@@ -351,7 +358,8 @@ class TDbPool {
 public:
     TDbPool(ui32 sessionsCount, NYdb::NTable::TTableClient tableClient, NMonitoring::TDynamicCounterPtr counters)
         : ProxyActorId(StartWorkers(sessionsCount, std::move(tableClient), std::move(counters)))
-    {}
+    {
+    }
 
     TActorId GetProxyActorId() const {
         return ProxyActorId;
@@ -365,16 +373,20 @@ private:
         std::unordered_set<TActorId> actors;
         actors.reserve(sessionsCount);
         for (ui32 i = 0; i < sessionsCount; ++i) {
-            Y_VALIDATE(actors.emplace(TActivationContext::Register(new TDbPoolActor(tableClient, counters), parentId, TMailboxType::HTSwap, parentId.PoolID())).second, "Unexpected actor id");
+            Y_VALIDATE(actors
+                           .emplace(TActivationContext::Register(
+                               new TDbPoolActor(tableClient, counters), parentId, TMailboxType::HTSwap, parentId.PoolID()))
+                           .second, "Unexpected actor id");
         }
 
-        return TActivationContext::Register(new TDbPoolProxyActor(std::move(actors), std::move(counters)), parentId, TMailboxType::HTSwap, parentId.PoolID());
+        return TActivationContext::Register(
+            new TDbPoolProxyActor(std::move(actors), std::move(counters)), parentId, TMailboxType::HTSwap, parentId.PoolID());
     }
 };
 
 namespace {
 
-class TDbRequest : public TActorBootstrapped<TDbRequest> {
+class TDbRequest: public TActorBootstrapped<TDbRequest> {
     using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
 
     const TDbPoolPtr DbPool;
@@ -388,7 +400,8 @@ public:
         : DbPool(std::move(dbPool))
         , Handler(std::move(handler))
         , Promise(std::move(promise))
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvents::TEvDbFunctionResponse, Handle);
@@ -430,9 +443,9 @@ private:
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-class TDbPoolMap final : public TThrRefBase {
+class TDbPoolMap final: public TThrRefBase {
     const NDbPool::TConfig Config;
     const NYdb::TDriver Driver;
     const NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
@@ -444,12 +457,14 @@ class TDbPoolMap final : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolMap>;
 
-    TDbPoolMap(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters)
+    TDbPoolMap(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory,
+        NMonitoring::TDynamicCounterPtr counters)
         : Config(PrepareConfig(config))
         , Driver(driver)
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Counters(counters)
-    {}
+    {
+    }
 
     TDbPoolPtr GetOrCreate(ui32 poolId) {
         TGuard<TMutex> lock(Mutex);
@@ -473,15 +488,15 @@ public:
             credSettings.UseLocalMetadata = Config.GetUseLocalMetadataService();
             credSettings.OAuthToken = Config.GetToken();
 
-            TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, NYdb::NTable::TClientSettings()
-                .UseQueryCache(false)
-                .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + maxSessionCount))
-                .Database(Config.GetDatabase())
-                .DiscoveryEndpoint(Config.GetEndpoint())
-                .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-                .SslCredentials(NYdb::TSslCredentials(Config.GetUseSsl()))
-                .CredentialsProviderFactory(CredentialsProviderFactory(credSettings))
-            );
+            TableClient = MakeHolder<NYdb::NTable::TTableClient>(
+                Driver, NYdb::NTable::TClientSettings()
+                            .UseQueryCache(false)
+                            .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + maxSessionCount))
+                            .Database(Config.GetDatabase())
+                            .DiscoveryEndpoint(Config.GetEndpoint())
+                            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+                            .SslCredentials(NYdb::TSslCredentials(Config.GetUseSsl()))
+                            .CredentialsProviderFactory(CredentialsProviderFactory(credSettings)));
         }
 
         auto dbPool = std::make_shared<TDbPool>(it->second, *TableClient, Counters);
@@ -499,10 +514,12 @@ private:
     }
 };
 
-TDbPoolHolder::TDbPoolHolder(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters)
+TDbPoolHolder::TDbPoolHolder(const NDbPool::TConfig& config, NYdb::TDriver driver,
+    NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters)
     : Driver(std::move(driver))
     , Pools(MakeIntrusive<TDbPoolMap>(config, Driver, std::move(credentialsProviderFactory), std::move(counters)))
-{}
+{
+}
 
 TDbPoolHolder::~TDbPoolHolder() {
     try {
@@ -520,8 +537,9 @@ NYdb::TAsyncStatus ExecDbRequest(TDbPoolPtr dbPool, std::function<NYdb::TAsyncSt
     Y_VALIDATE(dbPool, "Missing db pool");
     const auto parentId = TActivationContext::AsActorContext().SelfID;
     NThreading::TPromise<NYdb::TStatus> promise = NThreading::NewPromise<NYdb::TStatus>();
-    TActivationContext::Register(new TDbRequest(std::move(dbPool), promise, std::move(handler)), parentId, TMailboxType::HTSwap, parentId.PoolID());
+    TActivationContext::Register(
+        new TDbRequest(std::move(dbPool), promise, std::move(handler)), parentId, TMailboxType::HTSwap, parentId.PoolID());
     return promise.GetFuture();
 }
 
-} // namespace NDbPool
+}   // namespace NDbPool

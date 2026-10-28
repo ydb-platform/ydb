@@ -1226,6 +1226,73 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }, /* enableJsonIndexAutoSelect */ true);
     }
 
+    Y_UNIT_TEST_TWIN(JsonParameterErrorHandlersAreBranchLocal, IsJsonDocument) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::nullopt, [](TQueryClient& db, const auto&) {
+            const std::string declarations = "DECLARE $p AS Json;";
+
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value FALSE ON ERROR))");
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY NULL ON ERROR))");
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_EXISTS(Text, 'strict $.k1' PASSING $p AS value ERROR ON ERROR))");
+
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))");
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR))");
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR))");
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Utf8 NULL ON EMPTY ERROR ON ERROR) IN ("v"u, "other"u))");
+
+            // An unsafe side of AND is kept as a residual predicate while the
+            // other side supplies the index tokens.
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR) AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(NOT JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k2'))");
+
+            // OR needs tokens from every branch, so an unsafe side still makes
+            // the whole expression ineligible for automatic index selection.
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) OR JSON_EXISTS(Text, '$.k2'))");
+            ValidateNoAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR) OR JSON_EXISTS(Text, '$.k2'))");
+
+            const auto assertIndexUsed = [&](const std::string& query, const TString& context) {
+                const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), context << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan(), context << ": explain plan is empty");
+
+                NJson::TJsonValue planJson;
+                UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true),
+                    context << ": failed to parse explain plan");
+                UNIT_ASSERT_VALUES_EQUAL_C(CountPlanNodesByKv(planJson, "Index", "json_idx"), 1, context);
+            };
+
+            // Error-producing JSON in the SELECT list is evaluated after either
+            // scan and must not make an otherwise safe index predicate ineligible.
+            const std::string projection =
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))";
+            const std::string predicate = R"(JSON_EXISTS(Text, '$.k2'))";
+            assertIndexUsed(declarations + "\nSELECT " + projection + " FROM TestTable WHERE " + predicate + ";",
+                "automatic index selection with unsafe projection");
+            assertIndexUsed(declarations + "\nSELECT " + projection + " FROM TestTable VIEW json_idx WHERE " + predicate + ";",
+                "explicit index with unsafe projection");
+
+            // JSON_VALUE without RETURNING cannot provide index tokens itself,
+            // but it can remain as a residual side of AND.
+            ValidateAutoSelectWithDecl(db, declarations,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) == "v"u AND JSON_EXISTS(Text, '$.k2'))");
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
     Y_UNIT_TEST(TwoJsonIndexes_SameColumn) {
         auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
@@ -1375,6 +1442,27 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             "JSON_EXISTS(Text, '$.a') OR JSON_VALUE(Extra, '$.x' RETURNING Int64) == 10",
             "json_idx_extra", "TestTable");
+
+        const std::string declarations = "DECLARE $p AS Json;";
+        const std::string unsafeCrossColumn =
+            R"(JSON_EXISTS(Text, 'strict $.a ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Extra, '$.x'))";
+        ValidateNoAutoSelectWithDecl(db, declarations, unsafeCrossColumn,
+            "json_idx_text", "TestTable");
+        ValidateAutoSelectWithDecl(db, declarations, unsafeCrossColumn,
+            "json_idx_extra", "TestTable");
+
+        const auto explain = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+        const auto explicitExtra = db.ExecuteQuery(
+            declarations + "\nSELECT * FROM TestTable VIEW json_idx_extra WHERE " + unsafeCrossColumn + ";",
+            TTxControl::NoTx(), explain).ExtractValueSync();
+        UNIT_ASSERT_C(explicitExtra.IsSuccess(), explicitExtra.GetIssues().ToString());
+        UNIT_ASSERT_C(explicitExtra.GetStats() && explicitExtra.GetStats()->GetPlan(),
+            "Explicit cross-column index explain plan is empty");
+
+        NJson::TJsonValue explicitExtraPlan;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*explicitExtra.GetStats()->GetPlan(), &explicitExtraPlan, true),
+            "Failed to parse explicit cross-column index plan");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(explicitExtraPlan, "Index", "json_idx_extra"), 1);
     }
 
     Y_UNIT_TEST_TWIN(AutoSelectSqlForms, Compact) {

@@ -35,11 +35,21 @@ public:
 
   /**
    * Changes the singleton MeterProvider.
+   *
+   * Passing a nullptr MeterProvider installs a no-op MeterProvider, so that
+   * GetMeterProvider() never returns a nullptr MeterProvider.
    */
   static void SetMeterProvider(const nostd::shared_ptr<MeterProvider> &tp) noexcept
   {
     std::lock_guard<common::SpinLockMutex> guard(GetLock());
-    GetProvider() = tp;
+    if (tp)
+    {
+      GetProvider() = tp;
+    }
+    else
+    {
+      GetProvider() = nostd::shared_ptr<MeterProvider>(new NoopMeterProvider);
+    }
   }
 
 private:

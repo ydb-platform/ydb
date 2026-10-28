@@ -1,29 +1,26 @@
 #include "external_source_builder.h"
 #include "validation_functions.h"
 
-#include <util/string/join.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <util/string/join.h>
 
 namespace NKikimr::NExternalSource {
 namespace {
 
-class TValidatedExternalDataSource final : public IExternalSource {
+class TValidatedExternalDataSource final: public IExternalSource {
 public:
-    TValidatedExternalDataSource(
-        const TString& name, 
-        const std::vector<TExternalSourceBuilder::TAuthHolder>& authMethods, 
-        const std::unordered_map<TString, TExternalSourceBuilder::TConditionalValidator>& availableProperties, 
+    TValidatedExternalDataSource(const TString& name, const std::vector<TExternalSourceBuilder::TAuthHolder>& authMethods,
+        const std::unordered_map<TString, TExternalSourceBuilder::TConditionalValidator>& availableProperties,
         const std::vector<TRegExMatch>& hostnamePatterns)
         : Name_(name)
         , AuthMethodsForCheck_(authMethods)
         , AvailableProperties_(availableProperties)
         , HostnamePatterns_(hostnamePatterns)
     {
-
     }
 
-    virtual TString Pack(const NKikimrExternalSources::TSchema&,
-                         const NKikimrExternalSources::TGeneral&) const override {
+    virtual TString Pack(const NKikimrExternalSources::TSchema&, const NKikimrExternalSources::TGeneral&) const override {
         ythrow TExternalSourceException() << "Internal error. Only external table supports pack operation";
     }
 
@@ -49,9 +46,8 @@ public:
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
 
         if (!proto.ParseFromString(externalDataSourceDescription)) {
-            ythrow TExternalSourceException() 
-                << "Internal error. "
-                << "Couldn't parse protobuf with external data source description";
+            ythrow TExternalSourceException() << "Internal error. "
+                                              << "Couldn't parse protobuf with external data source description";
         }
 
         TVector<TString> result;
@@ -61,7 +57,7 @@ public:
                 result.push_back(a.Auth);
             }
         }
-        
+
         return result;
     }
 
@@ -73,9 +69,8 @@ public:
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
 
         if (!proto.ParseFromString(externalDataSourceDescription)) {
-            ythrow TExternalSourceException() 
-                << "Internal error. "
-                << "Couldn't parse protobuf with external data source description";
+            ythrow TExternalSourceException() << "Internal error. "
+                                              << "Couldn't parse protobuf with external data source description";
         }
 
         auto properties = proto.GetProperties().GetProperties();
@@ -88,7 +83,7 @@ public:
                 throw TExternalSourceException() << "Unsupported property: " << key;
             }
 
-            // validate property value 
+            // validate property value
             if (p->second.ApplyCondition(properties)) {
                 p->second.Validator(key, value);
             }
@@ -96,7 +91,7 @@ public:
             validatedProperties.emplace(key);
         }
 
-        // validate properties that has been left 
+        // validate properties that has been left
         for (const auto& [property, validator] : AvailableProperties_) {
             if (validatedProperties.contains(property)) {
                 continue;
@@ -118,34 +113,35 @@ public:
         return false;
     }
 
-private: 
+private:
     const TString Name_;
     const std::vector<TExternalSourceBuilder::TAuthHolder> AuthMethodsForCheck_;
     const std::unordered_map<TString, TExternalSourceBuilder::TConditionalValidator> AvailableProperties_;
     const std::vector<TRegExMatch> HostnamePatterns_;
 };
 
-} // unnamed
+}   // namespace
 
-TExternalSourceBuilder::TExternalSourceBuilder(const TString& name) 
+TExternalSourceBuilder::TExternalSourceBuilder(const TString& name)
     : Name_(name)
 {
 }
 
 TExternalSourceBuilder& TExternalSourceBuilder::Auth(const TVector<TString>& authMethods, TCondition condition) {
     for (auto a : authMethods) {
-        AuthMethodsForCheck_.push_back(TExternalSourceBuilder::TAuthHolder{a, condition});
+        AuthMethodsForCheck_.push_back(TExternalSourceBuilder::TAuthHolder{ a, condition });
     }
 
     return *this;
 }
 
 TExternalSourceBuilder& TExternalSourceBuilder::Property(TString name, TValidator validator, TCondition condition) {
-    AvailableProperties_.emplace(name, TExternalSourceBuilder::TConditionalValidator{validator, condition});
+    AvailableProperties_.emplace(name, TExternalSourceBuilder::TConditionalValidator{ validator, condition });
     return *this;
-} 
+}
 
-TExternalSourceBuilder& TExternalSourceBuilder::Properties(const TSet<TString>& availableProperties, TValidator validator, TCondition condition) {
+TExternalSourceBuilder& TExternalSourceBuilder::Properties(
+    const TSet<TString>& availableProperties, TValidator validator, TCondition condition) {
     for (auto p : availableProperties) {
         Property(p, validator, condition);
     }
@@ -154,8 +150,7 @@ TExternalSourceBuilder& TExternalSourceBuilder::Properties(const TSet<TString>& 
 }
 
 TExternalSourceBuilder& TExternalSourceBuilder::HostnamePatterns(const std::vector<TRegExMatch>& patterns) {
-    HostnamePatterns_.insert(
-        HostnamePatterns_.end(), patterns.begin(), patterns.end());
+    HostnamePatterns_.insert(HostnamePatterns_.end(), patterns.begin(), patterns.end());
     return *this;
 }
 
@@ -172,7 +167,7 @@ TCondition GetHasSettingCondition(const TString& property, const TString& value)
 }
 
 TValidator GetRequiredValidator() {
-    return [](const TString& property, const TString& value){
+    return [](const TString& property, const TString& value) {
         if (!value.empty()) {
             return;
         }
@@ -184,7 +179,7 @@ TValidator GetRequiredValidator() {
 TValidator GetIsInListValidator(const std::unordered_set<TString>& values, bool required) {
     auto joinedValues = JoinSeq(", ", values);
 
-    return [values, required, joinedValues](const TString& property, const TString& value){
+    return [values, required, joinedValues](const TString& property, const TString& value) {
         if (value.empty() && required) {
             throw TExternalSourceException() << " required property: " << property << " is not set";
         }
@@ -194,12 +189,10 @@ TValidator GetIsInListValidator(const std::unordered_set<TString>& values, bool 
         }
 
         if (!values.contains(value)) {
-            throw TExternalSourceException() 
-                << " property: " << property 
-                << " has wrong value: " << value 
-                << " allowed values: " << joinedValues;
+            throw TExternalSourceException() << " property: " << property << " has wrong value: " << value
+                                             << " allowed values: " << joinedValues;
         }
     };
 }
 
-} // NKikimr::NExternalSource
+}   // namespace NKikimr::NExternalSource

@@ -1,5 +1,9 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
 # the test queries yandex storage bucket
 # like olap tests do
 TAG(ya:manual)

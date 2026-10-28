@@ -1,17 +1,16 @@
 #pragma once
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <yql/essentials/minikql/computation/mkql_value_builder.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-
-#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <chrono>
 #include <queue>
@@ -22,38 +21,39 @@ class TFakeActor;
 
 using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntimeBase>;
 using TCallback = std::function<void(TFakeActor&)>;
-template<typename T>
+template <typename T>
 using TReadValueParser = std::function<std::vector<T>(const NUdf::TUnboxedValue&)>;
 using TWriteValueProducer = std::function<NKikimr::NMiniKQL::TUnboxedValueBatch(NKikimr::NMiniKQL::THolderFactory&)>;
 
 namespace {
-    struct TEvPrivate {
-        // Event ids
-        enum EEv : ui32 {
-            EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+struct TEvPrivate {
+    // Event ids
+    enum EEv: ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
-            EvExecute = EvBegin,
+        EvExecute = EvBegin,
 
-            EvEnd
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-        // Events
-
-        struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
-            TEvExecute(NThreading::TPromise<void>& promise, TCallback callback, std::exception_ptr& resultException)
-                : Promise(promise)
-                , Callback(callback)
-                , ResultException(resultException)
-            {}
-
-            NThreading::TPromise<void> Promise;
-            TCallback Callback;
-            std::exception_ptr& ResultException;
-        };
+        EvEnd
     };
-}
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    // Events
+
+    struct TEvExecute: public NActors::TEventLocal<TEvExecute, EvExecute> {
+        TEvExecute(NThreading::TPromise<void>& promise, TCallback callback, std::exception_ptr& resultException)
+            : Promise(promise)
+            , Callback(callback)
+            , ResultException(resultException)
+        {
+        }
+
+        NThreading::TPromise<void> Promise;
+        TCallback Callback;
+        std::exception_ptr& ResultException;
+    };
+};
+}   // namespace
 
 struct TAsyncInputPromises {
     NThreading::TPromise<void> NewAsyncInputDataArrived = NThreading::NewPromise();
@@ -69,9 +69,12 @@ struct TAsyncOutputPromises {
 
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
 
-class TFakeActor : public NActors::TActor<TFakeActor> {
+class TFakeActor: public NActors::TActor<TFakeActor> {
     struct TAsyncInputEvents {
-        explicit TAsyncInputEvents(TFakeActor& parent) : Parent(parent) {}
+        explicit TAsyncInputEvents(TFakeActor& parent)
+            : Parent(parent)
+        {
+        }
 
         void OnNewAsyncInputDataArrived(ui64) {
             Parent.AsyncInputPromises->NewAsyncInputDataArrived.SetValue();
@@ -87,8 +90,11 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
         TFakeActor& Parent;
     };
 
-    struct TAsyncOutputCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
-        explicit TAsyncOutputCallbacks(TFakeActor& parent) : Parent(parent) {}
+    struct TAsyncOutputCallbacks: public IDqComputeActorAsyncOutput::ICallbacks {
+        explicit TAsyncOutputCallbacks(TFakeActor& parent)
+            : Parent(parent)
+        {
+        }
 
         void ResumeExecution(EResumeSource) override {
             Parent.AsyncOutputPromises->ResumeExecution.SetValue();
@@ -194,11 +200,9 @@ struct TFakeCASetup {
     // send events to the actor system, and only then destroy the setup (and the runtime).
     void Terminate();
 
-    template<typename T>
+    template <typename T>
     std::vector<std::variant<T, TInstant>> AsyncInputRead(
-        const TReadValueParser<T> parser,
-        NThreading::TFuture<void>& nextDataFutureOut,
-        i64 freeSpace = 12345)
+        const TReadValueParser<T> parser, NThreading::TFuture<void>& nextDataFutureOut, i64 freeSpace = 12345)
     {
         std::vector<std::variant<T, TInstant>> result;
         NThreading::TFuture<bool> nextDataFuture;
@@ -224,38 +228,32 @@ struct TFakeCASetup {
         return result;
     }
 
-    template<typename T>
-    std::vector<std::variant<T, TInstant>> AsyncInputReadUntil(
-        const TReadValueParser<T> parser,
-        ui64 size,
-        i64 eachReadFreeSpace = 1000,
-        TDuration timeout = TDuration::Seconds(30),
-        bool onlyData = false)
+    template <typename T>
+    std::vector<std::variant<T, TInstant>> AsyncInputReadUntil(const TReadValueParser<T> parser, ui64 size, i64 eachReadFreeSpace = 1000,
+        TDuration timeout = TDuration::Seconds(30), bool onlyData = false)
     {
         ui32 dataItemsCt = 0;
         std::vector<std::variant<T, TInstant>> result;
         TInstant startedAt = TInstant::Now();
-        DoWithRetry([&](){
-                NThreading::TFuture<void> nextDataFuture;
-                auto batch = AsyncInputRead<T>(parser, nextDataFuture, eachReadFreeSpace);
-                for (const auto& item : batch) {
-                    result.emplace_back(item);
-                    if (!onlyData || std::holds_alternative<T>(item)) {
-                        dataItemsCt++;
-                    }
+        DoWithRetry([&]() {
+            NThreading::TFuture<void> nextDataFuture;
+            auto batch = AsyncInputRead<T>(parser, nextDataFuture, eachReadFreeSpace);
+            for (const auto& item : batch) {
+                result.emplace_back(item);
+                if (!onlyData || std::holds_alternative<T>(item)) {
+                    dataItemsCt++;
                 }
+            }
 
-                if (TInstant::Now() > startedAt + timeout) {
-                    return;
-                }
+            if (TInstant::Now() > startedAt + timeout) {
+                return;
+            }
 
-                if (dataItemsCt < size) {
-                    nextDataFuture.Wait(timeout);
-                    ythrow yexception() << "Not enough items";
-                }
-            },
-            TRetryOptions(std::numeric_limits<ui32>::max()),
-            true);
+            if (dataItemsCt < size) {
+                nextDataFuture.Wait(timeout);
+                ythrow yexception() << "Not enough items";
+            }
+        }, TRetryOptions(std::numeric_limits<ui32>::max()), true);
 
         UNIT_ASSERT_C(dataItemsCt >= size, "Waited for " << size << " items but only " << dataItemsCt << " received");
 
@@ -281,4 +279,4 @@ private:
     bool Terminated = false;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

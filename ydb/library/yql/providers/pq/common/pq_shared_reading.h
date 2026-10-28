@@ -6,4 +6,4 @@ namespace NYql {
 
 bool HasSharedReading(const ::google::protobuf::Any& maybePqTopicSource);
 
-} // namespace NYql
+}   // namespace NYql

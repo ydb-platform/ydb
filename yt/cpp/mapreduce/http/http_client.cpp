@@ -18,6 +18,7 @@
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/http/client.h>
+#include <yt/yt/core/http/compression.h>
 #include <yt/yt/core/http/config.h>
 #include <yt/yt/core/http/http.h>
 
@@ -25,6 +26,7 @@
 #include <yt/yt/core/https/config.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yt/logging/logger.h>
 
 namespace NYT::NHttpClient {
 
@@ -213,6 +215,7 @@ struct TCoreRequestContext
     bool LogResponse;
     TInstant StartTime;
     NLogging::TLoggingTagList LoggedAttributes;
+    TMaybe<NHttp::TContentEncoding> ContentEncoding;
 };
 
 class TCoreHttpResponse
@@ -234,7 +237,8 @@ public:
     IAbortableInputStream* GetResponseStream() override
     {
         if (!Stream_) {
-            NConcurrency::IAsyncInputStreamPtr asyncStream = NConcurrency::CreateCopyingAdapter(Response_);
+            NConcurrency::IAsyncInputStreamPtr asyncStream = GetDecompressedStream();
+
             if (TConfig::Get()->UseHaltingResponse) {
                 asyncStream = NDetail::CreateHaltingAsyncStream(std::move(asyncStream), TConfig::Get()->HaltingResponseBytesLimit);
             }
@@ -282,8 +286,19 @@ public:
     {
         return Context_.RequestId;
     }
-
 private:
+    NConcurrency::IAsyncInputStreamPtr GetDecompressedStream()
+    {
+        if (auto encoding = Response_->GetHeaders()->Find("Content-Encoding")) {
+            if (!NHttp::IsContentEncodingSupported(*encoding)) {
+                ythrow yexception() << "Unsupported content encoding: " << *encoding;
+            }
+            if (*encoding != NHttp::IdentityContentEncoding) {
+                return NHttp::CreateDecompressingAdapter(Response_, *encoding, GetSyncInvoker());
+            }
+        }
+        return NConcurrency::CreateCopyingAdapter(Response_);
+    }
     class TWrappedStream
         : public IAbortableInputStream
     {
@@ -310,7 +325,7 @@ private:
             size_t read = Underlying_->Read(buf, len);
 
             if (read == 0 && len != 0) {
-                CheckTrailers(Response_->GetTrailers());
+                CheckTrailers(GetTrailers());
             }
             return read;
         }
@@ -319,12 +334,21 @@ private:
         {
             size_t skipped = Underlying_->Skip(len);
             if (skipped == 0 && len != 0) {
-                CheckTrailers(Response_->GetTrailers());
+                CheckTrailers(GetTrailers());
             }
             return skipped;
         }
 
     private:
+        NHttp::THeadersPtr GetTrailers()
+        {
+            auto chunk = Response_->Read().BlockingGet().ValueOrThrow();
+            while (chunk) {
+                chunk = Response_->Read().BlockingGet().ValueOrThrow();
+            }
+            return Response_->GetTrailers();
+        }
+
         void CheckTrailers(const NHttp::THeadersPtr& trailers)
         {
             if (auto errorResponse = ParseError(trailers)) {
@@ -367,10 +391,7 @@ class TCoreHttpRequest
 {
 public:
     TCoreHttpRequest(TCoreRequestContext context, NHttp::IActiveRequestPtr activeRequest)
-        : Context_(std::move(context))
-        , ActiveRequest_(std::move(activeRequest))
-        , Stream_(NConcurrency::CreateBufferedSyncAdapter(ActiveRequest_->GetRequestStream()))
-        , WrappedStream_(this, Stream_.get())
+        : TCoreHttpRequest(PrepareInitArgs(std::move(context), std::move(activeRequest)))
     { }
 
     IOutputStream* GetStream() override
@@ -380,7 +401,7 @@ public:
 
     IHttpResponsePtr Finish() override
     {
-        WrappedStream_.Flush();
+        WrappedStream_.Finish();
         auto response = ActiveRequest_->Finish().BlockingGet().ValueOrThrow();
         return std::make_unique<TCoreHttpResponse>(std::move(Context_), std::move(response));
     }
@@ -392,13 +413,53 @@ public:
     }
 
 private:
+    struct TInitializationArgs
+    {
+        NConcurrency::IAsyncOutputStreamPtr Compressor;
+        TCoreRequestContext Context;
+        NHttp::IActiveRequestPtr ActiveRequest;
+    };
+
+    static TInitializationArgs PrepareInitArgs(
+        TCoreRequestContext context,
+        NHttp::IActiveRequestPtr activeRequest)
+    {
+        auto compressor = GetCompressor(context, activeRequest);
+        return {
+            std::move(compressor),
+            std::move(context),
+            std::move(activeRequest)
+        };
+    }
+
+    TCoreHttpRequest(TInitializationArgs args)
+        : Context_(std::move(args.Context))
+        , ActiveRequest_(std::move(args.ActiveRequest))
+        , Stream_(NConcurrency::CreateBufferedSyncAdapter(args.Compressor ? args.Compressor : ActiveRequest_->GetRequestStream()))
+        , WrappedStream_(this, Stream_.get(), args.Compressor)
+    { }
+
+    static NConcurrency::IAsyncOutputStreamPtr GetCompressor(const TCoreRequestContext& context, const NHttp::IActiveRequestPtr& activeRequest)
+    {
+        if (auto encoding = context.ContentEncoding) {
+            if (!NHttp::IsContentEncodingSupported(*encoding)) {
+                ythrow yexception() << "Unsupported content encoding: " << *encoding;
+            }
+            if (*encoding != NHttp::IdentityContentEncoding) {
+                return NHttp::CreateCompressingAdapter(activeRequest->GetRequestStream(), *encoding, GetSyncInvoker());
+            }
+        }
+        return nullptr;
+    }
+
     class TWrappedStream
         : public IOutputStream
     {
     public:
-        TWrappedStream(TCoreHttpRequest* httpRequest, IOutputStream* underlying)
+        TWrappedStream(TCoreHttpRequest* httpRequest, IOutputStream* underlying, NConcurrency::IAsyncOutputStreamPtr compressor)
             : HttpRequest_(httpRequest)
             , Underlying_(underlying)
+            , Compressor_(compressor)
         { }
 
     private:
@@ -432,8 +493,10 @@ private:
 
         void DoFinish() override
         {
+            Flush();
             WrapWriteFunc([&] {
                 Underlying_->Finish();
+                CloseCompressor();
             });
         }
 
@@ -450,7 +513,8 @@ private:
         // In many cases http proxy stops reading request and resets connection
         // if error has happend. This function tries to read error response
         // in such cases.
-        void HandleWriteException() {
+        void HandleWriteException()
+        {
             Y_ABORT_UNLESS(WriteError_ == nullptr);
             WriteError_ = std::current_exception();
             Y_ABORT_UNLESS(WriteError_ != nullptr);
@@ -470,10 +534,19 @@ private:
             }
         }
 
+        void CloseCompressor()
+        {
+            if (Compressor_) {
+                auto future = Compressor_->Close();
+                future.BlockingGet().ThrowOnError();
+            }
+        }
+
     private:
         TCoreHttpRequest* const HttpRequest_;
         IOutputStream* Underlying_;
         std::exception_ptr WriteError_;
+        NConcurrency::IAsyncOutputStreamPtr Compressor_;
     };
 
 private:
@@ -523,29 +596,26 @@ public:
             bool includeParameters = false;
             auto headers = header.GetHeader(context.HostName, requestId, includeParameters).Get();
 
+            YT_TLOG_DEBUG("Requesting connection from connection pool")
+                .With("RequestId", context.RequestId)
+                .With("HostName", context.HostName);
+
             logRequest(includeParameters);
-
-            auto activeRequest = StartRequestImpl(header.GetMethod(), url, headers);
-
-            activeRequest->GetRequestStream()->Write(TSharedRef::FromString(parametersStr)).BlockingGet().ThrowOnError();
-            response = activeRequest->Finish().BlockingGet().ValueOrThrow();
+            return NonGetRequestImpl(header, url, headers, context, parametersStr);
         } else {
             auto bodyRef = TSharedRef::FromString(TString(body ? *body : ""));
             bool includeParameters = true;
             auto headers = header.GetHeader(context.HostName, requestId, includeParameters).Get();
 
+            YT_TLOG_DEBUG("Requesting connection from connection pool")
+                .With("RequestId", context.RequestId)
+                .With("HostName", context.HostName);
             logRequest(includeParameters);
 
             if (header.GetMethod() == "GET") {
                 response = RequestImpl(header.GetMethod(), url, headers, bodyRef);
             } else {
-                auto activeRequest = StartRequestImpl(header.GetMethod(), url, headers);
-
-                auto request = std::make_unique<TCoreHttpRequest>(std::move(context), std::move(activeRequest));
-                if (body) {
-                    request->GetStream()->Write(*body);
-                }
-                return request->Finish();
+                return NonGetRequestImpl(header, url, headers, context, body);
             }
         }
 
@@ -580,9 +650,11 @@ private:
         if (outputFormat && outputFormat->IsTextYson()) {
             context.LogResponse = true;
         }
+        context.ContentEncoding = header.GetRequestCompression();
         context.StartTime = TInstant::Now();
         return context;
     }
+
 
     NHttp::IResponsePtr RequestImpl(const TString& method, const TString& url, const NHttp::THeadersPtr& headers, const TSharedRef& body)
     {
@@ -610,6 +682,19 @@ private:
                 .With("Method", method)
                 .With("Url", url);
         }
+    }
+
+    IHttpResponsePtr NonGetRequestImpl(const THttpHeader& header, const TString& url, const NHttp::THeadersPtr& headers, const TCoreRequestContext& context, TMaybe<TStringBuf> message)
+    {
+        auto activeRequest = StartRequestImpl(header.GetMethod(), url, headers);
+        YT_TLOG_DEBUG("Connection established")
+            .With("RequestId", context.RequestId)
+            .With("HostName", context.HostName);
+        auto request = std::make_unique<TCoreHttpRequest>(context, std::move(activeRequest));
+        if (message) {
+            request->GetStream()->Write(*message);
+        }
+        return request->Finish();
     }
 
     NConcurrency::IThreadPoolPollerPtr Poller_;

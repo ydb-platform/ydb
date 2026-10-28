@@ -75,6 +75,7 @@ struct TKqpStatsCompile {
     bool FromCache = false;
     ui64 DurationUs = 0;
     ui64 CpuTimeUs = 0;
+    bool UsedNewRbo = false;
 };
 } // namespace NKikimr::NKqp
 

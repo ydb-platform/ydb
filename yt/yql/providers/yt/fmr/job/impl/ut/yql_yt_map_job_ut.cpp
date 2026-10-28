@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
 
         {
             auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),functionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
             TTypeEnvironment env(alloc);

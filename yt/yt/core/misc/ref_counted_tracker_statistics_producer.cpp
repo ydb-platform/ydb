@@ -5,7 +5,7 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT {
 
@@ -74,7 +74,7 @@ private:
 
     static constexpr auto CachedYsonTtl = TDuration::Seconds(5);
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CachedYsonLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, CachedYsonLock_);
     TYsonString CachedStatisticsYson_;
     TInstant CachedYsonUpdateTime_;
 

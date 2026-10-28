@@ -211,6 +211,66 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
                 "Key 3 = Upsert value = Set baz value2 = Empty NULL\n");
         }
     }
+
+    Y_UNIT_TEST(LargeDeltaChainRoundTrip) {
+        TMyEnvBase env;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // Same compaction policy as LargeDeltaChain — keeps memory pressure low
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        policy->InMemSizeToSnapshot = 24ull * 1024 * 1024;
+        policy->InMemStepsToSnapshot = 4;
+        policy->InMemForceStepsToSnapshot = 4;
+        policy->InMemForceSizeToSnapshot = 24ull * 1024 * 1024;
+        policy->Generations.push_back({10ull * 1024 * 1024 * 1024, 1024, 1024, 10ull * 1024 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), false});
+
+        // 1. Init schema with three columns
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(policy) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bar") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "baz") });
+
+        // 2. Create 1024 transactions, each making a 4.1MB update for key 2
+        for (ui64 txId = 1; txId < 1024; ++txId) {
+            TString value(size_t(4.1 * 1024 * 1024), char('a' + txId % 26));
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, std::move(value), txId) });
+        }
+
+        // The last transaction writes "hello" and is committed
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, "hello", 1024) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(1024) });
+
+        // 3. Force a full compaction — writes compacted part to blob storage
+        Cerr << "...compacting" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        Cerr << "...waiting until compacted" << Endl;
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // 4. Verify data before restart
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Set bar value2 = Set hello\n"
+                "Key 3 = Upsert value = Set baz value2 = Empty NULL\n");
+        }
+
+        // 5. Restart the tablet — forces boot from blob storage
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // 6. Verify data after restart — pages read from blobs via TExecutorBootLogic
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Set bar value2 = Set hello\n"
+                "Key 3 = Upsert value = Set baz value2 = Empty NULL\n");
+        }
+    }
 #endif
 }
 

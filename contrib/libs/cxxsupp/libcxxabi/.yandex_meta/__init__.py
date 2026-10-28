@@ -119,6 +119,17 @@ def post_install(self):
             """,
         )
 
+        libcxxabi.after(
+            "SRCS",
+            """
+            IF (OS_ZEPHYR)
+                CFLAGS(
+                    -DLIBCXXABI_BAREMETAL
+                )
+            ENDIF()
+            """,
+        )
+
         libcxxabi.PEERDIR.add("library/cpp/sanitizer/include")
 
 

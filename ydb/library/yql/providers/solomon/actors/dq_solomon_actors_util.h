@@ -1,7 +1,8 @@
 #pragma once
 
-#include <library/cpp/monlib/encode/encoder.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
+
+#include <library/cpp/monlib/encode/encoder.h>
 #include <yql/essentials/public/udf/udf_value.h>
 
 namespace NYql::NDq {
@@ -27,4 +28,4 @@ private:
     bool UseCloudFormat;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

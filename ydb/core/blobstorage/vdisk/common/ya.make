@@ -25,6 +25,7 @@ SRCS(
     defs.h
     disk_part.h
     sublog.h
+    vdisk_compaction_priority.h
     vdisk_config.cpp
     vdisk_config.h
     vdisk_context.cpp

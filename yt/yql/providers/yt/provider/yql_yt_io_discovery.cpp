@@ -194,6 +194,7 @@ public:
                     // Already processed
                     return node;
                 }
+                const bool isLink = key.GetType() == TYtKey::EType::Link;
 
                 const auto systemSettings = { EYtSettingType::Initial, EYtSettingType::MutationId };
                 for (auto setting : systemSettings) {
@@ -205,10 +206,39 @@ public:
                     }
                 }
 
-                auto mode = NYql::GetSetting(*node->ChildPtr(4), EYtSettingType::Mode);
-                const bool flush = mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Flush;
+                const auto mode = NYql::GetSetting(*node->ChildPtr(4), EYtSettingType::Mode);
+                TMaybe<EYtWriteMode> writeMode;
+                if (mode) {
+                    writeMode = FromString<EYtWriteMode>(mode->Child(1)->Content());
+                }
+                if (isLink) {
+                    if (!writeMode) {
+                        ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), "Write mode is required for a link"));
+                        return {};
+                    }
+                    const bool create = IsCreateSymlinkMode(*writeMode);
+                    const bool drop = IsDropSymlinkMode(*writeMode);
+                    if (!create && !drop) {
+                        ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder()
+                            << "Unsupported link write mode: " << mode->Child(1)->Content()));
+                        return {};
+                    }
+                    if (create != key.GetTarget().Defined()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(write.Arg(2).Pos()), create
+                            ? "Target is required for creating a symlink"
+                            : "Target is not supported for dropping a symlink"));
+                        return {};
+                    }
+                }
+                const bool flush = writeMode == EYtWriteMode::Flush;
 
                 TYtTableInfo tableInfo(key, ds.Cluster().Value());
+                TMaybe<TYtTableInfo> targetInfo;
+                if (isLink && key.GetTarget()) {
+                    targetInfo.ConstructInPlace();
+                    targetInfo->Name = *key.GetTarget();
+                    targetInfo->Cluster = ds.Cluster().Value();
+                }
                 if (key.IsAnonymous()) {
                     if (flush) {
                         ctx.AddError(TIssue(
@@ -221,12 +251,26 @@ public:
                             .Name().Value(ToString(EYtSettingType::Anonymous)).Build()
                         .Build()
                         .Done();
-                } else if (tableInfo.Name.StartsWith(NYT::TConfig::Get()->Prefix)) {
-                    tableInfo.Name = tableInfo.Name.substr(NYT::TConfig::Get()->Prefix.size());
+                } else {
+                    const auto normalizePath = [] (TString& path) {
+                        if (path.StartsWith(NYT::TConfig::Get()->Prefix)) {
+                            path = path.substr(NYT::TConfig::Get()->Prefix.size());
+                        }
+                    };
+                    normalizePath(tableInfo.Name);
+                    if (targetInfo) {
+                        normalizePath(targetInfo->Name);
+                    }
                 }
 
                 if (tableInfo.Name.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), "Table name must not be empty"));
+                    ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder()
+                        << (isLink ? "Link" : "Table")
+                        << " name must not be empty"));
+                    return {};
+                }
+                if (targetInfo && targetInfo->Name.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), "Target name must not be empty"));
                     return {};
                 }
 
@@ -241,6 +285,9 @@ public:
                     State_->Checkpoints.emplace(std::move(setKey));
                 }
                 node->ChildRef(2) = tableInfo.ToExprNode(ctx, write.Pos()).Ptr();
+                if (targetInfo) {
+                    node->ChildRef(3) = targetInfo->ToExprNode(ctx, write.Pos()).Ptr();
+                }
                 return node;
             }
 

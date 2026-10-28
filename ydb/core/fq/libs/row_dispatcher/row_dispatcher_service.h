@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/common/row_dispatcher_settings.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
@@ -13,22 +14,15 @@ namespace NActors {
 
 class TMon;
 
-} // namespace NActors
+}   // namespace NActors
 
 namespace NFq {
 
-std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const TRowDispatcherSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqStaticGateway::TPtr& pqGateway,
-    NYdb::TDriver driver,
-    NActors::TMon* monitoring = nullptr,
-    ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
-    NActors::TActorId nodesManagerId = {},
+std::unique_ptr<NActors::IActor> NewRowDispatcherService(const TRowDispatcherSettings& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqStaticGateway::TPtr& pqGateway, NYdb::TDriver driver, NActors::TMon* monitoring = nullptr,
+    ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>(), NActors::TActorId nodesManagerId = {},
     bool enableStreamingQueriesCounters = false);
 
-} // namespace NFq
+}   // namespace NFq

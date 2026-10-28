@@ -4,6 +4,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/portions/compacted.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
@@ -76,7 +77,8 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::TierName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : Portions) {
-            const auto tierName = i->GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+            const auto tierName =
+                NColumnShard::NTiers::TExternalStorageId::GetDisplayName(i->GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId));
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));

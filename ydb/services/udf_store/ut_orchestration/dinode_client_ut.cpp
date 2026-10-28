@@ -1,18 +1,17 @@
 #include "snapshot_helpers.h"
 
-#include <ydb/services/udf_store/compile_controller/compile_controller.h>
-#include <ydb/services/udf_store/compile_controller/events.h>
-#include <ydb/services/udf_store/events.h>
-#include <ydb/services/udf_store/service.h>
-
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
+#include <ydb/services/udf_store/compile_controller/events.h>
+#include <ydb/services/udf_store/events.h>
+#include <ydb/services/udf_store/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -31,12 +30,13 @@ const TString ForeignCpuSpec = "some-other-platform";
 //! Stands in for the scheme cache. Discovery only reads the domain's processing
 //! params out of a navigate, so that is all this has to produce; going through
 //! a real scheme cache would drag in a whole schemeshard.
-class TFakeSchemeCache : public NActors::TActor<TFakeSchemeCache> {
+class TFakeSchemeCache: public NActors::TActor<TFakeSchemeCache> {
 public:
     explicit TFakeSchemeCache(ui64 controllerTabletId)
         : TActor(&TThis::StateWork)
         , ControllerTabletId(controllerTabletId)
-    {}
+    {
+    }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -83,9 +83,9 @@ public:
         Runtime.SetLogPriority(NKikimrServices::METADATA_PROVIDER, NActors::NLog::PRI_DEBUG);
 
         TAppPrepare app;
-        app.AddDomain(TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
-            "dc-1", /*domainUid=*/0, /*schemeRoot=*/0, /*planResolution=*/100500,
-            TVector<ui64>{}, TVector<ui64>{}, TVector<ui64>{}, DefaultPoolKinds(2)).Release());
+        app.AddDomain(TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", /*domainUid=*/0, /*schemeRoot=*/0,
+            /*planResolution=*/100500, TVector<ui64>{}, TVector<ui64>{}, TVector<ui64>{}, DefaultPoolKinds(2))
+                          .Release());
         SetupChannelProfiles(app);
         SetupTabletServices(Runtime, &app, true);
 
@@ -94,8 +94,7 @@ public:
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        CreateTestBootstrapper(Runtime,
-            CreateTestTabletInfo(::NKikimr::NUdfStore::ControllerTabletId, TTabletTypes::WasmCompileController),
+        CreateTestBootstrapper(Runtime, CreateTestTabletInfo(::NKikimr::NUdfStore::ControllerTabletId, TTabletTypes::WasmCompileController),
             &CreateWasmCompileController);
 
         TDispatchOptions bootOptions;
@@ -108,9 +107,7 @@ public:
         // nothing to navigate to.
         Runtime.GetAppData(0).TenantName = TestDatabase;
 
-        Runtime.RegisterService(MakeSchemeCacheID(),
-            Runtime.Register(new TFakeSchemeCache(options.ControllerTabletId), 0),
-            0);
+        Runtime.RegisterService(MakeSchemeCacheID(), Runtime.Register(new TFakeSchemeCache(options.ControllerTabletId), 0), 0);
 
         NKikimrConfig::TUdfStoreConfig config;
         config.SetEnabled(true);
@@ -120,8 +117,7 @@ public:
         config.SetWasmCpuSpecOverride(TestCpuSpec);
 
         auto functionRegistry = Runtime.GetAppData(0).FunctionRegistry->Clone();
-        ServiceId = Runtime.Register(
-            CreateService(config, functionRegistry), 0, Runtime.GetAppData(0).UserPoolId);
+        ServiceId = Runtime.Register(CreateService(config, functionRegistry), 0, Runtime.GetAppData(0).UserPoolId);
         Runtime.RegisterService(MakeServiceId(Runtime.GetNodeId(0)), ServiceId, 0);
         // Tablets get onto this whitelist through their bootstrapper; an actor
         // registered by hand does not, and everything it schedules for itself
@@ -142,8 +138,7 @@ public:
     //! can serve. Delivering its result directly is the seam that lets the
     //! orchestration code run without a database behind it.
     void InitializeService() {
-        SendToService(new TEvArtifactTableInitialized(
-            TStringBuilder() << TestDatabase << "/.metadata/udf_store/artifacts/" << TestCpuSpec));
+        SendToService(new TEvArtifactTableInitialized(TStringBuilder() << TestDatabase << "/.metadata/udf_store/artifacts/" << TestCpuSpec));
         Settle();
     }
 
@@ -153,21 +148,14 @@ public:
 
     //! Hands the service an assignment the way the controller would, without
     //! having to drive the controller into producing exactly this one.
-    void SendAssignment(
-        const TString& name,
-        const TString& uid,
-        ui64 assignmentId,
-        const TString& cpuSpec = TestCpuSpec,
-        bool isLibrary = false,
+    void SendAssignment(const TString& name, const TString& uid, ui64 assignmentId, const TString& cpuSpec = TestCpuSpec, bool isLibrary = false,
         TMaybe<ui64> generation = Nothing())
     {
         auto ev = std::make_unique<TEvCompileController::TEvAssignCompile>();
         auto& record = ev->Record;
         auto& key = *record.MutableKey();
         key.SetName(name);
-        key.SetKind(isLibrary
-            ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY
-            : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
+        key.SetKind(isLibrary ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
         key.SetUid(uid);
         key.SetCpuSpec(cpuSpec);
         record.SetAssignmentId(assignmentId);
@@ -189,8 +177,7 @@ public:
     //! Stands in for the compile actor's local reply. The actor itself cannot
     //! run here: every step of it goes through YQL.
     void ReportCompileResult(const TString& name, bool success, bool deferred = false) {
-        SendToService(new TEvWasmCompileResponse(
-            success, name, success ? TString() : "boom", deferred));
+        SendToService(new TEvWasmCompileResponse(success, name, success ? TString() : "boom", deferred));
         Settle();
     }
 
@@ -244,8 +231,7 @@ private:
                 // it creates. Only a lookup of the database itself, which is a
                 // single-component path, is the discovery under test.
                 const auto* request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request.Get();
-                if (request && request->ResultSet.size() == 1
-                    && request->ResultSet.front().Path.size() == 1)
+                if (request && request->ResultSet.size() == 1 && request->ResultSet.front().Path.size() == 1)
                 {
                     ++SeenNavigates;
                 }
@@ -255,8 +241,7 @@ private:
                 SeenRegisters.push_back(ev->Get<TEvCompileController::TEvRegister>()->Record);
                 break;
             case TEvCompileController::TEvRegisterResult::EventType:
-                SeenGeneration = ev->Get<TEvCompileController::TEvRegisterResult>()
-                    ->Record.GetControllerGeneration();
+                SeenGeneration = ev->Get<TEvCompileController::TEvRegisterResult>()->Record.GetControllerGeneration();
                 break;
             case TEvCompileController::TEvHeartbeat::EventType:
                 SeenHeartbeats.push_back(ev->Get<TEvCompileController::TEvHeartbeat>()->Record);
@@ -288,10 +273,9 @@ private:
     TVector<NKikimrUdfStore::TEvNeedArtifact> SeenNeedArtifacts;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
-
     Y_UNIT_TEST(DiscoveryRegistersWithController) {
         TDinodeEnv env;
         env.InitializeService();
@@ -307,37 +291,33 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
     Y_UNIT_TEST(DatabaseWithoutControllerCompilesNothing) {
         // An unmigrated tenant: the params carry no controller id at all. There
         // is no local fallback anymore, so the gap simply stays open.
-        TDinodeEnv env({.ControllerTabletId = 0});
+        TDinodeEnv env({ .ControllerTabletId = 0 });
         env.InitializeService();
         env.Settle(TickTime);
 
         UNIT_ASSERT_C(env.NavigateCount() > 0, "discovery never asked the scheme cache");
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Registers().size(), 0,
-            "the node registered with a controller the database does not have");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Registers().size(), 0, "the node registered with a controller the database does not have");
 
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
         // Repeating the same gap must not inflate the gauge: every refresh
         // rediscovers it.
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
 
-        UNIT_ASSERT_VALUES_EQUAL_C(env.GapsWithoutController(), 1,
-            "a gap nobody can compile was not accounted for");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.GapsWithoutController(), 1, "a gap nobody can compile was not accounted for");
     }
 
     Y_UNIT_TEST(SnapshotAsksTheControllerInsteadOfCompiling) {
         TDinodeEnv env;
         env.InitializeService();
 
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
 
-        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 1,
-            "the node did not report the gap to the controller");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 1, "the node did not report the gap to the controller");
         const auto& key = env.NeedArtifacts().front().GetKey();
         UNIT_ASSERT_VALUES_EQUAL(key.GetName(), "m1");
         UNIT_ASSERT_VALUES_EQUAL(key.GetUid(), "u1");
         UNIT_ASSERT_VALUES_EQUAL(key.GetCpuSpec(), TestCpuSpec);
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(key.GetKind()), static_cast<int>(NKikimrUdfStore::ARTIFACT_KIND_MODULE));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(key.GetKind()), static_cast<int>(NKikimrUdfStore::ARTIFACT_KIND_MODULE));
     }
 
     Y_UNIT_TEST(GapIsReportedOncePerUid) {
@@ -346,15 +326,14 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
 
         // Every refresh rediscovers the same gap. Repeating it costs the
         // controller a full rebuild per hint, times every node of the platform.
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u1" } });
 
-        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 1,
-            "an unchanged gap was reported again on every snapshot refresh");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 1, "an unchanged gap was reported again on every snapshot refresh");
 
         // A re-upload is a different gap and has to reach the controller.
-        env.SendSnapshot({{.Name = "m1", .Uid = "u2"}});
+        env.SendSnapshot({ { .Name = "m1", .Uid = "u2" } });
 
         UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 2, "a re-upload was not reported");
         UNIT_ASSERT_VALUES_EQUAL(env.NeedArtifacts().back().GetKey().GetUid(), "u2");
@@ -371,8 +350,7 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
 
         UNIT_ASSERT_C(env.Heartbeats().size() > beforeAssign, "no heartbeat after the assignment");
         const auto& record = env.Heartbeats().back();
-        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 1,
-            "the node did not claim the assignment it was given");
+        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 1, "the node did not claim the assignment it was given");
         UNIT_ASSERT_VALUES_EQUAL(record.GetActiveAssignmentIds(0), 42);
     }
 
@@ -384,15 +362,13 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         env.Settle(TickTime);
 
         const auto& record = env.Heartbeats().back();
-        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 0,
-            "the node accepted an assignment for object code it cannot produce");
+        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 0, "the node accepted an assignment for object code it cannot produce");
 
         // Silence would leave the platform's slot taken until the assignment
         // expires, which under MaxPerCpuSpec = 1 stalls the whole platform.
         UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 1, "the refusal was never reported");
         UNIT_ASSERT_VALUES_EQUAL(env.Failed().front().GetAssignmentId(), 42);
-        UNIT_ASSERT_C(env.Failed().front().GetStale(),
-            "a refusal was charged to the module's retry budget");
+        UNIT_ASSERT_C(env.Failed().front().GetStale(), "a refusal was charged to the module's retry budget");
     }
 
     Y_UNIT_TEST(SecondUidForTheSameNameIsRejected) {
@@ -411,8 +387,7 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         UNIT_ASSERT_C(env.Failed().front().GetStale(), "a refusal was counted as a compile failure");
 
         const auto& record = env.Heartbeats().back();
-        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 1,
-            "the node claims an assignment it refused");
+        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 1, "the node claims an assignment it refused");
         UNIT_ASSERT_VALUES_EQUAL(record.GetActiveAssignmentIds(0), 42);
     }
 
@@ -437,15 +412,13 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         env.InitializeService();
         UNIT_ASSERT_C(env.Generation() >= 1, "the controller announced no generation to compare against");
 
-        env.SendAssignment("m1", "u1", /*assignmentId=*/42, TestCpuSpec, /*isLibrary=*/false,
-            env.Generation() - 1);
+        env.SendAssignment("m1", "u1", /*assignmentId=*/42, TestCpuSpec, /*isLibrary=*/false, env.Generation() - 1);
         env.Settle(TickTime);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Heartbeats().back().ActiveAssignmentIdsSize(), 0,
-            "the node took an exclusive right from a leader that no longer holds it");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            env.Heartbeats().back().ActiveAssignmentIdsSize(), 0, "the node took an exclusive right from a leader that no longer holds it");
         UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 1, "the refusal was never reported");
-        UNIT_ASSERT_C(env.Failed().front().GetStale(),
-            "a refusal was charged to the module's retry budget");
+        UNIT_ASSERT_C(env.Failed().front().GetStale(), "a refusal was charged to the module's retry budget");
     }
 
     Y_UNIT_TEST(AssignmentFromANewerLeaderIsAccepted) {
@@ -455,12 +428,11 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         // A tablet move the node has not been told about yet: the registration
         // reply of the new leader is still in flight, but its assignment is
         // already the current truth.
-        env.SendAssignment("m1", "u1", /*assignmentId=*/42, TestCpuSpec, /*isLibrary=*/false,
-            env.Generation() + 1);
+        env.SendAssignment("m1", "u1", /*assignmentId=*/42, TestCpuSpec, /*isLibrary=*/false, env.Generation() + 1);
         env.Settle(TickTime);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Heartbeats().back().ActiveAssignmentIdsSize(), 1,
-            "the node ignored the leader that had actually taken over");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            env.Heartbeats().back().ActiveAssignmentIdsSize(), 1, "the node ignored the leader that had actually taken over");
         UNIT_ASSERT_VALUES_EQUAL(env.Heartbeats().back().GetActiveAssignmentIds(0), 42);
     }
 
@@ -492,8 +464,7 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
 
         UNIT_ASSERT_VALUES_EQUAL(env.Failed().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(env.Failed().front().GetAssignmentId(), 42);
-        UNIT_ASSERT_C(!env.Failed().front().GetStale(),
-            "a real compile failure was reported as a lost uid race");
+        UNIT_ASSERT_C(!env.Failed().front().GetStale(), "a real compile failure was reported as a lost uid race");
         UNIT_ASSERT_VALUES_EQUAL(env.Done().size(), 0);
     }
 
@@ -505,9 +476,8 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         env.ReportCompileResult("m1", /*success=*/false, /*deferred=*/true);
 
         UNIT_ASSERT_VALUES_EQUAL(env.Failed().size(), 1);
-        UNIT_ASSERT_C(env.Failed().front().GetStale(),
-            "losing to a re-upload was charged to the module's retry budget");
+        UNIT_ASSERT_C(env.Failed().front().GetStale(), "losing to a re-upload was charged to the module's retry budget");
     }
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

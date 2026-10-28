@@ -565,9 +565,7 @@ def test_lockfile_merge_rebases_injected_package_paths():
         },
         "snapshots": {
             "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)": {
-                "dependencies": {
-                    "@yatool/ci-reporter": "file:../../../../../library/typescript/ci-reporter"
-                }
+                "dependencies": {"@yatool/ci-reporter": "file:../../../../../library/typescript/ci-reporter"}
             }
         },
     }
@@ -579,9 +577,7 @@ def test_lockfile_merge_rebases_injected_package_paths():
         importer["devDependencies"]["@yatool/vitest-reporter"]["version"]
         == "file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)"
     )
-    assert root.data["packages"][
-        "@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter"
-    ] == {
+    assert root.data["packages"]["@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter"] == {
         "resolution": {"directory": "../../../library/typescript/ci-reporter", "type": "directory"}
     }
     snapshot = root.data["snapshots"][

@@ -14,4 +14,4 @@ T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
     return NThreading::TFuture<T>(f).ExtractValueSync();
 }
 
-} // namespace
+}   // namespace

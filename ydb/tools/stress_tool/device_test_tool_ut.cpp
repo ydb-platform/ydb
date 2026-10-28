@@ -2,11 +2,15 @@
 
 #include <ydb/tools/stress_tool/proto/device_perf_test.pb.h>
 
+#include <ydb/library/pdisk_io/uring_test_support.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/message.h>
+#include <util/generic/algorithm.h>
 #include <util/system/tempfile.h>
 
 #include "device_test_tool.h"
+#include "device_test_tool_cli.h"
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
@@ -29,6 +33,7 @@ using TPersistentBufferTest32 = NKikimr::TPersistentBufferTest<TestChunkSize>;
 
 struct TPrinterStub : NKikimr::IResultPrinter {
     TVector<std::pair<TString, TString>> Results;
+    TVector<std::pair<TString, TString>> GlobalParams;
     bool ExpectResults;
 
     TPrinterStub(bool expectResults)
@@ -39,7 +44,8 @@ struct TPrinterStub : NKikimr::IResultPrinter {
         Results.emplace_back(name, value);
     }
 
-    void AddGlobalParam(const TString&, const TString&) override {
+    void AddGlobalParam(const TString& name, const TString& value) override {
+        GlobalParams.emplace_back(name, value);
     }
 
     void AddSpeedAndIops(const NKikimr::TSpeedAndIops&) override {
@@ -61,18 +67,29 @@ struct TPrinterStub : NKikimr::IResultPrinter {
 
 Y_UNIT_TEST_SUITE(TDeviceTestTool) {
 
+Y_UNIT_TEST(DDiskDevNullConfigurationFactoryPropagatesFlag) {
+    const auto ordinary = NKikimr::MakeDDiskConfig(true, false, 64ull << 20, false);
+    const auto synthetic = NKikimr::MakeDDiskConfig(true, false, 64ull << 20, true);
+    UNIT_ASSERT(!ordinary.DevNullMode);
+    UNIT_ASSERT(synthetic.DevNullMode);
+    UNIT_ASSERT(!synthetic.ForcePDiskFallback);
+}
+
 template<typename P, typename T>
 void ProbeTest(const TString &testDescription, bool expectResults,
         TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {},
         bool disableDDiskChecksums = false,
         bool forcePDiskFallback = false,
-        TVector<std::pair<TString, TString>>* outResults = nullptr) {
+        bool ddiskDevNull = false,
+        TVector<std::pair<TString, TString>>* outResults = nullptr,
+        TVector<std::pair<TString, TString>>* outGlobalParams = nullptr) {
     UNIT_ASSERT(!(expectResults && format));
     TTempFileHandle file;
     file.Resize(FileSize);
     NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true,
         "1", "0", "0", false, disableDDiskChecksums, forcePDiskFallback);
     config.PersistentBufferChunks = 10;
+    config.DDiskDevNullMode = ddiskDevNull;
 
     P testProto;
     NProtoBuf::TextFormat::ParseFromString(testDescription, &testProto);
@@ -92,6 +109,9 @@ void ProbeTest(const TString &testDescription, bool expectResults,
     printer->EndTest();
     if (outResults && stub) {
         *outResults = stub->Results;
+    }
+    if (outGlobalParams && stub) {
+        *outGlobalParams = stub->GlobalParams;
     }
 }
 
@@ -317,7 +337,7 @@ void ProbeDDiskRead(bool disableDDiskChecksums, float backgroundWriteRatio = 0,
     )___";
 
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
-        perfCfg.Str(), true, {}, disableDDiskChecksums, false, outResults);
+        perfCfg.Str(), true, {}, disableDDiskChecksums, false, false, outResults);
 }
 
 Y_UNIT_TEST(DDiskTestRead) {
@@ -375,7 +395,80 @@ Y_UNIT_TEST(DDiskTestWriteLargeIo) {
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
 }
 
-void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false) {
+Y_UNIT_TEST(DDiskCliPhysicalChunkSize) {
+    for (bool physical : {false, true}) {
+        NKikimr::TPerfTestConfig config("SectorMap:cli:64", "name", "ROT", "json", "0", false);
+        if (physical) {
+            config.PhysicalChunkSize = NKikimr::NStressTool::DDiskChunkSize;
+        }
+        NDevicePerfTest::TPDiskTest proto;
+        NKikimr::TPDiskTest<> test(config, proto);
+        test.FormatPDiskForTest();
+        NKikimr::NPDisk::TMainKey mainKey{
+            .Keys = {NKikimr::NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true};
+        NKikimr::TPDiskInfo info;
+        UNIT_ASSERT_C(NKikimr::ReadPDiskFormatInfo(config.Path, mainKey, info, false, config.SectorMap),
+            info.ErrorReason);
+        const auto pdiskConfig = test.MakePDiskConfig(0);
+        if (physical) {
+            UNIT_ASSERT_VALUES_EQUAL(info.RawChunkSizeBytes, 128 << 20);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->PhysicalChunkSize, 128 << 20);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ChunkSize, 0);
+        } else {
+            UNIT_ASSERT(info.RawChunkSizeBytes > (128 << 20));
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->PhysicalChunkSize, 0);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ChunkSize, 128 << 20);
+        }
+    }
+}
+
+void ProbeDDiskCli(bool readOnly, bool fallback) {
+    NKikimr::NStressTool::TCommandLine cli(true);
+    TVector<const char*> args = {"tool ddisk", "--areas", "1", "--duration", "1", "--io-size", "65536"};
+    if (readOnly) {
+        args.push_back("--read-only");
+    }
+    NLastGetopt::TOptsParseResultException parsed(&cli.Opts, args.size(), args.data());
+    const auto tests = NKikimr::NStressTool::LoadTests(parsed, true);
+    TTempFileHandle file;
+    file.Resize(FileSize);
+    NKikimr::TPerfTestConfig config(file.Name(), "cli", "ROT", "json", "0", true);
+    config.PhysicalChunkSize = NKikimr::NStressTool::DDiskChunkSize;
+    config.PersistentBufferChunks = 10;
+    config.ForcePDiskFallback = fallback;
+    NKikimr::TDDiskTest<> test(config, tests.GetDDiskTestList(0));
+    test.InitialSleep = TDuration::MilliSeconds(100);
+    auto printer = MakeIntrusive<TPrinterStub>(true);
+    test.SetPrinter(printer);
+    test.RunTest();
+    printer->EndTest();
+    bool measured = false;
+    for (const auto& [name, value] : printer->Results) {
+        if (name == "IOPS") {
+            measured = FromString<double>(value) > 0;
+        }
+    }
+    UNIT_ASSERT_C(measured, "generated workload must complete measured I/O");
+}
+
+Y_UNIT_TEST(DDiskCliWrite) {
+    ProbeDDiskCli(false, false);
+}
+
+Y_UNIT_TEST(DDiskCliRead) {
+    ProbeDDiskCli(true, false);
+}
+
+Y_UNIT_TEST(DDiskCliWritePDiskFallback) {
+    ProbeDDiskCli(false, true);
+}
+
+Y_UNIT_TEST(DDiskCliReadPDiskFallback) {
+    ProbeDDiskCli(true, true);
+}
+
+void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false,
+        bool ddiskDevNull = false) {
     TStringStream perfCfg;
     perfCfg << R"___(
         PersistentBufferTestList: {
@@ -394,8 +487,12 @@ void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallb
         }
     )___";
 
+    TVector<std::pair<TString, TString>> globalParams;
     ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(
-        perfCfg.Str(), true, {}, disableDDiskChecksums, forcePDiskFallback);
+        perfCfg.Str(), true, {}, disableDDiskChecksums, forcePDiskFallback, ddiskDevNull,
+        nullptr, &globalParams);
+    UNIT_ASSERT(Count(globalParams, std::make_pair(TString("DDiskDevNull"),
+        TString(ddiskDevNull ? "on" : "off"))));
 }
 
 Y_UNIT_TEST(PersistentBufferTestWrite) {
@@ -404,6 +501,13 @@ Y_UNIT_TEST(PersistentBufferTestWrite) {
 
 Y_UNIT_TEST(PersistentBufferTestWriteChecksumsDisabled) {
     ProbePersistentBufferWrite(true, true);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWriteDevNull) {
+    if (!NKikimr::NPDisk::RequireUring()) {
+        return;
+    }
+    ProbePersistentBufferWrite(false, false, true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

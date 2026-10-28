@@ -178,6 +178,7 @@ public:
     bool UseUnordered(const TTableRef& table) const;
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+    void SetRelativePathPrefix(const TString& value);
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
@@ -269,6 +270,14 @@ public:
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(
         NYql::TPosition tokenPos,
         std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
+    const NSQLTranslation::TSQLHints& GetSqlHints() const {
+        return SqlHints_;
+    }
+
+    void SetSqlHints(NSQLTranslation::TSQLHints hints) {
+        SqlHints_ = std::move(hints);
+    }
 
     bool WarnUnusedHints();
 
@@ -386,8 +395,8 @@ public:
     ui32 ResultRowsLimit = 0;
     ui64 ResultSizeLimit = 0;
     TString RuntimeLogLevel;
-    ui32 PragmaGroupByLimit = 1 << 6;
-    ui32 PragmaGroupByCubeLimit = 5;
+    ui32 PragmaGroupByLimit = Settings.GroupByLimit;
+    ui32 PragmaGroupByCubeLimit = Settings.GroupByCubeLimit;
     // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
     bool FlexibleTypes = true;
     // see YQL-10265
@@ -435,6 +444,7 @@ public:
     bool DebugPositions = false;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
+    bool RuntimeUserAttrs = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

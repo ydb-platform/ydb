@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 Y_UNIT_TEST_SUITE(DDisk) {
 
@@ -676,6 +677,28 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
         }
     };
+
+    Y_UNIT_TEST(SystemViewMarksDDiskSlots) {
+        TDDiskTestContext f;
+        f.Env.Sim(TDuration::Seconds(10));
+        using namespace NSysView;
+        f.Env.Runtime->SendToPipe(f.Env.TabletId, f.Edge, new TEvSysView::TEvGetVSlotsRequest(),
+            0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge);
+        ui32 ddiskSlots = 0;
+        ui32 ordinarySlots = 0;
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            if (entry.GetInfo().GetDDisk()) {
+                ++ddiskSlots;
+                UNIT_ASSERT(entry.GetInfo().HasGroupId());
+            } else {
+                ++ordinarySlots;
+            }
+        }
+        // The fixture creates three DDisk groups with five slots each, plus a conventional pool.
+        UNIT_ASSERT_VALUES_EQUAL(ddiskSlots, 15);
+        UNIT_ASSERT(ordinarySlots > 0);
+    }
 
     Y_UNIT_TEST(Basic) {
         TDDiskTestContext f;

@@ -368,6 +368,12 @@ private:
     }
 };
 
+SIMPLE_STRICT_UDF_OPTIONS(TCrc32, ui32(TAutoMap<char*>), builder.SetMinLangVer(NYql::NFeature::SparkDigestFuncs.MinLangVer);) {
+    Y_UNUSED(valueBuilder);
+    const auto& inputRef = args[0].AsStringRef();
+    return TUnboxedValuePod(crc32(inputRef.Data(), inputRef.Size()));
+}
+
 SIMPLE_STRICT_UDF(TSuperFastHash, ui32(TAutoMap<char*>)) {
     Y_UNUSED(valueBuilder);
     const auto& inputRef = args[0].AsStringRef();
@@ -385,6 +391,16 @@ SIMPLE_STRICT_UDF(TSha1, char*(TAutoMap<char*>)) {
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
+SIMPLE_STRICT_UDF_OPTIONS(TSha224, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::NFeature::SparkDigestFuncs.MinLangVer);) {
+    const auto& inputRef = args[0].AsStringRef();
+    SHA256_CTX sha;
+    SHA224_Init(&sha);
+    SHA224_Update(&sha, inputRef.Data(), inputRef.Size());
+    std::array<unsigned char, SHA224_DIGEST_LENGTH> hash;
+    SHA224_Final(hash.data(), &sha);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
+}
+
 SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
     const auto& inputRef = args[0].AsStringRef();
     SHA256_CTX sha;
@@ -392,6 +408,16 @@ SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
     SHA256_Update(&sha, inputRef.Data(), inputRef.Size());
     std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
     SHA256_Final(hash.data(), &sha);
+    return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TSha384, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::NFeature::SparkDigestFuncs.MinLangVer);) {
+    const auto& inputRef = args[0].AsStringRef();
+    SHA512_CTX sha;
+    SHA384_Init(&sha);
+    SHA384_Update(&sha, inputRef.Data(), inputRef.Size());
+    std::array<unsigned char, SHA384_DIGEST_LENGTH> hash;
+    SHA384_Final(hash.data(), &sha);
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
@@ -460,6 +486,7 @@ private:
 
 SIMPLE_MODULE(TDigestModule,
               TCrc32c,
+              TCrc32,
               TCrc64,
               TFnv32,
               TFnv64,
@@ -484,7 +511,9 @@ SIMPLE_MODULE(TDigestModule,
               TFarmHashFingerprint128,
               TSuperFastHash,
               TSha1,
+              TSha224,
               TSha256,
+              TSha384,
               TSha512,
               TIntHash64,
               TXXH3,

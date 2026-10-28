@@ -8,8 +8,8 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalUnionAllBuilder: public TPhysicalVariadicOpBuilder {
 public:
-    TPhysicalUnionAllBuilder(TIntrusivePtr<TOpUnionAll> unionAll, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalVariadicOpBuilder(ctx, pos)
+    TPhysicalUnionAllBuilder(TOpUnionAll& unionAll, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalVariadicOpBuilder(ctx, pos, names)
         , UnionAll(unionAll) {
     }
 
@@ -18,5 +18,5 @@ public:
 private:
     TExprNode::TPtr ProjectInput(TExprNode::TPtr input, ui32 childIndex) const;
 
-    TIntrusivePtr<TOpUnionAll> UnionAll;
+    TOpUnionAll& UnionAll;
 };

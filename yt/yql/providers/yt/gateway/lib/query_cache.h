@@ -82,7 +82,7 @@ public:
         const TMaybe<TString>& singleOutputHash,
         const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs, const TString& userName,
         const TString& tmpFolder, const NYT::TNode& mergeSpec,
-        const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
+        const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout,
         const std::pair<TString, TString>& logCtx);
 
     // returns true if cache was used
@@ -113,7 +113,6 @@ private:
     TVector<TString> CachedPaths;
     const ui64 ChunkLimit;
     const bool UseExpirationTimeout;
-    const bool UseMultiSet;
     const std::pair<TString, TString> LogCtx;
     TMap<TString, ui32> SortedCachedPaths;
     const NYT::TNode MergeSpec;

@@ -192,7 +192,7 @@ public:
     nostd::unique_ptr<const char[]> CopyStringToPointer(nostd::string_view str)
     {
       char *temp = new char[str.size() + 1];
-      memcpy(temp, str.data(), str.size());
+      std::memcpy(temp, str.data(), str.size());
       temp[str.size()] = '\0';
       return nostd::unique_ptr<const char[]>(temp);
     }

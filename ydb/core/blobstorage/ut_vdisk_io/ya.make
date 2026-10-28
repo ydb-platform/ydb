@@ -24,7 +24,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
     ydb/core/blobstorage/vdisk/common
     ydb/core/tx/scheme_board
-    ydb/core/testlib/default
+    ydb/library/actors/testlib
 )
 
 END()

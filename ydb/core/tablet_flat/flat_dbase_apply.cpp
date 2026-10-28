@@ -49,7 +49,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         TCell null;
 
         if (delta.HasDefault()) {
-            auto raw = delta.GetDefault();
+            // the cell points into the proto's string; a copy would die at the end of this block
+            const auto& raw = delta.GetDefault();
 
             null = TCell(raw.data(), raw.size());
         }

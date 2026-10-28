@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     json_index.cpp
@@ -11,8 +11,6 @@ PEERDIR(
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/types/binary_json
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

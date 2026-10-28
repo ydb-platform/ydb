@@ -3045,8 +3045,7 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                              rd_kafka_Uuid_base64str(&request_topic_id));
         }
         if (missing_topic_ids && *missing_topic_ids)
-                rd_list_deduplicate(missing_topic_ids,
-                                    (void *)rd_kafka_Uuid_ptr_cmp);
+                rd_list_deduplicate(missing_topic_ids, rd_kafka_Uuid_ptr_cmp);
         return assignment_with_metadata;
 }
 

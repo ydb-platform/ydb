@@ -1106,4 +1106,63 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
         UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetStored(), false);
     }
+
+    Y_UNIT_TEST(CannotCopyBackupTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Create a regular source table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a backup table from it
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BackupTable"
+            CopyFromTable: "/MyRoot/Table"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BackupTable", true), {
+            NLs::IsBackupTable(true),
+        });
+
+        // Cannot copy a backup table (single CopyTable)
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyOfBackup"
+            CopyFromTable: "/MyRoot/BackupTable"
+        )", {NKikimrScheme::StatusSchemeError});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfBackup"), {NLs::PathNotExist});
+
+        // Cannot copy a backup table (ConsistentCopyTables)
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/BackupTable"
+                DstPath: "/MyRoot/ConsistentCopyOfBackup"
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ConsistentCopyOfBackup"), {NLs::PathNotExist});
+
+        // Cannot copy a backup table even as part of a larger consistent operation
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/CopyOfTable"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/BackupTable"
+                DstPath: "/MyRoot/CopyOfBackupTable"
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        // The whole operation must be rejected before any part is proposed:
+        // no destination paths may exist
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyOfBackupTable"), {NLs::PathNotExist});
+    }
 }

@@ -1,7 +1,18 @@
+#include "functions.h"
 #include "ut_common.h"
 
-namespace cp = ::arrow::compute;
+#include <ydb/library/formats/arrow/helpers/array.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <cmath>
+#include <cstdint>
+#include <vector>
+
+namespace cp = ::arrow::compute;
 
 namespace NKikimr::NKernels {
 
@@ -52,4 +63,4 @@ Y_UNIT_TEST_SUITE(MathTest) {
     }
 }
 
-}
+}   // namespace NKikimr::NKernels

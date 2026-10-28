@@ -102,14 +102,23 @@ TCandidate ToCandidate(TFolderName name, TLocalSyntaxContext& local) {
     return candidate;
 }
 
-TCandidate ToCandidate(TTableName name, TLocalSyntaxContext& local) {
+template <ECandidateKind Kind>
+TCandidate ToCandidateT(TIdentifier name, TLocalSyntaxContext& local) {
     if (!local.IsQuoted.AtLhs) {
         name.Identifier.prepend('`');
     }
     if (!local.IsQuoted.AtRhs) {
         name.Identifier.append('`');
     }
-    return {.Kind = ECandidateKind::TableName, .Content = std::move(name.Identifier)};
+    return {.Kind = Kind, .Content = std::move(name.Identifier)};
+}
+
+TCandidate ToCandidate(TTableName name, TLocalSyntaxContext& local) {
+    return ToCandidateT<ECandidateKind::TableName>(std::move(name), local);
+}
+
+TCandidate ToCandidate(TViewName name, TLocalSyntaxContext& local) {
+    return ToCandidateT<ECandidateKind::ViewName>(std::move(name), local);
 }
 
 TCandidate ToCandidate(TClusterName name) {
@@ -146,6 +155,7 @@ TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& local) {
             std::is_same_v<T, TKeyword> ||
             std::is_same_v<T, TFolderName> ||
             std::is_same_v<T, TTableName> ||
+            std::is_same_v<T, TViewName> ||
             std::is_same_v<T, TColumnName> ||
             std::is_same_v<T, TUnknownName>;
 

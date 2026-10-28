@@ -4,13 +4,12 @@
 
 #include <ydb/library/wasm/api/compartment.h>
 
-#include <yql/essentials/public/udf/udf_value.h>
-
 #include <util/generic/hash.h>
 #include <util/generic/list.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 namespace NKikimr::NUdfStore::NWasm {
 
@@ -54,16 +53,11 @@ inline constexpr ui64 DefaultResidentBudgetBytes = 64ull << 20;
 //! re-ask (a hash lookup, not a copy) instead of caching offsets across rows.
 class TCompartmentResidentCache: public TNonCopyable {
 public:
-    explicit TCompartmentResidentCache(
-        NYdb::NWasm::IWebAssemblyCompartment* compartment,
-        ui64 budgetBytes = DefaultResidentBudgetBytes);
+    explicit TCompartmentResidentCache(NYdb::NWasm::IWebAssemblyCompartment* compartment, ui64 budgetBytes = DefaultResidentBudgetBytes);
 
     //! Copy `bytes` into linear memory once per key; repeat calls are lookups.
     //! `owner` keeps the source alive, so `key` stays valid while pinned.
-    ui64 Pin(
-        const TBridgeIdentity& key,
-        const NYql::NUdf::TUnboxedValue& owner,
-        NYql::NUdf::TStringRef bytes);
+    ui64 Pin(const TBridgeIdentity& key, const NYql::NUdf::TUnboxedValue& owner, NYql::NUdf::TStringRef bytes);
 
     //! Copy of `bytes` for values without stable identity (embedded strings,
     //! freshly built blobs). Released at the next BeginRun, so the arena block
@@ -209,4 +203,4 @@ private:
     ui64 DroppedUserData_ = 0;
 };
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

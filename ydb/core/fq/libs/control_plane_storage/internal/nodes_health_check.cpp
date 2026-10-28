@@ -17,7 +17,7 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(RTC_NODES_HEALTH_CHECK)};
+    TRequestCounters requestCounters{ nullptr, Counters.GetCommonCounters(RTC_NODES_HEALTH_CHECK) };
     requestCounters.IncInFly();
 
     const TEvControlPlaneStorage::TEvNodesHealthCheckRequest& event = *ev->Get();
@@ -66,13 +66,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
     readQueryBuilder.AddTimestamp("now", TInstant::Now());
     readQueryBuilder.AddString("tenant", tenant);
-    readQueryBuilder.AddText(
-        "SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, "
-        "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME"`, `" DATA_CENTER_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n"
-        "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
-    );
+    readQueryBuilder.AddText("SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME
+                             "`, `" ACTIVE_WORKERS_COLUMN_NAME "`, `" MEMORY_LIMIT_COLUMN_NAME
+                             "`, "
+                             "`" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME
+                             "`, `" DATA_CENTER_COLUMN_NAME "` FROM `" NODES_TABLE_NAME
+                             "`\n"
+                             "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n");
 
-    auto prepareParams = [tenant, nodeId, instanceId, hostName, deadline, activeWorkers, memoryLimit, memoryAllocated, icPort, nodeAddress, dataCenter, response=response, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [tenant, nodeId, instanceId, hostName, deadline, activeWorkers, memoryLimit, memoryAllocated, icPort, nodeAddress,
+                             dataCenter, response = response,
+                             tablePathPrefix = YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         for (const auto& resultSet : resultSets) {
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {
@@ -104,15 +108,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         writeQueryBuilder.AddUint32("ic_port", icPort);
         writeQueryBuilder.AddString("node_address", nodeAddress);
         writeQueryBuilder.AddString("data_center", dataCenter);
-        writeQueryBuilder.AddText(
-            "UPSERT INTO `" NODES_TABLE_NAME "`\n"
-            "(`" TENANT_COLUMN_NAME "`, `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`,\n"
-            "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`,\n"
-            "`" MEMORY_LIMIT_COLUMN_NAME "`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`,\n"
-            "`" NODE_ADDRESS_COLUMN_NAME "`, `" DATA_CENTER_COLUMN_NAME"`)\n"
-            "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit,\n"
-            "$memory_allocated, $ic_port, $node_address, $data_center);\n"
-        );
+        writeQueryBuilder.AddText("UPSERT INTO `" NODES_TABLE_NAME
+                                  "`\n"
+                                  "(`" TENANT_COLUMN_NAME "`, `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME
+                                  "`,\n"
+                                  "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME
+                                  "`,\n"
+                                  "`" MEMORY_LIMIT_COLUMN_NAME "`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME
+                                  "`,\n"
+                                  "`" NODE_ADDRESS_COLUMN_NAME "`, `" DATA_CENTER_COLUMN_NAME
+                                  "`)\n"
+                                  "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit,\n"
+                                  "$memory_allocated, $ic_port, $node_address, $data_center);\n");
         const auto writeQuery = writeQueryBuilder.Build();
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
@@ -120,22 +127,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const auto readQuery = readQueryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus status = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
-    auto prepare = [response] { return *response; };
+    auto prepare = [response] {
+        return *response;
+    };
     auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Fq::Private::NodesHealthCheckResult>(
-        "NodesHealthCheckRequest - NodesHealthCheckResult",
-        NActors::TActivationContext::ActorSystem(),
-        status,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        "NodesHealthCheckRequest - NodesHealthCheckResult", NActors::TActivationContext::ActorSystem(), status, SelfId(), std::move(ev),
+        startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(NodesHealthCheckRequest, tenant, nodeId, instanceId, hostName, delta, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(NodesHealthCheckRequest, tenant, nodeId, instanceId, hostName, delta, future.GetValue());
+    });
 }
 
-} // NFq
+}   // namespace NFq

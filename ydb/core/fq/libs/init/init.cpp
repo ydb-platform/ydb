@@ -23,6 +23,7 @@
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
@@ -36,42 +37,31 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
 #include <util/thread/pool.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 namespace NFq {
 
 using namespace NKikimr;
 
-void Init(
-    const NFq::NConfig::TConfig& protoConfig,
-    ui32 nodeId,
-    const TActorRegistrator& actorRegistrator,
-    const TAppData* appData,
-    const TString& tenant,
-    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const IYqSharedResources::TPtr& iyqSharedResources,
-    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
-    ui32 icPort,
-    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory
-    )
+void Init(const NFq::NConfig::TConfig& protoConfig, ui32 nodeId, const TActorRegistrator& actorRegistrator, const TAppData* appData,
+    const TString& tenant, ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, const IYqSharedResources::TPtr& iyqSharedResources,
+    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory, ui32 icPort,
+    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories, NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
 {
     Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
@@ -82,29 +72,17 @@ void Init(
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
         const auto counters = yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage");
-        auto controlPlaneStorage = protoConfig.GetControlPlaneStorage().GetUseInMemory()
-            ? NFq::CreateInMemoryControlPlaneStorageServiceActor(
-                protoConfig.GetControlPlaneStorage(),
-                protoConfig.GetGateways().GetS3(),
-                commonConfig,
-                protoConfig.GetCompute(),
-                counters,
-                tenant)
-            : NFq::CreateYdbControlPlaneStorageServiceActor(
-                protoConfig.GetControlPlaneStorage(),
-                protoConfig.GetGateways().GetS3(),
-                commonConfig,
-                protoConfig.GetCompute(),
-                counters,
-                yqSharedResources,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                tenant);
+        auto controlPlaneStorage =
+            protoConfig.GetControlPlaneStorage().GetUseInMemory()
+                ? NFq::CreateInMemoryControlPlaneStorageServiceActor(protoConfig.GetControlPlaneStorage(), protoConfig.GetGateways().GetS3(),
+                      commonConfig, protoConfig.GetCompute(), counters, tenant)
+                : NFq::CreateYdbControlPlaneStorageServiceActor(protoConfig.GetControlPlaneStorage(), protoConfig.GetGateways().GetS3(),
+                      commonConfig, protoConfig.GetCompute(), counters, yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, tenant);
         actorRegistrator(NFq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
 
         actorRegistrator(NFq::ControlPlaneConfigActorId(),
             CreateControlPlaneConfigActor(yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
-                protoConfig.GetCompute(), yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
-        );
+                protoConfig.GetCompute(), yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig")));
     }
 
     NFq::TSigner::TPtr signer;
@@ -113,49 +91,35 @@ void Init(
     }
 
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
-        auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(
-            protoConfig.GetControlPlaneProxy(),
-            protoConfig.GetControlPlaneStorage(),
-            protoConfig.GetCompute(),
-            commonConfig,
-            protoConfig.GetGateways().GetS3(),
-            signer,
-            yqSharedResources,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"),
-            protoConfig.GetQuotasManager().GetEnabled());
+        auto controlPlaneProxy =
+            NFq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(), protoConfig.GetControlPlaneStorage(), protoConfig.GetCompute(),
+                commonConfig, protoConfig.GetGateways().GetS3(), signer, yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory,
+                yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NFq::ControlPlaneProxyActorId(), controlPlaneProxy);
     }
 
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
-        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
-                                                                                         NKikimr::CreateYdbCredentialsProviderFactory, 
-                                                                                         commonConfig, 
-                                                                                         signer, 
-                                                                                         yqSharedResources, 
-                                                                                         yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
+        auto computeDatabaseService =
+            NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), NKikimr::CreateYdbCredentialsProviderFactory,
+                commonConfig, signer, yqSharedResources, yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
         actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
 
     if (protoConfig.GetRateLimiter().GetControlPlaneEnabled()) {
-        Y_ABORT_UNLESS(protoConfig.GetQuotasManager().GetEnabled()); // Rate limiter resources want to know CPU quota on creation
-        NActors::IActor* rateLimiterService = NFq::CreateRateLimiterControlPlaneService(protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory);
+        Y_ABORT_UNLESS(protoConfig.GetQuotasManager().GetEnabled());   // Rate limiter resources want to know CPU quota on creation
+        NActors::IActor* rateLimiterService = NFq::CreateRateLimiterControlPlaneService(
+            protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory);
         actorRegistrator(NFq::RateLimiterControlPlaneServiceId(), rateLimiterService);
     }
 
     if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
-        actorRegistrator(
-            NFq::YqQuoterServiceActorId(),
-            NFq::CreateQuoterService(protoConfig.GetRateLimiter(),
-            yqSharedResources,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            yqCounters->GetSubgroup("subsystem", "quoter_service")));
+        actorRegistrator(NFq::YqQuoterServiceActorId(),
+            NFq::CreateQuoterService(protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory,
+                yqCounters->GetSubgroup("subsystem", "quoter_service")));
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {
-        auto* auditService = NFq::CreateYqCloudAuditServiceActor(
-            protoConfig.GetAudit(),
-            yqCounters->GetSubgroup("subsystem", "audit"));
+        auto* auditService = NFq::CreateYqCloudAuditServiceActor(protoConfig.GetAudit(), yqCounters->GetSubgroup("subsystem", "audit"));
         actorRegistrator(NFq::YqAuditServiceActorId(), auditService);
     }
 
@@ -166,32 +130,24 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        auto checkpointStorage = NFq::NewCheckpointStorageService(
-            protoConfig.GetCheckpointCoordinator(),
-            commonConfig.GetIdsPrefix(),
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources->UserSpaceYdbDriver,
+        auto checkpointStorage = NFq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), commonConfig.GetIdsPrefix(),
+            NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
-    TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
-        NYql::GetCommonDqFactory(),
-        NKikimr::NMiniKQL::GetYqlFactory()
-    };
+    TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = { NYql::GetCommonDqFactory(), NKikimr::NMiniKQL::GetYqlFactory() };
 
     compNodeFactories.insert(compNodeFactories.end(), additionalCompNodeFactories.begin(), additionalCompNodeFactories.end());
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(std::move(compNodeFactories));
 
-    NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
-        NYql::CreateCommonDqTaskTransformFactory()
-    });
+    NYql::TTaskTransformFactory dqTaskTransformFactory =
+        NYql::CreateCompositeTaskTransformFactory({ NYql::CreateCommonDqTaskTransformFactory() });
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
-    const auto httpGateway = NYql::IHTTPGateway::Make(
-        &protoConfig.GetGateways().GetHttpGateway(),
-        yqCounters->GetSubgroup("subcomponent", "http_gateway"));
+    const auto httpGateway =
+        NYql::IHTTPGateway::Make(&protoConfig.GetGateways().GetHttpGateway(), yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
     NYql::NConnector::IClient::TPtr connectorClient;
 
@@ -208,36 +164,23 @@ void Init(
             caContent = TUnbufferedFileInput(path).ReadAll();
         }
 
-        securedCredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
+        securedCredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
+            tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
-    const NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory(securedCredentialsFactory);
-    auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
+    const NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory =
+        NYql::CreateStructuredTokenCredentialsFactory(securedCredentialsFactory);
+    auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(
+        commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            nullptr,
-            nullptr,
-            std::make_shared<NYql::TPqGatewayConfig>(),
-            nullptr,
-            nullptr,
-            commonTopicClientSettings
-        );
+        NYql::TPqGatewayServices pqServices(yqSharedResources->UserSpaceYdbDriver, nullptr, nullptr, std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr, nullptr, commonTopicClientSettings);
 
-        auto rowDispatcher = NFq::NewRowDispatcherService(
-            protoConfig.GetRowDispatcher(),
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            credentialsFactory,
-            appData->FunctionRegistry,
-            tenant,
-            yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
-            yqSharedResources->UserSpaceYdbDriver,
-            appData->Mon,
-            appData->Counters,
-            MakeNodesManagerId(),
-            true);
+        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), NKikimr::CreateYdbCredentialsProviderFactory,
+            credentialsFactory, appData->FunctionRegistry, tenant, yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
+            pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices), yqSharedResources->UserSpaceYdbDriver,
+            appData->Mon, appData->Counters, MakeNodesManagerId(), true);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -250,35 +193,27 @@ void Init(
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
 
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            pqCmConnections,
-            credentialsFactory,
-            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
-            appData->FunctionRegistry,
-            nullptr,
-            commonTopicClientSettings
-        );
+        NYql::TPqGatewayServices pqServices(yqSharedResources->UserSpaceYdbDriver, pqCmConnections, credentialsFactory,
+            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()), appData->FunctionRegistry, nullptr,
+            commonTopicClientSettings);
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway,
-            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true);
+            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true, false);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
-        s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
-            httpGateway, s3HttpRetryPolicy);
+        s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy);
 
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
-        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"), true);
+        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway,
+            yqCounters->GetSubgroup("subsystem", "DqSinkTracker"), true);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);
     }
 
     ui64 mkqlInitialMemoryLimit = 8_GB;
     auto taskCounters = protoConfig.GetEnableTaskCounters() ? appData->Counters->GetSubgroup("counters", "dq_tasks") : nullptr;
-    auto workerManagerCounters = NYql::NDqs::TWorkerManagerCounters(
-        yqCounters->GetSubgroup("subsystem", "worker_manager"),
-        taskCounters);
+    auto workerManagerCounters = NYql::NDqs::TWorkerManagerCounters(yqCounters->GetSubgroup("subsystem", "worker_manager"), taskCounters);
 
     if (protoConfig.GetResourceManager().GetEnabled()) {
         mkqlInitialMemoryLimit = protoConfig.GetResourceManager().GetMkqlInitialMemoryLimit();
@@ -293,7 +228,8 @@ void Init(
         Y_ABORT_UNLESS(appData->FunctionRegistry);
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
-        lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, nullptr, false);
+        lwmOptions.Factory =
+            NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, nullptr, false);
         lwmOptions.AsyncIoFactory = asyncIoFactory;
         lwmOptions.FunctionRegistry = appData->FunctionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
@@ -302,7 +238,8 @@ void Init(
         lwmOptions.MkqlProgramHardMemoryLimit = protoConfig.GetResourceManager().GetMkqlTaskHardMemoryLimit();
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
         lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [=](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NYql::NDq::TDqTaskSettings& task, NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
+            [=](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NYql::NDq::TDqTaskSettings& task,
+                NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
                 return lwmOptions.Factory->Get(alloc, task, statsMode);
             });
         if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
@@ -317,29 +254,16 @@ void Init(
 
     if (protoConfig.GetNodesManager().GetEnabled() || protoConfig.GetPendingFetcher().GetEnabled()) {
         auto internal = protoConfig.GetPrivateApi().GetLoopback()
-            ? NFq::CreateLoopbackServiceActor(clientCounters)
-            : NFq::CreateInternalServiceActor(
-                yqSharedResources,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                protoConfig.GetPrivateApi(),
-                clientCounters
-            );
+                            ? NFq::CreateLoopbackServiceActor(clientCounters)
+                            : NFq::CreateInternalServiceActor(
+                                  yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetPrivateApi(), clientCounters);
         actorRegistrator(NFq::MakeInternalServiceActorId(), internal);
     }
 
     if (protoConfig.GetNodesManager().GetEnabled()) {
-        auto nodesManager = CreateNodesManager(
-            workerManagerCounters,
-            TAppData::TimeProvider,
-            TAppData::RandomProvider,
-            serviceCounters,
-            protoConfig.GetPrivateApi(),
-            yqSharedResources,
-            icPort,
-            protoConfig.GetNodesManager().GetDataCenter(),
-            protoConfig.GetNodesManager().GetUseDataCenter(),
-            tenant,
-            mkqlInitialMemoryLimit);
+        auto nodesManager = CreateNodesManager(workerManagerCounters, TAppData::TimeProvider, TAppData::RandomProvider, serviceCounters,
+            protoConfig.GetPrivateApi(), yqSharedResources, icPort, protoConfig.GetNodesManager().GetDataCenter(),
+            protoConfig.GetNodesManager().GetUseDataCenter(), tenant, mkqlInitialMemoryLimit);
 
         actorRegistrator(MakeNodesManagerId(), nodesManager);
     }
@@ -348,74 +272,38 @@ void Init(
     actorRegistrator(MakeYqlAnalyticsHttpProxyId(), httpProxy);
 
     if (protoConfig.GetTestConnection().GetEnabled()) {
-        auto testConnection = NFq::CreateTestConnectionActor(
-                protoConfig.GetTestConnection(),
-                protoConfig.GetControlPlaneStorage(),
-                protoConfig.GetGateways().GetS3(),
-                commonConfig,
-                signer,
-                yqSharedResources,
-                credentialsFactory,
-                pqCmConnections,
-                appData->FunctionRegistry,
-                httpGateway,
-                yqCounters->GetSubgroup("subsystem", "TestConnection"));
+        auto testConnection = NFq::CreateTestConnectionActor(protoConfig.GetTestConnection(), protoConfig.GetControlPlaneStorage(),
+            protoConfig.GetGateways().GetS3(), commonConfig, signer, yqSharedResources, credentialsFactory, pqCmConnections,
+            appData->FunctionRegistry, httpGateway, yqCounters->GetSubgroup("subsystem", "TestConnection"));
         actorRegistrator(NFq::TestConnectionActorId(), testConnection);
     }
 
     if (protoConfig.GetPendingFetcher().GetEnabled()) {
-        NYql::TPqGatewayServices pqServices(
-            yqSharedResources->UserSpaceYdbDriver,
-            pqCmConnections,
-            credentialsFactory,
-            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
-            appData->FunctionRegistry,
-            nullptr,
-            commonTopicClientSettings
-        );
-        auto fetcher = CreatePendingFetcher(
-            yqSharedResources,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            protoConfig,
-            appData->FunctionRegistry,
-            TAppData::TimeProvider,
-            TAppData::RandomProvider,
-            dqCompFactory,
-            serviceCounters,
-            credentialsFactory,
-            httpGateway,
-            connectorClient,
-            std::move(pqCmConnections),
-            clientCounters,
-            tenant,
-            appData->Mon,
-            s3ActorsFactory,
-            pqGatewayFactory ? pqGatewayFactory : NYql::CreatePqNativeGatewayFactory(pqServices)
-            );
+        NYql::TPqGatewayServices pqServices(yqSharedResources->UserSpaceYdbDriver, pqCmConnections, credentialsFactory,
+            std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()), appData->FunctionRegistry, nullptr,
+            commonTopicClientSettings);
+        auto fetcher = CreatePendingFetcher(yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, protoConfig,
+            appData->FunctionRegistry, TAppData::TimeProvider, TAppData::RandomProvider, dqCompFactory, serviceCounters, credentialsFactory,
+            httpGateway, connectorClient, std::move(pqCmConnections), clientCounters, tenant, appData->Mon, s3ActorsFactory,
+            pqGatewayFactory ? pqGatewayFactory : NYql::CreatePqNativeGatewayFactory(pqServices));
 
         actorRegistrator(MakePendingFetcherId(nodeId), fetcher);
     }
 
     if (protoConfig.GetPrivateProxy().GetEnabled()) {
         auto proxyPrivate = CreateYqlAnalyticsPrivateProxy(
-            protoConfig.GetPrivateProxy(),
-            TAppData::TimeProvider,
-            TAppData::RandomProvider,
-            serviceCounters.Counters,
-            signer);
+            protoConfig.GetPrivateProxy(), TAppData::TimeProvider, TAppData::RandomProvider, serviceCounters.Counters, signer);
 
         actorRegistrator(MakeYqPrivateProxyId(), proxyPrivate);
     }
 
     if (protoConfig.GetHealth().GetEnabled()) {
-        auto health = NFq::CreateHealthActor(
-            protoConfig.GetHealth(),
-            yqSharedResources,
-            serviceCounters.Counters);
+        auto health = NFq::CreateHealthActor(protoConfig.GetHealth(), yqSharedResources, serviceCounters.Counters);
         actorRegistrator(NFq::HealthActorId(), health);
     }
 
     if (protoConfig.GetQuotasManager().GetEnabled()) {
+        // clang-format off
         auto quotaService = NFq::CreateQuotaServiceActor(
             protoConfig.GetQuotasManager(),
             protoConfig.GetControlPlaneStorage().GetStorage(),
@@ -433,21 +321,18 @@ void Init(
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_QUERY_RESULT_LIMIT, 20_MB, 2_GB)
             },
             appData->Mon);
+        // clang-format on
         actorRegistrator(NFq::MakeQuotaServiceActorId(nodeId), quotaService);
 
-        auto quotaProxy = NFq::CreateQuotaProxyActor(
-            protoConfig.GetQuotasManager(),
-            serviceCounters.Counters);
+        auto quotaProxy = NFq::CreateQuotaProxyActor(protoConfig.GetQuotasManager(), serviceCounters.Counters);
         actorRegistrator(NFq::MakeQuotaProxyActorId(), quotaProxy);
     }
 }
 
-IYqSharedResources::TPtr CreateYqSharedResources(
-    const NFq::NConfig::TConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+IYqSharedResources::TPtr CreateYqSharedResources(const NFq::NConfig::TConfig& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return CreateYqSharedResourcesImpl(config, credentialsProviderFactory, counters);
 }
 
-} // NFq
+}   // namespace NFq

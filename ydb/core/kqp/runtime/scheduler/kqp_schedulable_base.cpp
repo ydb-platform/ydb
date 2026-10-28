@@ -141,6 +141,9 @@ void TSchedulableBase::StopExecution() {
         }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
+        if (const auto now = TMonotonic::Now(); now > StartThrottle) {
+            SchedulableTask->IncreaseBurstThrottle(now - StartThrottle);
+        }
         Resume();
     }
 }

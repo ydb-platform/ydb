@@ -570,3 +570,76 @@ SKIP_JUNK="yes"
 USE_EAT_MY_DATA="yes"
 DEBUGINFO_LINES_ONLY="yes"
 ```
+
+## Run NBS1->NBS2 (shards/cells)
+#### 1. Start nbs1
+All needed scripts and custom configs are already in the branch.
+
+##### Temp config changes
+/home/yudovmaksim/nbs/example/nbs/nbs-server.txt:
+`ChecksumFlags {
+    EnableDataIntegrityClient: false
+}
+`
+
+Branch: users/yudov-maksim/nbs2_mvp
+
+Actions:
+- cd ~/nbs/example
+- ./0-setup.sh
+- ./1-start_storage.sh
+- ./2-init_storage.sh
+- ./3-start_nbs_mvp_nbs2.sh
+
+#### 2. Start nbs2
+- Turn on the nbs2 frontend in config
+  - ydb/tests/library/harness/kikimr_config.py
+    - `"nbs_frontend_config": {
+          "enabled": True
+      },`
+- Running
+  - cd ~/ydbwork/ydb/ydb/tests/tools/local_cluster
+  - YDB_DEFAULT_LOG_LEVEL=DEBUG ./local_cluster --binary-path ~/ydbwork/ydb/ydb/apps/ydbd/ydbd --enable-nbs --port-offset 0
+- Disk's setup
+  - cd ~/ydbwork/ydb/ydb/apps
+  - ./ydbd/ydbd admin bs config invoke --proto 'Command { DefineDDiskPool { BoxId: 1 Name: "ddp1" Geometry { NumFailRealms: 1 NumFailDomainsPerFailRealm: 5 NumVDisksPerFailDomain: 1 RealmLevelBegin    : 10 RealmLevelEnd: 10 DomainLevelBegin: 10 DomainLevelEnd: 40 } PDiskFilter { Property { Type: ROT } } NumDDiskGroups: 10 } }'
+  - ./dstool/ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 33554432 --pool ddp1 --type=ssd --disk-id disk1
+
+#### 3. Run cheks
+source ./prepare_binaries.sh
+
+##### Base mount/unmount checks
+./blockstore-client.sh startendpoint     --host 127.0.0.1 --port 9766     --disk-id disk1     --socket nbs2_mvp_endpoint.sock     --ipc-type vhost     --client-id step2-check
+
+./blockstore-client.sh stopendpoint     --host 127.0.0.1 --port 9766     --disk-id disk1     --socket nbs2_mvp_endpoint.sock      --client-id step2-check
+
+##### NBD tests
+
+NBD_TEST_DIR=$(mktemp -d /tmp/nbs1-nbs2-nbd.XXXXXX)
+sudo-blockstore-nbd \
+    --device-mode endpoint \
+    --host 127.0.0.1 --port 9766 \
+    --disk-id disk1 \
+    --access-mode rw \
+    --mount-mode local \
+    --connect-device=/dev/nbd0 \
+    --listen-path "$NBD_TEST_DIR/disk1.sock"
+
+sudo blockdev --getsize64 /dev/nbd0
+  // expected non null value, default 137438953472
+
+##### Single write/read data and check consistency
+IO_TEST_DIR=$(mktemp -d /tmp/nbs1-nbs2-io.XXXXXX)
+dd if=/dev/urandom of="$IO_TEST_DIR/write.bin" \
+    bs=4096 count=1 status=none
+
+sudo dd if="$IO_TEST_DIR/write.bin" of=/dev/nbd0 \
+    bs=4096 count=1 oflag=direct conv=notrunc
+
+sudo dd if=/dev/nbd0 of="$IO_TEST_DIR/read.bin" \
+    bs=4096 count=1 iflag=direct
+
+sudo cmp "$IO_TEST_DIR/write.bin" "$IO_TEST_DIR/read.bin" \
+    && echo "PASS: data equal"
+##### FIO tests
+sudo fio --name=randwrite --ioengine=libaio --iodepth=32 --rw=randwrite --bs=4k --direct=1 --numjobs=1 --group_reporting --filename=/dev/nbd0 --runtime=120 --time_based=1

@@ -8,7 +8,7 @@
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 #include <vector>
 
@@ -36,7 +36,7 @@ constexpr int NoParent = 0;
 
 struct TDynamicTag final
 {
-    NThreading::TAtomicObject<std::pair<std::string, std::string>> Tag;
+    TAtomicObject<std::pair<std::string, std::string>> Tag;
 };
 
 using TDynamicTagPtr = TIntrusivePtr<TDynamicTag>;

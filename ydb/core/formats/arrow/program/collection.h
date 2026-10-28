@@ -3,6 +3,7 @@
 #include "abstract.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/container/container.h>
 
@@ -10,6 +11,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+
+#include <variant>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -226,11 +229,38 @@ public:
     };
 
     class TChunkedArguments: public TMoveOnly {
+    public:
+        struct TBatch {
+            std::vector<arrow::Datum> Arguments;
+            // If set, one of actual Arguments for this batch has been replaced with its values and the original dictionary stored here.
+            std::shared_ptr<TDictionaryArray> Dictionary;
+            ui32 DictionaryIndex = 0;
+        };
+
     private:
         std::vector<std::shared_ptr<IChunkedArray>> ArraysOriginal;
         ui32 LastColumnId = 0;
         std::vector<std::shared_ptr<arrow::ChunkedArray>> Arrays;
         std::vector<arrow::Datum> Scalars;
+        using TPart = std::variant<arrow::Datum, std::shared_ptr<TDictionaryArray>>;
+
+        // A single dictionary will become {IsComposite=false, Parts=[TDictionaryArray{}]}
+        // A composite with a single dictionary inside will become {IsComposite=true, Parts=[TDictionaryArray{}]}
+        // A composite with a dictionary and a plain array inside will become {IsComposite=true, Parts=[TDictionaryArray{}, Datum{}]}
+        struct TSpecialArgument {
+            const ui32 Index;
+            const bool IsComposite;
+            const std::vector<TPart> Parts;
+            ui32 NextPartIndex = 0;
+
+            TSpecialArgument(const ui32 index, const bool isComposite, std::vector<TPart>&& parts)
+                : Index(index)
+                , IsComposite(isComposite)
+                , Parts(std::move(parts))
+            {
+            }
+        };
+        std::optional<TSpecialArgument> SpecialArgument;
 
         std::shared_ptr<arrow::Table> Table;
         std::vector<std::shared_ptr<arrow::Field>> Fields;
@@ -291,10 +321,46 @@ public:
             Addresses.emplace_back(TArrayAddress::Scalar(Scalars.size() - 1));
         }
 
+        void AddDictionary(const std::shared_ptr<TDictionaryArray>& dictionary, const ui32 index) {
+            AFL_VERIFY(!Started);
+            AFL_VERIFY(Arrays.empty());
+            AFL_VERIFY(!SpecialArgument);
+            std::vector<TPart> parts;
+            parts.emplace_back(dictionary);
+            SpecialArgument.emplace(index, false, std::move(parts));
+        }
+
+        void AddComposite(const std::vector<std::shared_ptr<IChunkedArray>>& chunks, const ui32 index) {
+            AFL_VERIFY(!Started);
+            AFL_VERIFY(Arrays.empty());
+            AFL_VERIFY(!SpecialArgument);
+            std::vector<TPart> parts;
+            parts.reserve(chunks.size());
+            for (const auto& chunk : chunks) {
+                if (chunk->GetType() == IChunkedArray::EType::Dictionary) {
+                    const auto dictionary = std::static_pointer_cast<TDictionaryArray>(chunk);
+                    parts.emplace_back(dictionary);
+                } else {
+                    // Some kernels do not support arrow chunked arrays, so unwrap them here.
+                    // Expect that those are trivial/sparsed and do not trigger data copying.
+                    const auto chunked = chunk->GetChunkedArray();
+                    parts.reserve(parts.size() + chunked->num_chunks());
+                    for (const auto& array : chunked->chunks()) {
+                        parts.emplace_back(array);
+                    }
+                }
+            }
+            SpecialArgument.emplace(index, true, std::move(parts));
+        }
+
+        bool HasUnwrappedComposite() const {
+            return SpecialArgument && SpecialArgument->IsComposite;
+        }
+
         void StartRead(const bool concatenate) {
             Started = true;
             AFL_VERIFY(!Table);
-            AFL_VERIFY(Arrays.size() || Scalars.size());
+            AFL_VERIFY(Arrays.size() || Scalars.size() || SpecialArgument);
             if (Arrays.size()) {
                 Table = arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), Arrays);
                 if (concatenate) {
@@ -310,9 +376,24 @@ public:
             return result;
         }
 
-        std::optional<std::vector<arrow::Datum>> ReadNext() {
+        std::optional<TBatch> ReadNext() {
             AFL_VERIFY(Started);
             AFL_VERIFY(!Finished);
+            if (SpecialArgument) {
+                if (SpecialArgument->NextPartIndex == SpecialArgument->Parts.size()) {
+                    Finished = true;
+                    return {};
+                }
+                const auto& part = SpecialArgument->Parts[SpecialArgument->NextPartIndex++];
+                auto arguments = Scalars;
+                if (const auto* array = std::get_if<arrow::Datum>(&part)) {
+                    arguments.insert(arguments.begin() + SpecialArgument->Index, *array);
+                    return TBatch{ std::move(arguments), nullptr, 0 };
+                }
+                const auto& dictionary = std::get<std::shared_ptr<TDictionaryArray>>(part);
+                arguments.insert(arguments.begin() + SpecialArgument->Index, dictionary->GetDictionary());
+                return TBatch{ std::move(arguments), dictionary, SpecialArgument->Index };
+            }
             if (Arrays.empty() && Scalars.empty()) {
                 Finished = true;
                 return {};
@@ -323,7 +404,7 @@ public:
                     return {};
                 }
                 ConstantsRead = true;
-                return Scalars;
+                return TBatch{ Scalars, nullptr, 0 };
             } else {
                 AFL_VERIFY(Table);
                 std::shared_ptr<arrow::RecordBatch> chunk;
@@ -332,18 +413,18 @@ public:
                     Finished = true;
                     return {};
                 }
-                std::vector<arrow::Datum> columns;
+                std::vector<arrow::Datum> arguments;
                 for (auto&& i : Addresses) {
-                    columns.emplace_back(i.GetDatum(chunk, Scalars));
+                    arguments.emplace_back(i.GetDatum(chunk, Scalars));
                 }
-                return columns;
+                return TBatch{ std::move(arguments), nullptr, 0 };
             }
         }
 
         TChunkedArguments() = default;
     };
 
-    TChunkedArguments GetArguments(const std::vector<ui32>& columnIds, const bool concatenate) const;
+    TChunkedArguments GetArguments(const std::vector<ui32>& columnIds, const bool concatenate, const bool allowDictionaryValuesExtraction) const;
     std::vector<std::shared_ptr<IChunkedArray>> GetAccessors(const std::vector<ui32>& columnIds) const;
     std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
     std::shared_ptr<IChunkedArray> ExtractAccessorOptional(const ui32 columnId);

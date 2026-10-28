@@ -63,7 +63,8 @@ private:
         if (MvccSnapshot) {
             AFL_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)),
+                0, 0, std::move(ev->TraceId));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
@@ -78,7 +79,7 @@ private:
             createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
             createSnapshot->SetIgnoreSystemViews(true);
 
-            Send(MakeTxProxyID(), req.Release());
+            Send(MakeTxProxyID(), req.Release(), 0, 0, std::move(ev->TraceId));
             Become(&TThis::StateAwaitCreation);
         }
     }

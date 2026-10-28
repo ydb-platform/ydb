@@ -2,6 +2,7 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -56,6 +57,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
                 return CreateIamJwtFileCredentialsProviderFactory(
                     { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyFile });
             }
+        }
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
         }
         return CreateInsecureCredentialsProviderFactory();
     };

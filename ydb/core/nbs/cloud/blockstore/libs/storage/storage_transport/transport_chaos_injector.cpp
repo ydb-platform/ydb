@@ -6,6 +6,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/system/guard.h>
 #include <util/system/yassert.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -79,6 +80,31 @@ void TTransportChaosInjector::EnableNode(ui32 nodeId)
     DisabledNodes.AtomicStore(next);
 }
 
+bool TTransportChaosInjector::IsNodeDisabled(ui32 nodeId) const
+{
+    return DisabledNodes.AtomicLoad()->NodeIds.contains(nodeId);
+}
+
+void TTransportChaosInjector::ArmFaultRule(TFaultRule rule)
+{
+    TGuard lock(FaultRulesLock);
+    auto next = MakeIntrusive<TFaultRules>();
+    next->Items = FaultRules.AtomicLoad()->Items;
+    next->Items.push_back(std::move(rule));
+    FaultRules.AtomicStore(next);
+}
+
+void TTransportChaosInjector::ClearFaultRules()
+{
+    TGuard lock(FaultRulesLock);
+    FaultRules.AtomicStore(MakeIntrusive<TFaultRules>());
+}
+
+TVector<TFaultRule> TTransportChaosInjector::GetFaultRules() const
+{
+    return FaultRules.AtomicLoad()->Items;
+}
+
 IStorageTransport::TConnectResultFutures TTransportChaosInjector::Connect(
     const THostConnection& connection)
 {
@@ -136,13 +162,20 @@ TTransportChaosInjector::WriteToPBuffer(
     const ui64 lsn,
     const NKikimr::NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     if (IsNodeDisabled(connection.DDiskId.NodeId)) {
         return MakeUndeliveredFuture<TEvWritePersistentBufferResult>();
     }
-    return UnderlyingTransport
-        ->WriteToPBuffer(connection, selector, lsn, instruction, data, span);
+    return UnderlyingTransport->WriteToPBuffer(
+        connection,
+        selector,
+        lsn,
+        instruction,
+        data,
+        checksums,
+        span);
 }
 
 void TTransportChaosInjector::WriteToManyPBuffers(
@@ -153,6 +186,7 @@ void TTransportChaosInjector::WriteToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
     TDuration replyTimeout,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
@@ -195,6 +229,7 @@ void TTransportChaosInjector::WriteToManyPBuffers(
         std::move(persistentBufferIds),
         replyTimeout,
         data,
+        checksums,
         std::move(span),
         std::move(callback));
 }
@@ -205,13 +240,19 @@ TTransportChaosInjector::WriteToDDisk(
     const NKikimr::NDDisk::TBlockSelector& selector,
     const NKikimr::NDDisk::TWriteInstruction instruction,
     const TGuardedSgList& data,
+    const TBlockChecksums& checksums,
     NWilson::TSpan* span)
 {
     if (IsNodeDisabled(connection.DDiskId.NodeId)) {
         return MakeUndeliveredFuture<TEvWriteResult>();
     }
-    return UnderlyingTransport
-        ->WriteToDDisk(connection, selector, instruction, data, span);
+    return UnderlyingTransport->WriteToDDisk(
+        connection,
+        selector,
+        instruction,
+        data,
+        checksums,
+        span);
 }
 
 NThreading::TFuture<IStorageTransport::TEvSyncResult>
@@ -278,11 +319,6 @@ TTransportChaosInjector::DeleteTabletChunks(const THostConnection& connection)
         return MakeUndeliveredFuture<TEvDeleteTabletChunksResult>();
     }
     return UnderlyingTransport->DeleteTabletChunks(connection);
-}
-
-bool TTransportChaosInjector::IsNodeDisabled(ui32 nodeId) const
-{
-    return DisabledNodes.AtomicLoad()->NodeIds.contains(nodeId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

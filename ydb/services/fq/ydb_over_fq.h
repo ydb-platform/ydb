@@ -1,24 +1,21 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/actorid.h>
-
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/grpc/server/grpc_server.h>
-
 #include <ydb/public/api/grpc/draft/fq_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-class TGRpcYdbOverFqService
-{
+class TGRpcYdbOverFqService {
 public:
-    TGRpcYdbOverFqService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id);
+    TGRpcYdbOverFqService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger);
+
 protected:
     virtual void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) = 0;
 
@@ -29,9 +26,7 @@ protected:
     NActors::TActorId GRpcRequestProxyId_;
 };
 
-class TGrpcTableOverFqService
-    : public TGRpcYdbOverFqService
-    , public NYdbGrpc::TGrpcServiceBase<Ydb::Table::V1::TableService> {
+class TGrpcTableOverFqService: public TGRpcYdbOverFqService, public NYdbGrpc::TGrpcServiceBase<Ydb::Table::V1::TableService> {
     using TBase = TGRpcYdbOverFqService;
     using TBase::TBase;
 
@@ -44,9 +39,7 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) override;
 };
 
-class TGrpcSchemeOverFqService
-    : public TGRpcYdbOverFqService
-    , public NYdbGrpc::TGrpcServiceBase<Ydb::Scheme::V1::SchemeService> {
+class TGrpcSchemeOverFqService: public TGRpcYdbOverFqService, public NYdbGrpc::TGrpcServiceBase<Ydb::Scheme::V1::SchemeService> {
     using TBase = TGRpcYdbOverFqService;
     using TBase::TBase;
 
@@ -59,5 +52,5 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) override;
 };
 
-} // namespace NGRpcService
-} // namespace NKikimr
+}   // namespace NGRpcService
+}   // namespace NKikimr

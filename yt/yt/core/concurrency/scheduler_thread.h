@@ -14,12 +14,12 @@ public:
     void Stop();
 
 protected:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+    const TIntrusivePtr<TEventCount> CallbackEventCount_;
 
     std::atomic<bool> GracefulStop_ = false;
 
     TSchedulerThread(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         std::string threadGroupName,
         std::string threadName,
         NThreading::TThreadOptions options = {});

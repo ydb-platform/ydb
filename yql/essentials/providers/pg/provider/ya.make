@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_pg_datasink.cpp
@@ -11,8 +11,6 @@ SRCS(
     yql_pg_provider.h
     yql_pg_provider_impl.h
 )
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     yql/essentials/core

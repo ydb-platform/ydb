@@ -338,7 +338,8 @@ bool IsReplicaReallySync(
     ETableReplicaState state,
     const std::vector<TReplicaHistoryItem>& replicaHistory)
 {
-    return IsReplicaSync(mode, replicaHistory) && IsReplicaEnabled(state);
+    // Just created disabled queue-replica without catchup can have empty history.
+    return IsReplicaEnabled(state) && IsReplicaSync(mode, replicaHistory);
 }
 
 ETableReplicaMode GetTargetReplicaMode(ETableReplicaMode mode)

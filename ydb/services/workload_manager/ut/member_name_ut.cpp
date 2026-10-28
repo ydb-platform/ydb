@@ -3,7 +3,6 @@
 namespace NKikimr::NWorkloadManager {
 
 Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
-
     Y_UNIT_TEST(ShouldMatchUserSID) {
         TClassifyTestCase tc;
         tc.ClassifierMemberName = "user@domain";
@@ -17,11 +16,10 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
         });
 
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10) },
         });
 
-        auto token = MakeIntrusive<NACLib::TUserToken>(
-            NACLib::TSID("alice"), TVector<NACLib::TSID>{"admins", "devs"});
+        auto token = MakeIntrusive<NACLib::TUserToken>(NACLib::TSID("alice"), TVector<NACLib::TSID>{ "admins", "devs" });
 
         TClassifyContext ctx{
             .PoolId = "",
@@ -45,12 +43,11 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
 
     Y_UNIT_TEST(ShouldMatchAnonymousUserWithEmptySID) {
         auto classifierSnap = MakeClassifierSnapshot({
-            MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target",
-                TString(NACLib::TSID())),
+            MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target", TString(NACLib::TSID())),
         });
 
         auto poolSnap = MakeResourcePoolMap({
-            {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
+            { _JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10) },
         });
 
         TClassifyContext ctx{
@@ -67,4 +64,4 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
     }
 }
 
-} // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

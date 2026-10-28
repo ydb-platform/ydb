@@ -14,13 +14,8 @@ namespace NKikimr::NKqp {
 //   checkPeriod  – how often to repeat the check (default 1 minute)
 //   startDelay   – time to wait for initial compute states before first check
 //   maxTasksPerStage – resolved KQP MaxTasksPerStage pragma value
-NActors::IActor* CreateStreamingQueryNodesManager(
-    NActors::TActorId runActorId,
-    TString tenantName,
-    TString queryId,
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
-    TDuration checkPeriod,
-    TDuration startDelay,
+NActors::IActor* CreateStreamingQueryNodesManager(NActors::TActorId runActorId, TString tenantName, TString queryId,
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks, TDuration checkPeriod, TDuration startDelay,
     ui64 maxTasksPerStage);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

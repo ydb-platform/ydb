@@ -1023,6 +1023,61 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
     
+    Y_UNIT_TEST_DUO(ExtendedTtlTypes, UseIndex) {
+        TTieringTestHelper tieringHelper{true, [](TKikimrSettings& settings) {
+            settings.FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+        }};
+        auto& helper = tieringHelper.GetTestHelper();
+        auto& controller = tieringHelper.GetCsController();
+        auto tableClient = helper.GetKikimr().GetTableClient();
+        for (const TString type : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            for (const bool expired : {true, false}) {
+                const TString path = "/Root/ttl_" + type + (expired ? "_expired" : "_future");
+                const auto create = helper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                    << "CREATE TABLE `" << path << "` (id Uint64 NOT NULL, ts " << type << " NOT NULL, PRIMARY KEY("
+                    << (UseIndex ? "id" : "ts, id") << ")) "
+                    << "PARTITION BY HASH(id) WITH (STORE=COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT=1);"
+                    << (UseIndex ? TStringBuilder() << "ALTER TABLE `" << path << "` ADD INDEX ttl_max LOCAL USING min_max ON(ts);" : TString()))
+                    .GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), NYdb::EStatus::SUCCESS, create.GetIssues().ToString());
+                const TString value = expired ? (type == "DyNumber" ? TString("DyNumber(\"-1\")") : TStringBuilder() << "Unwrap(CAST(-1 AS " << type << "))")
+                    : type == "DyNumber" ? TString("DyNumber(\"1e125\")")
+                    : TStringBuilder() << type << "(\"2100-01-01" << (type == "Date32" ? "" : "T00:00:00Z") << "\")";
+                const auto planner = helper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                    << "ALTER OBJECT `" << path << "` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, "
+                    << R"sql(`COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[
+                        {"class_name":"Zero","portions_live_duration":"1s","expected_blobs_size":1572864,"portions_count_available":2},
+                        {"class_name":"Zero"}]}`);)sql"
+                    ).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(planner.GetStatus(), NYdb::EStatus::SUCCESS, planner.GetIssues().ToString());
+                const auto compactionsBefore = controller->GetCompactionFinishedCounter().Val();
+                for (ui32 i = 0; i < 2; ++i) {
+                    helper.ExecuteQuery(TStringBuilder() << "UPSERT INTO `" << path << "` (id, ts) VALUES (1ul, " << value << ");");
+                }
+                controller->WaitCondition(TDuration::Seconds(60), [&]() {
+                    return controller->GetCompactionFinishedCounter().Val() > compactionsBefore;
+                });
+                const auto before = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT id FROM `" << path << "`;");
+                UNIT_ASSERT_VALUES_EQUAL(before.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(before[0].at("id")), 1);
+                const auto alter = helper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                    << "ALTER TABLE `" << path << "` SET TTL Interval(\"PT1S\") ON ts"
+                    << (type == "DyNumber" ? " AS SECONDS" : "") << ";").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), NYdb::EStatus::SUCCESS, alter.GetIssues().ToString());
+                controller->WaitTtl(TDuration::Seconds(5));
+                controller->WaitCondition(TDuration::Seconds(60), [&]() {
+                    const auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT id FROM `" << path << "`;");
+                    if (expired) {
+                        return rows.empty();
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("id")), 1);
+                    return true;
+                });
+            }
+        }
+    }
+
     Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
         const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         TTieringTestHelper tieringHelper{localIndexAsSchemeObject};

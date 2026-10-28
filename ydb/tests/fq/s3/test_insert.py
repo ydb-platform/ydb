@@ -511,9 +511,7 @@ class TestS3(object):
         sql = R'''
             insert into `{1}`.`{0}/` with (format={0})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(
-            format, storage_connection_name
-        )
+            '''.format(format, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -523,9 +521,7 @@ class TestS3(object):
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(
-            format, storage_connection_name
-        )
+            '''.format(format, storage_connection_name)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         if Version(moto_version) < Version("4.0.5"):
@@ -610,7 +606,9 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "No write format specified. Please use WITH FORMAT for writing into S3" in issues, "Incorrect Issues: " + issues
+        assert "No write format specified. Please use WITH FORMAT for writing into S3" in issues, (
+            "Incorrect Issues: " + issues
+        )
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -644,16 +642,33 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Only a column with a primitive type is allowed for the raw format" in issues, "Incorrect Issues: " + issues
+        assert "Only a column with a primitive type is allowed for the raw format" in issues, (
+            "Incorrect Issues: " + issues
+        )
 
     def get_insert_test_query(self, insert_path: str):
         sql = f"INSERT INTO {insert_path} WITH (FORMAT = \"parquet\") SELECT\n"
         for val, type in [
-            (2, "Int8"), (-3, "Int16"), (4, "Int32"), (-5, "Int64"), (6, "Uint8"), (7, "Uint16"), (8, "Uint32"), (9, "Uint64"),
-            (1, "Bool"),  (10.5, "Float"), (11.9, "Double"),
-            ("\"STR_1\"", "String"), ("\"STR_2\"", "Utf8"), ("\"\\\"STR_3\\\"\"", "Json"),
-            ("CurrentUtcDate()", "Date"), ("\"2025-05-09T18:44:58Z\"", "Datetime"), ("\"2025-05-09T18:44:58.678906Z\"", "Timestamp"),
-            ("CurrentTzDate(1)", "TzDate"), ("\"2025-05-09T21:45:58,Europe/Moscow\"", "TzDateTime"), ("\"2025-05-09T21:45:58.222886,Europe/Moscow\"", "TzTimestamp"),
+            (2, "Int8"),
+            (-3, "Int16"),
+            (4, "Int32"),
+            (-5, "Int64"),
+            (6, "Uint8"),
+            (7, "Uint16"),
+            (8, "Uint32"),
+            (9, "Uint64"),
+            (1, "Bool"),
+            (10.5, "Float"),
+            (11.9, "Double"),
+            ("\"STR_1\"", "String"),
+            ("\"STR_2\"", "Utf8"),
+            ("\"\\\"STR_3\\\"\"", "Json"),
+            ("CurrentUtcDate()", "Date"),
+            ("\"2025-05-09T18:44:58Z\"", "Datetime"),
+            ("\"2025-05-09T18:44:58.678906Z\"", "Timestamp"),
+            ("CurrentTzDate(1)", "TzDate"),
+            ("\"2025-05-09T21:45:58,Europe/Moscow\"", "TzDateTime"),
+            ("\"2025-05-09T21:45:58.222886,Europe/Moscow\"", "TzTimestamp"),
         ]:
             sql += f"Unwrap(CAST({val} AS {type})) AS `{type}Col`,\n"
             sql += f"Just(Unwrap(CAST({val} AS {type}))) AS `Opt{type}Col`,\n"
@@ -715,11 +730,21 @@ class TestS3(object):
         storage_connection_name = unique_prefix + "ibucket"
         client.create_storage_connection(storage_connection_name, "insert_bucket")
 
-        sql = "PRAGMA s3.UseBlocksSink = \"true\";\n" + self.get_insert_test_query(f"`{storage_connection_name}`.`/block/`")
-        client.wait_query_status(client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id, fq.QueryMeta.COMPLETED)
+        sql = "PRAGMA s3.UseBlocksSink = \"true\";\n" + self.get_insert_test_query(
+            f"`{storage_connection_name}`.`/block/`"
+        )
+        client.wait_query_status(
+            client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id,
+            fq.QueryMeta.COMPLETED,
+        )
 
-        sql = "PRAGMA s3.UseBlocksSink = \"false\";\n" + self.get_insert_test_query(f"`{storage_connection_name}`.`/scalar/`")
-        client.wait_query_status(client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id, fq.QueryMeta.COMPLETED)
+        sql = "PRAGMA s3.UseBlocksSink = \"false\";\n" + self.get_insert_test_query(
+            f"`{storage_connection_name}`.`/scalar/`"
+        )
+        client.wait_query_status(
+            client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id,
+            fq.QueryMeta.COMPLETED,
+        )
 
         sql = f'''
             SELECT
@@ -768,7 +793,9 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Writing deadlock occurred, please increase write actor memory limit" in issues, "Incorrect Issues: " + issues
+        assert "Writing deadlock occurred, please increase write actor memory limit" in issues, (
+            "Incorrect Issues: " + issues
+        )
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

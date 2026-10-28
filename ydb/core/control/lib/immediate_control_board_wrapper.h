@@ -10,6 +10,10 @@ class TControlWrapper {
     friend class TDynamicControlBoard;
 
 public:
+    explicit TControlWrapper(TIntrusivePtr<TControl> control)
+        : Control(std::move(control))
+    {}
+
     TControlWrapper(TAtomicBase defaultValue = 0)
         : Control(new TControl(defaultValue, Min<TAtomicBase>(), Max<TAtomicBase>()))
     {}
@@ -28,6 +32,11 @@ public:
 
     TAtomicBase GetDefault() const {
         return Control->GetDefault();
+    }
+
+    // Restore the current default in the shared control.
+    void RestoreDefault() {
+        Control->RestoreDefault();
     }
 
     i64 operator=(i64 value) {

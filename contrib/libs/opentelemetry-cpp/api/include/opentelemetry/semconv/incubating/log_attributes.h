@@ -56,9 +56,9 @@ static constexpr const char *kLogRecordOriginal = "log.record.original";
 /**
   A unique identifier for the Log Record.
   <p>
-  If an id is provided, other log records with the same id will be considered duplicates and can be
+  If an ID is provided, other log records with the same ID will be considered duplicates and can be
   removed safely. This means, that two distinguishable log records MUST have different values. The
-  id MAY be an <a href="https://github.com/ulid/spec">Universally Unique Lexicographically Sortable
+  ID MAY be an <a href="https://github.com/ulid/spec">Universally Unique Lexicographically Sortable
   Identifier (ULID)</a>, but other identifiers (e.g. UUID) may be used as needed.
  */
 static constexpr const char *kLogRecordUid = "log.record.uid";

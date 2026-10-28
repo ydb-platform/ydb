@@ -32,6 +32,7 @@ enum class ECandidateKind {
     HintName,
     FolderName,
     TableName,
+    ViewName,
     ClusterName,
     ColumnName,
     BindingName,

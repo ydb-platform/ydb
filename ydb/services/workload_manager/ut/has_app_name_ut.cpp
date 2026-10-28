@@ -1,9 +1,9 @@
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -14,18 +14,16 @@ namespace {
 
 constexpr TStringBuf USER_SID = "test@user";
 
-void CreatePoolAndClassifier(
-    TIntrusivePtr<IYdbSetup> ydb,
-    const TString& poolId,
-    const TString& classifierName,
-    const TString& appName)
+void CreatePoolAndClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId, const TString& classifierName, const TString& appName)
 {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << USER_SID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << USER_SID << R"(`;
         CREATE RESOURCE POOL )" << poolId << R"( WITH (
             CONCURRENT_QUERY_LIMIT=0
         );
-        CREATE RESOURCE POOL CLASSIFIER )" << classifierName << R"( WITH (
+        CREATE RESOURCE POOL CLASSIFIER )" << classifierName
+                                             << R"( WITH (
             RESOURCE_POOL=")" << poolId << R"(",
             HAS_APP_NAME=")" << appName << R"("
         );
@@ -36,10 +34,9 @@ TQueryRunnerSettings QuerySettings(const TString& appName) {
     return TQueryRunnerSettings().PoolId("").UserSID(TString(USER_SID)).ApplicationName(appName);
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierHasAppName) {
-
     Y_UNIT_TEST(ShouldMatchAppName) {
         TClassifyTestCase tc;
         tc.ClassifierHasAppName = "my_app";
@@ -69,7 +66,6 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasAppName) {
 }
 
 Y_UNIT_TEST_SUITE(HasAppNameDdl) {
-
     Y_UNIT_TEST(TestHasAppNameClassifier) {
         auto ydb = TYdbSetupSettings().Create();
         const TString& poolId = "app_pool";
@@ -129,4 +125,4 @@ Y_UNIT_TEST_SUITE(HasAppNameDdl) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -250,13 +250,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
             RebuildDrop,    // dropping old impl tables for rebuild
             RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;

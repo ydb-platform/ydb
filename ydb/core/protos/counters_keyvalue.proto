@@ -111,6 +111,7 @@ enum ECumulativeCounters {
     COUNTER_MOVE_DATA_BLOBS_MOVED = 83                               [(CounterOpts) = {Name: "MoveDataBlobsMoved"}];
     COUNTER_MOVE_DATA_BYTES_MOVED = 84                               [(CounterOpts) = {Name: "MoveDataBytesMoved"}];
     COUNTER_MOVE_DATA_RECORDS_SCANNED = 85                           [(CounterOpts) = {Name: "MoveDataRecordsScanned"}];
+    COUNTER_MEMORY_STATE_BYTES_UNDERFLOWS = 86                       [(CounterOpts) = {Name: "MemoryStateBytesUnderflows"}];
 }
 
 enum ESimpleCounters {
@@ -137,6 +138,12 @@ enum ESimpleCounters {
     COUNTER_UNCOMMITTED_TRASH_BYTES = 14                             [(CounterOpts) = {Name: "UncommittedTrashBytes"}];
     COUNTER_VIRTUAL_TRASH_COUNT = 15                                 [(CounterOpts) = {Name: "VirtualTrashCount"}];
     COUNTER_VIRTUAL_TRASH_BYTES = 16                                 [(CounterOpts) = {Name: "VirtualTrashBytes"}];
+
+    COUNTER_MEMORY_STATE_BYTES = 17                                  [(CounterOpts) = {Name: "MemoryStateBytes"}];
+    COUNTER_MEMORY_INDEX_BYTES = 18                                  [(CounterOpts) = {Name: "MemoryIndexBytes"}];
+    COUNTER_MEMORY_INLINE_DATA_BYTES = 19                            [(CounterOpts) = {Name: "MemoryInlineDataBytes"}];
+    COUNTER_MEMORY_REF_COUNTS_BYTES = 20                             [(CounterOpts) = {Name: "MemoryRefCountsBytes"}];
+    COUNTER_MEMORY_TRASH_BYTES = 21                                  [(CounterOpts) = {Name: "MemoryTrashBytes"}];
 }
 
 enum EPercentileCounters {

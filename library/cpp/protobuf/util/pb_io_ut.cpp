@@ -258,6 +258,45 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         }
     }
 
+    Y_UNIT_TEST(TestSerializeToTextFormatString) {
+        {
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToTextFormatString(GetCorrectMessage()), CORRECT_MESSAGE);
+        }
+        {
+            // Foo: 42 followed by unknown varint field 2 with value 7
+            NProtobufUtilUt::TTextTest message;
+            UNIT_ASSERT(message.ParseFromString(TString("\x08\x2a\x10\x07", 4)));
+
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToTextFormatString(message), CORRECT_MESSAGE);
+            UNIT_ASSERT_VALUES_EQUAL(
+                SerializeToTextFormatString(message, ESerializeToTextFormatOption::PrintUnknownFields),
+                "Foo: 42\n2: 7\n");
+        }
+        {
+            NProtobufUtilUt::TTextAnyTest message;
+            message.MutableAny()->PackFrom(GetCorrectMessage());
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                SerializeToTextFormatString(message),
+                "Any {\n"
+                "  type_url: \"type.googleapis.com/NProtobufUtilUt.TTextTest\"\n"
+                "  value: \"\\010*\"\n"
+                "}\n");
+            UNIT_ASSERT_VALUES_EQUAL(
+                SerializeToTextFormatString(message, ESerializeToTextFormatOption::ExpandAny),
+                "Any {\n"
+                "  [type.googleapis.com/NProtobufUtilUt.TTextTest] {\n"
+                "    Foo: 42\n"
+                "  }\n"
+                "}\n");
+
+            NProtobufUtilUt::TTextAnyTest parsed;
+            UNIT_ASSERT_NO_EXCEPTION(ParseTextFormatFromString(
+                SerializeToTextFormatString(message, ESerializeToTextFormatOption::ExpandAny), parsed));
+            UNIT_ASSERT(NProtoBuf::IsEqual(message, parsed));
+        }
+    }
+
     Y_UNIT_TEST(TestMergeFromTextFormat) {
         //
         // Tests cases below are identical to `Parse` tests

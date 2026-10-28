@@ -1,7 +1,10 @@
 import numpy as np
 from numpy.testing import (
-    assert_, assert_array_equal, assert_allclose, suppress_warnings
-    )
+    assert_,
+    assert_allclose,
+    assert_array_equal,
+    suppress_warnings,
+)
 
 
 class TestRegression:
@@ -17,19 +20,19 @@ class TestRegression:
 
     def test_mem_masked_where(self):
         # Ticket #62
-        from numpy.ma import masked_where, MaskType
+        from numpy.ma import MaskType, masked_where
         a = np.zeros((1, 1))
         b = np.zeros(a.shape, MaskType)
         c = masked_where(b, a)
-        a-c
+        a - c
 
     def test_masked_array_multiply(self):
         # Ticket #254
         a = np.ma.zeros((4, 1))
         a[2, 0] = np.ma.masked
         b = np.zeros((4, 2))
-        a*b
-        b*a
+        a * b
+        b * a
 
     def test_masked_array_repeat(self):
         # Ticket #271
@@ -87,7 +90,7 @@ class TestRegression:
         assert_array_equal(ma[[]], ma[:0])
 
     def test_masked_array_tobytes_fortran(self):
-        ma = np.ma.arange(4).reshape((2,2))
+        ma = np.ma.arange(4).reshape((2, 2))
         assert_array_equal(ma.tobytes(order='F'), ma.T.tobytes())
 
     def test_structured_array(self):

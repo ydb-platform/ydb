@@ -4,6 +4,8 @@ CXXFLAGS(-DMKQL_DISABLE_CODEGEN)
 
 INCLUDE(../ya.make.inc)
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
     yql/essentials/minikql/comp_nodes/no_llvm
     yql/essentials/minikql/computation/no_llvm

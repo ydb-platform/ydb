@@ -2,7 +2,6 @@
 
 #include <util/system/types.h>
 
-
 namespace NFq {
 
 NActors::TActorId YqAuditServiceActorId() {
@@ -10,4 +9,4 @@ NActors::TActorId YqAuditServiceActorId() {
     return NActors::TActorId(0, name);
 }
 
-} // namespace NFq
+}   // namespace NFq

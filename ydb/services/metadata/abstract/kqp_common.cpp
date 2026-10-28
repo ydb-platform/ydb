@@ -1,7 +1,9 @@
 #include "initialization.h"
 #include "kqp_common.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/service.h>
 
@@ -14,7 +16,7 @@ TString GetStoragePrefix() {
     return "/" + AppData()->TenantName + "/" + path;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TString IClassBehaviour::GetStorageTableDirectory() const {
     return TFsPath(GetStorageTablePath()).Fix().Parent().GetPath();
@@ -53,4 +55,4 @@ std::shared_ptr<NModifications::IOptimizationManager> IClassBehaviour::Construct
     return nullptr;
 }
 
-}
+}   // namespace NKikimr::NMetadata

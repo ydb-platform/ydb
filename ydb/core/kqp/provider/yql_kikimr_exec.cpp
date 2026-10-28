@@ -158,6 +158,13 @@ namespace {
                 }
                 schemeLimits->SetMaxChildrenInDir(value);
             }
+            if (name == "TABLES_METRICS_LEVEL") {
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                YQL_ENSURE(ParseDatabaseTablesMetricsLevel(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error), << error);
+                alterDatabaseSettings.TablesMetricsLevel = metricsLevel;
+            }
         }
 
         return alterDatabaseSettings;
@@ -1356,6 +1363,14 @@ private:
             return peepHoleStatus;
         }
 
+        if (const auto parameter = FindNode(node, [](const TExprNode::TPtr& node) {
+            return node->IsCallable("Parameter");
+        })) {
+            ctx.AddError(TIssue(ctx.GetPosition(parameter->Pos()), TStringBuilder()
+                << "Cannot evaluate expression that depends on query parameter: " << parameter->Head().Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)
@@ -2524,6 +2539,24 @@ public:
                             ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
                         } else if (name == "resetTtlSettings") {
                             alterTableRequest.mutable_drop_ttl_settings();
+                        } else if (name == "setMetricsLevel" || name == "resetMetricsLevel") {
+                            if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                    TStringBuilder() << "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                                return SyncError();
+                            }
+                            if (name == "resetMetricsLevel") {
+                                alterTableRequest.mutable_drop_metrics_settings();
+                            } else {
+                                auto raw = TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                                Ydb::Table::MetricsSettings::MetricsLevel level;
+                                TString error;
+                                if (!ParseTablesMetricsLevel(raw, level, error)) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                                    return SyncError();
+                                }
+                                alterTableRequest.mutable_set_metrics_settings()->set_metrics_level(level);
+                            }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                 TStringBuilder() << "Unknown table profile setting: " << name));
@@ -3950,6 +3983,24 @@ public:
 
         if (auto kiObject = TMaybeNode<TKiDropObject>(input)) {
             return TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+        }
+
+        if (auto killSession = TMaybeNode<TKiKillSession>(input)) {
+            auto requireStatus = RequireChild(*input, TKiKillSession::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            const auto node = killSession.Cast();
+            const auto parameter = node.SessionId().Maybe<TCoParameter>();
+            const TString target = parameter
+                ? parameter.Cast().Name().StringValue()
+                : node.SessionId().Cast<TCoUtf8>().Literal().StringValue();
+            auto future = Gateway->KillSession(TString(node.DataSink().Cluster()), target, bool(parameter));
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult&, const TExprNode::TPtr& input, TExprContext& ctx) {
+                    return ctx.NewWorld(input->Pos());
+                }, "Preparing KILL SESSION");
         }
 
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {

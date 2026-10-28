@@ -9,7 +9,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 
@@ -156,7 +156,7 @@ private:
 
     struct TShard
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, EntryMapSpinLock);
+        YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, EntryMapSpinLock);
         TEntryMap EntryMap;
 
         TShard() = default;
@@ -234,14 +234,14 @@ private:
     template <class THeterogenousKey>
     int GetShardIndex(const THeterogenousKey& key) const;
 
-    NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> MakeReaderGuardForKey(const TKey& key);
+    TReaderGuard<TReaderWriterSpinLock> MakeReaderGuardForKey(const TKey& key);
 
-    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShard(int shardIndex);
+    std::pair<TReaderGuard<TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShard(int shardIndex);
     template <class THeterogenousKey>
-    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShardForKey(const THeterogenousKey& key);
+    std::pair<TReaderGuard<TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShardForKey(const THeterogenousKey& key);
 
-    std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShard(int shardIndex);
-    std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShardForKey(const TKey& key);
+    std::pair<TWriterGuard<TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShard(int shardIndex);
+    std::pair<TWriterGuard<TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShardForKey(const TKey& key);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

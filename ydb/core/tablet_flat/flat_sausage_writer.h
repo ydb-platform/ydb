@@ -2,6 +2,7 @@
 
 #include "flat_sausage_record.h"
 #include "flat_sausage_grind.h"
+#include "flat_page_iface.h"
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -9,11 +10,12 @@ namespace NPageCollection {
 
     class TWriter {
     public:
-        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize)
+        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize, bool v2OnlyMode)
             : MaxBlobSize(maxBlobSize)
             , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
+            , V2OnlyMode(v2OnlyMode)
         {
 
         }
@@ -23,7 +25,7 @@ namespace NPageCollection {
             return Record.Pages() || Blobs || Buffer;
         }
 
-        ui32 AddPage(const TArrayRef<const char> body, ui32 type)
+        ui32 AddPage(const TArrayRef<const char> body, ui32 type, ui32* crc32 = nullptr)
         {
             for (size_t offset = 0; offset < body.size(); ) {
                 if (Buffer.capacity() == 0 && MaxBlobSize != Max<ui32>())
@@ -40,7 +42,27 @@ namespace NPageCollection {
                 }
             }
 
-            return Record.Push(type, body);
+            bool pageSkipped = V2OnlyMode
+                && NTable::NPage::IsAbsorbedInV2Only(static_cast<NTable::NPage::EPage>(type));
+            /* No TEntry/TExtra entry created */
+            if (pageSkipped) {
+                SkippedBytes += body.size();
+                SkippedPages += 1;
+                if (crc32)
+                    *crc32 = Checksum(body);
+                return Max<ui32>();
+            }
+
+            return Record.Push(type, body, crc32);
+        }
+
+        void PushSkipEntry()
+        {
+            if (SkippedBytes > 0) {
+                Record.PushSkip(Record.GetOffset() + SkippedBytes, (ui32)NTable::NPage::EPage::Skip, SkippedPages);
+                SkippedBytes = 0;
+                SkippedPages = 0;
+            }
         }
 
         void AddInplace(ui32 page, TArrayRef<const char> body)
@@ -50,6 +72,7 @@ namespace NPageCollection {
 
         TSharedData Finish(bool empty)
         {
+            Y_ENSURE(SkippedBytes == 0, "PushSkipEntry not called before Finish");
             Flush();
 
             TSharedData meta;
@@ -104,6 +127,9 @@ namespace NPageCollection {
         TCookieAllocator &CookieAllocator;
         TVector<TGlob> Blobs;
         NPageCollection::TRecord Record;
+        bool V2OnlyMode = false;
+        ui64 SkippedBytes = 0;
+        ui32 SkippedPages = 0;
     };
 
 }

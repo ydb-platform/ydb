@@ -36,6 +36,9 @@ public:
             {T::SchemeshardId::ColumnId, {E::kInfoFieldNumber, V::kSchemeshardIdFieldNumber}},
             {T::PathId::ColumnId, {E::kInfoFieldNumber, V::kPathIdFieldNumber}},
             {T::DefaultGroupSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kDefaultGroupSizeInUnitsFieldNumber}},
+            {T::BestSpaceColor::ColumnId, {E::kInfoFieldNumber, V::kBestSpaceColorFieldNumber}},
+            {T::WorstSpaceColor::ColumnId, {E::kInfoFieldNumber, V::kWorstSpaceColorFieldNumber}},
+            {T::SpaceExhausted::ColumnId, {E::kInfoFieldNumber, V::kSpaceExhaustedFieldNumber}},
         };
         return fieldMap;
     }

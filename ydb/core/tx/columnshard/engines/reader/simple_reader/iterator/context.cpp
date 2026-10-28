@@ -125,6 +125,7 @@ void TSpecialReadContext::RegisterActors(NCommon::ISourcesConstructor& sources) 
 }
 
 void TSpecialReadContext::UnregisterActors() {
+    DuplicatesAbortionFlag->Inc();
     if (NActors::TActorSystem::IsStopped()) {
         return;
     }

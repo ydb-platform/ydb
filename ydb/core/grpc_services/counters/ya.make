@@ -13,6 +13,4 @@ PEERDIR(
     ydb/core/sys_view/service
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

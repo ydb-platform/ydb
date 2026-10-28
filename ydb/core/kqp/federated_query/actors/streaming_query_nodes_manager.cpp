@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -42,8 +43,7 @@ TDuration GetDurationFromEnv(const char* name, TDuration defaultValue) {
 
 bool IsTopicSourceTask(const NYql::NDqProto::TDqTask& task) {
     for (const auto& input : task.GetInputs()) {
-        if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource
-            && input.GetSource().GetType() == NYql::NDq::PqSource)
+        if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && input.GetSource().GetType() == NYql::NDq::PqSource)
         {
             return true;
         }
@@ -65,9 +65,8 @@ ui64 GetTopicPartitionsCount(const NYql::NDqProto::TDqTask& task) {
 
     if (!topicSourceFound) {
         for (const auto& input : task.GetInputs()) {
-            if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource
-                && input.GetSource().GetType() == NYql::NDq::PqSource
-                && input.GetSource().GetSettings().UnpackTo(&topicSource))
+            if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && input.GetSource().GetType() == NYql::NDq::PqSource &&
+                input.GetSource().GetSettings().UnpackTo(&topicSource))
             {
                 topicSourceFound = true;
                 break;
@@ -100,17 +99,10 @@ ui64 GetTopicPartitionsCount(const NYql::NDqProto::TDqTask& task) {
     return NYql::NDq::GetPartitionsToRead(readTaskParams, federatedClusters).size();
 }
 
-class TStreamingQueryNodesManager
-    : public TActorBootstrapped<TStreamingQueryNodesManager>
-{
+class TStreamingQueryNodesManager: public TActorBootstrapped<TStreamingQueryNodesManager> {
 public:
-    TStreamingQueryNodesManager(
-        TActorId runActorId,
-        TString tenantName,
-        TString queryId,
-        const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
-        TDuration checkPeriod,
-        TDuration startDelay,
+    TStreamingQueryNodesManager(TActorId runActorId, TString tenantName, TString queryId,
+        const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks, TDuration checkPeriod, TDuration startDelay,
         ui64 maxTasksPerStage)
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
@@ -130,12 +122,8 @@ public:
     static constexpr char ActorName[] = "STREAMING_QUERY_NODES_MANAGER";
 
     void Bootstrap() {
-        LOG_I("StreamingQueryNodesManager started",
-            {"tenant", TenantName},
-            {"taskCount", TopicSourceTaskNodes.size()},
-            {"partitionCount", TopicPartitionsCount},
-            {"checkPeriod", CheckPeriod},
-            {"startDelay", StartDelay});
+        LOG_I("StreamingQueryNodesManager started", { "tenant", TenantName }, { "taskCount", TopicSourceTaskNodes.size() },
+            { "partitionCount", TopicPartitionsCount }, { "checkPeriod", CheckPeriod }, { "startDelay", StartDelay });
 
         if (TopicSourceTaskNodes.empty()) {
             PassAway();
@@ -168,9 +156,7 @@ private:
             const ui32 nodeId = task.ActorId.NodeId();
             topicSourceTask->second = nodeId;
             QueryNodes.insert(nodeId);
-            LOG_D("Task node updated",
-                {"taskId", task.Id},
-                {"nodeId", nodeId});
+            LOG_D("Task node updated", { "taskId", task.Id }, { "nodeId", nodeId });
         }
         Ready = true;
         Schedule(StartDelay, new TEvents::TEvWakeup(WakeupTag));
@@ -210,10 +196,8 @@ private:
         }
         const ui64 totalNodes = nodes.size();
 
-        LOG_D("Received tenant node list",
-            {"totalTenantNodes", totalNodes},
-            {"topicSourceTasks", TopicSourceTaskNodes.size()},
-            {"topicPartitions", TopicPartitionsCount});
+        LOG_D("Received tenant node list", { "totalTenantNodes", totalNodes }, { "topicSourceTasks", TopicSourceTaskNodes.size() },
+            { "topicPartitions", TopicPartitionsCount });
 
         if (totalNodes == 0) {
             LOG_W("Tenant has no nodes, skipping check");
@@ -225,28 +209,24 @@ private:
         }
 
         const ui64 nodesWithQuery = QueryNodes.size();
-        const ui64 expectedTasks = NYql::NDq::GetExpectedTopicReadTasks(
-            TopicPartitionsCount, MaxTasksPerStage, !MaxTasksPerStage);
+        const ui64 expectedTasks = NYql::NDq::GetExpectedTopicReadTasks(TopicPartitionsCount, MaxTasksPerStage, !MaxTasksPerStage);
         const ui64 expectedNodesWithQuery = Min(totalNodes, expectedTasks);
 
         if (nodesWithQuery < expectedNodesWithQuery) {
             const TString reason = TStringBuilder()
-                << "StreamingQuery health check failed: "
-                << "nodes with topic reader tasks (" << nodesWithQuery << " [" << JoinSeq(", ", QueryNodes) << "]) "
-                << "is less than expected (" << expectedNodesWithQuery << "). "
-                << "Total tenant nodes: " << totalNodes << ". "
-                << "Expected topic reader tasks: " << expectedTasks << ". "
-                << "Query will be aborted.";
+                                   << "StreamingQuery health check failed: "
+                                   << "nodes with topic reader tasks (" << nodesWithQuery << " [" << JoinSeq(", ", QueryNodes) << "]) "
+                                   << "is less than expected (" << expectedNodesWithQuery << "). "
+                                   << "Total tenant nodes: " << totalNodes << ". "
+                                   << "Expected topic reader tasks: " << expectedTasks << ". "
+                                   << "Query will be aborted.";
             LOG_W(reason);
             Abort(reason);
             return;
         }
 
-        LOG_D("Health check passed",
-            {"nodesWithQuery", nodesWithQuery},
-            {"expectedNodesWithQuery", expectedNodesWithQuery},
-            {"totalNodes", totalNodes},
-            {"expectedTasks", expectedTasks});
+        LOG_D("Health check passed", { "nodesWithQuery", nodesWithQuery }, { "expectedNodesWithQuery", expectedNodesWithQuery },
+            { "totalNodes", totalNodes }, { "expectedTasks", expectedTasks });
     }
 
     void ScheduleWakeup() {
@@ -280,29 +260,17 @@ private:
     bool AlreadyAborted = false;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
-IActor* CreateStreamingQueryNodesManager(
-    TActorId runActorId,
-    TString tenantName,
-    TString queryId,
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
-    TDuration checkPeriod,
-    TDuration startDelay,
-    ui64 maxTasksPerStage)
+IActor* CreateStreamingQueryNodesManager(TActorId runActorId, TString tenantName, TString queryId,
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks, TDuration checkPeriod, TDuration startDelay, ui64 maxTasksPerStage)
 {
     return new TStreamingQueryNodesManager(
-        runActorId,
-        std::move(tenantName),
-        std::move(queryId),
-        tasks,
-        checkPeriod,
-        startDelay,
-        maxTasksPerStage);
+        runActorId, std::move(tenantName), std::move(queryId), tasks, checkPeriod, startDelay, maxTasksPerStage);
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

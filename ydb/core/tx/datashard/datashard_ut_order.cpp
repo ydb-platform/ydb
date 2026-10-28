@@ -60,7 +60,7 @@ public:
         THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB);
         THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat(
             NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1,
-                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, 
+                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider,
                                           "", host.Get()));
 
         TEngineBay ebay(host.Release(), engine.Release());
@@ -1565,7 +1565,7 @@ Y_UNIT_TEST(TestOutOfOrderNonConflictingWrites) {
     }
 }
 
-Y_UNIT_TEST(TestOutOfOrderRestartLocksReorderedWithoutBarrier) {
+Y_UNIT_TEST(TestOutOfOrderRestartLocksReordered) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -1576,9 +1576,6 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksReorderedWithoutBarrier) {
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
@@ -1700,7 +1697,7 @@ Y_UNIT_TEST(TestOutOfOrderRestartLocksReorderedWithoutBarrier) {
     }
 }
 
-Y_UNIT_TEST(TestOutOfOrderNoBarrierRestartImmediateLongTail) {
+Y_UNIT_TEST(TestOutOfOrderRestartImmediateLongTail) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -1711,9 +1708,6 @@ Y_UNIT_TEST(TestOutOfOrderNoBarrierRestartImmediateLongTail) {
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
-
-    // This test requires barrier to be disabled
-    runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);

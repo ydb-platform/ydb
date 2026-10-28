@@ -57,6 +57,7 @@ struct TKqpQueryState {
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     ui32 ReplyFlags = 0;
     bool KeepSession = false;
+    bool CollectTraceStats = false;
 };
 
 struct TKqpCleanupState {
@@ -183,18 +184,19 @@ public:
         auto now = TAppData::TimeProvider->Now();
 
         QueryState->Sender = ev->Sender;
+        QueryState->CollectTraceStats = bool(ev->TraceId);
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
+            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, std::nullopt, NWilson::TTraceId(ev->TraceId));
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig, NWilson::TTraceId(ev->TraceId));
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
-            !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
+            !Settings.LongSession, QueryState->RequestEv->IsInternalCall(), nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -578,6 +580,7 @@ private:
 
     IKqpHost::TExecScriptSettings ParseExecScriptSettings() {
         IKqpHost::TExecScriptSettings execSettings;
+        execSettings.IsInternalCall = QueryState->RequestEv->IsInternalCall();
         execSettings.Deadlines = QueryState->QueryDeadlines;
         execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
         auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);
@@ -853,6 +856,8 @@ private:
         if (reportStats) {
             record.MutableResponse()->MutableQueryStats()->Swap(&stats);
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
+        } else if (QueryState->CollectTraceStats) {
+            responseEv->WorkerStats = std::make_unique<NKqpProto::TKqpStatsQuery>(std::move(stats));
         }
 
         AddTrailingInfo(responseEv->Record);

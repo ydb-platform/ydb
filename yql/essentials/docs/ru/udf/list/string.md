@@ -122,6 +122,9 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 * `String::ReverseBits(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
   Разворачивает строку, рассматривая ее как битовую последовательность.
 
+* `String::Soundex(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2026.03](../../changelog/2026.03.md#string-module)
+  Возвращает четырёхсимвольный код Soundex для английских имён.
+
 * `String::IsAscii(string:String{Flags:AutoMap}) -> Bool`
 
   Проверяет, является ли строка валидной ascii последовательностью.

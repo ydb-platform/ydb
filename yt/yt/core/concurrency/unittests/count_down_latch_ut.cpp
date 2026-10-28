@@ -1,13 +1,11 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <library/cpp/yt/threading/count_down_latch.h>
+#include <library/cpp/yt/system/count_down_latch.h>
 
 #include <thread>
 
 namespace NYT::NConcurrency {
 namespace {
-
-using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -2058,6 +2058,11 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            "Consumer offset commits are disabled", NPersQueue::NErrorCode::PRECONDITION_FAILED));
+        return;
+    }
     // extend the lifetime for PartitionGraph
     auto partitionGraph = TopicHolder->GetPartitionGraph();
     const auto& parents = GetParents(partitionGraph);

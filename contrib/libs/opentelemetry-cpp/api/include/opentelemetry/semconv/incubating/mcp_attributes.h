@@ -41,7 +41,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpMethodName = "mcp.meth
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMcpProtocolVersion = "mcp.protocol.version";
 
 /**
-  The value of the resource uri.
+  The value of the resource URI.
 
   @deprecated
   {"note": "Moved to the <a

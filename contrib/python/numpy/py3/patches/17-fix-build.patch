@@ -27,9 +27,6 @@
 @@ -600 +600 @@ struct AddExport {
 -#include "hwy/ops/scalar-inl.h"
 +#error #include "hwy/ops/scalar-inl.h"
-@@ -635 +635 @@ struct AddExport {
--#include "hwy/ops/loongarch_lsx-inl.h"
-+#error #include "hwy/ops/loongarch_lsx-inl.h"
 --- contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.cpp	(index)
 +++ contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.cpp	(working tree)
 @@ -49 +49 @@

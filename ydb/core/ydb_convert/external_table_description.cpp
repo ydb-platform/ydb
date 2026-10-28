@@ -42,9 +42,15 @@ bool ConvertContent(
 {
     using namespace NJson;
 
-    const auto externalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes());
+    const auto externalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceDatabaseTypes());
+    const auto databaseType = NYql::DatabaseTypeFromString(sourceType);
+    if (!databaseType) {
+        error = TStringBuilder() << "Unknown source type: " << sourceType;
+        status = Ydb::StatusIds::BAD_REQUEST;
+        return false;
+    }
     try {
-        const auto source = externalSourceFactory->GetOrCreate(sourceType);
+        const auto source = externalSourceFactory->GetOrCreate(*databaseType);
         for (const auto& [key, items] : source->GetParameters(in)) {
             TJsonValue json(EJsonValueType::JSON_ARRAY);
             for (const auto& item : items) {

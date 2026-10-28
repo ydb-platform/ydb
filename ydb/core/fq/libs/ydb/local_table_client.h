@@ -6,4 +6,4 @@ namespace NFq {
 
 IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions);
 
-} // namespace NFq
+}   // namespace NFq

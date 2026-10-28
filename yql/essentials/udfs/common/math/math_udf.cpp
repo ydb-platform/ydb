@@ -59,6 +59,10 @@ using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
     XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), 0)                         \
     XXL(Round, double(TAutoMap<double>, TPrecision), 1)
 
+#define SPARK_MATH_UDF_MAP(XX, XXL)     \
+    XX(Expm1, double(TAutoMap<double>)) \
+    XXL(Log1p, double(TAutoMap<double>))
+
 #define MATH_UDF_MAP_WITHOUT_IR(XX) \
     XX(NearbyInt, TOptional<i64>(TAutoMap<double>, TTaggedRoundingMode), 0)
 
@@ -75,6 +79,21 @@ using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
             TUnboxedValuePod res;                                                                       \
             name##IR(this, &res, valueBuilder, args);                                                   \
             return res;                                                                                 \
+        }
+#endif
+#ifdef DISABLE_IR
+    #define SPARK_MATH_STRICT_UDF(name, signature)                                                                         \
+        SIMPLE_STRICT_UDF_OPTIONS(T##name, signature, builder.SetMinLangVer(NYql::NFeature::SparkMathFuncs.MinLangVer);) { \
+            TUnboxedValuePod result;                                                                                       \
+            name##IR(this, &result, valueBuilder, args);                                                                   \
+            return result;                                                                                                 \
+        }
+#else
+    #define SPARK_MATH_STRICT_UDF(name, signature)                                                                                                                                          \
+        SIMPLE_UDF_IMPL(T##name, builder.SimpleSignature<signature>().IsStrict().SetMinLangVer(NYql::NFeature::SparkMathFuncs.MinLangVer);, signature, "/llvm_bc/Math", #name "IR", void) { \
+            TUnboxedValuePod result;                                                                                                                                                        \
+            name##IR(this, &result, valueBuilder, args);                                                                                                                                    \
+            return result;                                                                                                                                                                  \
         }
 #endif
 
@@ -137,13 +156,14 @@ extern const char precision[] = "Precision";
 using TPrecision = TNamedArg<int, precision>;
 
 MATH_UDF_MAP(MATH_STRICT_UDF, MATH_STRICT_UDF)
+SPARK_MATH_UDF_MAP(SPARK_MATH_STRICT_UDF, SPARK_MATH_STRICT_UDF)
 
 MATH_UDF_MAP_WITHOUT_IR(MATH_STRICT_UDF_WITHOUT_IR)
 
 SIMPLE_MODULE(TMathModule,
               MATH_UDF_MAP_WITHOUT_IR(REGISTER_MATH_UDF)
                   TUserDataTypeFuncFactory<true, false, SwapBytesUDF, TSwapBytesFunc, ui8, ui16, ui32, ui64>,
-              MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))
+              MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF) SPARK_MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))
 } // namespace
 
 REGISTER_MODULES(TMathModule)

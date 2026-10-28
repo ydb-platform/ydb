@@ -38,6 +38,10 @@ Since columns in YQL are identified by their names, and you can't have two colum
 * `CROSS`: A full Cartesian product of two tables without specifying key columns and no explicit `ON/USING`.
 * `EXCLUSION`: Both sides minus the intersection.
 
+Use `LEFT SEMI JOIN` instead of a correlated `EXISTS` subquery and
+`LEFT ONLY JOIN` instead of a correlated `NOT EXISTS` subquery. See
+[Correlated subqueries, EXISTS, and NOT EXISTS](../correlated-subqueries.md).
+
 ![JOIN](_assets/join-YQL-06.png)
 
 {% note info %}

@@ -26,7 +26,7 @@ def parse_callable(expr) -> tuple[str, tuple[str | int, ...], str]:
     pos += 1  # Skip first paren
     values = []
     value = ""
-    in_str = False
+    quote: str | None = None
     level = 0
 
     def add_value():
@@ -38,13 +38,16 @@ def parse_callable(expr) -> tuple[str, tuple[str | int, ...], str]:
     while True:
         char = expr[pos]
         pos += 1
-        if in_str:
+        if quote:
             value += char
-            if char == "'":
-                in_str = False
-            elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
+            if char == "\\" and pos < len(expr):
                 value += expr[pos]
                 pos += 1
+            elif char == quote and pos < len(expr) and expr[pos] == quote:
+                value += expr[pos]
+                pos += 1
+            elif char == quote:
+                quote = None
         else:
             if level == 0:
                 if char == " ":
@@ -62,8 +65,8 @@ def parse_callable(expr) -> tuple[str, tuple[str | int, ...], str]:
                     continue
                 if char == ")":
                     break
-            if char == "'" and (not value or "Enum" in value):
-                in_str = True
+            if char in ("'", '"', "`"):
+                quote = char
             elif char == "(":
                 level += 1
             elif char == ")" and level:
@@ -91,9 +94,13 @@ def parse_enum(expr) -> tuple[tuple[str, ...], tuple[int, ...]]:
         pos += 1
         if in_key:
             if char == "'":
-                keys.append("".join(key))
-                key = []
-                in_key = False
+                if expr[pos] == "'":
+                    key.append("'")
+                    pos += 1
+                else:
+                    keys.append("".join(key))
+                    key = []
+                    in_key = False
             elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos:] != "')":
                 key.append(expr[pos])
                 pos += 1
@@ -114,12 +121,14 @@ def parse_enum(expr) -> tuple[tuple[str, ...], tuple[int, ...]]:
     return tuple(sorted_keys), tuple(sorted_values)
 
 
-def parse_columns(expr: str):
+def parse_columns(expr: str, preserve_names: bool = False):
     """
     Parse a ClickHouse column list of the form (col1 String, col2 Array(Tuple(String, Int32))).  This also handles
     unnamed columns (such as Tuple definitions).  Mixed named and unnamed columns are not currently supported.
     :param expr: ClickHouse enum expression/arguments
-    :return: Parallel tuples of column types and column types (strings)
+    :param preserve_names: Keep identifier quoting in returned names. JSON parsing
+        uses this to distinguish quoted typed paths from unquoted directives.
+    :return: Parallel tuples of column names and column types (strings)
     """
     names = []
     columns = []
@@ -132,29 +141,39 @@ def parse_columns(expr: str):
         char = expr[pos]
         pos += 1
         if quote:
-            if char == quote:
-                quote = None
-            elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
+            if char == "\\" and pos < len(expr):
                 label += char + expr[pos]
                 pos += 1
                 continue
+            if char == quote and pos < len(expr) and expr[pos] == quote:
+                label += char + expr[pos]
+                pos += 1
+                continue
+            if char == quote:
+                quote = None
         else:
             if level == 0:
-                if char in (" ", "="):
+                if char.isspace() or char == "=":
                     if label and not named:
-                        names.append(unescape_identifier(label))
+                        names.append(label if preserve_names else unescape_identifier(label))
                         label = ""
                         named = True
-                    char = ""
+                        char = "=" if preserve_names and names[-1].upper() == "SKIP" and char == "=" else ""
+                    elif preserve_names and named and names[-1].upper() == "SKIP":
+                        if char.isspace():
+                            char = "" if not label or label.endswith(" ") else " "
+                    else:
+                        char = ""
                 elif char == ",":
-                    columns.append(label)
+                    columns.append(label.rstrip() if preserve_names and named and names[-1].upper() == "SKIP" else label)
                     named = False
                     label = ""
                     continue
                 elif char == ")":
-                    columns.append(label)
+                    if label or named or columns:
+                        columns.append(label.rstrip() if preserve_names and named and names[-1].upper() == "SKIP" else label)
                     break
-            if char in ("'", "`") and (not label or "Enum" in label):
+            if char in ("'", '"', "`"):
                 quote = char
             elif char == "(":
                 level += 1

@@ -1,9 +1,10 @@
 #pragma once
 #include <ydb/core/fq/libs/events/event_subspace.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 
@@ -11,7 +12,7 @@ NActors::TActorId RateLimiterControlPlaneServiceId();
 
 struct TEvRateLimiter {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvCreateResource = YqEventSubspaceBegin(TYqEventSubspace::RateLimiter),
         EvCreateResourceResponse,
         EvDeleteResource,
@@ -21,7 +22,7 @@ struct TEvRateLimiter {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(TYqEventSubspace::RateLimiter), "All events must be in their subspace");
 
-    struct TEvCreateResource : NActors::TEventLocal<TEvCreateResource, EEv::EvCreateResource> {
+    struct TEvCreateResource: NActors::TEventLocal<TEvCreateResource, EEv::EvCreateResource> {
         TEvCreateResource(const TString& cloudId, const TString& scope, const TString& queryId, TMaybe<double> queryLimit)
             : CloudId(cloudId)
             , Scope(scope)
@@ -44,7 +45,7 @@ struct TEvRateLimiter {
         const TMaybe<double> QueryLimit;
     };
 
-    struct TEvCreateResourceResponse : NActors::TEventLocal<TEvCreateResourceResponse, EEv::EvCreateResourceResponse> {
+    struct TEvCreateResourceResponse: NActors::TEventLocal<TEvCreateResourceResponse, EEv::EvCreateResourceResponse> {
         explicit TEvCreateResourceResponse(const NYql::TIssues& issues)
             : Success(false)
             , Issues(issues)
@@ -63,7 +64,7 @@ struct TEvRateLimiter {
         const TString RateLimiterPath;
     };
 
-    struct TEvDeleteResource : NActors::TEventLocal<TEvDeleteResource, EEv::EvDeleteResource> {
+    struct TEvDeleteResource: NActors::TEventLocal<TEvDeleteResource, EEv::EvDeleteResource> {
         explicit TEvDeleteResource(const TString& cloudId, const TString& scope, const TString& queryId)
             : CloudId(cloudId)
             , Scope(scope)
@@ -76,7 +77,7 @@ struct TEvRateLimiter {
         const TString QueryId;
     };
 
-    struct TEvDeleteResourceResponse : NActors::TEventLocal<TEvDeleteResourceResponse, EEv::EvDeleteResourceResponse> {
+    struct TEvDeleteResourceResponse: NActors::TEventLocal<TEvDeleteResourceResponse, EEv::EvDeleteResourceResponse> {
         explicit TEvDeleteResourceResponse(bool success, const NYql::TIssues& issues = {})
             : Success(success)
             , Issues(issues)
@@ -88,4 +89,4 @@ struct TEvRateLimiter {
     };
 };
 
-} // namespace NFq
+}   // namespace NFq

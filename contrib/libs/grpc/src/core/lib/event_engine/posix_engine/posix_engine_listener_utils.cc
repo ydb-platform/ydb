@@ -26,6 +26,8 @@
 
 #include "y_absl/cleanup/cleanup.h"
 #include "y_absl/status/status.h"
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_replace.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/log.h>
@@ -45,8 +47,6 @@
 #include <netinet/in.h>  // IWYU pragma: keep
 #include <sys/socket.h>  // IWYU pragma: keep
 #include <unistd.h>      // IWYU pragma: keep
-
-#include "y_absl/strings/str_cat.h"
 #endif
 
 namespace grpc_event_engine {
@@ -177,8 +177,16 @@ y_absl::Status PrepareSocket(const PosixTcpOptions& options,
       GRPC_FD_SERVER_LISTENER_USAGE, options));
 
   if (bind(fd, socket.addr.address(), socket.addr.size()) < 0) {
+    auto sockaddr_str = ResolvedAddressToString(socket.addr);
+    if (!sockaddr_str.ok()) {
+      gpr_log(GPR_ERROR, "Could not convert sockaddr to string: %s",
+              sockaddr_str.status().ToString().c_str());
+      sockaddr_str = "<unparsable>";
+    }
+    sockaddr_str = y_absl::StrReplaceAll(*sockaddr_str, {{"\0", "@"}});
     return y_absl::FailedPreconditionError(
-        y_absl::StrCat("Error in bind: ", std::strerror(errno)));
+        y_absl::StrCat("Error in bind for address '", *sockaddr_str,
+                     "': ", std::strerror(errno)));
   }
 
   if (listen(fd, GetMaxAcceptQueueSize()) < 0) {

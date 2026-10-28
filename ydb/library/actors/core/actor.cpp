@@ -18,6 +18,9 @@
 
 
 namespace NActors {
+#ifdef Y_HAVE_FAST_POD_TLS
+    constinit
+#endif
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     thread_local TActivationContext *TActivationContextHolder::Value = nullptr;
     TActivationContextHolder TlsActivationContext;

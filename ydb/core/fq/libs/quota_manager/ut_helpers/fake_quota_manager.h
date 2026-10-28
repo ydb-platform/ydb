@@ -10,7 +10,7 @@ class TQuotaServiceFakeActor: public NActors::TActor<TQuotaServiceFakeActor> {
     TQuotaMap Quotas;
 
 public:
-    TQuotaServiceFakeActor(const TQuotaMap& map = {{ QUOTA_CPU_PERCENT_LIMIT, 3200 }})
+    TQuotaServiceFakeActor(const TQuotaMap& map = { { QUOTA_CPU_PERCENT_LIMIT, 3200 } })
         : TActor<TQuotaServiceFakeActor>(&TQuotaServiceFakeActor::StateFunc)
         , Quotas(map)
     {
@@ -23,4 +23,4 @@ public:
     void Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev);
 };
 
-} // namespace NFq
+}   // namespace NFq

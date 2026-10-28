@@ -116,6 +116,8 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
 void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
 
+void FormatValue(TStringBuilderBase* builder, const TLockMask& lockMask, TStringBuf spec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema
@@ -406,6 +408,9 @@ public:
     //! Only applies to sorted replicated tables.
     //! Returns the ordered schema used in replication logs.
     TTableSchemaPtr ToReplicationLog() const;
+
+    //! Returns the column count of #ToReplicationLog().
+    int GetReplicationLogColumnCount() const;
 
     //! Only applies to sorted dynamic tables.
     //! Returns the static schema used for unversioned updates from bulk insert.

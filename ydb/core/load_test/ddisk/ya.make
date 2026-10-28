@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     library/cpp/monlib/service/pages
     library/cpp/time_provider
     ydb/core/base

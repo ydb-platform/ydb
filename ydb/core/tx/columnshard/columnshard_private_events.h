@@ -93,11 +93,27 @@ struct TEvPrivate {
         EvBackupImportRecordBatchResult,
 
         EvRetryConfigSubscription,
+        EvUpdateChannelApproximateFreeSpace,
 
+        EvContinueFindEmptyHistoryIntervals,
+        EvFindEmptyHistoryIntervalsPortionsReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvContinueFindEmptyHistoryIntervals
+        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
+
+    struct TEvFindEmptyHistoryIntervalsPortionsReady
+        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+
+        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+            : Portions(std::move(portions))
+        {
+        }
+    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:
@@ -361,6 +377,17 @@ struct TEvPrivate {
 
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;
+    };
+
+    struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
+        const ui32 Channel;
+        const float ApproximateFreeSpaceShare;
+
+        TEvUpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare)
+            : Channel(channel)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+        {
+        }
     };
 
     class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {

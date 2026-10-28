@@ -25,6 +25,8 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <limits>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -41,6 +43,25 @@ namespace {
             return descr.GetUniformPartitionsCount();
         }
         return descr.SplitBoundarySize() + 1;
+    }
+
+    bool IsGlobalIndex(const TableIndex& index) {
+        switch (index.type_case()) {
+            case TableIndex::kGlobalIndex:
+            case TableIndex::kGlobalAsyncIndex:
+            case TableIndex::kGlobalUniqueIndex:
+            case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalFulltextPlainIndex:
+            case TableIndex::kGlobalFulltextRelevanceIndex:
+            case TableIndex::kGlobalJsonIndex:
+                return true;
+            case TableIndex::kLocalBloomFilterIndex:
+            case TableIndex::kLocalBloomNgramFilterIndex:
+            case TableIndex::kLocalMinMaxIndex:
+            case TableIndex::TYPE_NOT_SET:
+                return false;
+        }
+        Y_UNREACHABLE();
     }
 }
 
@@ -326,12 +347,13 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     if (!createRequest.indexes().empty()) {
-        Stream << ",\n";
         try {
-            Format(createRequest.indexes(0));
-            for (int i = 1; i < createRequest.indexes().size(); i++) {
-                Stream << ",\n";
-                Format(createRequest.indexes(i));
+            for (const auto& index : createRequest.indexes()) {
+                if (SeparateGlobalIndexes && IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << ",\n\t";
+                Format(index);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -414,6 +436,12 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         printed |= Format(createRequest.read_replicas_settings(), del, !printed);
     }
 
+    FillMetricsSettings(createRequest, tableDesc);
+
+    if (createRequest.has_metrics_settings()) {
+        printed |= Format(createRequest.metrics_settings(), del, !printed);
+    }
+
     FillKeyBloomFilter(createRequest, tableDesc);
 
     if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::ENABLED) {
@@ -447,6 +475,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     Stream << ";";
+
+    if (SeparateGlobalIndexes) {
+        try {
+            for (const auto& index : createRequest.indexes()) {
+                if (!IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << "\nALTER TABLE ";
+                EscapeName(tablePath, Stream);
+                Stream << " ADD ";
+                Format(index);
+                Stream << ";";
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
 
     if (!tableDesc.GetCdcStreams().empty()) {
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size(),
@@ -555,7 +602,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 }
 
 void TCreateTableFormatter::Format(const TableIndex& index) {
-    Stream << "\tINDEX ";
+    Stream << "INDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;
@@ -1067,7 +1114,43 @@ bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
     return false;
 }
 
-void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {
+bool TCreateTableFormatter::Format(const Ydb::Table::MetricsSettings& metricsSettings, TString& del, bool needWith) {
+    switch (metricsSettings.metrics_level()) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"DATABASE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"TABLE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"PARTITION\"";
+            del = ",\n";
+            return true;
+        }
+        default:
+            break;
+    }
+    return false;
+}
+
+void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage,
+    std::optional<TString> objectKeyPrefix) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     Stream << "INTERVAL(";
     const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
@@ -1077,6 +1160,10 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     if (storage) {
         Stream << "TO EXTERNAL DATA SOURCE ";
         EscapeName(*storage, Stream);
+        if (objectKeyPrefix) {
+            Stream << '.';
+            EscapeName(*objectKeyPrefix, Stream);
+        }
     } else {
         Stream << "DELETE";
     }
@@ -1166,9 +1253,12 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
                     case Ydb::Table::TtlTier::kDelete:
                         Format(expireAfterSeconds);
                         break;
-                    case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                        Format(expireAfterSeconds, tier.evict_to_external_storage().storage());
+                    case Ydb::Table::TtlTier::kEvictToExternalStorage: {
+                        const auto& settings = tier.evict_to_external_storage();
+                        Format(expireAfterSeconds, settings.storage(),
+                            settings.has_object_key_prefix() ? std::make_optional(TString(settings.object_key_prefix())) : std::nullopt);
                         break;
+                    }
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier action is undefined");
                 }
@@ -1298,6 +1388,24 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     const auto& pqConfig = persQueue.GetPQTabletConfig();
     const auto& partitionConfig = pqConfig.GetPartitionConfig();
 
+    if (const ui64 resolvedTimestampsIntervalMs = cdcStream.GetResolvedTimestampsIntervalMs()) {
+        Stream << del << "BARRIERS_INTERVAL = INTERVAL(";
+
+        Y_ENSURE(resolvedTimestampsIntervalMs <= static_cast<ui64>(std::numeric_limits<i64>::max()) / 1000,
+            "Resolved timestamps interval is too large");
+
+        TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+
+        const i64 resolvedTimestampsIntervalUs = static_cast<i64>(resolvedTimestampsIntervalMs) * 1000;
+        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(
+            NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(resolvedTimestampsIntervalUs));
+        Y_ENSURE(str.HasValue(), "Failed to convert resolved timestamps interval to string");
+
+        EscapeString(TString(str.AsStringRef()), Stream);
+        Stream << ")";
+        del = ", ";
+    }
+
     if (partitionConfig.HasLifetimeSeconds()) {
         Stream << del << "RETENTION_PERIOD = ";
         TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
@@ -1310,17 +1418,52 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
-    if (persQueue.HasTotalGroupCount()) {
+    const auto& partitionStrategy = pqConfig.GetPartitionStrategy();
+    bool autoPartitioning = false;
+    const char* autoPartitioningStrategy = nullptr;
+    switch (partitionStrategy.GetPartitionStrategyType()) {
+        case NKikimrPQ::TPQTabletConfig::DISABLED:
+            break;
+        case NKikimrPQ::TPQTabletConfig::CAN_SPLIT:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "scale_up";
+            break;
+        case NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "scale_up_and_down";
+            break;
+        case NKikimrPQ::TPQTabletConfig::PAUSED:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "paused";
+            break;
+    }
+
+    if (autoPartitioning) {
+        Stream << del << "TOPIC_AUTO_PARTITIONING = 'ENABLED'";
+        del = ", ";
+    }
+
+    const bool canFormatExplicitPartitionCount = [&] {
         switch (firstColumnTypeId) {
             case NScheme::NTypeIds::Uint32:
             case NScheme::NTypeIds::Uint64:
-            case NScheme::NTypeIds::Uuid: {
-                Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
-                Stream << persQueue.GetTotalGroupCount();
-                del = ", ";
-                break;
-            }
+            case NScheme::NTypeIds::Uuid:
+                return true;
+            default:
+                return false;
         }
+    }();
+
+    if (canFormatExplicitPartitionCount && (autoPartitioning || persQueue.HasTotalGroupCount())) {
+        Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
+        Stream << (autoPartitioning ? partitionStrategy.GetMinPartitionCount() : persQueue.GetTotalGroupCount());
+        del = ", ";
+    }
+
+    if (autoPartitioning) {
+        Stream << del << "TOPIC_MAX_ACTIVE_PARTITIONS = ";
+        Stream << partitionStrategy.GetMaxPartitionCount();
+        del = ", ";
     }
 
     if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
@@ -1328,6 +1471,34 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     Stream << ");";
+
+    if (autoPartitioning) {
+        Y_ENSURE(autoPartitioningStrategy, "Unexpected auto partitioning strategy");
+
+        Stream << "ALTER TOPIC ";
+        EscapeName(JoinPath({tablePath, cdcStream.GetName()}), Stream);
+        Stream << " SET (min_active_partitions = " << partitionStrategy.GetMinPartitionCount();
+        Stream << ", max_active_partitions = " << partitionStrategy.GetMaxPartitionCount();
+        Stream << ", auto_partitioning_strategy = ";
+        EscapeString(autoPartitioningStrategy, Stream);
+        Stream << ", auto_partitioning_stabilization_window = INTERVAL(";
+
+        {
+            TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+            const i64 stabilizationWindowUs = static_cast<i64>(partitionStrategy.GetScaleThresholdSeconds()) * 1000000;
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(
+                NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(stabilizationWindowUs));
+            Y_ENSURE(str.HasValue(), "Failed to convert auto partitioning stabilization window to string");
+            EscapeString(TString(str.AsStringRef()), Stream);
+        }
+
+        Stream << ")";
+        Stream << ", auto_partitioning_up_utilization_percent = "
+            << partitionStrategy.GetScaleUpPartitionWriteSpeedThresholdPercent();
+        Stream << ", auto_partitioning_down_utilization_percent = "
+            << partitionStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent();
+        Stream << ");";
+    }
 }
 
 void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
@@ -1791,9 +1962,12 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
                     Format(tier.GetApplyAfterSeconds());
                     break;
-                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
-                    Format(tier.GetApplyAfterSeconds(), tier.GetEvictToExternalStorage().GetStorage());
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage: {
+                    const auto& settings = tier.GetEvictToExternalStorage();
+                    Format(tier.GetApplyAfterSeconds(), settings.GetStorage(),
+                        settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
                     break;
+                }
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                     ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Undefined tier action");
             }
@@ -2182,6 +2356,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeName("DEDUPLICATION_ENABLED", paramsStr);
         paramsStr << "=";
         EscapeValue(options.GetDeduplicationEnabled(), paramsStr);
+        del = ", ";
+    }
+    if (options.HasCacheBlobsAfterWrite()) {
+        paramsStr << del;
+        EscapeName("CACHE_BLOBS_AFTER_WRITE", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetCacheBlobsAfterWrite(), paramsStr);
         del = ", ";
     }
     if (options.HasCompactionPlannerConstructor()) {

@@ -488,6 +488,13 @@ void TSchemeShard::PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndex
     }
 }
 
+void TSchemeShard::PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i) {
+    auto& sizes = info.Clusters->GetClusterSizes();
+    db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+        NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(sizes[i])
+    );
+}
+
 void TSchemeShard::PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     auto& newClusters = info.Clusters->GetClusters();
     auto& newSizes = info.Clusters->GetNextClusterSizes();

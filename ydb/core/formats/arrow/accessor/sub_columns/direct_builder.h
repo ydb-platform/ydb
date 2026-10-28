@@ -1,5 +1,5 @@
 #pragma once
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"

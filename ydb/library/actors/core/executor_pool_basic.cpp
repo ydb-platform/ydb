@@ -1,6 +1,5 @@
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
-#include "executor_pool_basic_sanitizer.h"
 #include "executor_pool_shared.h"
 #include "executor_pool_jail.h"
 #include "actor.h"
@@ -46,15 +45,6 @@ namespace NActors {
         ui64 TakenTokensToSleep = 0;
         ui64 TakenTokensToWakeup = 0;
     };
-
-    namespace {
-#ifdef ACTOR_SANITIZER
-        constexpr bool DebugMode = true;
-#else
-        constexpr bool DebugMode = false;
-#endif
-    }
-
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -219,9 +209,6 @@ namespace NActors {
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if (EnableWaker) {
             Waker = std::make_unique<TWaker>(this);
-        }
-        if constexpr (DebugMode) {
-            Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "ThreadCount == ", ThreadCount, " DefaultThreadCount == ", DefaultThreadCount, " MinThreadCount == ", MinThreadCount, " MaxThreadCount == ", MaxThreadCount, " DefaultFullThreadCount == ", DefaultFullThreadCount, " MinFullThreadCount == ", MinFullThreadCount, " MaxFullThreadCount == ", MaxFullThreadCount);
     }
@@ -991,6 +978,7 @@ namespace NActors {
                     actorSystem,
                     this,
                     PoolName));
+            Threads[i].Thread->Prepare();
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
@@ -1010,9 +998,6 @@ namespace NActors {
             Threads[i].Thread->Start();
         }
 
-        if constexpr (DebugMode) {
-            Sanitizer->Start();
-        }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "started");
     }
 
@@ -1023,9 +1008,6 @@ namespace NActors {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
-        if constexpr (DebugMode) {
-            Sanitizer->Stop();
-        }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stopped");
     }
 
@@ -1034,10 +1016,6 @@ namespace NActors {
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join ", i);
             Threads[i].Thread->Join();
-        }
-        if constexpr (DebugMode) {
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join sanitizer");
-            Sanitizer->Join();
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown done");
     }

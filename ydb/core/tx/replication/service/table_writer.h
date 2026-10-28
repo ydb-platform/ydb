@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/defs.h>
 
+namespace NKikimrReplication { class TLocalTableWriterSettings; }
+
 namespace NKikimr {
     struct TPathId;
 }
@@ -13,6 +15,7 @@ enum class EWriteMode {
     Consistent,
 };
 
-IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode = EWriteMode::Simple);
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode = EWriteMode::Simple,
+    const NKikimrReplication::TLocalTableWriterSettings* settings = nullptr);
 
 }

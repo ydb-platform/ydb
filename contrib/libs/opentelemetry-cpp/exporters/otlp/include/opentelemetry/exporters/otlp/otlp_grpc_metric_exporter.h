@@ -3,22 +3,22 @@
 
 #pragma once
 
-// clang-format off
-#include "opentelemetry/exporters/otlp/protobuf_include_prefix.h"
-// clang-format on
+#include <atomic>
+#include <chrono>
 
-#include "opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h"
-
-// clang-format off
-#include "opentelemetry/exporters/otlp/protobuf_include_suffix.h"
-// clang-format on
-
-#include "opentelemetry/exporters/otlp/otlp_environment.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_options.h"
 #include "opentelemetry/nostd/shared_ptr.h"
+#include "opentelemetry/sdk/metrics/instruments.h"
 #include "opentelemetry/sdk/metrics/push_metric_exporter.h"
+#include "opentelemetry/version.h"
 
-#include <atomic>
+// clang-format off
+#include "opentelemetry/exporters/otlp/protobuf_include_prefix.h" // IWYU pragma: keep
+#include "opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h"
+#include "opentelemetry/exporters/otlp/protobuf_include_suffix.h" // IWYU pragma: keep
+// clang-format on
+
+// IWYU pragma: no_include "opentelemetry/exporters/otlp/otlp_grpc_client.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace exporter
@@ -26,8 +26,8 @@ namespace exporter
 namespace otlp
 {
 
-class OtlpGrpcClientReferenceGuard;
-class OtlpGrpcClient;
+class OtlpGrpcClientReferenceGuard;  // IWYU pragma: keep
+class OtlpGrpcClient;                // IWYU pragma: keep
 
 /**
  * The OTLP exporter exports metrics data in OpenTelemetry Protocol (OTLP) format in gRPC.

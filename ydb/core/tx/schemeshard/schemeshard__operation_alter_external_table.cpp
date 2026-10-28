@@ -137,6 +137,7 @@ private:
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
+            .NotDeleted()
             .NotUnderDeleting()
             .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalTable)
@@ -240,7 +241,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         Y_UNUSED(owner);
         const auto ssId = context.SS->SelfTabletId();
 
@@ -288,7 +289,7 @@ public:
         TExternalDataSourceInfo::TPtr oldDataSource;
         {
             const auto oldExternalTableRecord = context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-            Y_ABORT_UNLESS(oldExternalTableRecord);
+            AFL_ENSURE(oldExternalTableRecord)("path", dstPath.PathString())("path_id", dstPath->PathId);
             const auto oldDataSourcePath = TPath::Resolve(oldExternalTableRecord->DataSourcePath, context.SS);
             RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, oldDataSourcePath));
 
@@ -303,7 +304,7 @@ public:
 
         const auto oldExternalTableInfo =
             context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-        Y_ABORT_UNLESS(oldExternalTableInfo);
+        AFL_ENSURE(oldExternalTableInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
         auto [externalTableInfo, maybeError] =
             NExternalTable::CreateExternalTable(externalDataSource->SourceType,
                                                 externalTableDescription,
@@ -374,7 +375,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

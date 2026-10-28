@@ -1997,9 +1997,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             {{ NKikimrScheme::StatusSchemeError, "Unsupported column type" }});
 
         runtime.GetAppData().FeatureFlags.SetEnableColumnshardDyNumber(true);
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
-            createTableWithTtlColumn("DyNumber"),
-            {{ NKikimrScheme::StatusSchemeError, "Unsupported column type for TTL in column tables" }});
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+        for (const auto columnType : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                createTableWithTtlColumn(columnType),
+                {{ NKikimrScheme::StatusSchemeError,
+                    "TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled" }});
+        }
     }
 
     Y_UNIT_TEST(CreateColumnTableNegative_UnknownColumn) {

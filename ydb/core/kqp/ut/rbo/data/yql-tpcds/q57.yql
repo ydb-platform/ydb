@@ -55,11 +55,11 @@ $v1 = (
 
 $v2 = (
     SELECT
-        v1.cc_name,
-        v1.d_year,
-        v1.d_moy,
-        v1.avg_monthly_sales,
-        v1.sum_sales,
+        v1.cc_name AS cc_name,
+        v1.d_year AS d_year,
+        v1.d_moy AS d_moy,
+        v1.avg_monthly_sales AS avg_monthly_sales,
+        v1.sum_sales AS sum_sales,
         v1_lag.sum_sales AS psum,
         v1_lead.sum_sales AS nsum
     FROM
@@ -91,7 +91,7 @@ WHERE
             Abs(sum_sales - avg_monthly_sales) / avg_monthly_sales
         )
         ELSE NULL
-    END > 0.1
+    END > cast("0.1" as decimal(35,2))
 ORDER BY
     sum_sales - avg_monthly_sales,
     nsum

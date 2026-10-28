@@ -56,13 +56,34 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
 }
 
 void TAllocationInfo::SetAllocatedVolume(const ui64 value) {
-    AFL_VERIFY(GetAllocationStatus() != EAllocationStatus::Failed);
-    Stage->UpdateVolume(AllocatedVolume, value, GetAllocationStatus() == EAllocationStatus::Allocated);
+    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Allocated);
     AllocatedVolume = value;
 }
 
 bool TAllocationInfo::IsAllocatable(const ui64 additional) const {
     return Stage->IsAllocatable(AllocatedVolume, additional);
+}
+
+bool TAllocationInfo::IsAllocatableUnrestricted(const ui64 additional) const {
+    return Stage->IsAllocatableUnrestricted(AllocatedVolume, additional);
+}
+
+bool TAllocationInfo::NeverFitsUnrestricted() const {
+    return Stage->CanEverFitUnrestricted(AllocatedVolume) == false;
+}
+
+void TAllocationInfo::Fail(const TString& errorMessage) {
+    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Waiting)("status", GetAllocationStatus())("id", Identifier);
+    YDB_LOG_DEBUG("",
+        {"event", "allocation_failed"},
+        {"allocationId", Identifier},
+        {"stage", Stage->GetName()},
+        {"error", errorMessage});
+    Stage->Free(AllocatedVolume, false);
+    Stage->OnCannotAllocate();
+    AllocationFailed = true;
+    Allocation->OnAllocationImpossible(errorMessage);
+    Allocation = nullptr;
 }
 
 TAllocationInfo::~TAllocationInfo() {

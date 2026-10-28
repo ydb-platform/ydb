@@ -15,6 +15,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
+
 namespace NKikimr::NTxProxy {
 
 using namespace NColumnShard;
@@ -70,8 +72,11 @@ bool TryCollectTargetTablets(const TLongTxWrite& tx, TVector<ui64>& tabletIds, u
     TParsedBatchData accessor(tx.GetBatch());
     const auto initStatus = shardsSplitter->SplitData(entry, accessor);
     if (!initStatus.Ok()) {
-        AFL_WARN(NKikimrServices::LONG_TX_SERVICE)("event", "flow_control_split_failed")("path", tx.GetPath())(
-            "status", Ydb::StatusIds::StatusCode_Name(initStatus.GetStatus()))("reason", initStatus.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"event", "flow_control_split_failed"},
+            {"path", tx.GetPath()},
+            {"status", Ydb::StatusIds::StatusCode_Name(initStatus.GetStatus())},
+            {"reason", initStatus.GetErrorMessage()});
         return false;
     }
 
@@ -213,7 +218,10 @@ private:
     void FailOpenUnadmitted(const TActorContext& ctx, TStringBuf reason) {
         Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
         Counters.OnAdmitSkippedUnavailable();
-        AFL_WARN(NKikimrServices::LONG_TX_SERVICE)("event", "flow_control_admit_skipped")("reason", reason)("path", Tx.GetPath());
+        YDB_LOG_WARN("",
+            {"event", "flow_control_admit_skipped"},
+            {"reason", reason},
+            {"path", Tx.GetPath()});
         StartWrite(ctx);
         Finish(ctx);
     }

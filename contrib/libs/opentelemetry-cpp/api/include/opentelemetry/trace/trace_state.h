@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ctype.h>
+#include <cctype>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -322,7 +322,10 @@ private:
   }
 #endif
 
-  static bool IsLowerCaseAlphaOrDigit(char c) noexcept { return isdigit(c) || islower(c); }
+  static bool IsLowerCaseAlphaOrDigit(char c) noexcept
+  {
+    return std::isdigit(c) || std::islower(c);
+  }
 
 private:
   // Store entries in a C-style array to avoid using std::array or std::vector.

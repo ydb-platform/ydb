@@ -14,9 +14,9 @@ TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
     }
     auto strategy = config.GetPartitionStrategy();
     // Min/MaxPartitionCount are uint32 — negative API values must be rejected before conversion.
-    if (strategy.GetMaxPartitionCount() != 0 && strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+    if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
         return {Ydb::StatusIds::BAD_REQUEST,
-            TStringBuilder() << "Max active partitions must be greater than or equal to partitions count or equals zero (unlimited), provided "
+            TStringBuilder() << "Max active partitions must be greater than or equal to partitions count, provided "
             << strategy.GetMaxPartitionCount() << " and " << strategy.GetMinPartitionCount()};
     }
     if (strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() > 100) {

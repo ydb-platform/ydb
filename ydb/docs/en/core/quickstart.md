@@ -113,9 +113,18 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       ```bash
       helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      kubectl rollout status deployment/ydb-operator --timeout=5m
       ```
 
    5. Apply the manifest for creating a {{ ydb-short-name }} cluster:
+
+      First, check that the API server can call the controller's admission webhook and accept the manifest without creating the resource:
+
+      ```bash
+      kubectl apply --dry-run=server -f samples/minikube/storage.yaml
+      ```
+
+      The webhook may still be unavailable after `rollout status` completes. If the check reports `connection refused` or `no endpoints available` when calling the webhook, wait a few seconds and retry the check. Resolve the cause of any other errors before proceeding. Apply the manifest only after the check succeeds:
 
       ```bash
       kubectl apply -f samples/minikube/storage.yaml
@@ -131,7 +140,12 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
    8. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
 
-   9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-minikube-sample` DNS name on port 2135.
+   9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. Use the following separate services to connect from the same Kubernetes namespace:
+
+       - `database-minikube-sample-grpc:2135` (gRPC);
+       - `database-minikube-sample-status:8765` ({{ ydb-ui-name }}).
+
+       Database path: `/Root/database-minikube-sample`.
 
    10. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 8765`.
 
@@ -157,9 +171,18 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       ```bash
       helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      kubectl rollout status deployment/ydb-operator --timeout=5m
       ```
 
    6. Apply the manifest for creating a storage:
+
+      First, check that the API server can call the controller's admission webhook and accept the manifest without creating the resource:
+
+      ```bash
+      kubectl apply --dry-run=server -f samples/kind/storage.yaml
+      ```
+
+      The webhook may still be unavailable after `rollout status` completes. If the check reports `connection refused` or `no endpoints available` when calling the webhook, wait a few seconds and retry the check. Resolve the cause of any other errors before proceeding. Apply the manifest only after the check succeeds:
 
       ```bash
       kubectl apply -f samples/kind/storage.yaml
@@ -175,7 +198,12 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
    9. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
 
-   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-kind-sample` DNS name on port 2135.
+   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. Use the following separate services to connect from the same Kubernetes namespace:
+
+       - `database-kind-sample-grpc:2135` (gRPC);
+       - `database-kind-sample-status:8765` ({{ ydb-ui-name }}).
+
+       Database path: `/Root/database-kind-sample`.
 
    11. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-kind-sample-0 8765`.
 
@@ -188,7 +216,16 @@ The simplest way to launch your first {{ ydb-short-name }} query is via [{{ ydb-
 
 ![Web UI home page](_assets/web-ui-home.png)
 
-{{ ydb-short-name }} is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a {{ ydb-short-name }} cluster reside in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases running inside a single {{ ydb-short-name }} process that might belong to different tenants. `/Root` is for system purposes, while `/Root/test` or `/local` (depending on the chosen installation method) is a playground created during installation in the previous step. Click on either `/Root/test` or `/local`, enter your first query, and hit the "Run" button:
+{{ ydb-short-name }} is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a {{ ydb-short-name }} cluster reside in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases running inside a single {{ ydb-short-name }} process that might belong to different tenants. `/Root` is for system purposes. To run queries, select the database created in the previous step:
+
+| Installation method | Database |
+| --- | --- |
+| Linux x86_64 | `/Root/test` |
+| Docker x86_64 | `/local` |
+| Minikube | `/Root/database-minikube-sample` |
+| Kind | `/Root/database-kind-sample` |
+
+Click on the corresponding database, enter your first query, and hit the "Run" button:
 
 ```yql
 SELECT "Hello, world!"u;

@@ -2,7 +2,6 @@
 
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 class TResourcePoolConfig {
@@ -24,4 +23,4 @@ public:
     virtual TString GetTypeId() const override;
 };
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

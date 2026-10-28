@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <memory>
+
 namespace NAllocProfiler {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,10 +14,10 @@ Y_UNIT_TEST_SUITE(Profiler) {
         TStringStream str;
 
         NAllocProfiler::StartAllocationSampling(true);
-        TVector<TAutoPtr<int>> test;
+        TVector<std::unique_ptr<int>> test;
         // Do many allocations and no deallocations
         for (int i = 0; i < 10000; ++i) {
-            test.push_back(new int);
+            test.emplace_back(new int);
         }
         NAllocProfiler::StopAllocationSampling(str);
         //Cout << str.Str() << Endl;
@@ -57,11 +59,11 @@ Y_UNIT_TEST_SUITE(Profiler) {
         TStringStream str;
 
         NAllocProfiler::StartAllocationSampling(true);
-        TVector<TAutoPtr<int>> test;
+        TVector<std::unique_ptr<int>> test;
         NAllocProfiler::TProfilingScope scope(42);
         // Do many allocations and no deallocations
         for (int i = 0; i < 10000; ++i) {
-            test.push_back(new int);
+            test.emplace_back(new int);
         }
 
         TAllocDumper dumper(str);

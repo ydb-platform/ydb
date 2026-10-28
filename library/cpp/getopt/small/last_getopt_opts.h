@@ -60,6 +60,8 @@ namespace NLastGetopt {
         ui32 FreeArgsMin_; // minimal number of free args
         ui32 FreeArgsMax_; // maximal number of free args
 
+        TVector<const TOpt*> ExclusiveWithFreeArgs_;
+
         TMap<ui32, TFreeArgSpec> FreeArgSpecs_; // mapping [free arg position] -> [free arg specification]
         TFreeArgSpec TrailingArgSpec_;          // spec for the trailing argument (when arguments are unlimited)
         TString DefaultFreeArgTitle_ = "ARG"; // title that's used for free args without a title
@@ -220,6 +222,15 @@ namespace NLastGetopt {
         TOpt& GetOption(const TStringBuf& name) {
             return GetLongOption(name);
         }
+
+        /// @}
+
+        /**
+         * Search for the option with given short name
+         * @param c        short name for search
+         * @return         ref on result (throw exception if not found)
+         */
+        /// @{
 
         const TOpt& GetOption(char c) const {
             return GetCharOption(c);
@@ -425,6 +436,17 @@ namespace NLastGetopt {
         void MutuallyExclusiveOpt(TOpt& opt1, TOpt& opt2);
 
         /**
+         * Indicate that an explicitly specified option can't appear together with free arguments.
+         * Default values do not trigger this check.
+         */
+        template <typename Opt>
+        void MutuallyExclusiveWithFreeArgs(Opt&& name) {
+            TOpt& opt = GetOption(name);
+            ExclusiveWithFreeArgs_.push_back(&opt);
+            opt.IfPresentDisableCompletionForFreeArgs();
+        }
+
+        /**
          * @return index of option
          *
          * @param opt        pointer of option to search
@@ -434,7 +456,7 @@ namespace NLastGetopt {
         /**
          * Replace help string with given
          *
-         * @param decr        new help string
+         * @param descr     new help string
          */
         void SetCmdLineDescr(const TString& descr) {
             CustomCmdLineDescr = descr;

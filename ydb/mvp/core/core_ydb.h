@@ -288,8 +288,10 @@ struct TYdbLocation {
     NYdb::TDriverConfig GetDriverConfig(TStringBuf endpoint = TStringBuf(), TStringBuf scheme = TStringBuf()) const {
         NYdb::TDriverConfig config;
         TString endp(endpoint);
+        TString clusterEndpoint; // owns the value the views below may point into
         if (endpoint.empty()) {
-            endpoint = GetEndpoint("cluster-api");
+            clusterEndpoint = GetEndpoint("cluster-api");
+            endpoint = clusterEndpoint;
             endpoint.TrySplit("://", scheme, endpoint);
             endp = TString(endpoint);
         } else if (endp.find(':') == TString::npos) {

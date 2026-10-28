@@ -1,9 +1,11 @@
-#pragma once 
+#pragma once
+
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/fq/libs/config/yq_issue.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/core/fq/libs/config/yq_issue.h>
+
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
 namespace NFq {
 
@@ -19,18 +21,15 @@ public:
 
     void ProcessSkipAuth();
 
-    void SetDoOnWarehouseS3(std::function<
-        void(const FederatedQuery::IcebergWarehouse_S3&, const TString&)> callback) {
+    void SetDoOnWarehouseS3(std::function<void(const FederatedQuery::IcebergWarehouse_S3&, const TString&)> callback) {
         OnS3Callback_ = callback;
     }
 
-    void SetDoOnCatalogHive(std::function<
-        void(const FederatedQuery::IcebergCatalog_HiveMetastore&)> callback) {
+    void SetDoOnCatalogHive(std::function<void(const FederatedQuery::IcebergCatalog_HiveMetastore&)> callback) {
         OnHiveCallback_ = callback;
     }
 
-    void SetDoOnCatalogHadoop(std::function<
-        void(const FederatedQuery::IcebergCatalog_Hadoop&)> callback) {
+    void SetDoOnCatalogHadoop(std::function<void(const FederatedQuery::IcebergCatalog_Hadoop&)> callback) {
         OnHadoopCallback_ = callback;
     }
 
@@ -61,11 +60,9 @@ private:
     std::function<void(const FederatedQuery::IcebergCatalog_Hadoop&)> OnHadoopCallback_;
 };
 
-TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConfig& yqConfig,
-                                                      const FederatedQuery::Iceberg& config);
+TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConfig& yqConfig, const FederatedQuery::Iceberg& config);
 
-void FillIcebergGenericClusterConfig(const NConfig::TCommonConfig& yqConfig,
-                                     const FederatedQuery::Iceberg& config,
-                                     NYql::TGenericClusterConfig& cluster);
+void FillIcebergGenericClusterConfig(
+    const NConfig::TCommonConfig& yqConfig, const FederatedQuery::Iceberg& config, NYql::TGenericClusterConfig& cluster);
 
-} // NFq
+}   // namespace NFq

@@ -31,7 +31,8 @@ def start(argv):
 
     cmd = [
         binary_path,
-        "--port", str(grpc_port),
+        "--port",
+        str(grpc_port),
     ]
 
     recipes_common.start_daemon(
@@ -39,7 +40,7 @@ def start(argv):
         environment=None,
         is_alive_check=is_daemon_ready,
         pid_file_name=PID_FILENAME,
-        daemon_name=DAEMON_NAME
+        daemon_name=DAEMON_NAME,
     )
 
     set_env("IAM_EMULATOR_ENDPOINT", f"{HOSTNAME}:{grpc_port}")

@@ -1,20 +1,18 @@
 #include "solomon_accessor_client.h"
 
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/threading/future/wait/wait.h>
-#include <util/string/join.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/solomon/common/constants.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
-
-#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
-#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
-
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <algorithm>
 
@@ -130,13 +128,12 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetLabelsResponse(TStringBuilder() << "Monitoring api get labels response: " << response.Issues.ToOneLineString() <<
-            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+        return TGetLabelsResponse(TStringBuilder() << "Monitoring api get labels response: " << response.Issues.ToOneLineString()
+                                                   << ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetLabelsResponse(TStringBuilder() <<
-            "Monitoring api get labels request failed with " << DescribeHttpError(response.Content));
+        return TGetLabelsResponse(TStringBuilder() << "Monitoring api get labels request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
@@ -169,20 +166,20 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsResponse(TStringBuilder() << "Monitoring api list metrics response: " << response.Issues.ToOneLineString() <<
-            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+        return TListMetricsResponse(TStringBuilder() << "Monitoring api list metrics response: " << response.Issues.ToOneLineString()
+                                                     << ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsResponse(TStringBuilder() <<
-            "Monitoring api list metrics request failed with " << DescribeHttpError(response.Content));
+        return TListMetricsResponse(
+            TStringBuilder() << "Monitoring api list metrics request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse("Monitoring api list metrics response is not a valid json" );
+        return TListMetricsResponse("Monitoring api list metrics response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
@@ -194,9 +191,8 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     }
 
     const auto pagesInfo = json["page"];
-    if (!pagesInfo.IsMap() ||
-        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() ||
-        !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
+    if (!pagesInfo.IsMap() || !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || !pagesInfo.Has("totalCount") ||
+        !pagesInfo["totalCount"].IsInteger()) {
         return TListMetricsResponse("Monitoring api list metrics response doesn't contain paging info");
     }
 
@@ -204,13 +200,14 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     result.TotalCount = pagesInfo["totalCount"].GetInteger();
 
     for (const auto& metricObj : json["result"].GetArray()) {
-        if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
+        if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") ||
+            !metricObj["type"].IsString()) {
             return TListMetricsResponse("Monitoring api list metrics response contains invalid metrics");
         }
 
         TSelectors selectors;
         for (const auto& [key, value] : metricObj["labels"].GetMap()) {
-            selectors[key] = {"==", value.GetString()};
+            selectors[key] = { "==", value.GetString() };
         }
 
         result.Metrics.emplace_back(std::move(selectors), metricObj["type"].GetString());
@@ -223,13 +220,14 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     TListMetricsLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
-            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+        return TListMetricsLabelsResponse(TStringBuilder()
+                                          << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString()
+                                          << ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsLabelsResponse(TStringBuilder() <<
-            "Monitoring api list metrics labels request failed with " << DescribeHttpError(response.Content));
+        return TListMetricsLabelsResponse(
+            TStringBuilder() << "Monitoring api list metrics labels request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
@@ -256,7 +254,7 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
             bool truncated = label["truncated"].GetBooleanSafe();
             const auto& jsonValues = label["values"].GetArraySafe();
             std::vector<TString> values;
-    
+
             values.reserve(jsonValues.size());
             for (const auto& labelValue : jsonValues) {
                 if (!labelValue.IsString()) {
@@ -264,12 +262,12 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
                 }
                 values.push_back(labelValue.GetString());
             }
-    
+
             result.Labels.emplace_back(name, absent, truncated, std::move(values));
         } catch (const NJson::TJsonException& e) {
-            return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
+            return TListMetricsLabelsResponse(
+                TStringBuilder() << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
         }
-
     }
 
     return TListMetricsLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
@@ -279,8 +277,8 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << response.Issues.ToOneLineString() <<
-            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << response.Issues.ToOneLineString()
+                                                        << ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
@@ -292,7 +290,8 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
         try {
             NJson::ReadJsonTree(response.Content.data(), &errJson, /*throwOnError*/ true);
             parsed = true;
-        } catch (...) {}
+        } catch (...) {
+        }
 
         if (parsed && errJson.IsMap() && errJson.Has("message") && errJson["message"].IsString()) {
             const TString& message = errJson["message"].GetString();
@@ -302,14 +301,14 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
                 result.PointsCount = downsampledPointsCount;
                 return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
             }
-            return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << message <<
-                ", internal code: " << response.Content.HttpResponseCode);
+            return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << message
+                                                            << ", internal code: " << response.Content.HttpResponseCode);
         }
 
         // Non-JSON or no "message" field — report the HTTP status code only to
         // avoid logging potentially large / sensitive response bodies.
-        return TGetPointsCountResponse(TStringBuilder() <<
-            "Monitoring api points count request failed with HTTP " << response.Content.HttpResponseCode);
+        return TGetPointsCountResponse(
+            TStringBuilder() << "Monitoring api points count request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
@@ -333,10 +332,8 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
 
     if (!status.Ok()) {
         TString error = TStringBuilder() << "Monitoring api get data response: " << status.Msg;
-        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED ||
-            status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE ||
-            status.GRpcStatusCode == grpc::StatusCode::DEADLINE_EXCEEDED ||
-            status.GRpcStatusCode == grpc::StatusCode::INTERNAL ||
+        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE ||
+            status.GRpcStatusCode == grpc::StatusCode::DEADLINE_EXCEEDED || status.GRpcStatusCode == grpc::StatusCode::INTERNAL ||
             status.GRpcStatusCode == grpc::StatusCode::ABORTED) {
             return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
@@ -356,16 +353,16 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
 
         TSelectors selectors;
         for (const auto& [key, value] : queryResponse.labels()) {
-            selectors[key] = {"==", value};
+            selectors[key] = { "==", value };
         }
         std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
         std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
 
         if (TString name = queryResponse.name()) {
-            selectors["name"] = {"==", name};
+            selectors["name"] = { "==", name };
         }
 
-        TMetric metric {
+        TMetric metric{
             .Selectors = std::move(selectors),
             .Type = std::move(type),
         };
@@ -376,59 +373,51 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     return TGetDataResponse(std::move(result), response.ByteSize());
 }
 
-class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
+class TSolomonAccessorClient: public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
-    TSolomonAccessorClient(
-        NYql::NSo::NProto::TDqSolomonSource&& settings,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+    TSolomonAccessorClient(NYql::NSo::NProto::TDqSolomonSource&& settings, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         const TSolomonReadActorConfig& cfg)
         : EnableSolomonClientPostApi(cfg.EnablePostApi)
         , MaxListingPageSize(cfg.MaxListingPageSize)
         , LabelsListingLimit(cfg.LabelsListingLimit)
         , Settings(std::move(settings))
-        , CredentialsProvider(credentialsProvider) {
-
+        , CredentialsProvider(credentialsProvider)
+    {
         HttpConfig.SetMaxInFlightCount(cfg.MaxApiInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
 
-        HttpRetryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
-            [](CURLcode curlCode, long httpCode) {
-                // Retry only on transient transport-level errors (connection
-                // reset, timeouts, partial transfers, DNS hiccups, etc.).
-                // Configuration errors (malformed URL, unsupported protocol,
-                // ...) are deterministic and will fail again on retry, so we
-                // skip retrying them to avoid burning the retry budget and
-                // adding latency.
-                switch (curlCode) {
-                    case CURLE_OK:
-                        break;
-                    case CURLE_COULDNT_RESOLVE_PROXY:
-                    case CURLE_COULDNT_RESOLVE_HOST:
-                    case CURLE_COULDNT_CONNECT:
-                    case CURLE_OPERATION_TIMEDOUT:
-                    case CURLE_SEND_ERROR:
-                    case CURLE_RECV_ERROR:
-                    case CURLE_GOT_NOTHING:
-                    case CURLE_PARTIAL_FILE:
-                    case CURLE_HTTP2:
-                    case CURLE_HTTP2_STREAM:
-                    case CURLE_AGAIN:
-                        return ERetryErrorClass::ShortRetry;
-                    default:
-                        return ERetryErrorClass::NoRetry;
-                }
-                const auto& codes = NConstants::RetriableHttpCodes;
-                if (std::find(codes.begin(), codes.end(), httpCode) != codes.end()) {
+        HttpRetryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([](CURLcode curlCode, long httpCode) {
+            // Retry only on transient transport-level errors (connection
+            // reset, timeouts, partial transfers, DNS hiccups, etc.).
+            // Configuration errors (malformed URL, unsupported protocol,
+            // ...) are deterministic and will fail again on retry, so we
+            // skip retrying them to avoid burning the retry budget and
+            // adding latency.
+            switch (curlCode) {
+                case CURLE_OK:
+                    break;
+                case CURLE_COULDNT_RESOLVE_PROXY:
+                case CURLE_COULDNT_RESOLVE_HOST:
+                case CURLE_COULDNT_CONNECT:
+                case CURLE_OPERATION_TIMEDOUT:
+                case CURLE_SEND_ERROR:
+                case CURLE_RECV_ERROR:
+                case CURLE_GOT_NOTHING:
+                case CURLE_PARTIAL_FILE:
+                case CURLE_HTTP2:
+                case CURLE_HTTP2_STREAM:
+                case CURLE_AGAIN:
                     return ERetryErrorClass::ShortRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            cfg.RetryConfig.MinDelay,
-            cfg.RetryConfig.MinLongRetryDelay,
-            cfg.RetryConfig.MaxDelay,
-            cfg.RetryConfig.MaxRetries,
-            cfg.RetryConfig.MaxTime
-        );
+                default:
+                    return ERetryErrorClass::NoRetry;
+            }
+            const auto& codes = NConstants::RetriableHttpCodes;
+            if (std::find(codes.begin(), codes.end(), httpCode) != codes.end()) {
+                return ERetryErrorClass::ShortRetry;
+            }
+            return ERetryErrorClass::NoRetry;
+        }, cfg.RetryConfig.MinDelay, cfg.RetryConfig.MinLongRetryDelay, cfg.RetryConfig.MaxDelay, cfg.RetryConfig.MaxRetries,
+            cfg.RetryConfig.MaxTime);
 
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
@@ -445,16 +434,12 @@ public:
         auto [url, body] = BuildGetLabelsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
-        
+
         auto cb = [resultPromise, selectors](NYql::IHTTPGateway::TResult&& result) mutable {
             resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), selectors));
         };
 
-        auto error = DoHttpRequest(
-            std::move(cb),
-            std::move(url),
-            std::move(body)
-        );
+        auto error = DoHttpRequest(std::move(cb), std::move(url), std::move(body));
 
         if (error) {
             return NThreading::MakeFuture(TGetLabelsResponse(*error));
@@ -467,16 +452,12 @@ public:
         auto [url, body] = BuildListMetricsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
-        
+
         auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
             resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
         };
 
-        auto error = DoHttpRequest(
-            std::move(cb),
-            std::move(url),
-            std::move(body)
-        );
+        auto error = DoHttpRequest(std::move(cb), std::move(url), std::move(body));
 
         if (error) {
             return NThreading::MakeFuture(TListMetricsResponse(*error));
@@ -485,20 +466,17 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+    NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(
+        const TSelectors& selectors, TInstant from, TInstant to) const override final {
         auto [url, body] = BuildListMetricsLabelsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsLabelsResponse>();
-        
+
         auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
             resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
         };
 
-        auto error = DoHttpRequest(
-            std::move(cb),
-            std::move(url),
-            std::move(body)
-        );
+        auto error = DoHttpRequest(std::move(cb), std::move(url), std::move(body));
 
         if (error) {
             return NThreading::MakeFuture(TListMetricsLabelsResponse(*error));
@@ -507,32 +485,29 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const override final {        
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const override final {
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
         TInstant sevenDaysAgo = TInstant::Now() - NConstants::DownsamplingCutoff;
 
         TInstant downsamplingFrom = from;
         TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
-        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? NConstants::DefaultGridInterval.MilliSeconds() : Settings.GetDownsampling().GetGridMs();
+        ui64 gridMs =
+            Settings.GetDownsampling().GetDisabled() ? NConstants::DefaultGridInterval.MilliSeconds() : Settings.GetDownsampling().GetGridMs();
 
         ui64 downsampledPointsCount = ceil((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / gridMs) + 1;
 
         if (downsamplingTo < to) {
             auto fullSelectors = AddRequiredLabels(selectors);
             TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
-            
+
             auto [url, body] = BuildGetPointsCountHttpParams(program, downsamplingTo, to);
-            
+
             auto cb = [resultPromise, downsampledPointsCount](NYql::IHTTPGateway::TResult&& response) mutable {
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
             };
-    
-            auto error = DoHttpRequest(
-                std::move(cb),
-                std::move(url),
-                std::move(body)
-            );
+
+            auto error = DoHttpRequest(std::move(cb), std::move(url), std::move(body));
 
             if (error) {
                 return NThreading::MakeFuture(TGetPointsCountResponse(*error));
@@ -585,19 +560,14 @@ public:
             resultPromise.SetValue(TGetDataResponse("Client is being shutted down"));
             return resultPromise.GetFuture();
         }
-        
+
         // hold context until reply
         auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable {
             resultPromise.SetValue(ProcessGetDataResponse(std::move(status), std::move(result)));
         };
 
         GrpcConnection->DoRequest<ReadRequest, ReadResponse>(
-            std::move(request),
-            std::move(cb),
-            &DataService::Stub::AsyncRead,
-            callMeta,
-            context.get()
-        );
+            std::move(request), std::move(cb), &DataService::Stub::AsyncRead, callMeta, context.get());
 
         return resultPromise.GetFuture();
     }
@@ -655,24 +625,10 @@ private:
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
 
         if (!body.empty()) {
-            HttpGateway->Upload(
-                std::move(url),
-                std::move(headers),
-                std::move(body),
-                std::move(callback),
-                false,
-                HttpRetryPolicy
-            );
+            HttpGateway->Upload(std::move(url), std::move(headers), std::move(body), std::move(callback), false, HttpRetryPolicy);
         } else {
             HttpGateway->Download(
-                std::move(url),
-                std::move(headers),
-                0,
-                NConstants::MaxHttpGetResponseSize,
-                std::move(callback),
-                {},
-                HttpRetryPolicy
-            );
+                std::move(url), std::move(headers), 0, NConstants::MaxHttpGetResponseSize, std::move(callback), {}, HttpRetryPolicy);
         }
 
         return {};
@@ -691,11 +647,13 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -719,11 +677,13 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -746,12 +706,14 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
                 .UnsafeWriteKey("limit").WriteLongLong(LabelsListingLimit)
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -774,6 +736,7 @@ private:
 
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
+        // clang-format off
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(from.ToString())
             .UnsafeWriteKey("to").WriteString(to.ToString())
@@ -781,12 +744,15 @@ private:
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
+        // clang-format on
 
         if (!ds.GetDisabled()) {
-            w
-                .UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
-                .UnsafeWriteKey("fill").WriteString(ds.GetFill())
-                .UnsafeWriteKey("gridMillis").WriteLongLong(ds.GetGridMs());
+            w.UnsafeWriteKey("aggregation")
+                .WriteString(ds.GetAggregation())
+                .UnsafeWriteKey("fill")
+                .WriteString(ds.GetFill())
+                .UnsafeWriteKey("gridMillis")
+                .WriteLongLong(ds.GetGridMs());
         }
         w.EndObject().EndObject();
 
@@ -827,7 +793,7 @@ private:
             if (auto it = selectors.find(labelName); it != selectors.end()) {
                 fullSelectors[labelName] = it->second;
             } else {
-                fullSelectors[labelName] = {"=", "-"};
+                fullSelectors[labelName] = { "=", "-" };
             }
         }
         return fullSelectors;
@@ -877,14 +843,11 @@ private:
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient;
 };
 
-} // namespace
+}   // namespace
 
-ISolomonAccessorClient::TPtr
-ISolomonAccessorClient::Make(
-    NYql::NSo::NProto::TDqSolomonSource source,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-    const TSolomonReadActorConfig& cfg) {
+ISolomonAccessorClient::TPtr ISolomonAccessorClient::Make(NYql::NSo::NProto::TDqSolomonSource source,
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, const TSolomonReadActorConfig& cfg) {
     return std::make_shared<TSolomonAccessorClient>(std::move(source), credentialsProvider, cfg);
 }
 
-} // namespace NYql::NSo
+}   // namespace NYql::NSo

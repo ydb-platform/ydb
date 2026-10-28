@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     compute_actor.cpp
@@ -46,8 +46,6 @@ PEERDIR(
     yql/essentials/utils/failure_injector
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

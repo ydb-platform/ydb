@@ -13,8 +13,8 @@
 class TZstdCompress: public IOutputStream {
 public:
     /**
-      @param slave stream to write compressed data to
-      @param quality, higher quality - slower but better compression.
+      @param slave    stream to write compressed data to
+      @param quality  higher quality - slower but better compression.
              0 is default compression (see constant ZSTD_CLEVEL_DEFAULT(3))
              max compression is  ZSTD_MAX_CLEVEL (22)
     */

@@ -6,15 +6,14 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -23,7 +22,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TExecuterActor : public TBaseComputeActor<TExecuterActor> {
+class TExecuterActor: public TBaseComputeActor<TExecuterActor> {
 public:
     enum ERequestType {
         RT_EXECUTE_SCRIPT,
@@ -32,10 +31,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("ExecuteScript") },
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>(
+            { { MakeIntrusive<TComputeRequestCounters>("ExecuteScript") }, { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -43,7 +40,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -53,7 +50,8 @@ public:
         }
     };
 
-    TExecuterActor(const TRunActorParams& params, NYdb::NQuery::EStatsMode statsMode, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TExecuterActor(const TRunActorParams& params, NYdb::NQuery::EStatsMode statsMode, const TActorId& parent, const TActorId& connector,
+        const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Executer")
         , Params(params)
         , StatsMode(statsMode)
@@ -61,7 +59,8 @@ public:
         , Connector(connector)
         , Pinger(pinger)
         , Counters(GetStepCountersSubgroup())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_EXECUTER_ACTOR";
 
@@ -105,7 +104,11 @@ public:
                 {"jobId", Params.JobId},
                 {"executionId", ExecutionId},
                 {"operationId", OperationId});
-            Send(Parent, new TEvYdbCompute::TEvExecuterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent,
+                new TEvYdbCompute::TEvExecuterResponse(
+                    NYql::TIssues{ NYql::TIssue{
+                        TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId
+                                         << " OperationId: " << OperationId.ToString() } }, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -136,7 +139,11 @@ public:
     }
 
     void SendExecuteScript() {
-        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TInstant, NYdb::NQuery::ESyntax, NYdb::NQuery::EExecMode, NYdb::NQuery::EStatsMode, TString, std::map<TString, Ydb::TypedValue>>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.RequestSubmittedAt + Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), StatsMode, Params.JobId + "_" + ToString(Params.RestartCount), Params.QueryParameters));
+        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration,
+            TInstant, NYdb::NQuery::ESyntax, NYdb::NQuery::EExecMode, NYdb::NQuery::EStatsMode, TString, std::map<TString, Ydb::TypedValue>>(
+            Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl,
+            Params.RequestSubmittedAt + Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), StatsMode,
+            Params.JobId + "_" + ToString(Params.RestartCount), Params.QueryParameters));
     }
 
     NYdb::NQuery::ESyntax GetSyntax() const {
@@ -167,7 +174,7 @@ public:
             case FederatedQuery::SAVE:
             case FederatedQuery::ExecuteMode_INT_MAX_SENTINEL_DO_NOT_USE_:
             case FederatedQuery::ExecuteMode_INT_MIN_SENTINEL_DO_NOT_USE_:
-                return  NYdb::NQuery::EExecMode::Unspecified;
+                return NYdb::NQuery::EExecMode::Unspecified;
         }
     }
 
@@ -194,13 +201,9 @@ private:
     TInstant StartTime;
 };
 
-std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params,
-                                                     NYdb::NQuery::EStatsMode statsMode,
-                                                     const TActorId& parent,
-                                                     const TActorId& connector,
-                                                     const TActorId& pinger,
-                                                     const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params, NYdb::NQuery::EStatsMode statsMode, const TActorId& parent,
+    const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TExecuterActor>(params, statsMode, parent, connector, pinger, queryCounters);
 }
 
-}
+}   // namespace NFq

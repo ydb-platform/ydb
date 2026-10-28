@@ -8,7 +8,7 @@ namespace NYT::NConcurrency {
 template <class TQueueImpl>
 TSingleQueueSchedulerThread<TQueueImpl>::TSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     std::string threadGroupName,
     std::string threadName,
     NThreading::TThreadOptions options)
@@ -49,7 +49,7 @@ template class TSingleQueueSchedulerThread<TMpscQueueImpl>;
 template <class TQueueImpl>
 TSuspendableSingleQueueSchedulerThread<TQueueImpl>::TSuspendableSingleQueueSchedulerThread(
     TInvokerQueuePtr<TQueueImpl> queue,
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     std::string threadGroupName,
     std::string threadName,
     NThreading::TThreadOptions options)
@@ -70,7 +70,7 @@ TFuture<void> TSuspendableSingleQueueSchedulerThread<TQueueImpl>::Suspend(bool i
     if (!Suspending_.exchange(true)) {
         SuspendImmediately_ = immediately;
         SuspendedPromise_ = NewPromise<void>();
-        ResumeEvent_ = New<NThreading::TEvent>();
+        ResumeEvent_ = New<TEvent>();
     } else if (immediately) {
         SuspendImmediately_ = true;
     }
@@ -111,7 +111,7 @@ template <class TQueueImpl>
 TClosure TSuspendableSingleQueueSchedulerThread<TQueueImpl>::BeginExecute()
 {
     if (Suspending_ && (SuspendImmediately_ || Queue_->IsEmpty())) {
-        TIntrusivePtr<NThreading::TEvent> resumeEvent;
+        TIntrusivePtr<TEvent> resumeEvent;
         {
             auto guard = Guard(Lock_);
 

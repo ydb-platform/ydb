@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     update.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     ydb/core/tx/schemeshard/olap/operations/alter/abstract
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

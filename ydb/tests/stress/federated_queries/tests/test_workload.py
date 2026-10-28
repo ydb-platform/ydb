@@ -37,9 +37,13 @@ class TestYdbWorkload(StressFixture):
         logger.info("TestYdbWorkload::start test")
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint", f"localhost:{self.cluster.nodes[1].port}",
-            "--database", self.database,
-            "--duration", self.base_duration,
-            "--prefix", "federated_queries_stress",
+            "--endpoint",
+            f"localhost:{self.cluster.nodes[1].port}",
+            "--database",
+            self.database,
+            "--duration",
+            self.base_duration,
+            "--prefix",
+            "federated_queries_stress",
         ]
         yatest.common.execute(cmd, wait=True)

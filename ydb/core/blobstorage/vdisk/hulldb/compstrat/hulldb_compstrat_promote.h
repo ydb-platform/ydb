@@ -27,11 +27,13 @@ namespace NKikimr {
                     TIntrusivePtr<THullCtx> hullCtx,
                     TBoundariesConstPtr &boundaries,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , Boundaries(boundaries)
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
             {}
 
             EAction Select() {
@@ -39,6 +41,7 @@ namespace NKikimr {
                 EAction action = PromoteSsts();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::PromoteSsts;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
@@ -54,6 +57,7 @@ namespace NKikimr {
             TBoundariesConstPtr Boundaries;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            TCompactionYield* const Yield;
 
             EAction PromoteSsts() {
                 ui32 maxLevel = LevelSnap.SliceSnap.GetLevelXNumber();
@@ -62,6 +66,7 @@ namespace NKikimr {
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
                     const ui32 level = p.Level;
 

@@ -34,11 +34,6 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
-CFLAGS(
-    -mavx2
-    -mprfchw
-)
-
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(scalar_layout_converter_test_enums.h)

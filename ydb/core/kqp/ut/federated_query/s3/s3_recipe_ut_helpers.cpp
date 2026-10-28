@@ -15,4 +15,4 @@ shared_ptr<TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConf
     return NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), options);
 }
 
-}
+}   // namespace NTestUtils

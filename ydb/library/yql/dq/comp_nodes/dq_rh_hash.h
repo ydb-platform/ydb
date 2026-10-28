@@ -94,8 +94,13 @@ public:
 
     // returns iterator
     Y_FORCE_INLINE char* Insert(TKey key, const ui32 hash, bool& isNew) {
+        return InsertWithEqual(key, hash, isNew, EqualLocal_);
+    }
+
+    template <typename TProbeEqual>
+    Y_FORCE_INLINE char* InsertWithEqual(TKey key, const ui32 hash, bool& isNew, TProbeEqual&& equal) {
         auto ptr = MakeIterator(hash, Data_, CapacityShift_);
-        auto ret = InsertImpl(key, hash, isNew, Data_, DataEnd_, ptr);
+        auto ret = InsertImpl(key, hash, isNew, Data_, DataEnd_, ptr, equal);
         Size_ += isNew ? 1 : 0;
         return ret;
     }
@@ -201,7 +206,8 @@ private:
         return ptr;
     }
 
-    Y_FORCE_INLINE char* InsertImpl(TKey key, const ui32 hash, bool& isNew, char* data, char* dataEnd, char* ptr) {
+    template <typename TProbeEqual>
+    Y_FORCE_INLINE char* InsertImpl(TKey key, const ui32 hash, bool& isNew, char* data, char* dataEnd, char* ptr, TProbeEqual& equal) {
         isNew = false;
         TPSLStorage psl(hash);
         char* returnPtr;
@@ -217,7 +223,7 @@ private:
             }
 
             ui64 pslHash = pslData.Hash;
-            if (pslHash == psl.Hash && EqualLocal_(GetKeyValue(ptr), key)) {
+            if (pslHash == psl.Hash && equal(GetKeyValue(ptr), key)) {
                 return ptr;
             }
 
@@ -313,7 +319,7 @@ private:
     Y_NO_INLINE void CopyBatch(std::span<TInternalBatchRequestItem> batch, char* newData, char* newDataEnd) {
         for (auto& r : batch) {
             bool isNew;
-            InsertImpl(r.GetKey(), r.Hash, isNew, newData, newDataEnd, r.InitialIterator);
+            InsertImpl(r.GetKey(), r.Hash, isNew, newData, newDataEnd, r.InitialIterator, EqualLocal_);
             Y_ASSERT(isNew);
         }
     }

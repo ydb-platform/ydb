@@ -559,6 +559,7 @@ namespace NLongTxService {
     private:
         void Handle(NMon::TEvHttpInfo::TPtr& ev);
         TString RenderLocksMonPage();
+        TString RenderSnapshotsMonPage();
 
     private:
         const TLongTxServiceSettings Settings;
@@ -576,6 +577,7 @@ namespace NLongTxService {
         TActorId SnapshotsExchangeActorId;
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
+        TInstant LastRegistryBuildTime;
 
         ui64 NextLockIslandId = 1;
         THashMap<ui64, TLockIsland> LockIslands;

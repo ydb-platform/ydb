@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 #include "opentelemetry/sdk/configuration/aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/aggregation_configuration_visitor.h"
@@ -20,19 +21,16 @@ namespace configuration
 class Base2ExponentialBucketHistogramAggregationConfiguration : public AggregationConfiguration
 {
 public:
-  // TODO: max_scale range is [-10, 20]. Negative values require GetSignedInteger in the parser and
-  // changing the type of max_scale to an int32_t to match the
-  // Base2ExponentialHistogramAggregationConfig.
-  static constexpr std::size_t kDefaultMaxScale = 20;  // schema: minimum -10, maximum 20
-  static constexpr std::size_t kDefaultMaxSize  = 160;
-  static constexpr bool kDefaultRecordMinMax    = true;
+  static constexpr std::int32_t kDefaultMaxScale = 20;  // schema: minimum -10, maximum 20
+  static constexpr std::size_t kDefaultMaxSize   = 160;
+  static constexpr bool kDefaultRecordMinMax     = true;
 
   void Accept(AggregationConfigurationVisitor *visitor) const override
   {
     visitor->VisitBase2ExponentialBucketHistogram(this);
   }
 
-  std::size_t max_scale{kDefaultMaxScale};
+  std::int32_t max_scale{kDefaultMaxScale};
   std::size_t max_size{kDefaultMaxSize};
   bool record_min_max{kDefaultRecordMinMax};
 };

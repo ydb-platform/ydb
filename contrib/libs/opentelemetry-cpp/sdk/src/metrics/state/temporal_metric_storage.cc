@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/span.h"
@@ -46,7 +45,7 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
                                          const std::shared_ptr<AttributesHashMap> &delta_metrics,
                                          nostd::function_ref<bool(MetricData)> callback) noexcept
 {
-  std::lock_guard<opentelemetry::common::SpinLockMutex> guard(lock_);
+  std::lock_guard<std::mutex> guard(lock_);
   AggregationTemporality aggregation_temporarily =
       collector->GetAggregationTemporality(instrument_descriptor_.type_);
   // Per OTel spec (issue #4062): the start_ts for the first delta collection

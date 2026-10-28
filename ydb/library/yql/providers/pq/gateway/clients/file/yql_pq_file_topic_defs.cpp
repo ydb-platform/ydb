@@ -7,7 +7,8 @@ TDummyTopic::TDummyTopic(const TString& cluster, const TString& topicName, const
     , TopicName(topicName)
     , Path(path)
     , PartitionsCount(partitionCount)
-{}
+{
+}
 
 TDummyTopic& TDummyTopic::SetPartitionsCount(size_t count) {
     PartitionsCount = count;
@@ -21,4 +22,4 @@ TString SkipDatabasePrefix(const TString& path, const TString& database) {
     return TString(pathCanonized);
 }
 
-} // namespace NYql
+}   // namespace NYql

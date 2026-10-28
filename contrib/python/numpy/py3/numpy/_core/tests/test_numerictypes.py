@@ -1,14 +1,17 @@
-import sys
 import itertools
+import sys
 
 import pytest
+
 import numpy as np
 import numpy._core.numerictypes as nt
-from numpy._core.numerictypes import (
-    issctype, sctype2char, maximum_sctype, sctypes
-)
+from numpy._core.numerictypes import issctype, maximum_sctype, sctype2char, sctypes
 from numpy.testing import (
-    assert_, assert_equal, assert_raises, assert_raises_regex, IS_PYPY
+    IS_PYPY,
+    assert_,
+    assert_equal,
+    assert_raises,
+    assert_raises_regex,
 )
 
 # This is the structure of the table used for plain objects:
@@ -73,7 +76,7 @@ NbufferT = [
     ]
 
 
-byteorder = {'little':'<', 'big':'>'}[sys.byteorder]
+byteorder = {'little': '<', 'big': '>'}[sys.byteorder]
 
 def normalize_descr(descr):
     "Normalize a description adding the platform byteorder."
@@ -97,8 +100,7 @@ def normalize_descr(descr):
             l = normalize_descr(dtype)
             out.append((item[0], l))
         else:
-            raise ValueError("Expected a str or list and got %s" %
-                             (type(item)))
+            raise ValueError(f"Expected a str or list and got {type(item)}")
     return out
 
 
@@ -613,6 +615,35 @@ class TestScalarTypeNames:
     def test_names_are_undersood_by_dtype(self, t):
         """ Test the dtype constructor maps names back to the type """
         assert np.dtype(t.__name__).type is t
+
+
+class TestScalarTypeOrder:
+    @pytest.mark.parametrize(('a', 'b'), [
+        # signedinteger
+        (np.byte, np.short),
+        (np.short, np.intc),
+        (np.intc, np.long),
+        (np.long, np.longlong),
+        # unsignedinteger
+        (np.ubyte, np.ushort),
+        (np.ushort, np.uintc),
+        (np.uintc, np.ulong),
+        (np.ulong, np.ulonglong),
+        # floating
+        (np.half, np.single),
+        (np.single, np.double),
+        (np.double, np.longdouble),
+        # complexfloating
+        (np.csingle, np.cdouble),
+        (np.cdouble, np.clongdouble),
+        # flexible
+        (np.bytes_, np.str_),
+        (np.str_, np.void),
+        # bouncy castles
+        (np.datetime64, np.timedelta64),
+    ])
+    def test_stable_ordering(self, a: type[np.generic], b: type[np.generic]):
+        assert np.ScalarType.index(a) <= np.ScalarType.index(b)
 
 
 class TestBoolDefinition:

@@ -6,19 +6,17 @@
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <google/protobuf/util/time_util.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -27,7 +25,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TInitializerActor : public TBaseComputeActor<TInitializerActor> {
+class TInitializerActor: public TBaseComputeActor<TInitializerActor> {
 public:
     enum ERequestType {
         RT_PING,
@@ -35,9 +33,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests =
+            CreateArray<RT_MAX, TComputeRequestCountersPtr>({ { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -45,7 +42,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -55,14 +52,16 @@ public:
         }
     };
 
-    TInitializerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TInitializerActor(
+        const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Initializer")
         , Params(params)
         , Parent(parent)
         , Pinger(pinger)
         , Counters(GetStepCountersSubgroup())
         , StartTime(TInstant::Now())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_INITIALIZER_ACTOR";
 
@@ -75,7 +74,8 @@ public:
             {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         if (!Params.RequestStartedAt) {
             Become(&TInitializerActor::StateFunc);
-            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString(), Params.Deadline));
+            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(),
+                new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString(), Params.Deadline));
         } else {
             YDB_LOG_INFO("[ydb] [Initializer] Query has been initialized (did nothing)",
                 {"cloudId", Params.CloudId},
@@ -127,7 +127,9 @@ public:
                 {"scope", Params.Scope},
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId});
-            Send(Parent, new TEvYdbCompute::TEvInitializerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvInitializerResponse(
+                             NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Error moving the query to the terminal state" } },
+                             NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -140,11 +142,9 @@ private:
     TInstant StartTime;
 };
 
-std::unique_ptr<NActors::IActor> CreateInitializerActor(const TRunActorParams& params,
-                                                        const TActorId& parent,
-                                                        const TActorId& pinger,
-                                                        const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateInitializerActor(
+    const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TInitializerActor>(params, parent, pinger, queryCounters);
 }
 
-}
+}   // namespace NFq

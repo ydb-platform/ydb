@@ -84,7 +84,7 @@ static constexpr const char *kOpenbsd = "openbsd";
 static constexpr const char *kDragonflybsd = "dragonflybsd";
 
 /**
-  HP-UX (Hewlett Packard Unix)
+  HP-UX (Hewlett Packard UNIX)
  */
 static constexpr const char *kHpux = "hpux";
 

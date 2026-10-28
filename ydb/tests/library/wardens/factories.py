@@ -8,6 +8,7 @@ from ydb.tests.library.wardens.logs import kikimr_start_logs_safety_warden_facto
 from ydb.tests.library.wardens.logs import kikimr_crit_and_alert_logs_safety_warden_factory
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
+from ydb.tests.library.wardens.pq import PersQueueHasNoStuckTransactions
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 
 
@@ -43,7 +44,8 @@ def liveness_warden_factory(cluster, ssh_username):
             AllTabletsAliveLivenessWarden(cluster),
             BootQueueSizeWarden(cluster),
             SchemeShardHasNoInFlightTransactions(cluster),
-            TxCompleteLagLivenessWarden(cluster)
+            TxCompleteLagLivenessWarden(cluster),
+            PersQueueHasNoStuckTransactions(cluster),
         ]
     )
 
@@ -70,5 +72,6 @@ def transactions_processing_liveness_warden(cluster):
         [
             SchemeShardHasNoInFlightTransactions(cluster),
             TxCompleteLagLivenessWarden(cluster),
+            PersQueueHasNoStuckTransactions(cluster),
         ]
     )

@@ -1,9 +1,9 @@
 {
     "test.test[Find-Peephole]": [
         {
-            "checksum": "2503b67be2a8dbcdbc6be856f4eca7f3",
-            "size": 3953,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Find-Peephole_/opt.yql"
+            "checksum": "6e434c7371c1950c2cfd770a0fd548ba",
+            "size": 3965,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Find-Peephole_/opt.yql"
         }
     ],
     "test.test[Find-Results]": [
@@ -13,9 +13,9 @@
     ],
     "test.test[IsCategory-Peephole]": [
         {
-            "checksum": "bde64ec7d05be1ae958113c68b81ed0d",
-            "size": 2425,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_IsCategory-Peephole_/opt.yql"
+            "checksum": "6e48fa9b32ca9fb01854dfd46e108a10",
+            "size": 2434,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_IsCategory-Peephole_/opt.yql"
         }
     ],
     "test.test[IsCategory-Results]": [
@@ -35,9 +35,9 @@
     ],
     "test.test[Normalize-Peephole]": [
         {
-            "checksum": "2120c3f2ef81cc6c3f4fb2b5240fb48e",
-            "size": 1551,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Normalize-Peephole_/opt.yql"
+            "checksum": "0cc6822cd4bd577b090a110c085380d1",
+            "size": 1562,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Normalize-Peephole_/opt.yql"
         }
     ],
     "test.test[Normalize-Results]": [
@@ -47,9 +47,9 @@
     ],
     "test.test[Remove-Peephole]": [
         {
-            "checksum": "31a40c15f3b43b74e897a8465f42d43f",
-            "size": 1755,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Remove-Peephole_/opt.yql"
+            "checksum": "f98293923d06a6d7f4dfaecbb5f9c472",
+            "size": 1767,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Remove-Peephole_/opt.yql"
         }
     ],
     "test.test[Remove-Results]": [
@@ -59,9 +59,9 @@
     ],
     "test.test[Replace-Peephole]": [
         {
-            "checksum": "73786d8ff6c15831f306b4ac0aeea39b",
-            "size": 2037,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Replace-Peephole_/opt.yql"
+            "checksum": "a3bdb98dc1bc3079e2cc0e0e21e1679f",
+            "size": 2049,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Replace-Peephole_/opt.yql"
         }
     ],
     "test.test[Replace-Results]": [
@@ -76,9 +76,9 @@
     ],
     "test.test[Strip-Peephole]": [
         {
-            "checksum": "b8b76fd58edf1f629f1046e60cfd1829",
-            "size": 1590,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Strip-Peephole_/opt.yql"
+            "checksum": "44ff453a2388436e7bf4ca57ed5b6845",
+            "size": 1601,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Strip-Peephole_/opt.yql"
         }
     ],
     "test.test[Strip-Results]": [
@@ -88,9 +88,9 @@
     ],
     "test.test[To-Peephole]": [
         {
-            "checksum": "bce9d17a9591e9d7373101af496729cd",
-            "size": 1477,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_To-Peephole_/opt.yql"
+            "checksum": "52805debf0dbb3737d3af853cec011d0",
+            "size": 1488,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_To-Peephole_/opt.yql"
         }
     ],
     "test.test[To-Results]": [
@@ -100,9 +100,9 @@
     ],
     "test.test[ToUint64-Peephole]": [
         {
-            "checksum": "05604bd2e09e0d5e8c28ca202e5ef99f",
-            "size": 3861,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_ToUint64-Peephole_/opt.yql"
+            "checksum": "8597b9e89bd6a772a46a2491c5fda510",
+            "size": 3870,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_ToUint64-Peephole_/opt.yql"
         }
     ],
     "test.test[ToUint64-Results]": [
@@ -128,9 +128,9 @@
     ],
     "test.test[TryToUint64-Peephole]": [
         {
-            "checksum": "51c82a34b12e541741b32f15f446d02c",
-            "size": 1629,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_TryToUint64-Peephole_/opt.yql"
+            "checksum": "d4850b5301d7a667fafff5d87dac7009",
+            "size": 1652,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_TryToUint64-Peephole_/opt.yql"
         }
     ],
     "test.test[TryToUint64-Results]": [
@@ -140,9 +140,9 @@
     ],
     "test.test[Unicode-Peephole]": [
         {
-            "checksum": "2cb2eccf559173aa988ba8496894d5cb",
-            "size": 4009,
-            "uri": "https://{canondata_backend}/1946324/0662a78b84beaad87f138d3ab1fd574d1df7b19f/resource.tar.gz#test.test_Unicode-Peephole_/opt.yql"
+            "checksum": "c02b7be8ad0d4416f4a90df7b6118dca",
+            "size": 4035,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1809005/3a4a6fae5236aa7f88d4c17e830614c7ccf6907b/resource.tar.gz#test.test_Unicode-Peephole_/opt.yql"
         }
     ],
     "test.test[Unicode-Results]": [

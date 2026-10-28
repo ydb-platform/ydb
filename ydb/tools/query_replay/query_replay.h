@@ -169,6 +169,8 @@ struct TQueryReplayEvents {
         ExtraWriting,
         WriteColumnsMismatch,
         UncategorizedPlanMismatch,
+        // Abort of the replay tool itself (YQL_ENSURE / yexception), not a product error.
+        QrInternalError,
         Unspecified,
     };
 

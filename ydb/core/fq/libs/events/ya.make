@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(events.h)
 
@@ -17,7 +17,5 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

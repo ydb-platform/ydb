@@ -1,18 +1,15 @@
-#include <ydb/services/workload_manager/has_path_matcher.h>
 #include <ydb/core/resource_pools/regex_predicate.h>
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/services/workload_manager/has_path_matcher.h>
 
 #include <google/protobuf/any.pb.h>
-
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
-using NResourcePool::TRegexPredicate;
 using NKqpProto::TKqpPhyQuery;
-
+using NResourcePool::TRegexPredicate;
 
 namespace {
 
@@ -72,11 +69,9 @@ const auto MatchesTopics = [](auto build) {
     return MatchesPath(TRegexPredicate::FromGlob("/Root/db/topic"), {}, phy);
 };
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TPathMatcherPredicate) {
-
     Y_UNIT_TEST(EmptyPredicateAcceptsAny) {
         TKqpPhyQuery phy;
         AddTxTable(phy, "/Root/anything");
@@ -99,29 +94,29 @@ Y_UNIT_TEST_SUITE(TPathMatcherPredicate) {
 }
 
 Y_UNIT_TEST_SUITE(TPathMatcherQueryTables) {
-
     Y_UNIT_TEST(SinglePathMatches) {
-        UNIT_ASSERT(MatchesQueryTables({"/Root/t"}));
+        UNIT_ASSERT(MatchesQueryTables({ "/Root/t" }));
     }
 
     Y_UNIT_TEST(NoMatchingPath) {
-        UNIT_ASSERT(!MatchesQueryTables({"/Root/other"}));
+        UNIT_ASSERT(!MatchesQueryTables({ "/Root/other" }));
     }
 
     Y_UNIT_TEST(MixedPathsReturnTrueOnAnyMatch) {
-        UNIT_ASSERT(MatchesQueryTables({"/Root/other", "/Root/t"}));
+        UNIT_ASSERT(MatchesQueryTables({ "/Root/other", "/Root/t" }));
     }
 
     Y_UNIT_TEST(IndexSubTablePath) {
         // Secondary-index sub-tables show up in QueryTables at .../indexImplTable.
-        UNIT_ASSERT(MatchesQueryTables({"/Root/t/idx/indexImplTable"}));
+        UNIT_ASSERT(MatchesQueryTables({ "/Root/t/idx/indexImplTable" }));
     }
 }
 
 Y_UNIT_TEST_SUITE(TPathMatcherTxTables) {
-
     Y_UNIT_TEST(TableInTxMatches) {
-        UNIT_ASSERT(MatchesTx([](auto& phy) { AddTxTable(phy, "/Root/db/target"); }));
+        UNIT_ASSERT(MatchesTx([](auto& phy) {
+            AddTxTable(phy, "/Root/db/target");
+        }));
     }
 
     Y_UNIT_TEST(BothExternalEntriesGetWalked) {
@@ -144,13 +139,16 @@ Y_UNIT_TEST_SUITE(TPathMatcherTxTables) {
 }
 
 Y_UNIT_TEST_SUITE(TPathMatcherTopics) {
-
     Y_UNIT_TEST(PqTopicSourceMatches) {
-        UNIT_ASSERT(MatchesTopics([](auto& phy) { AddPqTopicSource(phy, "/Root/db/topic"); }));
+        UNIT_ASSERT(MatchesTopics([](auto& phy) {
+            AddPqTopicSource(phy, "/Root/db/topic");
+        }));
     }
 
     Y_UNIT_TEST(PqTopicSinkMatches) {
-        UNIT_ASSERT(MatchesTopics([](auto& phy) { AddPqTopicSink(phy, "/Root/db/topic"); }));
+        UNIT_ASSERT(MatchesTopics([](auto& phy) {
+            AddPqTopicSink(phy, "/Root/db/topic");
+        }));
     }
 
     Y_UNIT_TEST(NonPqExternalSourceIsIgnored) {
@@ -162,8 +160,10 @@ Y_UNIT_TEST_SUITE(TPathMatcherTopics) {
     }
 
     Y_UNIT_TEST(TopicPathWithoutLeadingSlashMatches) {
-        UNIT_ASSERT(MatchesTopics([](auto& phy) { AddPqTopicSource(phy, "Root/db/topic"); }));
+        UNIT_ASSERT(MatchesTopics([](auto& phy) {
+            AddPqTopicSource(phy, "Root/db/topic");
+        }));
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

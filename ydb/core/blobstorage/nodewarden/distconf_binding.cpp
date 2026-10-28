@@ -77,19 +77,24 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC13"},
             {"newNodeList", newNodeList});
 
+        const auto registry = GetCurrentPileRegistry();
+        auto resolvePileId = [&](const TNodeLocation& location) {
+            return ResolveNodePileId(registry, location).value_or(TBridgePileId());
+        };
+
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
-            std::optional<TString> expectedBridgePileName;
+            TBridgePileId expectedBridgePileId;
             if (Cfg->BridgeConfig) {
                 Y_ABORT_UNLESS(Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo());
                 const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
                 Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                expectedBridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
+                expectedBridgePileId = resolvePileId(TNodeLocation(nodeInfo.GetLocation()));
             }
 
             std::vector<ui32> nodeIds;
             for (const auto& [item, location] : newNodeList) {
-                if (location.GetBridgePileName() == expectedBridgePileName) {
+                if (resolvePileId(location) == expectedBridgePileId) {
                     nodeIds.push_back(item.NodeId());
                 }
             }
@@ -103,7 +108,7 @@ namespace NKikimr::NStorage {
         for (const auto& [item, location] : newNodeList) {
             if (item.NodeId() == selfNodeId) {
                 SelfNode = item;
-                SelfNodeBridgePileName = location.GetBridgePileName();
+                SelfNodeBridgePileId = resolvePileId(location);
                 found = true;
                 break;
             }
@@ -126,7 +131,8 @@ namespace NKikimr::NStorage {
             Hosts.emplace(std::get<0>(item), std::get<1>(item));
 
             // check if node is from the same pile (as this one)
-            if (location.GetBridgePileName() == SelfNodeBridgePileName) {
+            const TBridgePileId bridgePileId = resolvePileId(location);
+            if (bridgePileId == SelfNodeBridgePileId) {
                 NodesFromSamePile.insert(item.NodeId());
                 if (nodeId < selfNodeId) {
                     nodeIdsForOutgoingBinding.push_back(nodeId);
@@ -137,19 +143,20 @@ namespace NKikimr::NStorage {
 
             // check if node is located in primary pile (and this one is not the primary) -- then it is suitable for
             // binding to primary pile
-            if (location.GetBridgePileName() != SelfNodeBridgePileName) {
+            if (bridgePileId != SelfNodeBridgePileId) {
                 nodeIdsForOtherPilesOutgoingBinding.push_back(item.NodeId());
             }
         }
 
         // check if some nodes were deleted -- we have to unbind them
+        THashSet<ui32> addedNodeIds;
         bool bindingReset = false;
-        auto applyChanges = [&](auto& prev, auto& cur) {
+        auto applyChanges = [&](const auto& prev, auto& cur) {
             std::ranges::sort(cur);
-            for (auto prevIt = prev.begin(), curIt = cur.begin(); prevIt != prev.end() || curIt != cur.end(); ) {
-                if (prevIt == prev.end() || (curIt != cur.end() && *curIt < *prevIt)) { // node added
-                    ++curIt;
-                } else if (curIt == cur.end() || *prevIt < *curIt) { // node deleted
+            for (auto prevIt = prev.cbegin(), curIt = cur.cbegin(); prevIt != prev.cend() || curIt != cur.cend(); ) {
+                if (prevIt == prev.cend() || (curIt != cur.cend() && *curIt < *prevIt)) { // node added
+                    addedNodeIds.insert(*curIt++);
+                } else if (curIt == cur.cend() || *prevIt < *curIt) { // node deleted
                     const ui32 nodeId = *prevIt++;
                     UnbindNode(nodeId, "node vanished");
                     if (Binding && Binding->NodeId == nodeId) {
@@ -161,7 +168,6 @@ namespace NKikimr::NStorage {
                     ++curIt;
                 }
             }
-            prev = std::move(cur);
         };
         applyChanges(NodeIdsForOutgoingBinding, nodeIdsForOutgoingBinding);
         applyChanges(NodeIdsForIncomingBinding, nodeIdsForIncomingBinding);
@@ -170,23 +176,45 @@ namespace NKikimr::NStorage {
             AbortBinding("node vanished");
         }
 
+        NodeIdsForOutgoingBinding = std::move(nodeIdsForOutgoingBinding);
+        NodeIdsForIncomingBinding = std::move(nodeIdsForIncomingBinding);
+        NodeIdsForOtherPilesOutgoingBinding = std::move(nodeIdsForOtherPilesOutgoingBinding);
+
         // issue updates
         BindQueue.Update(NodeIdsForOutgoingBinding);
         RevBindQueue.Update(NodeIdsForIncomingBinding);
         OtherPilesBindQueue.Update(NodeIdsForOtherPilesOutgoingBinding);
+
+        if (!addedNodeIds.empty()) {
+            for (const auto& [nodeId, info] : AllBoundNodes) {
+                if (addedNodeIds.contains(nodeId.NodeId())) {
+                    GetBindQueue(nodeId.NodeId())->Disable(nodeId.NodeId());
+                }
+            }
+        }
     }
 
-    TBridgePileId TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
-        if (const auto& bridgePileName = location.GetBridgePileName()) {
-            if (const auto it = BridgePileNameMap.find(*bridgePileName); it != BridgePileNameMap.end()) {
-                return it->second;
-            } else {
-                Y_DEBUG_ABORT_S("incorrect bridge pile name for node Location# " << location.ToString());
-            }
-        } else if (BridgePileNameMap) {
-            Y_DEBUG_ABORT_S("missing bridge pile name for node Location# " << location.ToString());
+    std::optional<NKikimrBridge::TPileRegistry> TDistributedConfigKeeper::GetConfigPileRegistry(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        return GetPileRegistry(config, Cfg ? Cfg->BridgeConfig.get() : nullptr);
+    }
+
+    std::optional<NKikimrBridge::TPileRegistry> TDistributedConfigKeeper::GetCurrentPileRegistry() const {
+        return GetConfigPileRegistry(StorageConfig ? *StorageConfig
+            : BaseConfig ? *BaseConfig
+            : NKikimrBlobStorage::TStorageConfig::default_instance());
+    }
+
+    std::optional<TBridgePileId> ResolveNodePileId(const std::optional<NKikimrBridge::TPileRegistry>& registry,
+            const TNodeLocation& location) {
+        if (!registry) {
+            return TBridgePileId(); // this node is not bridge-capable (or the config is not bridged one)
+        } else if (const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName())) {
+            return bridgePileId;
+        } else {
+            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
+            return std::nullopt;
         }
-        return TBridgePileId();
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {
@@ -381,7 +409,7 @@ namespace NKikimr::NStorage {
         }
         subs.SessionId = sessionId;
 
-        if (Binding && Binding->NodeId == nodeId) {
+        if (Binding && Binding->NodeId == nodeId && !Binding->SessionId) {
             YDB_LOG_DEBUG("Continuing bind",
                 {"marker", "NWDC09"},
                 {"binding", Binding});

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade.cpp
@@ -42,7 +42,5 @@ PEERDIR(
     yql/essentials/providers/config
     yql/essentials/providers/result/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

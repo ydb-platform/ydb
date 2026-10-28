@@ -16,7 +16,20 @@
 // RISC-V V vectors (length not known at compile time).
 // External include guard in highway.h - see comment there.
 
+#pragma push_macro("__riscv_v_elen")
+
+// Workaround that ensures that all of the __riscv_vsetvl_* and
+// __riscv_vsetvlmax_* macros in riscv_vector.h are defined when compiling with
+// Clang 20 with dynamic dispatch and a baseline target of SCALAR or EMU128
+#if HWY_COMPILER_CLANG >= 2000 && HWY_COMPILER_CLANG < 2100 && \
+    (!defined(__riscv_v_elen) || __riscv_v_elen < 64)
+#undef __riscv_v_elen
+#define __riscv_v_elen 64
+#endif
+
 #include <riscv_vector.h>
+
+#pragma pop_macro("__riscv_v_elen")
 
 #include "hwy/ops/shared-inl.h"
 
@@ -1188,9 +1201,9 @@ HWY_RVV_FOREACH_I(HWY_RVV_RETV_ARGVV, SaturatedSub, ssub, _ALL)
 #if HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1400
 #define HWY_RVV_AVOID_VXRM
 // Clang 16 with __riscv_v_intrinsic == 11000 may either require VXRM or avoid.
-// Assume earlier versions avoid.
+// Assume that Clang 16 and earlier avoid VXRM.
 #elif HWY_COMPILER_CLANG && \
-    (HWY_COMPILER_CLANG < 1600 || __riscv_v_intrinsic < 11000)
+    (HWY_COMPILER_CLANG < 1700 || __riscv_v_intrinsic < 11000)
 #define HWY_RVV_AVOID_VXRM
 #endif
 
@@ -1571,6 +1584,20 @@ HWY_RVV_FOREACH_F(HWY_RVV_FMA, NegMulSub, fnmacc, _ALL)
 
 // ================================================== COMPARE
 
+// ------------------------------ MClear
+
+// mask = f()
+#define HWY_RVV_RETM(SEW, SHIFT, MLEN, NAME, OP)                \
+  HWY_API HWY_RVV_M(MLEN) NAME##MLEN() {                        \
+    return __riscv_vm##OP##_m_b##MLEN(HWY_RVV_AVL(SEW, SHIFT)); \
+  }
+
+namespace detail {
+HWY_RVV_FOREACH_B(HWY_RVV_RETM, MClear, clr)  // with ##MLEN suffix
+}  // namespace detail
+
+#undef HWY_RVV_RETM
+
 // Comparisons set a mask bit to 1 if the condition is true, else 0. The XX in
 // vboolXX_t is a power of two divisor for vector bits. SEW=8 / LMUL=1 = 1/8th
 // of all bits; SEW=8 / LMUL=4 = half of all bits.
@@ -1584,6 +1611,16 @@ HWY_RVV_FOREACH_F(HWY_RVV_FMA, NegMulSub, fnmacc, _ALL)
         a, b, HWY_RVV_AVL(SEW, SHIFT));                                     \
   }
 
+// mask = f(mask, vector, vector)
+#define HWY_RVV_RETM_ARGMVV(BASE, CHAR, SEW, SEWD, SEWH, LMUL, LMULD, LMULH, \
+                            SHIFT, MLEN, NAME, OP)                           \
+  HWY_API HWY_RVV_M(MLEN)                                                    \
+      NAME(HWY_RVV_M(MLEN) m, HWY_RVV_V(BASE, SEW, LMUL) a,                  \
+           HWY_RVV_V(BASE, SEW, LMUL) b) {                                   \
+    return __riscv_v##OP##_vv_##CHAR##SEW##LMUL##_b##MLEN##_mu(              \
+        m, detail::MClear##MLEN(), a, b, HWY_RVV_AVL(SEW, SHIFT));           \
+  }
+
 // mask = f(vector, scalar)
 #define HWY_RVV_RETM_ARGVS(BASE, CHAR, SEW, SEWD, SEWH, LMUL, LMULD, LMULH, \
                            SHIFT, MLEN, NAME, OP)                           \
@@ -1593,9 +1630,17 @@ HWY_RVV_FOREACH_F(HWY_RVV_FMA, NegMulSub, fnmacc, _ALL)
         a, b, HWY_RVV_AVL(SEW, SHIFT));                                     \
   }
 
+#ifdef HWY_NATIVE_MASKED_COMP
+#undef HWY_NATIVE_MASKED_COMP
+#else
+#define HWY_NATIVE_MASKED_COMP
+#endif
+
 // ------------------------------ Eq
 HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGVV, Eq, mseq, _ALL)
 HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVV, Eq, mfeq, _ALL)
+HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGMVV, MaskedEq, mseq, _ALL)
+HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGMVV, MaskedEq, mfeq, _ALL)
 
 namespace detail {
 HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGVS, EqS, mseq_vx, _ALL)
@@ -1605,6 +1650,8 @@ HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVS, EqS, mfeq_vf, _ALL)
 // ------------------------------ Ne
 HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGVV, Ne, msne, _ALL)
 HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVV, Ne, mfne, _ALL)
+HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGMVV, MaskedNe, msne, _ALL)
+HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGMVV, MaskedNe, mfne, _ALL)
 
 namespace detail {
 HWY_RVV_FOREACH_UI(HWY_RVV_RETM_ARGVS, NeS, msne_vx, _ALL)
@@ -1615,6 +1662,9 @@ HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVS, NeS, mfne_vf, _ALL)
 HWY_RVV_FOREACH_U(HWY_RVV_RETM_ARGVV, Lt, msltu, _ALL)
 HWY_RVV_FOREACH_I(HWY_RVV_RETM_ARGVV, Lt, mslt, _ALL)
 HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVV, Lt, mflt, _ALL)
+HWY_RVV_FOREACH_U(HWY_RVV_RETM_ARGMVV, MaskedLt, msltu, _ALL)
+HWY_RVV_FOREACH_I(HWY_RVV_RETM_ARGMVV, MaskedLt, mslt, _ALL)
+HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGMVV, MaskedLt, mflt, _ALL)
 
 namespace detail {
 HWY_RVV_FOREACH_I(HWY_RVV_RETM_ARGVS, LtS, mslt_vx, _ALL)
@@ -1626,20 +1676,43 @@ HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVS, LtS, mflt_vf, _ALL)
 HWY_RVV_FOREACH_U(HWY_RVV_RETM_ARGVV, Le, msleu, _ALL)
 HWY_RVV_FOREACH_I(HWY_RVV_RETM_ARGVV, Le, msle, _ALL)
 HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGVV, Le, mfle, _ALL)
+HWY_RVV_FOREACH_U(HWY_RVV_RETM_ARGMVV, MaskedLe, msleu, _ALL)
+HWY_RVV_FOREACH_I(HWY_RVV_RETM_ARGMVV, MaskedLe, msle, _ALL)
+HWY_RVV_FOREACH_F(HWY_RVV_RETM_ARGMVV, MaskedLe, mfle, _ALL)
 
+template <class D>
+using MFromD = decltype(Eq(Zero(D()), Zero(D())));
+
+template <class V, class M, class D = DFromV<V>>
+HWY_API MFromD<D> MaskedIsNaN(const M m, const V v) {
+  return MaskedNe(m, v, v);
+}
+
+#undef HWY_RVV_RETM_ARGMVV
 #undef HWY_RVV_RETM_ARGVV
 #undef HWY_RVV_RETM_ARGVS
 
-// ------------------------------ Gt/Ge
+// ------------------------------ Gt/Ge (Lt, Le)
+
+// Swap args to reverse comparisons:
+template <class V>
+HWY_API auto Gt(const V a, const V b) -> decltype(Lt(a, b)) {
+  return Lt(b, a);
+}
 
 template <class V>
 HWY_API auto Ge(const V a, const V b) -> decltype(Le(a, b)) {
   return Le(b, a);
 }
 
-template <class V>
-HWY_API auto Gt(const V a, const V b) -> decltype(Lt(a, b)) {
-  return Lt(b, a);
+template <class V, class M, class D = DFromV<V>>
+HWY_API MFromD<D> MaskedGt(M m, V a, V b) {
+  return MaskedLt(m, b, a);
+}
+
+template <class V, class M, class D = DFromV<V>>
+HWY_API MFromD<D> MaskedGe(M m, V a, V b) {
+  return MaskedLe(m, b, a);
 }
 
 // ------------------------------ TestBit
@@ -1713,10 +1786,6 @@ HWY_RVV_FOREACH_F(HWY_RVV_IF_THEN_ZERO_ELSE, IfThenZeroElse, fmerge_vfm, _ALL)
 #undef HWY_RVV_IF_THEN_ZERO_ELSE
 
 // ------------------------------ MaskFromVec
-
-template <class D>
-using MFromD = decltype(Eq(Zero(D()), Zero(D())));
-
 template <class V>
 HWY_API MFromD<DFromV<V>> MaskFromVec(const V v) {
   return detail::NeS(v, 0);
@@ -3185,7 +3254,7 @@ HWY_RVV_FOREACH(HWY_RVV_SLIDE_DOWN, SlideDown, slidedown, _ALL)
   HWY_API HWY_RVV_V(BASE, SEW, LMULH) NAME(HWY_RVV_V(BASE, SEW, LMUL) v) { \
     static_assert(kIndex == 0 || kIndex == 1, "kIndex must be 0 or 1");    \
     HWY_IF_CONSTEXPR(kIndex == 0) { return Trunc(v); }                     \
-    else {                                                                 \
+    HWY_IF_CONSTEXPR(kIndex != 0) {                                        \
       return Trunc(SlideDown(                                              \
           v, Lanes(HWY_RVV_D(BASE, SEW, HWY_LANES(HWY_RVV_T(BASE, SEW)),   \
                              SHIFT - 1){})));                              \
@@ -3197,7 +3266,7 @@ HWY_RVV_FOREACH(HWY_RVV_SLIDE_DOWN, SlideDown, slidedown, _ALL)
   HWY_API HWY_RVV_V(BASE, SEW, LMUL) NAME(HWY_RVV_V(BASE, SEW, LMUL) v) {     \
     static_assert(kIndex == 0 || kIndex == 1, "kIndex must be 0 or 1");       \
     HWY_IF_CONSTEXPR(kIndex == 0) { return v; }                               \
-    else {                                                                    \
+    HWY_IF_CONSTEXPR(kIndex != 0) {                                           \
       return SlideDown(                                                       \
           v, Lanes(HWY_RVV_D(BASE, SEW, HWY_LANES(HWY_RVV_T(BASE, SEW)),      \
                              SHIFT){}) /                                      \
@@ -3215,13 +3284,9 @@ template <size_t kIndex, class D>
 static HWY_INLINE HWY_MAYBE_UNUSED VFromD<AdjustSimdTagToMinVecPow2<Half<D>>>
 Get(D d, VFromD<D> v) {
   static_assert(kIndex == 0 || kIndex == 1, "kIndex must be 0 or 1");
-
-  const AdjustSimdTagToMinVecPow2<Half<decltype(d)>> dh;
-  HWY_IF_CONSTEXPR(kIndex == 0 || detail::IsFull(d)) {
-    (void)dh;
-    return Get<kIndex>(v);
-  }
-  else {
+  HWY_IF_CONSTEXPR(kIndex == 0 || detail::IsFull(d)) { return Get<kIndex>(v); }
+  HWY_IF_CONSTEXPR(kIndex != 0 && !detail::IsFull(d)) {
+    const AdjustSimdTagToMinVecPow2<Half<decltype(d)>> dh;
     const size_t slide_down_amt =
         (dh.Pow2() < DFromV<decltype(v)>().Pow2()) ? Lanes(dh) : (Lanes(d) / 2);
     return ResizeBitCast(dh, SlideDown(v, slide_down_amt));
@@ -3240,9 +3305,7 @@ Get(D d, VFromD<D> v) {
       return __riscv_v##OP##_v_v_##CHAR##SEW##LMUL##_tu(dest, Ext(d, v),       \
                                                         half_N);               \
     }                                                                          \
-    else {                                                                     \
-      return SlideUp(dest, Ext(d, v), half_N);                                 \
-    }                                                                          \
+    HWY_IF_CONSTEXPR(kIndex != 0) { return SlideUp(dest, Ext(d, v), half_N); } \
   }
 #define HWY_RVV_PARTIAL_VEC_SET_HALF_SMALLEST(                              \
     BASE, CHAR, SEW, SEWD, SEWH, LMUL, LMULD, LMULH, SHIFT, MLEN, NAME, OP) \
@@ -3254,9 +3317,7 @@ Get(D d, VFromD<D> v) {
     HWY_IF_CONSTEXPR(kIndex == 0) {                                         \
       return __riscv_v##OP##_v_v_##CHAR##SEW##LMUL##_tu(dest, v, half_N);   \
     }                                                                       \
-    else {                                                                  \
-      return SlideUp(dest, v, half_N);                                      \
-    }                                                                       \
+    HWY_IF_CONSTEXPR(kIndex != 0) { return SlideUp(dest, v, half_N); }      \
   }
 HWY_RVV_FOREACH(HWY_RVV_PARTIAL_VEC_SET_HALF, PartialVecSetHalf, mv, _GET_SET)
 HWY_RVV_FOREACH(HWY_RVV_PARTIAL_VEC_SET_HALF, PartialVecSetHalf, mv,
@@ -3276,7 +3337,7 @@ HWY_RVV_FOREACH(HWY_RVV_PARTIAL_VEC_SET_HALF_SMALLEST, PartialVecSetHalf, mv,
       return __riscv_v##OP##_v_##CHAR##SEW##LMULH##_##CHAR##SEW##LMUL(        \
           dest, kIndex, v); /* no AVL */                                      \
     }                                                                         \
-    else {                                                                    \
+    HWY_IF_CONSTEXPR(!detail::IsFull(d)) {                                    \
       const Half<decltype(d)> dh;                                             \
       return PartialVecSetHalf<kIndex>(dest, v, Lanes(dh));                   \
     }                                                                         \
@@ -3605,6 +3666,24 @@ HWY_API V SwapAdjacentBlocks(const V v) {
   const V down = detail::SlideDown(v, lpb);
   const V up = detail::SlideUp(v, v, lpb);
   return OddEvenBlocks(up, down);
+}
+
+// ------------------------------ InterleaveEvenBlocks
+// (SlideUpLanes, OddEvenBlocks)
+
+template <class D, class V = VFromD<D>>
+HWY_API V InterleaveEvenBlocks(D d, V a, V b) {
+  const size_t lpb = detail::LanesPerBlock(d);
+  return OddEvenBlocks(SlideUpLanes(d, b, lpb), a);
+}
+
+// ------------------------------ InterleaveOddBlocks
+// (SlideDownLanes, OddEvenBlocks)
+
+template <class D, class V = VFromD<D>>
+HWY_API V InterleaveOddBlocks(D d, V a, V b) {
+  const size_t lpb = detail::LanesPerBlock(d);
+  return OddEvenBlocks(b, SlideDownLanes(d, a, lpb));
 }
 
 // ------------------------------ TableLookupLanes
@@ -4755,6 +4834,8 @@ HWY_API T ReduceMax(D d, const VFromD<D> v) {
 
 #undef HWY_RVV_REDUCE
 
+// TODO: add MaskedReduceSum/Min/Max
+
 // ------------------------------ SumOfLanes
 
 template <class D, HWY_IF_LANES_GT_D(D, 1)>
@@ -5866,9 +5947,13 @@ HWY_API V64 BitShuffle(V64 values, VI idx) {
 template <class V, HWY_IF_T_SIZE_ONE_OF_V(V, (1 << 1) | (1 << 2) | (1 << 4)),
           class D = DFromV<V>, class DW = RepartitionToWide<D>>
 HWY_API VFromD<DW> MulEven(const V a, const V b) {
-  const auto lo = Mul(a, b);
-  const auto hi = MulHigh(a, b);
-  return BitCast(DW(), OddEven(detail::Slide1Up(hi), lo));
+  constexpr int maskVal = sizeof(TFromD<D>) == 4 ? 5
+                          : sizeof(TFromD<D>) == 2 ? 0x55
+                                                   : 0x5555;
+  const auto mask = Dup128MaskFromMaskBits(D(), maskVal);
+  const auto hi = Slide1Up(D(), MulHigh(a, b));
+  const auto res = MaskedMulOr(hi, mask, a, b);
+  return BitCast(DW(), res);
 }
 
 template <class V, HWY_IF_T_SIZE_ONE_OF_V(V, (1 << 1) | (1 << 2) | (1 << 4)),
@@ -5882,9 +5967,9 @@ HWY_API VFromD<DW> MulOdd(const V a, const V b) {
 // There is no 64x64 vwmul.
 template <class V, HWY_IF_T_SIZE_V(V, 8)>
 HWY_INLINE V MulEven(const V a, const V b) {
-  const auto lo = Mul(a, b);
-  const auto hi = MulHigh(a, b);
-  return OddEven(detail::Slide1Up(hi), lo);
+  const auto mask = Dup128MaskFromMaskBits(DFromV<V>(), 1);
+  const auto hi = Slide1Up(DFromV<V>(), MulHigh(a, b));
+  return MaskedMulOr(hi, mask, a, b);
 }
 
 template <class V, HWY_IF_T_SIZE_V(V, 8)>

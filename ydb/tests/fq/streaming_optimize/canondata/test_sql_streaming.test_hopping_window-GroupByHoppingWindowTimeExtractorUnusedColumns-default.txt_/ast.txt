@@ -90,7 +90,7 @@
       (return (Just '($96 $97)))
     ))) (Nothing (OptionalType (TupleType $41 $41)))))
     (return (AsStruct '('Percentile0 (Nth $92 '0)) '('Percentile1 (Nth $92 '1)) '('"group0" $91) '('"k" $89)))
-  ))) '1 '"group0"))
+  ))) '1 '"group0" (Void) (Void) (Void) (Void) 'true))
   (return (Map $49 (lambda '($98) (block '(
     (let $99 (ResourceType '"Yson2.Node"))
     (let $100 '($99 '"" '1))

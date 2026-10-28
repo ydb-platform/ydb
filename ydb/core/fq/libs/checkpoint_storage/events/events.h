@@ -1,23 +1,21 @@
 #pragma once
+#include <ydb/core/fq/libs/checkpoint_storage/proto/graph_description.pb.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
-#include <ydb/core/fq/libs/checkpoint_storage/proto/graph_description.pb.h>
+
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
-
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_pb.h>
-#include <ydb/library/actors/interconnect/events_local.h>
-
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NFq {
 
 struct TEvCheckpointStorage {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvRegisterCoordinatorRequest = YqEventSubspaceBegin(TYqEventSubspace::CheckpointStorage),
         EvRegisterCoordinatorResponse,
         EvCreateCheckpointRequest,
@@ -46,47 +44,42 @@ struct TEvCheckpointStorage {
 
     // Events.
 
-    struct TEvRegisterCoordinatorRequest
-        : NActors::TEventLocal<TEvRegisterCoordinatorRequest, EvRegisterCoordinatorRequest> {
+    struct TEvRegisterCoordinatorRequest: NActors::TEventLocal<TEvRegisterCoordinatorRequest, EvRegisterCoordinatorRequest> {
         explicit TEvRegisterCoordinatorRequest(TCoordinatorId coordinatorId)
-            : CoordinatorId(std::move(coordinatorId)) {
+            : CoordinatorId(std::move(coordinatorId))
+        {
         }
 
         TCoordinatorId CoordinatorId;
     };
 
-    struct TEvRegisterCoordinatorResponse
-        : NActors::TEventLocal<TEvRegisterCoordinatorResponse, EvRegisterCoordinatorResponse> {
+    struct TEvRegisterCoordinatorResponse: NActors::TEventLocal<TEvRegisterCoordinatorResponse, EvRegisterCoordinatorResponse> {
         TEvRegisterCoordinatorResponse() = default;
 
         explicit TEvRegisterCoordinatorResponse(NYql::TIssues issues)
-            : Issues(std::move(issues)) {
+            : Issues(std::move(issues))
+        {
         }
 
         NYql::TIssues Issues;
     };
 
-    struct TEvCreateCheckpointRequest : NActors::TEventLocal<TEvCreateCheckpointRequest, EvCreateCheckpointRequest> {
+    struct TEvCreateCheckpointRequest: NActors::TEventLocal<TEvCreateCheckpointRequest, EvCreateCheckpointRequest> {
         TEvCreateCheckpointRequest(
-            TCoordinatorId coordinatorId,
-            TCheckpointId checkpointId,
-            ui64 nodeCount,
-            const NProto::TCheckpointGraphDescription& graphDesc)
+            TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 nodeCount, const NProto::TCheckpointGraphDescription& graphDesc)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , NodeCount(nodeCount)
-            , GraphDescription(graphDesc) {
+            , GraphDescription(graphDesc)
+        {
         }
 
-        TEvCreateCheckpointRequest(
-            TCoordinatorId coordinatorId,
-            TCheckpointId checkpointId,
-            ui64 nodeCount,
-            const TString& graphDescId)
+        TEvCreateCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 nodeCount, const TString& graphDescId)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , NodeCount(nodeCount)
-            , GraphDescription(graphDescId) {
+            , GraphDescription(graphDescId)
+        {
         }
 
         TCoordinatorId CoordinatorId;
@@ -95,12 +88,13 @@ struct TEvCheckpointStorage {
         std::variant<TString, NProto::TCheckpointGraphDescription> GraphDescription;
     };
 
-    struct TEvCreateCheckpointResponse : NActors::TEventLocal<TEvCreateCheckpointResponse, EvCreateCheckpointResponse> {
+    struct TEvCreateCheckpointResponse: NActors::TEventLocal<TEvCreateCheckpointResponse, EvCreateCheckpointResponse> {
         TEvCreateCheckpointResponse(TCheckpointId checkpointId, NYql::TIssues issues, TString graphDescId, ui64 allCheckpointsSizeBytes)
             : CheckpointId(std::move(checkpointId))
             , Issues(std::move(issues))
             , GraphDescId(std::move(graphDescId))
-            , AllCheckpointsSizeBytes(allCheckpointsSizeBytes) {
+            , AllCheckpointsSizeBytes(allCheckpointsSizeBytes)
+        {
         }
 
         TCheckpointId CheckpointId;
@@ -114,7 +108,8 @@ struct TEvCheckpointStorage {
         TEvSetCheckpointPendingCommitStatusRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
-            , StateSizeBytes(stateSizeBytes) {
+            , StateSizeBytes(stateSizeBytes)
+        {
         }
 
         TCoordinatorId CoordinatorId;
@@ -126,24 +121,22 @@ struct TEvCheckpointStorage {
         : NActors::TEventLocal<TEvSetCheckpointPendingCommitStatusResponse, EvSetCheckpointStatusPendingCommitResponse> {
         TEvSetCheckpointPendingCommitStatusResponse(TCheckpointId checkpointId, NYql::TIssues issues)
             : CheckpointId(std::move(checkpointId))
-            , Issues(std::move(issues)) {
+            , Issues(std::move(issues))
+        {
         }
 
         TCheckpointId CheckpointId;
         NYql::TIssues Issues;
     };
 
-    struct TEvCompleteCheckpointRequest
-        : NActors::TEventLocal<TEvCompleteCheckpointRequest, EvCompleteCheckpointRequest> {
+    struct TEvCompleteCheckpointRequest: NActors::TEventLocal<TEvCompleteCheckpointRequest, EvCompleteCheckpointRequest> {
         TEvCompleteCheckpointRequest(
-            TCoordinatorId coordinatorId,
-            TCheckpointId checkpointId,
-            ui64 stateSizeBytes,
-            NYql::NDqProto::ECheckpointType type)
+            TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes, NYql::NDqProto::ECheckpointType type)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , StateSizeBytes(stateSizeBytes)
-            , Type(type) {
+            , Type(type)
+        {
         }
 
         TCoordinatorId CoordinatorId;
@@ -152,23 +145,23 @@ struct TEvCheckpointStorage {
         NYql::NDqProto::ECheckpointType Type;
     };
 
-    struct TEvCompleteCheckpointResponse
-        : NActors::TEventLocal<TEvCompleteCheckpointResponse, EvCompleteCheckpointResponse> {
+    struct TEvCompleteCheckpointResponse: NActors::TEventLocal<TEvCompleteCheckpointResponse, EvCompleteCheckpointResponse> {
         TEvCompleteCheckpointResponse(TCheckpointId checkpointId, NYql::TIssues issues)
             : CheckpointId(std::move(checkpointId))
-            , Issues(std::move(issues)) {
+            , Issues(std::move(issues))
+        {
         }
 
         TCheckpointId CheckpointId;
         NYql::TIssues Issues;
     };
 
-    struct TEvAbortCheckpointRequest
-            : NActors::TEventLocal<TEvAbortCheckpointRequest, EvAbortCheckpointRequest> {
+    struct TEvAbortCheckpointRequest: NActors::TEventLocal<TEvAbortCheckpointRequest, EvAbortCheckpointRequest> {
         TEvAbortCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, TString reason)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
-            , Reason(std::move(reason)) {
+            , Reason(std::move(reason))
+        {
         }
 
         TCoordinatorId CoordinatorId;
@@ -176,24 +169,25 @@ struct TEvCheckpointStorage {
         TString Reason;
     };
 
-    struct TEvAbortCheckpointResponse
-            : NActors::TEventLocal<TEvAbortCheckpointResponse, EvAbortCheckpointResponse> {
+    struct TEvAbortCheckpointResponse: NActors::TEventLocal<TEvAbortCheckpointResponse, EvAbortCheckpointResponse> {
         TEvAbortCheckpointResponse(TCheckpointId checkpointId, NYql::TIssues issues)
-                : CheckpointId(std::move(checkpointId))
-                , Issues(std::move(issues)) {
+            : CheckpointId(std::move(checkpointId))
+            , Issues(std::move(issues))
+        {
         }
 
         TCheckpointId CheckpointId;
         NYql::TIssues Issues;
     };
 
-    struct TEvGetCheckpointsMetadataRequest
-        : NActors::TEventLocal<TEvGetCheckpointsMetadataRequest, EvGetCheckpointsMetadataRequest> {
-        explicit TEvGetCheckpointsMetadataRequest(TString graphId, TVector<ECheckpointStatus> statuses = TVector<ECheckpointStatus>(), ui64 limit = std::numeric_limits<ui64>::max(), bool loadGraphDescription = false)
+    struct TEvGetCheckpointsMetadataRequest: NActors::TEventLocal<TEvGetCheckpointsMetadataRequest, EvGetCheckpointsMetadataRequest> {
+        explicit TEvGetCheckpointsMetadataRequest(TString graphId, TVector<ECheckpointStatus> statuses = TVector<ECheckpointStatus>(),
+            ui64 limit = std::numeric_limits<ui64>::max(), bool loadGraphDescription = false)
             : GraphId(std::move(graphId))
             , Statuses(std::move(statuses))
             , Limit(limit)
-            , LoadGraphDescription(loadGraphDescription) {
+            , LoadGraphDescription(loadGraphDescription)
+        {
         }
 
         TString GraphId;
@@ -202,24 +196,20 @@ struct TEvCheckpointStorage {
         bool LoadGraphDescription = false;
     };
 
-    struct TEvGetCheckpointsMetadataResponse
-        : NActors::TEventLocal<TEvGetCheckpointsMetadataResponse, EvGetCheckpointsMetadataResponse> {
+    struct TEvGetCheckpointsMetadataResponse: NActors::TEventLocal<TEvGetCheckpointsMetadataResponse, EvGetCheckpointsMetadataResponse> {
         TEvGetCheckpointsMetadataResponse(TVector<TCheckpointMetadata> checkpoints, NYql::TIssues issues)
             : Checkpoints(std::move(checkpoints))
-            , Issues(std::move(issues)) {
+            , Issues(std::move(issues))
+        {
         }
 
         TCheckpoints Checkpoints;
         NYql::TIssues Issues;
     };
 
-    struct TEvNewCheckpointSucceeded : NActors::TEventLocal<TEvNewCheckpointSucceeded, EvNewCheckpointSucceeded> {
-        TEvNewCheckpointSucceeded(
-            NActors::TActorId checkpointCoordinatorId,
-            TCoordinatorId coordinatorId,
-            TCheckpointId checkpointId,
-            NYql::NDqProto::ECheckpointType type,
-            ui64 cookie)
+    struct TEvNewCheckpointSucceeded: NActors::TEventLocal<TEvNewCheckpointSucceeded, EvNewCheckpointSucceeded> {
+        TEvNewCheckpointSucceeded(NActors::TActorId checkpointCoordinatorId, TCoordinatorId coordinatorId, TCheckpointId checkpointId,
+            NYql::NDqProto::ECheckpointType type, ui64 cookie)
             : CheckpointCoordinatorId(checkpointCoordinatorId)
             , CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
@@ -236,18 +226,15 @@ struct TEvCheckpointStorage {
     };
 
     // Sent from TActorGC to TStorageProxy when a GC cycle for a graph finishes (success or failure).
-    struct TEvGcFinished : NActors::TEventLocal<TEvGcFinished, EvGcFinished> {
-        explicit TEvGcFinished(
-            NActors::TActorId checkpointCoordinatorId,
-            TCoordinatorId coordinatorId,
-            TCheckpointId checkpointId,
-            ui64 cookie)
+    struct TEvGcFinished: NActors::TEventLocal<TEvGcFinished, EvGcFinished> {
+        explicit TEvGcFinished(NActors::TActorId checkpointCoordinatorId, TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 cookie)
             : CheckpointCoordinatorId(checkpointCoordinatorId)
             , CoordinatorId(std::move(coordinatorId))
             , CheckpointId(checkpointId)
             , Cookie(cookie)
         {
         }
+
         NActors::TActorId CheckpointCoordinatorId;
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
@@ -255,24 +242,27 @@ struct TEvCheckpointStorage {
     };
 
     // Sent to TStorageProxy to delete all checkpoint data for a graph.
-    struct TEvDeleteGraphRequest : NActors::TEventLocal<TEvDeleteGraphRequest, EvDeleteGraphRequest> {
+    struct TEvDeleteGraphRequest: NActors::TEventLocal<TEvDeleteGraphRequest, EvDeleteGraphRequest> {
         explicit TEvDeleteGraphRequest(TString graphId)
-            : GraphId(std::move(graphId)) {
+            : GraphId(std::move(graphId))
+        {
         }
 
         TString GraphId;
     };
 
     // Response from TStorageProxy after deleting all checkpoint data for a graph.
-    struct TEvDeleteGraphResponse : NActors::TEventLocal<TEvDeleteGraphResponse, EvDeleteGraphResponse> {
+    struct TEvDeleteGraphResponse: NActors::TEventLocal<TEvDeleteGraphResponse, EvDeleteGraphResponse> {
         explicit TEvDeleteGraphResponse(NYql::TIssues issues = {})
             : Status(issues.Empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR)
-            , Issues(std::move(issues)) {
+            , Issues(std::move(issues))
+        {
         }
 
         TEvDeleteGraphResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
             : Status(status)
-            , Issues(std::move(issues)) {
+            , Issues(std::move(issues))
+        {
         }
 
         Ydb::StatusIds::StatusCode Status;
@@ -280,4 +270,4 @@ struct TEvCheckpointStorage {
     };
 };
 
-} // namespace NFq
+}   // namespace NFq

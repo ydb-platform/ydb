@@ -149,6 +149,9 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
                 if (event.TraceId != TTraceId()) {
                     fluent.Item("trace_id").Value(event.TraceId);
                 }
+                if (Options_.EnableSpanIdField && event.SpanId != TSpanId()) {
+                    fluent.Item("span_id").Value(Format("%016x", event.SpanId));
+                }
                 if (IsSourceLocationEnabled() && event.SourceFile) {
                     auto sourceFile = event.SourceFile;
                     fluent.Item("source_file").Value(Format("%v:%v", sourceFile.RNextTok(LOCSLASH_C), event.SourceLine));

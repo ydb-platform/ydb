@@ -50,6 +50,6 @@ constexpr TDuration DefaultGridInterval = TDuration::Minutes(5);
 
 // HTTP status codes that indicate a transient server-side error and should
 // trigger a retry. 429 = Too Many Requests, 502/503/504 = gateway errors.
-constexpr std::array<long, 4> RetriableHttpCodes = {429, 502, 503, 504};
+constexpr std::array<long, 4> RetriableHttpCodes = { 429, 502, 503, 504 };
 
-} // namespace NYql::NSo::NConstants
+}   // namespace NYql::NSo::NConstants

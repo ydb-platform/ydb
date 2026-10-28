@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_fmr.cpp
@@ -30,8 +30,6 @@ PEERDIR(
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_fmr.h)
 

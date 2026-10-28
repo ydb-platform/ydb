@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_client_data_writes_ut.cpp
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_generated_columns_ut.cpp
@@ -24,6 +25,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/import
+    yql/essentials/types/binary_json
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
@@ -37,5 +40,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
 
 END()

@@ -1,5 +1,6 @@
-#include "udf_meta.h"
 #include "udf_behaviour.h"
+#include "udf_meta.h"
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NUdfStore {
@@ -31,7 +32,7 @@ bool TUdfMeta::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::
     return true;
 };
 
-TVector<NKikimrSchemeOp::TColumnDescription> TUdfMeta::GetColumnDescription(){
+TVector<NKikimrSchemeOp::TColumnDescription> TUdfMeta::GetColumnDescription() {
     auto makeCol = [](const TString& name, const char* type) {
         NKikimrSchemeOp::TColumnDescription col;
         col.SetName(name);
@@ -48,9 +49,8 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfMeta::GetColumnDescription(){
 }
 
 TVector<TString> TUdfMeta::GetPk() {
-    return {Md5ColName};
+    return { Md5ColName };
 }
-
 
 bool TUdfMeta::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
     if (!decoder.Read(decoder.GetMd5Idx(), Md5, rawValue)) {
@@ -79,11 +79,12 @@ NMetadata::NInternal::TTableRecord TUdfMeta::SerializeToRecord() const {
 }
 
 TString TUdfMeta::SerializeToString() const {
-    return TStringBuilder() << "{" << "Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name << ", Type: " << Type << ", Manifest: " << Manifest << "}";
+    return TStringBuilder() << "{" << "Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name << ", Type: " << Type
+                            << ", Manifest: " << Manifest << "}";
 }
 
 NMetadata::IClassBehaviour::TPtr TUdfMeta::GetBehaviour() {
     return TUdfBehaviour::GetInstance();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -2,7 +2,7 @@
 
 #include "invoker_queue.h"
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 #include <cmath>
 
@@ -15,7 +15,7 @@ using namespace NYTree;
 ////////////////////////////////////////////////////////////////////////////////
 
 TFairShareInvokerQueue::TFairShareInvokerQueue(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     const std::vector<TBucketDescription>& bucketDescriptions,
     NProfiling::IRegistryPtr registry)
     : Weights_(bucketDescriptions.size(), 1.0)
@@ -38,7 +38,7 @@ TFairShareInvokerQueue::TFairShareInvokerQueue(
 
 TFairShareInvokerQueue::~TFairShareInvokerQueue() = default;
 
-void TFairShareInvokerQueue::SetThreadId(NThreading::TThreadId threadId)
+void TFairShareInvokerQueue::SetThreadId(TThreadId threadId)
 {
     for (auto& bucket : Buckets_) {
         bucket.Queue->SetThreadId(threadId);

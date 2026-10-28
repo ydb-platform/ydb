@@ -35,6 +35,7 @@ PY3_LIBRARY()
         contrib/python/allure-python-commons
         contrib/python/matplotlib
         contrib/python/pytest-timeout
+        contrib/python/PyYAML
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers

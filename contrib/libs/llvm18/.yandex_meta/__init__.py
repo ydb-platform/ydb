@@ -72,10 +72,6 @@ def llvm_post_install(self):
                 }
             ),
         )
-    with self.yamakes["tools/gold"] as m:
-        m.EXPORTS_SCRIPT = ["gold.exports"]
-        m.PEERDIR.add("build/platform/binutils")
-        m.CFLAGS.append("-I$BINUTILS_ROOT_RESOURCE_GLOBAL/include")  # plugin-api.h
     # Make Linux-only dependencies conditional.
     with self.yamakes["tools/lli"] as m:
         peerdir_linux = {self.arcdir + "/lib/ExecutionEngine/PerfJITEvents"}
@@ -126,7 +122,7 @@ def llvm_post_install(self):
     ]
     self.yamakes.peerdir_for_addincls(self.arcdir, incs)
     with self.yamakes["."] as m:
-        recurse_linux = {"lib/ExecutionEngine/PerfJITEvents", "tools/gold"}
+        recurse_linux = {"lib/ExecutionEngine/PerfJITEvents"}
         self.yamakes["."] = self.module(
             Library,
             ADDINCL=list(map(GLOBAL, incs)),
@@ -393,8 +389,6 @@ llvm = CMakeNinjaNixProject(
         "yaml2obj",
         # utils
         "LLVMTableGenGlobalISel",
-        # linux only lib
-        "LLVMgold",
     ],
     put_with={
         "LLVMCodeGen": ["LLVMCodeGenTypes"],

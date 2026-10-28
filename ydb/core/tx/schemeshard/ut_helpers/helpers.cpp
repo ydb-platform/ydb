@@ -4,6 +4,13 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -3371,6 +3378,104 @@ namespace NSchemeShardUT_Private {
         return CountRows(runtime, TTestTxConfig::SchemeShard, table);
     }
 
+    void CreateTestTable(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, bool isColumnTable) {
+        if (isColumnTable) {
+            TestCreateColumnTable(runtime, txId, parentPath, R"(
+                Name: "TestTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "id"
+                }
+            )");
+        } else {
+            TestCreateTable(runtime, txId, parentPath, R"(
+                Name: "TestTable"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "data" Type: "String" }
+                KeyColumnNames: [ "id" ]
+            )");
+        }
+    }
+
+    void DropTestTable(TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString& tableName, bool isColumnTable, const TVector<TExpectedResult>& expectedResults) {
+        if (isColumnTable) {
+            AsyncSend(runtime, TTestTxConfig::SchemeShard,
+                DropColumnTableRequest(++txId, parentPath, tableName));
+            TestModificationResults(runtime, txId, expectedResults);
+        } else {
+            TestDropTable(runtime, ++txId, parentPath, tableName, expectedResults);
+        }
+    }
+
+    void WriteTableData(TTestActorRuntime& runtime, ui64& txId, const TString& tablePath, bool isColumnTable) {
+        if (isColumnTable) {
+            const auto describe = DescribePath(runtime, tablePath);
+            const auto& path = describe.GetPathDescription();
+            const ui64 tabletId = path.GetColumnTableDescription().GetSharding().GetColumnShards(0);
+            const ui64 pathId = path.GetSelf().GetPathId();
+            const ui64 ownerId = path.GetSelf().GetSchemeshardId();
+            const ui64 schemaVersion = path.GetColumnTableDescription().GetSchema().GetVersion();
+
+            NArrow::NConstruction::IArrayBuilder::TPtr keys = std::make_shared<
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("id");
+            NArrow::NConstruction::IArrayBuilder::TPtr values = std::make_shared<
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>(
+                    "data", NArrow::NConstruction::TStringPoolFiller(8, 100));
+            auto batch = NArrow::NConstruction::TRecordBatchConstructor({keys, values}).BuildBatch(5);
+
+            auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            const ui64 payload = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*write)
+                .AddDataToPayload(NArrow::SerializeBatchNoCompression(batch));
+            write->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+                {ownerId, pathId, schemaVersion}, {1, 2}, payload, NKikimrDataEvents::FORMAT_ARROW);
+            const auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, tabletId, sender, write.release());
+            auto result = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, result->Get()->Record.GetIssues());
+        } else {
+            TVector<TCell> cells = {
+                TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
+                TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
+                TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
+                TCell::Make((ui64)4), TCell(TStringBuf("row four")), TCell(TStringBuf("data four")),
+                TCell::Make((ui64)5), TCell(TStringBuf("row five")), TCell(TStringBuf("data five")),
+            };
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2, 3}, TSerializedCellMatrix(cells, 5, 3), true);
+        }
+    }
+
+    ui64 CountTableRows(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep) {
+        if (isColumnTable) {
+            const auto describe = DescribePath(runtime, tablePath);
+            const auto& path = describe.GetPathDescription();
+            const ui64 pathId = path.GetSelf().GetPathId();
+            const auto& columnShards = path.GetColumnTableDescription().GetSharding().GetColumnShards();
+            UNIT_ASSERT_VALUES_EQUAL(columnShards.size(), 1);
+            NTxUT::TShardReader reader(static_cast<TTestBasicRuntime&>(runtime), columnShards.Get(0), pathId,
+                NOlap::TSnapshot::MaxForPlanStep(planStep));
+            reader.SetReplyColumnIds({1, 2});
+            auto rows = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            return rows ? rows->num_rows() : 0;
+        }
+        return CountRows(runtime, TTestTxConfig::SchemeShard, tablePath);
+    }
+
+    void VerifyTableEmpty(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep) {
+        const auto& rows = CountTableRows(runtime, tablePath, isColumnTable, planStep);
+        if (isColumnTable) {
+            Y_UNUSED(rows); //TODO FIX ME
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
+        }
+    }
+
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
         ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds, ui32 vectorDimension) {
         TVector<TCell> cells;
@@ -3737,4 +3842,3 @@ namespace NSchemeShardUT_Private {
         }
     }
 }
-

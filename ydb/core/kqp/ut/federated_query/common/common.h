@@ -1,19 +1,18 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
 
 TString GetSymbolsString(char start, char end, const TString& skip = "");
 
 NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
-    const NYdb::TOperation::TOperationId& operationId,
-    const NYdb::TDriver& ydbDriver,
-    const TString& userSID = "");
+    const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID = "");
 
 void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
 void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
@@ -35,17 +34,13 @@ struct TKikimrRunnerOptions {
     bool NeedsStatsCollectors = false;
     TVector<TString> StoragePoolTypes;
     bool UseRealThreads = true;
+    TString AuthToken;
 };
 
-std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
-    bool initializeHttpGateway = false,
-    NYql::NConnector::IClient::TPtr connectorClient = nullptr,
-    NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
-    std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
-    const TKikimrRunnerOptions& options = {});
-
+std::shared_ptr<TKikimrRunner> MakeKikimrRunner(bool initializeHttpGateway = false, NYql::NConnector::IClient::TPtr connectorClient = nullptr,
+    NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr, std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr, const TKikimrRunnerOptions& options = {});
 
 std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount);
 
-} // namespace NKikimr::NKqp::NFederatedQueryTest
+}   // namespace NKikimr::NKqp::NFederatedQueryTest

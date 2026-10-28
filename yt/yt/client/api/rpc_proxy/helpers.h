@@ -9,6 +9,8 @@
 
 #include <yt/yt/client/api/client.h>
 
+#include <yt/yt/client/chunk_client/public.h>
+
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -172,6 +174,22 @@ void ToProto(
     const NApi::TTabletReadOptionsBase& options);
 
 void ToProto(
+    NProto::TTimingStatistics* protoStatistics,
+    const NChunkClient::TTimingStatistics& statistics);
+
+void FromProto(
+    NChunkClient::TTimingStatistics* statistics,
+    const NProto::TTimingStatistics& protoStatistics);
+
+void ToProto(
+    NProto::TRemoteTableReaderTimingStatistics* protoStatistics,
+    const NApi::TRemoteTableReaderTimingStatistics& statistics);
+
+void FromProto(
+    NApi::TRemoteTableReaderTimingStatistics* statistics,
+    const NProto::TRemoteTableReaderTimingStatistics& protoStatistics);
+
+void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics);
 
@@ -246,6 +264,26 @@ void FromProto(
 void FromProto(
     TTablePartitionCookiePtr* cookie,
     const TProtobufString& protoCookie);
+
+void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie);
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition);
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition);
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile);
 
 void ToProto(
     NProto::TRowBatchReadOptions* proto,

@@ -106,7 +106,11 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 double Remainder = 0.0;
             };
 
-            std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed; // Aggregated consumed counters for parent resources.
+            // Aggregated consumed counters for parent resources. Shared with TResource of the
+            // parent in quoter service and with proxies of other descendants, so they are never
+            // removed by name
+            std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed;
+            ::NMonitoring::TDynamicCounterPtr ResourceCounters;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueWeight;
             ::NMonitoring::TDynamicCounters::TCounterPtr Dropped;
@@ -115,6 +119,23 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             TDoubleCounter ReceivedFromKesus;
 
             TCounters(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
+                Init(resource, quoterCounters);
+            }
+
+            ~TCounters() {
+                Reset();
+            }
+
+            // Kesus may delete and recreate the resource while the proxy is disconnected.
+            // If Kesus is colocated, it removes the shared resource subgroup, so the
+            // previously obtained counters are detached. Rebind to the current subgroup.
+            void Rebind(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
+                Reset();
+                Init(resource, quoterCounters);
+            }
+
+        private:
+            void Init(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
                 if (!quoterCounters) {
                     return;
                 }
@@ -128,15 +149,36 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                     ParentConsumed.emplace_back(resourceCounters->GetCounter(CONSUMED_COUNTER_NAME, true));
                 }
 
-                const auto resourceCounters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, NKesus::CanonizeQuoterResourcePath(splittedPath));
-                QueueSize = resourceCounters->GetExpiringCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME, false);
-                QueueWeight = resourceCounters->GetExpiringCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME, false);
-                AllocatedOffline = resourceCounters->GetCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME, true);
-                Dropped = resourceCounters->GetCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME, true);
-                Accumulated = resourceCounters->GetExpiringCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME, false);
-                ReceivedFromKesus = resourceCounters->GetCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME, true);
+                ResourceCounters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, NKesus::CanonizeQuoterResourcePath(splittedPath));
+                QueueSize = ResourceCounters->GetCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME, false);
+                QueueWeight = ResourceCounters->GetCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME, false);
+                AllocatedOffline = ResourceCounters->GetCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME, true);
+                Dropped = ResourceCounters->GetCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME, true);
+                Accumulated = ResourceCounters->GetCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME, false);
+                ReceivedFromKesus = ResourceCounters->GetCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME, true);
             }
 
+            void Reset() {
+                ParentConsumed.clear();
+                if (!ResourceCounters) {
+                    return;
+                }
+                ResourceCounters->RemoveCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME);
+                ResourceCounters = nullptr;
+                QueueSize = nullptr;
+                QueueWeight = nullptr;
+                Dropped = nullptr;
+                Accumulated = nullptr;
+                AllocatedOffline = TDoubleCounter();
+                ReceivedFromKesus = TDoubleCounter();
+            }
+
+        public:
             void AddConsumed(ui64 consumed) {
                 for (::NMonitoring::TDynamicCounters::TCounterPtr& counter : ParentConsumed) {
                     *counter += consumed;
@@ -473,12 +515,14 @@ private:
 
     TResourceState* FindResource(ui64 id) {
         const auto indexIt = ResIndex.find(id);
-        return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
+        // The index may point to Resources.end() for the old id of a recreated resource.
+        return indexIt != ResIndex.end() && indexIt->second != Resources.end() ? indexIt->second->second.Get() : nullptr;
     }
 
     const TResourceState* FindResource(ui64 id) const {
         const auto indexIt = ResIndex.find(id);
-        return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
+        // The index may point to Resources.end() for the old id of a recreated resource.
+        return indexIt != ResIndex.end() && indexIt->second != Resources.end() ? indexIt->second->second.Get() : nullptr;
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
@@ -865,9 +909,8 @@ private:
             {"logPrefix", LogPrefix},
             {"resources", PrintResources(*ev->Get())});
         for (const TEvQuota::TProxyStat& stat : msg->Stats) {
-            const auto indexIt = ResIndex.find(stat.ResourceId);
-            if (indexIt != ResIndex.end()) {
-                TResourceState& res = *indexIt->second->second;
+            if (TResourceState* resPtr = FindResource(stat.ResourceId)) {
+                TResourceState& res = *resPtr;
                 res.AddConsumed(stat.Consumed);
                 res.SetAvailable(res.Available - stat.Consumed);
                 res.QueueWeight = stat.QueueWeight;
@@ -895,6 +938,22 @@ private:
         }
     }
 
+    // Ask Kesus to destroy the session for this resource so idle resources don't
+    // accumulate sessions on the tablet. The Kesus-side session is created on
+    // subscribe (ResId assigned), so close it regardless of whether it was
+    // actively consuming. When disconnected there is nothing to do: Kesus drops
+    // all sessions of this proxy's pipe on pipe-server disconnect.
+    void CloseSessionOnKesus(TResourceState& res) {
+        if (Connected && res.ResId != Max<ui64>()) {
+            InitUpdateEv();
+            auto* resInfo = UpdateEv->Record.AddResourcesInfo();
+            resInfo->SetResourceId(res.ResId);
+            resInfo->SetConsumeResource(false);
+            resInfo->SetCloseSession(true);
+        }
+        res.SessionIsActive = false;
+    }
+
     void DeleteResourceInfo(const TString& resource, const ui64 resourceId) {
         auto indexIt = ResIndex.find(resourceId);
         if (indexIt != ResIndex.end()) {
@@ -904,9 +963,7 @@ private:
                 if (res.ProxyRequestSpan) {
                     res.ProxyRequestSpan.EndError("Deleted");
                 }
-                if (res.SessionIsActive) {
-                    ActivateSession(res, false);
-                }
+                CloseSessionOnKesus(res);
                 Resources.erase(resIt);
             }
             ResIndex.erase(indexIt);
@@ -919,9 +976,7 @@ private:
             if (res.ProxyRequestSpan) {
                 res.ProxyRequestSpan.EndError("Deleted");
             }
-            if (res.SessionIsActive) {
-                ActivateSession(res, false);
-            }
+            CloseSessionOnKesus(res);
             if (res.ResId != Max<ui64>()) {
                 ResIndex.erase(res.ResId);
             }
@@ -1008,6 +1063,7 @@ private:
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
                             BreakResource(*resState, GetProxyUpdateEv());
                             ResIndex[resState->ResId] = Resources.end();
+                            resState->Counters.Rebind(resState->Resource, Counters.QuoterCounters);
                         }
                         resState->ResId = resResult.GetResourceId();
                         ResIndex[resState->ResId] = resourceIt;

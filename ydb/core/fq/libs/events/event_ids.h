@@ -6,13 +6,13 @@ namespace NFq {
 
 struct TEventIds {
     enum EEventSpaceYqlProxy {
-        ES_YQL_ANALYTICS_PROXY = 4205 //TKikimrEvents::ES_YQL_ANALYTICS_PROXY
+        ES_YQL_ANALYTICS_PROXY = 4205   //TKikimrEvents::ES_YQL_ANALYTICS_PROXY
     };
 
     static constexpr ui32 EventSpace = ES_YQL_ANALYTICS_PROXY;
 
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(EventSpace),
 
         //YQL Internal
@@ -56,7 +56,6 @@ struct TEventIds {
     };
 
     static_assert(EvEnd < EventSpaceEnd(EventSpace), "expect EvEnd < EventSpaceEnd(EventSpace)");
-
 };
 
-} // namespace NFq
+}   // namespace NFq

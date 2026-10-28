@@ -42,7 +42,11 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     AFL_VERIFY(Self->StoragesManager);
-    return Self->StoragesManager->LoadIdempotency(txc.DB);
+    if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
+        return false;
+    }
+    Self->InitFindEmptyHistoryIntervals();
+    return true;
 }
 
 bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

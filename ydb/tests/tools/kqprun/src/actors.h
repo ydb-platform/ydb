@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+
 #include <ydb/tests/tools/kqprun/runlib/actors.h>
 
 namespace NKqpRun {
@@ -41,12 +42,14 @@ struct TWaitResourcesSettings {
 
 using TProgressCallback = std::function<void(ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress)>;
 
-NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
+NActors::IActor* CreateRunScriptActorMock(
+    TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
 
 NActors::IActor* CreateAsyncQueryRunnerActor(const NKikimrRun::TAsyncQueriesSettings& settings);
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings);
 
-NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
+NActors::IActor* CreateSessionHolderActor(
+    TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

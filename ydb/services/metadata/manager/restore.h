@@ -1,10 +1,9 @@
 #pragma once
 #include "table_record.h"
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/services/metadata/manager/restore_controller.h>
 #include <ydb/services/metadata/request/request_actor.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -44,7 +43,8 @@ private:
     }
 
 public:
-    TRestoreObjectsActor(const NInternal::TTableRecords& objectIds, const NACLib::TUserToken& uToken, typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
+    TRestoreObjectsActor(const NInternal::TTableRecords& objectIds, const NACLib::TUserToken& uToken,
+        typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
         : Controller(controller)
         , ObjectIds(objectIds)
         , SessionId(sessionId)
@@ -75,4 +75,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

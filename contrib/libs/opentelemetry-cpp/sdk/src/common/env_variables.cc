@@ -4,7 +4,7 @@
 #include "opentelemetry/sdk/common/env_variables.h"
 
 #ifdef _MSC_VER
-#  include <string.h>
+#  include <cstring>
 #  define strcasecmp _stricmp
 #else
 #  include <strings.h>

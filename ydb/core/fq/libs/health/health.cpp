@@ -1,13 +1,13 @@
 #include "health.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
-#include <library/cpp/monlib/service/pages/templates.h>
 
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_HEALTH
 
@@ -16,19 +16,19 @@ namespace {
 
 using namespace NActors;
 
-class THealthActor : public NActors::TActorBootstrapped<THealthActor> {
+class THealthActor: public NActors::TActorBootstrapped<THealthActor> {
     NConfig::THealthConfig Config;
     NYdb::NDiscovery::TDiscoveryClient Client;
     NFq::TYqSharedResources::TPtr YqSharedResources;
 
 public:
-    THealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& )
+    THealthActor(
+        const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr&)
         : Config(config)
-        , Client(yqSharedResources->CoreYdbDriver,
-            NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint("localhost:" + ToString(Config.GetPort()))
-                .SslCredentials(NYdb::TSslCredentials(Config.GetSecure()))
-                .Database(Config.GetDatabase()))
+        , Client(yqSharedResources->CoreYdbDriver, NYdb::TCommonClientSettings()
+                                                       .DiscoveryEndpoint("localhost:" + ToString(Config.GetPort()))
+                                                       .SslCredentials(NYdb::TSslCredentials(Config.GetSecure()))
+                                                       .Database(Config.GetDatabase()))
         , YqSharedResources(yqSharedResources)
     {
     }
@@ -42,8 +42,7 @@ public:
         NActors::TMon* mon = NKikimr::AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "yq_health", "YQ Health", false,
-                TlsActivationContext->ActorSystem(), SelfId());
+            mon->RegisterActorPage(actorsMonPage, "yq_health", "YQ Health", false, TlsActivationContext->ActorSystem(), SelfId());
         }
 
         Become(&THealthActor::StateFunc);
@@ -78,15 +77,16 @@ private:
     }
 };
 
-} // namespace
+}   // namespace
 
 TActorId HealthActorId() {
     constexpr TStringBuf name = "YQHLTH";
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateHealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ::NMonitoring::TDynamicCounterPtr& counters) {
+IActor* CreateHealthActor(const NConfig::THealthConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources,
+    const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new THealthActor(config, yqSharedResources, counters);
 }
 
-}  // namespace NFq
+}   // namespace NFq

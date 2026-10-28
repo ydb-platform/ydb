@@ -16,16 +16,16 @@ namespace NKqp {
 using namespace NMiniKQL;
 using namespace NYql;
 
-TKqpProtoBuilder::TSelfHosted::TSelfHosted(const IFunctionRegistry& funcRegistry)
-    : Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+TKqpProtoBuilder::TSelfHosted::TSelfHosted()
+    : Alloc(__LOCATION__)
     , TypeEnv(Alloc)
     , MemInfo("KqpProtoBuilder")
     , HolderFactory(Alloc.Ref(), MemInfo)
 {
 }
 
-TKqpProtoBuilder::TKqpProtoBuilder(const IFunctionRegistry& funcRegistry)
-    : SelfHosted(MakeHolder<TSelfHosted>(funcRegistry))
+TKqpProtoBuilder::TKqpProtoBuilder()
+    : SelfHosted(MakeHolder<TSelfHosted>())
 {
     Alloc = &SelfHosted->Alloc;
     TypeEnv = &SelfHosted->TypeEnv;

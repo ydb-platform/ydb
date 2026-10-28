@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_pure_provider.cpp
@@ -23,8 +23,6 @@ PEERDIR(
     yql/essentials/providers/common/comp_nodes
     yql/essentials/minikql/runtime_settings
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

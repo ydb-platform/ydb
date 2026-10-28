@@ -2,7 +2,8 @@ cdef class ResponseBuffer:
     cdef:
         unsigned long long buf_loc, buf_sz, slice_sz
         signed long long slice_start
-        object gen, source, _exception_tag, open_marker, close_marker, carryover, exception_buf, last_message_data, current_chunk
+        readonly object gen
+        object source, _exception_tag, open_marker, close_marker, carryover, exception_buf, last_message_data, current_chunk
         char* buffer
         char* slice
         unsigned char _read_byte_load(self) except ?255

@@ -608,7 +608,6 @@ TEST(TYsonTest, ContextInExceptions_ContextAtTheVeryBeginning)
     struct TNoAttributesAllowedConsumer
         : public TNullYsonConsumer
     {
-    public:
         void OnBeginAttributes() override
         {
             THROW_ERROR_EXCEPTION("I don't like attributes");

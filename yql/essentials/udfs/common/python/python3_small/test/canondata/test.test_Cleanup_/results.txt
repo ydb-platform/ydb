@@ -1,0 +1,36 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "rnd";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ];
+                            [
+                                "yid";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "0";
+                        "bla"
+                    ]
+                ]
+            }
+        ]
+    }
+]

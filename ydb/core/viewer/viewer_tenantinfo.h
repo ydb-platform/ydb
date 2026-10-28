@@ -8,6 +8,7 @@
 #include "wb_aggregate.h"
 #include "wb_merge.h"
 #include <ydb/core/base/memory_stats.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 
 namespace NKikimr::NViewer {
 
@@ -690,15 +691,18 @@ public:
         Problems.push_back(problem);
     }
 
-    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
-        if (pdiskInfo.GetExpectedSlotSize()) {
-            return pdiskInfo.GetExpectedSlotSize();
+    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
+        ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        if (!slotSize) {
+            slotSize = pdiskInfo.GetExpectedSlotSize();
         }
-        if (pdiskInfo.GetExpectedSlotCount()) {
-            return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
-        } else {
-            return pdiskInfo.GetTotalSize() / 16;
+        if (!slotSize) {
+            const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
+            slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
+        return TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.HasUserChunkPoolSize() ? std::make_optional(pdiskInfo.GetUserChunkPoolSize()) : std::nullopt);
     }
 
     struct TStoragePoolStats {
@@ -738,7 +742,7 @@ public:
         if (Storage) {
             std::unordered_map<TPDiskId, const NKikimrSysView::TPDiskInfo&> pDisksIndex;
             std::unordered_map<TStoragePoolId, TString> poolIdToName;
-            std::unordered_map<TGroupId, TStoragePoolId> groupToPoolId;
+            std::unordered_map<TGroupId, const NKikimrSysView::TGroupInfo&> groupsIndex;
 
             if (PDisksResponse && PDisksResponse->IsOk()) {
                 for (const NKikimrSysView::TPDiskEntry& entry : PDisksResponse->Get()->Record.GetEntries()) {
@@ -765,7 +769,7 @@ public:
                 for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                     const NKikimrSysView::TGroupKey& key = entry.GetKey();
                     const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                    groupToPoolId.emplace(key.GetGroupId(), info.GetStoragePoolId());
+                    groupsIndex.emplace(key.GetGroupId(), info);
                     auto itPoolName = poolIdToName.find(info.GetStoragePoolId());
                     if (itPoolName != poolIdToName.end()) {
                         poolByName[itPoolName->second].Groups++;
@@ -782,14 +786,14 @@ public:
                     auto itPDisk = pDisksIndex.find(std::make_pair(key.GetNodeId(), key.GetPDiskId()));
                     if (itPDisk != pDisksIndex.end()) {
                         ui64 allocated = info.GetAllocatedSize();
-                        ui64 slotSize = GetSlotSize(itPDisk->second);
-                        auto itPoolId = groupToPoolId.find(info.GetGroupId());
-                        if (itPoolId != groupToPoolId.end()) {
-                            auto itPoolName = poolIdToName.find(itPoolId->second);
+                        auto itGroup = groupsIndex.find(info.GetGroupId());
+                        if (itGroup != groupsIndex.end()) {
+                            ui64 slotSize = GetSlotSize(itPDisk->second, itGroup->second.GetGroupSizeInUnits());
+                            auto itPoolName = poolIdToName.find(itGroup->second.GetStoragePoolId());
                             if (itPoolName != poolIdToName.end()) {
                                 auto& poolStats = poolByName[itPoolName->second];
                                 poolStats.Size += allocated;
-                                poolStats.Limit += slotSize;
+                                poolStats.Limit += Min(slotSize, Max<ui64>() - poolStats.Limit);
                             }
                         }
                     }
@@ -954,11 +958,11 @@ public:
                                 const auto& poolStats = itPoolStats->second;
                                 auto& databaseStats = databaseStorageByType[poolType];
                                 databaseStats.Size += poolStats.Size;
-                                databaseStats.Limit += poolStats.Limit;
+                                databaseStats.Limit += Min(poolStats.Limit, Max<ui64>() - databaseStats.Limit);
                                 databaseStats.Groups += poolStats.Groups;
                                 storageGroups += poolStats.Groups;
                                 storageSize += poolStats.Size;
-                                storageLimit += poolStats.Limit;
+                                storageLimit += Min(poolStats.Limit, Max<ui64>() - storageLimit);
                             }
                         }
 

@@ -5,6 +5,7 @@ SRCS(
     events.h
     keys.h
     path.h
+    query_metrics_limits.h
     scan_actor_base_impl.h
     registry.cpp
     resolver.cpp

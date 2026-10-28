@@ -18,8 +18,10 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const TInstant Deadline;
     const ui64 IssuerGuid;
     const TWriteSource WriteSource;
+    const bool CountAlreadyForQuorum;
     bool SeenAlready = false;
     bool SeenObsoleteVersion = false;
+    bool QuorumHoldsBlock = false;
     ui32 ActualGeneration = 0;
 
     TGroupQuorumTracker QuorumTracker;
@@ -64,15 +66,17 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         std::vector<TVDiskID> queryStatus, resend;
         if (status == NKikimrProto::ALREADY) {
             // ALREADY means that newly arrived Block is the same or older than existing one; we treat it as ERROR here
-            // and reply with ALREADY only when no quorum could be obtained during the whole operation
+            // and reply with ALREADY only when no quorum could be obtained during the whole operation; the one asking
+            // to count ALREADY for the quorum takes the VDisk for holding the block, as the one replying OK does
             SeenAlready = true;
-            status = NKikimrProto::ERROR;
+            status = CountAlreadyForQuorum ? NKikimrProto::OK : NKikimrProto::ERROR;
         }
         switch (NKikimrProto::EReplyStatus newStatus = incarnationGuid
                 ? QuorumTracker.ProcessReplyWithCooldown(vdisk, status, TActivationContext::Now(), *incarnationGuid, queryStatus, resend)
                 : QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                return ReplyAndDie(newStatus);
+                QuorumHoldsBlock = true;
+                return ReplyAndDie(CountAlreadyForQuorum && SeenAlready ? NKikimrProto::ALREADY : NKikimrProto::OK);
 
             case NKikimrProto::UNKNOWN:
                 break;
@@ -106,6 +110,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         result->ErrorReason = ErrorReason;
         result->IsTabletStorageInfoVersionObsolete = status != NKikimrProto::OK && SeenObsoleteVersion;
         result->ActualGeneration = ActualGeneration;
+        result->QuorumHoldsBlock = QuorumHoldsBlock;
         DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
         Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         return SendResponseAndDie(std::move(result));
@@ -129,6 +134,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid, WriteSource,
             Version);
         ev->RestartCounter = counter;
+        ev->CountAlreadyForQuorum = CountAlreadyForQuorum;
         return ev;
     }
 
@@ -150,6 +156,7 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
         , WriteSource(params.Common.Event->WriteSource)
+        , CountAlreadyForQuorum(params.Common.Event->CountAlreadyForQuorum)
         , QuorumTracker(Info.Get())
     {}
 

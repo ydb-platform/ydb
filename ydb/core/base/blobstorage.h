@@ -1510,6 +1510,9 @@ struct TEvBlobStorage {
         const TWriteSource WriteSource;
         const std::optional<ui32> Version;
         bool IsMonitored = true;
+        // a VDisk replying ALREADY holds the block or a newer one, so count it for the quorum as the one replying OK;
+        // the reply is ALREADY with QuorumHoldsBlock then
+        bool CountAlreadyForQuorum = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -1520,6 +1523,7 @@ struct TEvBlobStorage {
             , WriteSource(origin.WriteSource)
             , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
+            , CountAlreadyForQuorum(origin.CountAlreadyForQuorum)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1575,6 +1579,9 @@ struct TEvBlobStorage {
     {
         bool IsTabletStorageInfoVersionObsolete = false;
         ui32 ActualGeneration = 0;
+        // a quorum of the VDisks is known to hold the block or a newer one; ALREADY may come without that, when only some
+        // of them were found to hold a newer block
+        bool QuorumHoldsBlock = false;
 
         TEvBlockResult(NKikimrProto::EReplyStatus status,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0)

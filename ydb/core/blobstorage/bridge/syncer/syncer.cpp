@@ -132,15 +132,22 @@ namespace NKikimr::NBridge {
             std::optional<ui32> targetGeneration = targetItem
                 ? std::make_optional(targetItem->BlockedGeneration)
                 : std::nullopt;
+            // the block counts as synced once a quorum of the group holds it or a newer one
+            auto makeBlock = [&](ui32 generation) {
+                auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max(),
+                    TWriteSource::SyncerMergeBlock);
+                ev->CountAlreadyForQuorum = true;
+                return ev;
+            };
             if (sourceGeneration < targetGeneration) {
                 // synced group has lesser blocked generation for this tablet than unsynced one: we need to update
                 // blocked generation in source group and this will lead to possible tablet restart
                 Y_ABORT_UNLESS(targetGeneration);
-                IssueQuery(false, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *targetGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
+                IssueQuery(false, makeBlock(*targetGeneration));
             } else if (targetGeneration < sourceGeneration) {
                 // we just need to update target group generation to current one in source group
                 Y_ABORT_UNLESS(sourceGeneration);
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *sourceGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
+                IssueQuery(true, makeBlock(*sourceGeneration));
             }
         };
 
@@ -422,8 +429,9 @@ namespace NKikimr::NBridge {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS09, "TEvBlockResult", (LogId, LogId), (Msg, msg));
         const NKikimrProto::EReplyStatus status = msg.Status;
+        // the block is in place only when a quorum of the group holds it or a newer one
         const bool success = status == NKikimrProto::OK
-            || status == NKikimrProto::ALREADY
+            || (status == NKikimrProto::ALREADY && msg.QuorumHoldsBlock)
             || status == NKikimrProto::BLOCKED;
         OnQueryFinished(ev->Cookie, success);
         CheckIfDone();

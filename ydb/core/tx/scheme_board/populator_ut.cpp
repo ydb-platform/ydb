@@ -908,7 +908,8 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             return ev->Sender == populator && ev->Cookie == cookie;
         });
         TBlockEvents<TUpdateAck> replicaAcks(runtime, [&](const auto& ev) {
-            return replicaActors.contains(ev->Sender) && ev->Cookie == cookie;
+            // Replica updates use a child-local cookie, not the client's publication cookie.
+            return replicaActors.contains(ev->Sender) && ev->Get()->GetPathId() == pathId;
         });
         TBlockEvents<TUpdateAck> mainAcks(runtime, [&](const auto& ev) {
             return ev->Recipient == edge && ev->Cookie == cookie;

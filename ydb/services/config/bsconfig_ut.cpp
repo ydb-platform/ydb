@@ -34,6 +34,9 @@
 
 #include <ydb/core/cms/console/console.h>
 
+#include <util/system/mutex.h>
+#include <util/system/type_name.h>
+
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <util/system/thread.h>
@@ -897,6 +900,51 @@ config:
             hasStorage |= entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kStorage;
         }
         UNIT_ASSERT_C(hasStorage, "no storage YAML in the fetch naming the domain database: " << result.DebugString());
+    }
+
+}
+
+// pipes made by the request actors to tablets
+Y_UNIT_TEST_SUITE(ConfigGRPCServicePipes) {
+    using namespace NTestSuiteConfigGRPCService;
+
+    // The fetch goes to BSC through a pipe of its own; once the fetch is answered, the pipe is closed
+    Y_UNIT_TEST(FetchClosesItsPipe) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        // BSC fetches the configuration once configuration v2 is on, which the first replacement does
+        const auto replaced = Replace(runtime, server, R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+config:
+  log_config:
+    cluster_name: fetch-pipes
+)" + HostsYaml(runtime));
+        UNIT_ASSERT_CHECK_STATUS(replaced.operation(), Ydb::StatusIds::SUCCESS);
+
+        THashSet<TActorId> pipes; // pipe clients of the fetch actors
+        THashSet<TActorId> closed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                IActor *actor = runtime.FindActor(ev->GetRecipientRewrite());
+                if (actor && TypeName(*actor).Contains("TFetchStorageConfigRequest")) {
+                    pipes.insert(ev->Sender);
+                }
+            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison && pipes.contains(ev->GetRecipientRewrite())) {
+                closed.insert(ev->GetRecipientRewrite());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        for (ui32 i = 0; i < 3; ++i) {
+            const auto response = Fetch(runtime, server);
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(!pipes.empty(), "the fetches made no pipes");
+        UNIT_ASSERT_VALUES_EQUAL_C(closed.size(), pipes.size(), "the pipes of the answered fetches stay open");
     }
 
 }

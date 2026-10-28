@@ -1148,6 +1148,7 @@ protected:
     // the target of each node, or Max when the node has several; a replica of an older version replies without the
     // cookie, and its node tells the target then, if it can
     THashMap<ui32, ui32> NodeTarget;
+    bool ConfigMismatch = false; // a replica has a newer configuration, so the replicas asked may be outdated
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1164,6 +1165,9 @@ public:
     {}
 
     bool QuorumReached() const {
+        if (ConfigMismatch) {
+            return false;
+        }
         bool anyGroup = false;
         for (ui32 idx : xrange(Info->RingGroups.size())) {
             const auto& ringGroup = Info->RingGroups[idx];
@@ -1254,6 +1258,7 @@ public:
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+            ConfigMismatch = true;
             SendResponse();
             return;
         }

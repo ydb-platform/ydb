@@ -37,3 +37,25 @@ Change the `feature_flags` settings only if you are sure of the consequences. In
 | `enable_external_data_sources` | Enabling [external data sources](../../concepts/datamodel/external_data_source.md) |
 | `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
+
+## Experimental Functionality {#experimental}
+
+### Why a Flag May Be Disabled {#availability}
+
+Some functionality is included in a release in an experimental state. It is still under development and is therefore disabled by default. Its behavior, syntax, API, or data storage format may change without backward compatibility. Such functionality may remain experimental for a long time or be removed without ever becoming generally available.
+
+However, not every disabled flag indicates experimental functionality. Some flags control stable capabilities that not everyone needs. Check the status of a particular capability in the documentation for the relevant YDB version.
+
+A capability being described in the documentation or its code being included in a release does not necessarily mean that it is enabled on your database's cluster.
+
+### Risks of Enabling Experimental Functionality {#risks}
+
+Stability, performance, and backward compatibility are not guaranteed for experimental functionality. Enabling its flag may lead to:
+
+* errors when executing queries or cluster instability;
+* reduced performance;
+* data being written in a format that the previous YDB version does not support.
+
+In the last case, disabling the flag does not necessarily restore the previous data format. You should therefore assess whether a version rollback is possible before enabling the functionality, rather than after a problem occurs.
+
+Do not enable experimental functionality in production clusters. Use a separate test cluster with data you can afford to lose.

@@ -10,6 +10,11 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/base/tablet_pipe.h>
+
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -39,6 +44,45 @@
 
 namespace NKikimr::NGRpcService {
 
+namespace {
+
+    // Run blocking calls on a separate thread while the test thread dispatches the simulated runtime.
+    class TAsyncCall {
+    public:
+        explicit TAsyncCall(std::function<void()> func)
+            : Promise(NThreading::NewPromise<void>())
+            , Thread([promise = Promise, func = std::move(func)]() mutable {
+                try {
+                    func();
+                    promise.SetValue();
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            })
+        {}
+
+        ~TAsyncCall() {
+            if (Thread.joinable()) {
+                Thread.join();
+            }
+        }
+
+        // dispatches events until the call is done, and rethrows its failure
+        void Wait(NActors::TTestActorRuntime& runtime) {
+            runtime.WaitFuture(Promise.GetFuture());
+        }
+
+    private:
+        NThreading::TPromise<void> Promise;
+        std::thread Thread;
+    };
+
+    void Dispatched(NActors::TTestActorRuntime& runtime, std::function<void()> func) {
+        TAsyncCall(std::move(func)).Wait(runtime);
+    }
+
+} // anonymous namespace
+
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
@@ -56,9 +100,11 @@ struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
 template <typename TestSettings = TKikimrTestSettings>
 class TBasicKikimrWithGrpcAndRootSchema {
 public:
+    // useRealThreads=false makes the runtime simulate the actor system, which observers of events need
     TBasicKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
-            TAutoPtr<TLogBackend> logBackend = {})
+            TAutoPtr<TLogBackend> logBackend = {},
+            bool useRealThreads = true)
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
@@ -66,6 +112,7 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
+        ServerSettings->SetUseRealThreads(useRealThreads);
         ServerSettings->SetDynamicNodeCount(1);
         if (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
@@ -117,7 +164,14 @@ public:
         if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
-        annoyingClient.InitRootScheme("Root");
+        if (useRealThreads) {
+            annoyingClient.InitRootScheme("Root");
+        } else {
+            // the client waits for the replies, which come only while the runtime dispatches events
+            Dispatched(*Server_->GetRuntime(), [&] {
+                annoyingClient.InitRootScheme("Root");
+            });
+        }
         GRpcPort_ = grpc;
 
         Channel_ = grpc::CreateChannel(TStringBuilder() << "localhost:" << GetPort(), grpc::InsecureChannelCredentials());
@@ -847,6 +901,161 @@ config:
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
         ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ true);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
+    }
+
+}
+
+// replacements of the configuration overlapping with each other and with the replies of Console
+Y_UNIT_TEST_SUITE(ConfigGRPCServiceReplaceRaces) {
+    using namespace NTestSuiteConfigGRPCService;
+
+    // BSC parses the main YAML with the hosts of the cluster, so each YAML of these tests has the host of the test node.
+    // Its drive keeps the type of the static PDisk, ROT: a new type changes the device type of the static group without
+    // a new generation of the group, and BSC sends the group to the cache of distconf anew when it restarts.
+    TString HostsYaml(TTestActorRuntime& runtime) {
+        return Sprintf(R"(  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", (runtime.GetTempDir() + "pdisk_1.dat").c_str());
+    }
+
+    // dispatches events until the condition holds
+    void WaitFor(TTestActorRuntime& runtime, std::function<bool()> condition) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = std::move(condition);
+        UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Minutes(10)));
+    }
+
+    Ydb::Config::ReplaceConfigResponse Replace(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server,
+            const TString& mainConfig, bool dryRun = false) {
+        Ydb::Config::ReplaceConfigResponse response;
+        Dispatched(runtime, [&] {
+            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, dryRun,
+                [&](const auto& resp) { response = resp; });
+        });
+        return response;
+    }
+
+    // a replacement whose validation or application is held: it is answered when the test lets it go
+    std::unique_ptr<TAsyncCall> ReplaceAsync(TKikimrWithGrpcAndRootSchema& server, const TString& mainConfig,
+            Ydb::Config::ReplaceConfigResponse& response) {
+        return std::make_unique<TAsyncCall>([&server, &response, mainConfig] {
+            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, false,
+                [&](const auto& resp) { response = resp; });
+        });
+    }
+
+    Ydb::Config::FetchConfigResponse Fetch(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
+        Ydb::Config::FetchConfigResponse response;
+        Dispatched(runtime, [&] {
+            auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+            Ydb::Config::FetchConfigRequest request;
+            request.mutable_all();
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            stub->FetchConfig(&ctx, request, &response);
+        });
+        return response;
+    }
+
+    std::optional<TString> FetchMainConfig(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
+        const auto response = Fetch(runtime, server);
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        Ydb::Config::FetchConfigResult result;
+        response.operation().result().UnpackTo(&result);
+        for (const auto& entry : result.config()) {
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kMain) {
+                return entry.config();
+            }
+        }
+        return std::nullopt;
+    }
+
+    // the settings of the static PDisk of the test node can't change, so a change of the storage settings is a drive more
+    TString ExtraDrives(ui32 count) {
+        TStringBuilder drives;
+        for (ui32 i = 1; i <= count; ++i) {
+            drives << "    - path: SectorMap:" << i << ":64\n      type: SSD\n";
+        }
+        return drives;
+    }
+
+    // the node ids start from 1 again, so that the host of the YAML is the node with the PDisk of the test
+    struct TFirstNodeIdReset {
+        TFirstNodeIdReset() {
+            NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        }
+    };
+
+    // the server of these tests: the runtime simulates the actor system, and the gRPC node has configuration v2 on;
+    // BSC turns it on with the first replacement
+    struct TRaceServer : TFirstNodeIdReset, TKikimrWithGrpcAndRootSchema {
+        TRaceServer()
+            : TKikimrWithGrpcAndRootSchema({}, {}, false)
+        {
+            auto& runtime = *GetRuntime();
+            runtime.SetScheduledLimit(10'000'000); // the timers of the whole server over minutes of simulated time
+            Ydb::DynamicConfig::ReplaceConfigResponse response;
+            Dispatched(runtime, [&] {
+                auto stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(GetChannel());
+                Ydb::DynamicConfig::ReplaceConfigRequest request;
+                request.set_config(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    switch_to_config_v2: true
+)");
+                grpc::ClientContext context;
+                AdjustCtxForDB(context);
+                stub->ReplaceConfig(&context, request, &response);
+            });
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+            WaitFor(runtime, [&] { return runtime.GetAppData(0).FeatureFlags.GetSwitchToConfigV2(); });
+        }
+    };
+
+    // The reply of Console validating the main YAML for BSC is held until the replacement times out. It says then that
+    // the YAML is not valid; BSC has no request for it any more and must drop the reply, then serve the next request.
+    Y_UNIT_TEST(LateConsoleValidationReplyIsDropped) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        const TString yamlConfig = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+config:
+  log_config:
+    cluster_name: late-validation
+)" + HostsYaml(runtime);
+        TAutoPtr<IEventHandle> heldReply;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse && !heldReply) {
+                heldReply = ev;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto timedOut = Replace(runtime, server, yamlConfig);
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(timedOut.operation().status() != Ydb::StatusIds::SUCCESS, timedOut.operation().DebugString());
+        UNIT_ASSERT(heldReply);
+        heldReply->Get<TEvBlobStorage::TEvControllerValidateConfigResponse>()->Record.SetStatus(
+            NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
+        runtime.Send(heldReply.Release());
+
+        // the replacement timed out with nothing applied, so the same YAML is checked again
+        const auto checked = Replace(runtime, server, yamlConfig, /*dryRun=*/ true);
+        UNIT_ASSERT_CHECK_STATUS(checked.operation(), Ydb::StatusIds::SUCCESS);
     }
 
 }

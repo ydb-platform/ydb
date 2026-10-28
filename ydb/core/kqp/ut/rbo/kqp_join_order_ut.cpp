@@ -44,11 +44,10 @@ TString FormatJoinOrder(const TString& plan) {
     return stream.Str();
 }
 
-// JOIN_ORDER_QUERIES selects comma-separated query IDs and overrides both skip lists.
+// JOIN_ORDER_QUERIES selects comma-separated query IDs and overrides the disabled list.
 // JOIN_ORDER_STATISTICS selects normal (default) or small.
 // CANONIZE_JOIN_ORDER_TESTS=true rewrites only successfully explained queries.
-void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& disabled = {},
-    const std::set<ui32>& mismatched_join_orders = {}) {
+void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& disabled = {}) {
     std::set<ui32> selected;
     const TString selection = GetTestParam("JOIN_ORDER_QUERIES");
     if (!selection.empty()) {
@@ -112,7 +111,7 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
         if (!selected.empty() && !selected.contains(id)) {
             continue;
         }
-        if (selected.empty() && (disabled.contains(id) || mismatched_join_orders.contains(id))) {
+        if (selected.empty() && disabled.contains(id)) {
             Cerr << "Skipping " << benchmark.Name << " Q" << id << Endl;
             continue;
         }
@@ -160,24 +159,12 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
 
 Y_UNIT_TEST_SUITE(KqpJoinOrderNewRbo) {
     Y_UNIT_TEST(TPCH) {
-        const std::set<ui32> mismatched_join_orders = {
-            2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 20, 21
-        };
-        RunJoinOrderBenchmark({"TPCH", "yql-tpch", "tpch", "tpch1000s", "tpch100s", 22}, {}, mismatched_join_orders);
+        RunJoinOrderBenchmark({"TPCH", "yql-tpch", "tpch", "tpch1000s", "tpch100s", 22}, {});
     }
 
     Y_UNIT_TEST(TPCDS) {
-        const std::set<ui32> mismatched_join_orders = {6, 14, 64, 78};
-        // No canonical snapshots yet. Explicit query selection can run and canonize these queries.
-        RunJoinOrderBenchmark({"TPCDS", "yql-tpcds", "tpcds", "tpcds1000s", "tpcds10s", 99}, {
-            1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17,
-            18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-            33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-            48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62,
-            63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 79,
-            80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94,
-            95, 96, 97, 98, 99,
-        }, mismatched_join_orders);
+        // Match the queries excluded from KqpRboYql::TPCDS_YQL.
+        RunJoinOrderBenchmark({"TPCDS", "yql-tpcds", "tpcds", "tpcds1000s", "tpcds10s", 99}, {17, 44});
     }
 }
 

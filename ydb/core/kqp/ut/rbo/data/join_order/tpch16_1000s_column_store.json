@@ -3,47 +3,40 @@
   "args":
     [
       {
-        "op_name":"HashShuffle",
+        "op_name":"LeftOnlyJoin (BlockHash)",
         "args":
           [
             {
-              "op_name":"LeftOnlyJoin (BlockHash)",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (BlockHash)",
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"partsupp"
-                                    }
-                                  ]
-                              },
-                              {
                                 "op_name":"TableFullScan",
-                                "table":"part"
+                                "table":"partsupp"
                               }
                             ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"part"
                         }
                       ]
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"supplier"
                   }
                 ]
+            },
+            {
+              "op_name":"TableFullScan",
+              "table":"supplier"
             }
           ]
       }
     ]
 }
-

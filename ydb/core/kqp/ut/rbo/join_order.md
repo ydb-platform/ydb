@@ -8,12 +8,10 @@ join trees, algorithms, and shuffles using `GetDetailedJoinOrder`. All queries,
 schemas, statistics, and snapshots are loaded from the RBO-local `data/` directory.
 
 `RunJoinOrderBenchmark` runs a benchmark and reports all query failures together.
-Each benchmark passes a disabled query-ID set for missing snapshots and a
-separate `mismatched_join_orders` set for known canonical mismatches. Explicit
-`JOIN_ORDER_QUERIES` selection overrides both sets, so excluded queries can be
-retried or recanonicalized without editing the test. Currently TPC-H queries
-1, 6, 12, 14, 19, and 22 are enabled. All TPC-DS queries are skipped: 95 lack
-snapshots and the remaining four have known mismatches.
+Each benchmark passes a disabled query-ID set. Explicit `JOIN_ORDER_QUERIES`
+selection overrides that set, so excluded queries can be run or canonized without
+editing the test. All 22 TPC-H queries and 97 TPC-DS queries are enabled. Only
+TPC-DS queries 17 and 44 are skipped, matching `KqpRboYql::TPCDS_YQL`.
 
 The suite builds in the separate target `ydb/core/kqp/ut/rbo/join_order` to
 avoid the main RBO binary's debug-section relocation limit. Its source remains

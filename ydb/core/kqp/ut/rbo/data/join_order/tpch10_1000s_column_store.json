@@ -35,7 +35,7 @@
                             ]
                         },
                         {
-                          "op_name":"InnerJoin (Map)",
+                          "op_name":"InnerJoin (BlockHash)",
                           "args":
                             [
                               {
@@ -56,4 +56,3 @@
       }
     ]
 }
-

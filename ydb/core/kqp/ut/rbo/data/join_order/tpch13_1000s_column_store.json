@@ -3,26 +3,20 @@
   "args":
     [
       {
-        "op_name":"HashShuffle",
+        "op_name":"LeftJoin (BlockHash)",
         "args":
           [
             {
-              "op_name":"LeftJoin (BlockHash)",
+              "op_name":"TableFullScan",
+              "table":"customer"
+            },
+            {
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"customer"
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"orders"
-                        }
-                      ]
+                    "table":"orders"
                   }
                 ]
             }
@@ -30,4 +24,3 @@
       }
     ]
 }
-

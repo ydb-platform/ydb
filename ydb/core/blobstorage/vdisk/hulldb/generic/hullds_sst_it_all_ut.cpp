@@ -119,7 +119,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(TestSstIndexSeekAndIterate) {
             TTestContexts ctxs;
-            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndexLogoBlobs));
 
             auto addRecord = [&index](ui64 tabletId, ui32 step) {
                 TLogoBlobID id(tabletId, 0, step, 0, 0, 0);
@@ -205,7 +205,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(TestSstIndexSaveLoad) {
             TTestContexts ctxs;
-            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndexLogoBlobs));
 
             auto addRecord = [&index](ui64 tabletId, ui32 step, ui32 blobSize) {
                 TLogoBlobID id(tabletId, 0, step, 0, blobSize, 0);
@@ -254,12 +254,48 @@ namespace NKikimr {
             ++low;
             UNIT_ASSERT(low == indexLow.end());
 
-            TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+            TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndexLogoBlobs));
             ptr->SaveLinearIndex(&checkIndex);
 
             for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
                 UNIT_ASSERT(i->GetKey() == c->GetKey());
             }
+        }
+
+        // MemTotal:SstIndex is reported per table, under the "table" label, and has no unlabeled series
+        Y_UNIT_TEST(SstIndexMemoryByTable) {
+            TTestContexts ctxs;
+            const TVDiskContextPtr vctx = ctxs.GetVCtx();
+            auto value = [&](const char* table) {
+                return vctx->VDiskMemCounters->GetSubgroup("table", table)->GetCounter("MemTotal:SstIndex")->Val();
+            };
+            using TBlocksSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+            {
+                TTrackableVector<TLogoBlobSst::TRec> blobs(TMemoryConsumer(vctx->SstIndexLogoBlobs));
+                for (ui32 step = 1; step <= 1000; ++step) {
+                    TMemRecLogoBlob memRec;
+                    memRec.SetDiskBlob(TDiskPart(1, step * 4096, 100));
+                    blobs.emplace_back(TKeyLogoBlob(TLogoBlobID(1, 1, step, 0, 100, 0)), memRec);
+                }
+                TLogoBlobSstPtr blobsSst(new TLogoBlobSst(vctx));
+                blobsSst->LoadLinearIndex(blobs);
+                blobs.Reset(); // the two-level index copies the records; drop the source
+
+                TTrackableVector<TBlocksSst::TRec> blocks(TMemoryConsumer(vctx->SstIndexBlocks));
+                for (ui64 tabletId = 1; tabletId <= 100; ++tabletId) {
+                    blocks.emplace_back(TKeyBlock(tabletId), TMemRecBlock(1));
+                }
+                TIntrusivePtr<TBlocksSst> blocksSst(new TBlocksSst(vctx));
+                blocksSst->LoadedIndex = std::move(blocks); // as the SST writer fills a flat index
+
+                UNIT_ASSERT(value("LogoBlobs") > 0);
+                UNIT_ASSERT_VALUES_EQUAL(value("Blocks"), i64(blocksSst->LoadedIndex.capacity() * sizeof(TBlocksSst::TRec)));
+                UNIT_ASSERT_VALUES_EQUAL(value("Barriers"), 0);
+                UNIT_ASSERT(!vctx->VDiskMemCounters->FindCounter("MemTotal:SstIndex"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(value("LogoBlobs"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(value("Blocks"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(value("Barriers"), 0);
         }
     } // TBlobStorageHullSstIt
 

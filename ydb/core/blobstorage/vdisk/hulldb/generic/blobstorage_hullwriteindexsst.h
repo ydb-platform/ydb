@@ -86,7 +86,7 @@ protected:
 
     void CreateWriter() {
         Writer = std::make_unique<TBufferedChunkWriter>(
-            TMemoryConsumer(VCtx->SstIndex),
+            TMemoryConsumer(SstIndexConsumer<TKey>(*VCtx)),
             PDiskCtx->Dsk->Owner,
             PDiskCtx->Dsk->OwnerRound,
             NPriWrite::SyncLog, // ???
@@ -107,7 +107,7 @@ public:
         , PDiskCtx(std::move(pDiskCtx))
         , LevelIndex(levelIndex)
         , MsgQueue(msgQueue)
-        , Recs(TMemoryConsumer(VCtx->SstIndex))
+        , Recs(TMemoryConsumer(SstIndexConsumer<TKey>(*VCtx)))
     {}
 
     TActorId GetLevelIndexActorId() const {

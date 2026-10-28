@@ -9,7 +9,6 @@
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
 /ydb/core/tx/sharding/ut @ydb-platform/datashard
-/ydb/library/nmslib/test @ydb-platform/datashard
 /ydb/tests/functional/large_serializable @ydb-platform/datashard
 /ydb/tests/functional/serializable @ydb-platform/datashard
 /ydb/tests/functional/split_merge @ydb-platform/datashard
@@ -27,9 +26,6 @@
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/config/validation/column_shard_config_validator_ut @ydb-platform/cs
 /ydb/core/io_formats/arrow/scheme/ut @ydb-platform/cs
-/ydb/library/arrow_clickhouse/ut @ydb-platform/cs
-/ydb/library/arrow_kernels/ut @ydb-platform/cs
-/ydb/library/formats/arrow @ydb-platform/cs
 /ydb/tests/functional/ttl @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/formats/arrow @ydb-platform/cs
@@ -73,7 +69,6 @@
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 #Security Team @azevaykin TEAM:@ydb-platform/security
-/ydb/library/http_proxy/authorization/ut @ydb-platform/security
 /ydb/tests/functional/encryption @ydb-platform/security
 /ydb/tests/functional/mvp/oidc_proxy @ydb-platform/security
 /ydb/core/security @ydb-platform/security
@@ -87,7 +82,6 @@
 /ydb/services/scheme_secret/ut @ydb-platform/Security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
-/ydb/library/mkql_proto/ut @ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
 /ydb/udfs/wasm @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -200,8 +194,6 @@
 /ydb/core/tx/tx_proxy @ydb-platform/core
 /ydb/core/wrappers/ut @ydb-platform/core
 /ydb/core/ydb_convert @ydb-platform/core
-/ydb/library/backup/ut @ydb-platform/core
-/ydb/library/yaml_config @ydb-platform/core
 /ydb/mvp/core/ut @ydb-platform/core
 /ydb/mvp/meta @ydb-platform/core
 /ydb/services/cms/ut @ydb-platform/core

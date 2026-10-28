@@ -113,6 +113,8 @@ namespace NKikimr {
             bool MustRestoreFirst = false;
             bool TrustedPileResponded = false; // for reads without MustRestoreFirst, which have to get its answer
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
+            // the deadline of the original read, which restoration is done on behalf of
+            TInstant Deadline = TInstant::Max();
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -137,6 +139,7 @@ namespace NKikimr {
 
                     MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
+                    Deadline = request->Deadline;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
                     State = TRangeState{
@@ -145,10 +148,12 @@ namespace NKikimr {
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst;
+                    Deadline = request->Deadline;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
                     };
+                    Deadline = request->Deadline;
 
                     RestoreQueue.resize(1);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
@@ -436,7 +441,7 @@ namespace NKikimr {
                         IssueRestorePut(self, RestoreIndex);
                     } else {
                         self.SendQuery(shared_from_this(), item.ReadFrom, std::make_unique<TEvBlobStorage::TEvGet>(
-                            item.Id, 0, 0, TInstant::Max(), GetHandleClass), {.Index = RestoreIndex});
+                            item.Id, 0, 0, Deadline, GetHandleClass), {.Index = RestoreIndex});
                         IsRestoring = true;
                     }
 
@@ -483,7 +488,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = item.Id,
                             .Buffer = TRope(TRcBuf(item.Buffer)),
-                            .Deadline = TInstant::Max(),
+                            .Deadline = Deadline,
                             .HandleClass = handleClass,
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,

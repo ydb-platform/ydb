@@ -100,6 +100,7 @@ public:
     void KeepInfoFromOtherRingGroup();
     void IgnoreWriteOnlyRingGroupOnLookup();
     void ReturnNotAvailableWithoutReadableRingGroup();
+    void RepublishAfterReplicaShutdown();
 
 protected:
     THolder<TTestBasicRuntime> Context;
@@ -112,6 +113,7 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST(NotAvailableByShutdown);
     UNIT_TEST(ReconnectReplica);
     UNIT_TEST(DropByDisconnect);
+    UNIT_TEST(RepublishAfterReplicaShutdown);
     UNIT_TEST_SUITE_END();
 };
 
@@ -292,6 +294,28 @@ void TBoardSubscriberTestBase::NotAvailableByShutdown() {
 
     auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
     UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+}
+
+// The replica shuts down and tells the child publishing to it; the publisher must replace that child, so the
+// payload is published to the replica again once it is back under the same id
+void TBoardSubscriberTestBase::RepublishAfterReplicaShutdown() {
+    const auto replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    TVector<TActorId> children; // publishing to the replica, in order
+    auto publishes = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublish>([&](auto& ev) {
+        if (ev->Recipient == replica) {
+            children.push_back(ev->Sender);
+        }
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    CreatePublisher("path", "test", edgePublisher, 0);
+    Context->WaitFor("the publication to the replica", [&] { return !children.empty(); }, TDuration::Seconds(10));
+
+    Send(children.front(), replica, new TEvStateStorage::TEvReplicaShutdown(), 0, true);
+    Context->WaitFor("the publication by a new child", [&] { return children.size() > 1; }, TDuration::Seconds(30));
+    UNIT_ASSERT_UNEQUAL(children.back(), children.front());
 }
 
 void TBoardSubscriberTestBase::ReconnectReplica() {

@@ -16,6 +16,46 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeGet) {
 
+    // the restoration is done on behalf of the read, so it is bound by the deadline of the read: the pile the blob is
+    // restored into doesn't complete writes, and the read must end by its deadline anyway
+    Y_UNIT_TEST(RestoreRespectsReadDeadline) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 2,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+
+        const TString data = "blob to be restored";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const auto put = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[0], 1,
+            new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Status, NKikimrProto::OK, put->ToString());
+
+        // VDisks of pile 1 run on nodes 9-16
+        env.Runtime->FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return nodeId <= 8 || (ev->GetTypeRewrite() != TEvBlobStorage::EvVPut &&
+                ev->GetTypeRewrite() != TEvBlobStorage::EvVMultiPut);
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(5);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, deadline, NKikimrBlobStorage::FastRead,
+                /*mustRestoreFirst=*/ true));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        const TInstant replied = env.Runtime->GetClock();
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_C(replied <= deadline + TDuration::Seconds(1), "replied " << replied - deadline << " after deadline");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[0].Status, NKikimrProto::ERROR, res->Get()->ToString());
+    }
+
     Y_UNIT_TEST(PartRestorationAcrossBridge) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,

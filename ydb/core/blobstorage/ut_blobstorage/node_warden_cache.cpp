@@ -1,3 +1,5 @@
+#include "bridge_config_yaml.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -124,5 +126,84 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
         // the exception escaping the save would have ended the process by now
         UNIT_ASSERT((nodeDir / "config.yaml").Exists());
         UNIT_ASSERT((nodeDir / "storage.yaml").Exists());
+    }
+
+    // Update A switches to the single config and its save fails; update B, coming right after it, brings the dedicated
+    // storage YAML, which is saved. The retry of A is obsolete then: it must not run and delete the storage YAML of B.
+    Y_UNIT_TEST(ObsoleteRetryOfSaveKeepsNewerStorageYaml) {
+        TTempDir dir;
+        TEnvironmentSetup env{{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .ConfigPreprocessor = [&](ui32 nodeId, TNodeWardenConfig& config) {
+                config.ConfigDirPath = (dir.Path() / ToString(nodeId)).GetPath();
+            },
+        }};
+        env.Sim(TDuration::Seconds(10));
+
+        const TFsPath nodeDir = dir.Path() / "1";
+        const TFsPath blocker = nodeDir / "temp_config.yaml";
+        blocker.MkDirs(); // the main YAML of A can't be saved
+        ui32 numRetries = 0;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->HasEvent() && ev->GetTypeName().Contains("TEvRetrySaveConfig") && !numRetries++) {
+                blocker.ForceDelete(); // the retry of A would succeed
+            }
+            return true;
+        };
+
+        auto a = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        a->Record.MutableYamlConfig()->SetMainConfig("single config\n");
+        a->Record.MutableYamlConfig()->SetMainConfigVersion(1000);
+        auto b = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        b->Record.MutableYamlConfig()->SetStorageConfig("dedicated storage config\n");
+        b->Record.MutableYamlConfig()->SetStorageConfigVersion(1);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, a.release()), 1);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, b.release()), 1);
+        env.Sim(TDuration::Minutes(1));
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT(numRetries);
+        UNIT_ASSERT_C((nodeDir / "storage.yaml").Exists(), "the obsolete retry deleted the storage YAML of B");
+    }
+
+    // Distconf commits a new main YAML, and its save on node 1 fails. That save is the latest one, so its retry must run
+    // and bring the YAML on disk up to date once it can be saved.
+    Y_UNIT_TEST(RetryOfDistconfSaveRuns) {
+        TTempDir dir;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ConfigPreprocessor = [&](ui32 nodeId, TNodeWardenConfig& config) {
+                config.ConfigDirPath = (dir.Path() / ToString(nodeId)).GetPath();
+            },
+            .LocationGenerator = NBridgeTest::GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        env.Sim(TDuration::Seconds(30));
+
+        const TFsPath nodeDir = dir.Path() / "1";
+        const TFsPath blocker = nodeDir / "temp_config.yaml";
+        blocker.MkDirs(); // the new main YAML can't be saved
+        ui32 numRetries = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 1 && ev->HasEvent() && ev->GetTypeName().Contains("TEvRetrySaveConfig") && !numRetries++) {
+                blocker.ForceDelete(); // the retry would succeed
+            }
+            return true;
+        };
+
+        const auto res = NBridgeTest::ReplaceMainConfig(env, [](YAML::Node&) {});
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        const ui64 version = YAML::Load(NBridgeTest::FetchMainConfigYaml(env))["metadata"]["version"].as<ui64>();
+        env.Sim(TDuration::Minutes(1));
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT(numRetries);
+        const auto saved = YAML::Load(TFileInput(nodeDir / "config.yaml").ReadAll());
+        UNIT_ASSERT_VALUES_EQUAL_C(saved["metadata"]["version"].as<ui64>(), version, "the retry of the latest save didn't run");
     }
 }

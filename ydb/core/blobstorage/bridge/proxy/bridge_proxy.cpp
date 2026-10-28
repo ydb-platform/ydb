@@ -116,6 +116,8 @@ namespace NKikimr {
             // request, so it is admitted the same way that request would be.
             NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
+            // the deadline of the original read, which restoration is done on behalf of
+            TInstant Deadline = TInstant::Max();
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -142,6 +144,7 @@ namespace NKikimr {
 
                     MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
+                    Deadline = request->Deadline;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
                     State = TRangeState{
@@ -150,10 +153,12 @@ namespace NKikimr {
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst;
+                    Deadline = request->Deadline;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
                     };
+                    Deadline = request->Deadline;
 
                     RestoreQueue.resize(1);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
@@ -445,7 +450,7 @@ namespace NKikimr {
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
                     } else {
-                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, TInstant::Max(),
+                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, Deadline,
                             GetHandleClass);
                         get->DataKind = DataKind;
                         self.SendQuery(shared_from_this(), item.ReadFrom, std::move(get), {.Index = RestoreIndex});
@@ -495,7 +500,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = item.Id,
                             .Buffer = TRope(TRcBuf(item.Buffer)),
-                            .Deadline = TInstant::Max(),
+                            .Deadline = Deadline,
                             .HandleClass = handleClass,
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,

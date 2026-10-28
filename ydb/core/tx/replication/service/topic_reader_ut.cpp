@@ -112,6 +112,35 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-2");
         }
 
+        if (!Compress) {
+            return;
+        }
+        // trigger commit, write broken data & kill reader
+        {
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic",
+                        NYdb::NTopic::TWriteMessage::CompressedMessage(
+                            "baddata",
+                            NYdb::NTopic::ECodec::GZIP,   // GZIP has signature and junk message will be rejected
+                            12345)));
+            env.SendAsync(reader, new TEvents::TEvPoison());
+        }
+
+        // create reader again & read
+        {
+            reader = CreateReader(env, settings);
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+
+            TAutoPtr<IEventHandle> ev;
+            do {
+                env.GetRuntime().template GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(ev);
+            } while (ev->Sender != reader);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvWorker::EvGone);
+            const auto &result = *ev->Get<TEvWorker::TEvGone>();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::UNAVAILABLE, result.ToString());
+        }
+
     }
 
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {

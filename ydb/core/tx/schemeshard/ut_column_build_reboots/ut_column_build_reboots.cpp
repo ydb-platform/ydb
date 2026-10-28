@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -54,7 +55,7 @@ enum class EMixedBuildInterruption {
     Failure,
 };
 
-void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption, bool dropExistingColumn) {
+void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption, bool rebootDuringRollback) {
     TTestBasicRuntime runtime;
     TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
     ui64 txId = 100;
@@ -97,29 +98,45 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     const ui64 buildId = ++txId;
     auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal, "plain_value");
     auto* settings = request->Record.MutableSettings();
+    const TVector<TString> defaultNames{"default_value", "default_two", "default_three"};
+    const TVector<TString> plainNames{"plain_value", "plain_two", "plain_three"};
     auto* builtColumn = settings->mutable_column_build_operation()->mutable_column(0);
     builtColumn->SetNotNull(true);
     builtColumn->SetFamily("cold");
     NKikimrSchemeOp::TModifyScheme payload;
     UNIT_ASSERT(settings->GetAlterMainTablePayload().UnpackTo(&payload));
+    for (size_t i = 1; i < defaultNames.size(); ++i) {
+        auto* column = settings->mutable_column_build_operation()->add_column();
+        column->CopyFrom(settings->column_build_operation().column(0));
+        column->SetColumnName(defaultNames[i]);
+        column->mutable_default_from_literal()->mutable_value()->set_uint32_value(10 * i);
+        payload.MutableAlterTable()->AddColumns()->SetName(defaultNames[i]);
+        auto* plain = payload.MutableAlterTable()->AddColumns();
+        plain->SetName(plainNames[i]);
+        plain->SetType("Uint32");
+    }
     for (auto& column : *payload.MutableAlterTable()->MutableColumns()) {
-        if (column.GetName() == "plain_value") {
+        if (column.GetName().StartsWith("plain_")) {
             column.SetFamilyName("cold");
         }
     }
-    if (dropExistingColumn) {
-        payload.MutableAlterTable()->AddDropColumns()->SetName("removed");
-    }
+    // ALTER of an existing column shares Columns with ADDs and must never become a rollback DROP.
+    auto* existingColumn = payload.MutableAlterTable()->AddColumns();
+    existingColumn->SetName("value");
+    existingColumn->SetFamilyName("cold");
     settings->MutableAlterMainTablePayload()->PackFrom(payload);
+    const auto retrySettings = *settings;
 
     size_t scans = 0;
     auto scanObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
         ++scans;
         const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
-        UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), "default_value");
-        UNIT_ASSERT(columns.column(0).GetNotNull());
-        UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetFamily(), "cold");
+        UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 3);
+        for (size_t i = 0; i < defaultNames.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(i).GetColumnName(), defaultNames[i]);
+            UNIT_ASSERT(columns.column(i).GetNotNull());
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(i).GetFamily(), "cold");
+        }
     });
     size_t completedBatches = 0;
     bool injectFailure = false;
@@ -142,8 +159,10 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     THashSet<ui32> uploadedColumnIds;
     TBlockEvents<TEvDataShard::TEvUploadRowsRequest> uploads(runtime, [&](const auto& ev) {
         const auto& scheme = ev->Get()->Record.GetRowScheme();
-        UNIT_ASSERT_VALUES_EQUAL(scheme.ValueColumnIdsSize(), 1);
-        uploadedColumnIds.insert(scheme.GetValueColumnIds(0));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.ValueColumnIdsSize(), 3);
+        for (const auto id : scheme.GetValueColumnIds()) {
+            uploadedColumnIds.insert(id);
+        }
         return true;
     });
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
@@ -153,31 +172,44 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     // Process a request after the progress response before restarting SchemeShard.
     TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
     UNIT_ASSERT(scans > 0);
-    UNIT_ASSERT_VALUES_EQUAL(uploadedColumnIds.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(uploadedColumnIds.size(), 3);
     const auto building = DescribePath(runtime, "/MyRoot/Table");
     for (const auto& column : building.GetPathDescription().GetTable().GetColumns()) {
-        if (column.GetName() == "default_value") {
+        if (column.GetName().StartsWith("default_")) {
             UNIT_ASSERT(uploadedColumnIds.contains(column.GetId()));
             UNIT_ASSERT(column.GetIsBuildInProgress());
-        } else if (column.GetName() == "plain_value") {
+        } else if (column.GetName().StartsWith("plain_")) {
             UNIT_ASSERT(!uploadedColumnIds.contains(column.GetId()));
             UNIT_ASSERT(!column.GetIsBuildInProgress());
         }
     }
     TestDropTable(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
 
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> rollback(runtime, [&](const auto& ev) {
+        return rebootDuringRollback
+            && ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropColumnBuild;
+    });
     if (interruption == EMixedBuildInterruption::Restart) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         schemeShardActorId = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
-    } else if (interruption == EMixedBuildInterruption::Cancel) {
+    }
+    if (interruption == EMixedBuildInterruption::Cancel) {
         TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-    } else {
+    } else if (interruption == EMixedBuildInterruption::Failure) {
         injectFailure = true;
         uploads.Unblock(1);
         runtime.WaitFor("failure after a completed batch", [&] { return failureInjected; });
         UNIT_ASSERT(completedBatches >= 2);
     }
     uploads.Stop().Unblock();
+    if (rebootDuringRollback) {
+        runtime.WaitFor("blocked rollback", [&] { return !rollback.empty(); });
+        rollback.clear();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        schemeShardActorId = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        runtime.WaitFor("rollback proposed after restart", [&] { return !rollback.empty(); });
+        rollback.Stop().Unblock();
+    }
     env.TestWaitNotification(runtime, buildId);
     const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
     const auto expectedState = interruption == EMixedBuildInterruption::Restart
@@ -187,33 +219,30 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             : Ydb::Table::IndexBuildState::STATE_REJECTED;
     UNIT_ASSERT_VALUES_EQUAL_C(build.GetIndexBuild().GetState(), expectedState, build.DebugString());
 
-    const auto checkSchema = [&](bool hasDefault) {
+    const auto checkSchema = [&](bool hasAddedColumns) {
         TSet<TString> dropped;
-        if (dropExistingColumn) {
-            dropped.insert("removed");
-        }
-        if (!hasDefault) {
-            dropped.insert("default_value");
+        if (!hasAddedColumns) {
+            dropped.insert(defaultNames.begin(), defaultNames.end());
+            dropped.insert(plainNames.begin(), plainNames.end());
         }
         const auto table = DescribePath(runtime, "/MyRoot/Table");
         TestDescribeResult(table, {
-            NLs::CheckColumns("Table", {"key", "value", "removed", "default_value", "plain_value"}, dropped, {"key"}, true),
+            NLs::CheckColumns("Table", {"key", "value", "removed", "default_value", "default_two", "default_three",
+                "plain_value", "plain_two", "plain_three"}, dropped, {"key"}, true),
         });
         for (const auto& column : table.GetPathDescription().GetTable().GetColumns()) {
             UNIT_ASSERT(!column.GetIsBuildInProgress());
-            if (column.GetName() == "plain_value" || column.GetName() == "default_value") {
+            if (column.GetName().StartsWith("plain_") || column.GetName().StartsWith("default_")) {
                 UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), column.GetName() == "default_value");
+                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), column.GetName().StartsWith("default_"));
             }
         }
     };
-    const auto checkRows = [&](bool hasDefault) {
-        TVector<TString> names{"key", "value", "plain_value"};
-        if (hasDefault) {
-            names.push_back("default_value");
-        }
-        if (!dropExistingColumn) {
-            names.push_back("removed");
+    const auto checkRows = [&](bool hasAddedColumns) {
+        TVector<TString> names{"key", "value", "removed"};
+        if (hasAddedColumns) {
+            names.insert(names.end(), defaultNames.begin(), defaultNames.end());
+            names.insert(names.end(), plainNames.begin(), plainNames.end());
         }
         for (const auto shard : shards) {
             const auto result = ReadTable(runtime, shard, "Table", {"key"}, names);
@@ -221,13 +250,15 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
             UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 4);
             for (size_t i = 0; i < rows.Size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(TString(rows[i]["value"]), "original");
-                UNIT_ASSERT(rows[i]["plain_value"].IsNull());
-                if (hasDefault) {
-                    UNIT_ASSERT(rows[i]["default_value"].HaveValue());
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i]["default_value"]), 0);
-                }
-                if (!dropExistingColumn) {
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i]["removed"]), 99);
+                UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i]["removed"]), 99);
+                if (hasAddedColumns) {
+                    for (const auto& name : plainNames) {
+                        UNIT_ASSERT(rows[i][name].IsNull());
+                    }
+                    for (size_t j = 0; j < defaultNames.size(); ++j) {
+                        UNIT_ASSERT(rows[i][defaultNames[j]].HaveValue());
+                        UNIT_ASSERT_VALUES_EQUAL(ui32(rows[i][defaultNames[j]]), 10 * j);
+                    }
                 }
             }
         }
@@ -236,12 +267,10 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
     checkSchema(hasDefault);
     checkRows(hasDefault);
     if (!hasDefault) {
-        // Retry the default column; the ordinary column already exists after ALTER.
+        // Retry the entire request: none of its added columns may survive rollback.
         const ui64 retryId = ++txId;
         auto retry = CreateBuildColumnRequest(retryId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
-        auto* column = retry->Record.MutableSettings()->mutable_column_build_operation()->mutable_column(0);
-        column->SetNotNull(true);
-        column->SetFamily("cold");
+        retry->Record.MutableSettings()->CopyFrom(retrySettings);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), retry.release());
         env.TestWaitNotification(runtime, retryId);
         const auto result = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryId);
@@ -257,16 +286,16 @@ void CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption interruption,
 } // namespace
 
 Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
-    Y_UNIT_TEST_TWIN(MixedColumnsRestartAfterPartialBackfill, DropExistingColumn) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Restart, DropExistingColumn);
+    Y_UNIT_TEST(MixedColumnsRestartAfterPartialBackfill) {
+        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Restart, false);
     }
 
-    Y_UNIT_TEST_TWIN(MixedColumnsCancelAfterPartialBackfill, DropExistingColumn) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Cancel, DropExistingColumn);
+    Y_UNIT_TEST_TWIN(MixedColumnsCancelAfterPartialBackfill, RebootDuringRollback) {
+        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Cancel, RebootDuringRollback);
     }
 
-    Y_UNIT_TEST_TWIN(MixedColumnsFailureAfterPartialBackfill, DropExistingColumn) {
-        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Failure, DropExistingColumn);
+    Y_UNIT_TEST_TWIN(MixedColumnsFailureAfterPartialBackfill, RebootDuringRollback) {
+        CheckMixedColumnsAfterPartialBackfill(EMixedBuildInterruption::Failure, RebootDuringRollback);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
@@ -373,7 +402,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                                    {NLs::PathExist,
                                     NLs::IndexesCount(0),
                                     NLs::PathVersionEqual(7),
-                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName}, {"key"}, true)});
+                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName, nonDefaultColumnName}, {"key"}, true)});
             }
         });
     }
@@ -415,7 +444,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
                                    {NLs::PathExist,
                                     NLs::IndexesCount(0),
                                     NLs::PathVersionEqual(7),
-                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName}, {"key"}, true)});
+                                    NLs::CheckColumns("Table", {"key", "value", columnName, nonDefaultColumnName}, {columnName, nonDefaultColumnName}, {"key"}, true)});
             }
         });
     }

@@ -295,6 +295,9 @@ public:
                 {
                     return makeReply("invalid ALTER TABLE payload for column build");
                 }
+                if (modifyScheme.GetAlterTable().DropColumnsSize()) {
+                    return makeReply("DROP COLUMN cannot be combined with ADD COLUMN with DEFAULT");
+                }
                 buildInfo->AlterMainTablePayload.CopyFrom(modifyScheme.GetAlterTable());
             }
 

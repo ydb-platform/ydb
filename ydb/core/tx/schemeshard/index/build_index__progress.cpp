@@ -1110,6 +1110,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
 
+    // Roll back every addition from this ALTER, while keeping backfill settings DEFAULT-only.
+    auto* settings = columnBuild->MutableSettings();
+    THashSet<TString> columns;
+    for (const auto& column : settings->Getcolumn()) {
+        columns.insert(column.GetColumnName());
+    }
+    for (const auto& column : buildInfo.AlterMainTablePayload.GetColumns()) {
+        // Entries without a type alter existing columns rather than adding them.
+        if (column.HasType() && columns.insert(column.GetName()).second) {
+            settings->add_column()->SetColumnName(column.GetName());
+        }
+    }
+
     AddDropSequencePropose(ss, buildInfo, *propose);
 
     YDB_LOG_NOTICE("DropColumnsPropose",

@@ -714,7 +714,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             TString Name;
             ui32 ColumnCount;
             TVector<ui32> DefaultColumns;
-            bool DropExisting = false;
             bool NotNullDefaults = false;
         };
         const TVector<TTestCase> testCases = {
@@ -723,7 +722,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             {"FewDefaults", 32, {0, 13, 31}},
             {"ManyDefaults", 16, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}},
             {"AllDefaults", 16, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}},
-            {"AddAndDrop", 8, {1, 4, 6}, true, true},
+            {"NotNullDefaults", 8, {1, 4, 6}, true},
         };
         for (const auto& testCase : testCases) {
             for (bool empty : {false, true}) {
@@ -740,14 +739,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
                 TStringBuilder alter;
                 alter << "ALTER TABLE " << table << " ";
-                if (testCase.DropExisting) {
-                    alter << "DROP COLUMN Old1, DROP COLUMN Old2, ";
-                }
                 TStringBuilder selectColumns;
-                selectColumns << "Key, Value";
-                if (!testCase.DropExisting) {
-                    selectColumns << ", Old1, Old2";
-                }
+                selectColumns << "Key, Value, Old1, Old2";
                 TStringBuilder explicitColumns;
                 explicitColumns << "Key";
                 TStringBuilder explicitValues;
@@ -776,11 +769,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 for (const auto& column : describe.GetTableDescription().GetTableColumns()) {
                     columns.insert(TString(column.Name));
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(columns.size(), testCase.ColumnCount + (testCase.DropExisting ? 2 : 4), table);
+                UNIT_ASSERT_VALUES_EQUAL_C(columns.size(), testCase.ColumnCount + 4, table);
                 UNIT_ASSERT(columns.contains("Key"));
                 UNIT_ASSERT(columns.contains("Value"));
-                UNIT_ASSERT_VALUES_EQUAL(columns.contains("Old1"), !testCase.DropExisting);
-                UNIT_ASSERT_VALUES_EQUAL(columns.contains("Old2"), !testCase.DropExisting);
+                UNIT_ASSERT(columns.contains("Old1"));
+                UNIT_ASSERT(columns.contains("Old2"));
                 for (ui32 i = 0; i < testCase.ColumnCount; ++i) {
                     UNIT_ASSERT_C(columns.contains(TStringBuilder() << "C" << i), table << ": C" << i);
                 }
@@ -797,9 +790,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                         expected << ";";
                     }
                     expected << "[" << key << "u;" << (key == 1 ? "[111u]" : "#");
-                    if (!testCase.DropExisting) {
-                        expected << (key == 1 ? ";[222u];[333u]" : ";#;#");
-                    }
+                    expected << (key == 1 ? ";[222u];[333u]" : ";#;#");
                     for (ui32 i = 0; i < testCase.ColumnCount; ++i) {
                         expected << ";";
                         if (key != 3 && !defaultColumns.contains(i)) {
@@ -824,7 +815,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    void TestMixedColumnsAndDropMatrix(bool withData, bool multiShard) {
+    void TestMixedColumnsMatrix(bool withData, bool multiShard) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
@@ -865,24 +856,16 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             }
             TStringBuilder alter;
             alter << "ALTER TABLE t ";
-            const bool dropFirst = order.front().StartsWith('n');
-            if (dropFirst) {
-                alter << "DROP COLUMN Obsolete, ";
-            }
             for (size_t i = 0; i < order.size(); ++i) {
                 alter << (i ? ", " : "") << "ADD COLUMN " << order[i] << " " << definitions.at(order[i]);
-            }
-            if (!dropFirst) {
-                alter << ", DROP COLUMN Obsolete";
             }
             execute(alter << ";");
             UNIT_ASSERT(scans > 0);
 
             const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetTableColumns().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetTableColumns().size(), 7);
             for (const auto& column : describe.GetTableDescription().GetTableColumns()) {
-                UNIT_ASSERT_VALUES_UNEQUAL(column.Name, "Obsolete");
                 if (column.Name == "n2" || column.Name == "d2") {
                     UNIT_ASSERT_VALUES_EQUAL(column.Family, "cold");
                 }
@@ -903,12 +886,82 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         UNIT_ASSERT_VALUES_EQUAL(permutations, 24);
     }
 
-    Y_UNIT_TEST_TWIN(AlterTableMixedColumnsAndDropMatrixEmpty, MultiShard) {
-        TestMixedColumnsAndDropMatrix(false, MultiShard);
+    Y_UNIT_TEST_TWIN(AlterTableMixedColumnsMatrixEmpty, MultiShard) {
+        TestMixedColumnsMatrix(false, MultiShard);
     }
 
-    Y_UNIT_TEST_TWIN(AlterTableMixedColumnsAndDropMatrixFilled, MultiShard) {
-        TestMixedColumnsAndDropMatrix(true, MultiShard);
+    Y_UNIT_TEST_TWIN(AlterTableMixedColumnsMatrixFilled, MultiShard) {
+        TestMixedColumnsMatrix(true, MultiShard);
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableAddAndDropColumns, WithData) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        auto tableSession = kikimr.RunCall([&] { return kikimr.GetTableClient().CreateSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            return kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+        };
+        const auto success = [&](const TString& query) {
+            auto result = execute(query);
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        size_t scans = 0;
+        auto scanObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        for (ui32 defaultCount : {0, 1, 3}) {
+            for (ui32 plainCount : {0, 2}) {
+                if (!defaultCount && !plainCount) {
+                    continue;
+                }
+                for (ui32 dropCount : {1, 2}) {
+                    for (bool dropFirst : {false, true}) {
+                        success("CREATE TABLE t (Key Uint32 NOT NULL, Value Uint32, Old1 Uint32, Old2 Uint32, PRIMARY KEY (Key));");
+                        if (WithData) {
+                            success("UPSERT INTO t (Key, Value, Old1, Old2) VALUES (1, 42, 111, 222);");
+                        }
+                        TStringBuilder adds;
+                        for (ui32 i = 0; i < plainCount; ++i) {
+                            adds << (i ? ", " : "") << "ADD COLUMN n" << i << " Uint32";
+                        }
+                        for (ui32 i = 0; i < defaultCount; ++i) {
+                            adds << (i || plainCount ? ", " : "") << "ADD COLUMN d" << i << " Uint32 DEFAULT " << 10 + i;
+                        }
+                        const TString drops = dropCount == 1 ? "DROP COLUMN Old1" : "DROP COLUMN Old1, DROP COLUMN Old2";
+                        const TString query = TStringBuilder() << "ALTER TABLE t "
+                            << (dropFirst ? drops : TString(adds)) << ", "
+                            << (dropFirst ? TString(adds) : drops) << ";";
+                        const auto result = execute(query);
+                        UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), defaultCount == 0, query << ": " << result.GetIssues().ToString());
+                        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+
+                        const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
+                        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+                        THashSet<TString> names;
+                        for (const auto& column : describe.GetTableDescription().GetTableColumns()) {
+                            names.insert(TString(column.Name));
+                        }
+                        if (defaultCount) {
+                            UNIT_ASSERT_VALUES_EQUAL(names.size(), 4);
+                            UNIT_ASSERT(names.contains("Key") && names.contains("Value") && names.contains("Old1") && names.contains("Old2"));
+                            const auto rows = success("SELECT Key, Value, Old1, Old2 FROM t;");
+                            CompareYson(WithData ? "[[1u;[42u];[111u];[222u]]]" : "[]", FormatResultSetYson(rows.GetResultSet(0)));
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(names.size(), 4 + plainCount - dropCount);
+                            UNIT_ASSERT(names.contains("Key") && names.contains("Value") && names.contains("n0") && names.contains("n1"));
+                            UNIT_ASSERT(!names.contains("Old1"));
+                            UNIT_ASSERT_VALUES_EQUAL(names.contains("Old2"), dropCount == 1);
+                            const auto rows = success("SELECT Key, Value, n0, n1 FROM t;");
+                            CompareYson(WithData ? "[[1u;[42u];#;#]]" : "[]", FormatResultSetYson(rows.GetResultSet(0)));
+                            success("UPSERT INTO t (Key, n0, n1) VALUES (2, 10, 20);");
+                            const auto inserted = success("SELECT n0, n1 FROM t WHERE Key = 2;");
+                            CompareYson("[[[10u];[20u]]]", FormatResultSetYson(inserted.GetResultSet(0)));
+                        }
+                        success("DROP TABLE t;");
+                    }
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST_TWIN(AlterTableAddAndDropSameColumnRejected, DefaultColumn) {

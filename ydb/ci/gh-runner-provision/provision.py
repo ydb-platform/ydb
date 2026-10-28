@@ -877,10 +877,24 @@ def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
     if restart_blocked({"busy": busy, "status": status}):
         print(f"{name}: {status or 'busy'} now, not restarting", flush=True)
         return "online" if status == "online" else "busy", taken
-    proc = run(ssh_argv(cfg, ip) + ["sudo", "bash", "-s"], input=runner_service_script())
+    proc = run(
+        ssh_argv(cfg, ip) + ["sudo", "bash", "-s"],
+        input=runner_service_script(),
+        stderr=subprocess.PIPE,
+    )
     if proc.returncode == 42:
         register(cfg, name, ip)
     elif proc.returncode != 0:
+        ssh_error = proc.stderr or ""
+        if ssh_error:
+            print(ssh_error, end="" if ssh_error.endswith("\n") else "\n", file=sys.stderr)
+        gateway_errors = (
+            "Network is unreachable",
+            "No route to host",
+            "Connection closed by remote host",
+        )
+        if any(message in ssh_error for message in gateway_errors):
+            raise SystemExit(f"{name}: SSH gateway is unreachable; refusing to replace runner")
         print(f"{name}: service restart failed", flush=True)
     if wait_runner_online(cfg["repo"], name, boot_wait):
         return "online", taken

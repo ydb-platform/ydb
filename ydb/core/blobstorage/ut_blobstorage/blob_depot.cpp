@@ -555,4 +555,41 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             ++tabletId;
         }
     }
+
+    // the agent of the virtual group with no physical group behind it has nothing to assimilate; it answers with error
+    // rather than forwarding the request nowhere
+    Y_UNIT_TEST(AssimilateWithoutPhysicalGroup) {
+        TBlobDepotTestEnvironment tenv;
+        auto& env = *tenv.Env;
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "written through the virtual group";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        std::optional<NKikimrProto::EReplyStatus> status;
+        bool undelivered = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() != edge) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult) {
+                status = ev->Get<TEvBlobStorage::TEvAssimilateResult>()->Status;
+            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
+                undelivered = true;
+            }
+            return false;
+        };
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvAssimilate(std::nullopt, std::nullopt, std::nullopt,
+                true, false));
+        });
+        env.Sim(TDuration::Minutes(1));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(!undelivered);
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_VALUES_EQUAL(*status, NKikimrProto::ERROR);
+    }
 }

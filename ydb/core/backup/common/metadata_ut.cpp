@@ -4,6 +4,16 @@
 
 namespace NKikimr::NBackup {
 
+Y_UNIT_TEST_SUITE(BackupMetadataTest) {
+    Y_UNIT_TEST(SourceDatabase) {
+        TMetadata metadata;
+        UNIT_ASSERT(TMetadata::Deserialize(metadata.Serialize()).GetSourceDatabase().empty());
+        UNIT_ASSERT(TMetadata::Deserialize(R"({"version": 1})").GetSourceDatabase().empty());
+        metadata.SetSourceDatabase("/Root/tenant/database");
+        UNIT_ASSERT_VALUES_EQUAL(TMetadata::Deserialize(metadata.Serialize()).GetSourceDatabase(), "/Root/tenant/database");
+    }
+}
+
 Y_UNIT_TEST_SUITE(PathsNormalizationTest) {
     Y_UNIT_TEST(NormalizeItemPath) {
         UNIT_ASSERT_STRINGS_EQUAL(NormalizeItemPath("/a/b/c/"), "a/b/c");

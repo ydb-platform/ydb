@@ -168,6 +168,20 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
             xinfo.CurrentGeneration = record.HasCurrentGeneration() ? record.GetCurrentGeneration() : 0;
             xinfo.Locked = record.HasLocked() ? record.GetLocked() : false;
             xinfo.LockedFor = record.HasLockedFor() ? record.GetLockedFor() : 0;
+            // followers and candidates alike; replicas of older versions fill only the deprecated fields
+            xinfo.Followers.clear();
+            if (record.FollowerInfoSize()) {
+                for (const auto& followerInfo : record.GetFollowerInfo()) {
+                    xinfo.Followers.push_back(ActorIdFromProto(followerInfo.GetFollower()));
+                }
+            } else {
+                for (const auto& follower : record.GetFollower()) {
+                    xinfo.Followers.push_back(ActorIdFromProto(follower));
+                }
+                for (const auto& follower : record.GetFollowerCandidates()) {
+                    xinfo.Followers.push_back(ActorIdFromProto(follower));
+                }
+            }
         }
 
         xinfo.ConfigContentHash = record.GetConfigContentHash();

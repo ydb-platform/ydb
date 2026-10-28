@@ -1170,6 +1170,48 @@ config:
         UNIT_ASSERT_C(response.operation().status() != Ydb::StatusIds::SUCCESS, response.operation().DebugString());
     }
 
+    // Replacement A waits for the reply of Console validating it, and replacement B comes then. B is refused as there
+    // is a replacement going on; A must go on as it was and apply its YAML.
+    Y_UNIT_TEST(RefusedConcurrentReplacementKeepsOngoingOne) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        auto makeYaml = [&](ui32 version, const char *name) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s
+)", version, name) + HostsYaml(runtime);
+        };
+
+        TAutoPtr<IEventHandle> heldReply;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse && !heldReply) {
+                heldReply = ev;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Ydb::Config::ReplaceConfigResponse responseA;
+        auto replaceA = ReplaceAsync(server, makeYaml(1, "replacement-a"), responseA);
+        WaitFor(runtime, [&] { return bool(heldReply); });
+
+        const auto refused = Replace(runtime, server, makeYaml(1, "replacement-b"));
+        UNIT_ASSERT_C(refused.operation().status() != Ydb::StatusIds::SUCCESS, refused.operation().DebugString());
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(heldReply.Release());
+        replaceA->Wait(runtime);
+        UNIT_ASSERT_CHECK_STATUS(responseA.operation(), Ydb::StatusIds::SUCCESS);
+
+        const auto mainConfig = FetchMainConfig(runtime, server);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT_C(mainConfig->Contains("replacement-a"), *mainConfig);
+    }
+
 }
 
 } // NKikimr::NGRpcService

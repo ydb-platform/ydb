@@ -994,7 +994,16 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         if (saveCtx->DeleteStorage) {
             // the storage YAML goes away only with the new main YAML in place, the old one relies on it
             if (success) {
-                std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName);
+                // failing to delete it is retried as failing to save is
+                std::error_code error;
+                std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName,
+                    error);
+                if (error) {
+                    YDB_LOG_ERROR_COMP(BS_NODE, "Failed to delete storage config file",
+                        {"marker", "NW96"},
+                        {"error", error.message()});
+                    success = false;
+                }
             }
         } else if (success && saveCtx->UpdateStorage) {
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);

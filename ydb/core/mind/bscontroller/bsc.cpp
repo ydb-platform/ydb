@@ -693,24 +693,26 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
     return nullptr;
 }
 
-void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
+bool TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf, ui64 cookie) {
     if (!StorageConfig->HasBlobStorageConfig()) {
-        return;
+        return false;
     }
     const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
 
     ApplyBscSettings(bsConfig);
 
     if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig->GetSelfManagementConfig().GetAutomaticBoxManagement())) {
-        return; // not expected to be managed by BSC
+        return false; // not expected to be managed by BSC
     }
 
     if (auto ev = BuildConfigRequestFromStorageConfig(*StorageConfig, HostRecords, false)) {
         YDB_LOG_DEBUG("ApplyStorageConfig",
             {"marker", "BSC14"},
             {"request", ev->Record});
-        Send(SelfId(), ev.release());
+        Send(SelfId(), ev.release(), 0, cookie);
+        return true;
     }
+    return false;
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
@@ -763,6 +765,15 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
                     return;
                 }
                 ConsoleInteraction->ProcessDryRunResponse(rollbackSuccess, std::move(errorReason));
+                break;
+
+            case TConfigValidationInfo::ESource::ConsoleInteractionApply:
+                YDB_LOG(resp.GetSuccess() ? PRI_DEBUG : PRI_ERROR, "TEvControllerConfigResponse",
+                    {"marker", "BSC15"},
+                    {"response", resp});
+                if (ConsoleInteraction) {
+                    ConsoleInteraction->ProcessApplyResponse(ev->Cookie, resp.GetSuccess(), resp.GetErrorDescription());
+                }
                 break;
         }
 

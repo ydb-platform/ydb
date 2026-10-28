@@ -246,8 +246,11 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConsoleInteraction::OnConfigCommit(bool mainConfigChanged) {
+    void TBlobStorageController::TConsoleInteraction::OnConfigCommit(bool mainConfigChanged, std::optional<ui64> storageApplyCookie) {
         CommitInProgress = false;
+        ConsoleCommitted = false;
+        StorageApplyCookie = storageApplyCookie;
+        StorageApplyError.reset();
         if (!Working) {
             return;
         }
@@ -309,7 +312,34 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::OnConsoleCommit() {
         MaybeDisableConfigV2();
-        if (ClientId) {
+        ConsoleCommitted = true;
+        MaybeFinishCommittedReplacement();
+    }
+
+    void TBlobStorageController::TConsoleInteraction::ProcessApplyResponse(ui64 cookie, bool success, TString errorReason) {
+        if (StorageApplyCookie != cookie) {
+            return; // this storage application is not awaited by the current replacement
+        }
+        StorageApplyCookie.reset();
+        if (!success) {
+            StorageApplyError.emplace(std::move(errorReason));
+        }
+        MaybeFinishCommittedReplacement();
+    }
+
+    void TBlobStorageController::TConsoleInteraction::MaybeFinishCommittedReplacement() {
+        if (!ConsoleCommitted || StorageApplyCookie) {
+            return;
+        }
+        ConsoleCommitted = false;
+        if (!ClientId) {
+            StorageApplyError.reset();
+        } else if (auto error = std::exchange(StorageApplyError, std::nullopt)) {
+            // the YAML is committed already, so the client has to learn the storage config didn't apply
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Aborted,
+                TStringBuilder() << "configuration is committed, but storage configuration failed to apply: "
+                    << *error);
+        } else {
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
     }
@@ -343,6 +373,12 @@ namespace NKikimr::NBsController {
             }
             return;
         }
+
+        // An earlier replacement may have lost its client while its storage application was still pending.
+        // Its result must not complete the replacement accepted here.
+        ConsoleCommitted = false;
+        StorageApplyCookie.reset();
+        StorageApplyError.reset();
 
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;

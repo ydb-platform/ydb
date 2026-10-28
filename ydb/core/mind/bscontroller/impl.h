@@ -1665,7 +1665,8 @@ public:
     struct TConfigValidationInfo {
         enum class ESource {
             Distconf,
-            ConsoleInteraction
+            ConsoleInteraction,
+            ConsoleInteractionApply, // not a validation, but the application of the storage config committed for Console
         };
 
         TActorId Sender;
@@ -2008,7 +2009,8 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr ev);
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
-    void ApplyStorageConfig(bool ignoreDistconf = false);
+    // returns true if a config command is sent; its response comes to the controller with the cookie
+    bool ApplyStorageConfig(bool ignoreDistconf = false, ui64 cookie = 0);
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 

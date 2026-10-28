@@ -875,7 +875,12 @@ namespace NKikimr::NStorage {
                 return;
             }
         }
-        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
+        if (Halted) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+            response->Record.SetErrorReason("distconf is halted on this node");
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+        } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer

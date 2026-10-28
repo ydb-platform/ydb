@@ -109,7 +109,8 @@ public:
                 if (!--self->NumPendingBridgeSyncFinishedResponses) {
                     Y_ABORT_UNLESS(self->CheckingUnsyncedBridgePiles);
                     self->CheckingUnsyncedBridgePiles = false;
-                    if (self->NotifyBridgeSyncFinishedErrors) {
+                    // the check requested while the notifications were in flight didn't run, so it runs now
+                    if (self->NotifyBridgeSyncFinishedErrors || self->RecheckUnsyncedBridgePiles) {
                         self->CheckUnsyncedBridgePiles();
                     }
                 }

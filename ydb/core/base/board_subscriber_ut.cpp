@@ -101,6 +101,7 @@ public:
     void IgnoreWriteOnlyRingGroupOnLookup();
     void ReturnNotAvailableWithoutReadableRingGroup();
     void RepublishAfterReplicaShutdown();
+    void ResubscribeAfterReplicaShutdown();
 
 protected:
     THolder<TTestBasicRuntime> Context;
@@ -114,6 +115,7 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST(ReconnectReplica);
     UNIT_TEST(DropByDisconnect);
     UNIT_TEST(RepublishAfterReplicaShutdown);
+    UNIT_TEST(ResubscribeAfterReplicaShutdown);
     UNIT_TEST_SUITE_END();
 };
 
@@ -316,6 +318,37 @@ void TBoardSubscriberTestBase::RepublishAfterReplicaShutdown() {
     Send(children.front(), replica, new TEvStateStorage::TEvReplicaShutdown(), 0, true);
     Context->WaitFor("the publication by a new child", [&] { return children.size() > 1; }, TDuration::Seconds(30));
     UNIT_ASSERT_UNEQUAL(children.back(), children.front());
+}
+
+// One replica of a live subscription shuts down, its node staying connected; the two others keep the subscription
+// alive. The subscription must try that replica again rather than leave it out for good.
+void TBoardSubscriberTestBase::ResubscribeAfterReplicaShutdown() {
+    const auto replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    struct TLookupSent {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+    TVector<TLookupSent> lookups; // sent to the replica
+    auto observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardLookup>([&](auto& ev) {
+        if (ev->Recipient == replica) {
+            lookups.push_back({ev->Sender, ev->Cookie});
+        }
+    });
+
+    const auto edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lookups.size(), 1);
+
+    // the shutdown comes with the cookie of the lookup it answers
+    Context->Send(new IEventHandle(lookups.front().Sender, replica, new TEvStateStorage::TEvReplicaShutdown(), 0,
+        lookups.front().Cookie), 1, true);
+    Context->WaitFor("another lookup of the replica", [&] { return lookups.size() > 1; }, TDuration::Seconds(30));
 }
 
 void TBoardSubscriberTestBase::ReconnectReplica() {

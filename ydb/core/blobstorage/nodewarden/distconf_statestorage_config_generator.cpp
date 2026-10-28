@@ -63,7 +63,11 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStoragePerPileGenerator::CalculateRingsParameters() {
-        ui32 minNodesInGroup = NodeGroups[0].Nodes.size();
+        // the groups are sorted by the health of their nodes, so the first one is not the smallest one
+        ui32 minNodesInGroup = Max<ui32>();
+        for (const auto& ng : NodeGroups) {
+            minNodesInGroup = Min<ui32>(minNodesInGroup, ng.Nodes.size());
+        }
         if (NodeGroups.size() == 1) {
             RingsInGroupCount = OverrideRingsCount;
             if (RingsInGroupCount == 0)

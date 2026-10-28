@@ -2,6 +2,7 @@
 
 The `PersQueueReadBalancer` tablet assigns topic partitions to a consumer's
 read sessions. The rules below describe ordering across split/merge.
+Both `STREAMING` and `MOVING` consumers use this read-session balancer.
 Implementation:
 [`read_balancer__balancing.cpp`](read_balancer__balancing.cpp),
 [`read_balancer__balancing.h`](read_balancer__balancing.h). Tests:

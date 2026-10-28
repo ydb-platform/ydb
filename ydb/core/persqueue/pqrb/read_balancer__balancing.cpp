@@ -2136,7 +2136,8 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     }
 
     auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
-    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING
+        && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING) {
         auto response = std::make_unique<TEvPersQueue::TEvError>();
         response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
         response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");

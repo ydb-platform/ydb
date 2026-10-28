@@ -211,6 +211,67 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         UNIT_ASSERT_VALUES_EQUAL(unregistered->Get()->Record.FollowerInfoSize(), 0);
     }
 
+    // Two ring groups of three replicas each, and two replicas of the second one are gone. The delete reaches four
+    // replicas of six, more than half, but only one of three in the second group, which still has the record on the
+    // majority of its replicas when they get back. The delete must not report success.
+    Y_UNIT_TEST(DeleteNeedsMajorityOfEachRingGroup) {
+        TTestBasicRuntime runtime(6);
+        SetupCustomStateStorage(runtime, 3, 3, 1, 2);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto& groups = resolved->Get()->ReplicaGroups;
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups[1].Replicas.size(), 3);
+        for (ui32 i : {1, 2}) {
+            runtime.Send(new IEventHandle(groups[1].Replicas[i], edge, new TEvents::TEvPoisonPill()));
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
+        auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK,
+            "the delete reached one replica of three in the second ring group");
+    }
+
+    // The same, but one replica of the first ring group is of an older version and replies without the cookie telling
+    // its group. That reply must not make the delete count all replies together as one group.
+    Y_UNIT_TEST(DeleteReplyWithoutCookieKeepsQuorumOfEachRingGroup) {
+        TTestBasicRuntime runtime(6);
+        SetupCustomStateStorage(runtime, 3, 3, 1, 2);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto& groups = resolved->Get()->ReplicaGroups;
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups[1].Replicas.size(), 3);
+        for (ui32 i : {1, 2}) {
+            runtime.Send(new IEventHandle(groups[1].Replicas[i], edge, new TEvents::TEvPoisonPill()));
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        bool cleared = false;
+        auto legacyReply = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (!cleared && ev->GetTypeRewrite() == TEvStateStorage::EvReplicaInfo && ev->Cookie == 1) {
+                cleared = true;
+                ev = new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, 0);
+            }
+        });
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
+        auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(cleared);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK,
+            "the delete reached one replica of three in the second ring group");
+    }
+
     // A replica is gone from the start. Its child must report it missing only after three seconds of failures, not
     // at the first one.
     Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {

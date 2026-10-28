@@ -134,6 +134,14 @@ namespace NKikimr::NBlobDepot {
             UpdateAssimilatorPosition();
         }
 
+        // the blobs assimilated before the restart are in the index already, so reads don't have to look for them in the
+        // group being decommitted; the state is stored with the last data it covers, so it is never ahead of the index
+        if (Self->DecommitState >= EDecommitState::BlobsFinished) {
+            Self->Data->LastAssimilatedBlobId = Max<TLogoBlobID>();
+        } else if (SkipBlobsUpTo) {
+            Self->Data->LastAssimilatedBlobId = *SkipBlobsUpTo;
+        }
+
         Become(&TThis::StateFunc);
         Action();
         UpdateBytesCopiedQ();
@@ -849,7 +857,7 @@ namespace NKikimr::NBlobDepot {
 
         const ui8 stateBits = (SkipBlocksUpTo ? TStateBits::Blocks : 0)
             | (SkipBarriersUpTo ? TStateBits::Barriers : 0)
-            | (SkipBlocksUpTo ? TStateBits::Blocks : 0);
+            | (SkipBlobsUpTo ? TStateBits::Blobs : 0);
 
         Save(&stream, stateBits);
 

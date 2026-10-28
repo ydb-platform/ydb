@@ -145,7 +145,7 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
     // Match federation_recipe / CM Cluster schema, including kikimrHost.
     // Do not add extra columns (fnx): DestPrepare CREATE TABLE then fails with
-    // "Table name conflict". FNX comes from the CM fnx column when present and from Balancer.clusters.
+    // "Table name conflict". FNX comes from the CM fnx column. Balancer.clusters does not set it.
     return Sprintf(
         R"(
                --!syntax_v1

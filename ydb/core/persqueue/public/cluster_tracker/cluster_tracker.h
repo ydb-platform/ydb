@@ -47,8 +47,6 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TVector<TCluster> GetReadClusters(TStringBuf account) const;
     // Sum of PQ/Config/V2/Account.version. Each account keeps its own version.
     i64 SumAccountVersions() const;
-    // A cluster named by a balancer is FNX even without Cluster.fnx.
-    void MarkFnxFromBalancers();
     void BuildVisibleClusters();
 
     struct TAccountClusters {

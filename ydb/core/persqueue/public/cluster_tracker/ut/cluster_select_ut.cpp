@@ -176,24 +176,6 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase("/Root/logbroker-federation/prod/"), "prod");
     }
 
-    Y_UNIT_TEST(MarkFnxFromBalancers) {
-        TClustersList list;
-        list.Clusters.push_back(MakeCluster("sas", false));
-        list.Clusters.push_back(MakeCluster("myt", false));
-        list.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt", "missing"};
-        list.MarkFnxFromBalancers();
-        UNIT_ASSERT(!list.Clusters[0].IsFnx);
-        UNIT_ASSERT(list.Clusters[1].IsFnx);
-
-        // Cluster.fnx stays FNX without a balancer.
-        TClustersList fromColumn;
-        fromColumn.Clusters.push_back(MakeCluster("sas", false));
-        fromColumn.Clusters.push_back(MakeCluster("klg", true));
-        fromColumn.MarkFnxFromBalancers();
-        UNIT_ASSERT(!fromColumn.Clusters[0].IsFnx);
-        UNIT_ASSERT(fromColumn.Clusters[1].IsFnx);
-    }
-
     Y_UNIT_TEST(ClustersListEqualityAndDebugString) {
         TClustersList left;
         left.Clusters.push_back(MakeCluster("sas", false));

@@ -4,16 +4,6 @@
 
 namespace NKikimr::NPQ::NClusterTracker {
 
-void TClustersList::MarkFnxFromBalancers() {
-    absl::flat_hash_set<TString> fnxNames;
-    for (const auto& [_, names] : Balancers) {
-        fnxNames.insert(names.begin(), names.end());
-    }
-    for (auto& cluster : Clusters) {
-        cluster.IsFnx = cluster.IsFnx || fnxNames.contains(cluster.Name);
-    }
-}
-
 void TClustersList::BuildVisibleClusters() {
     DefaultVisibleClusters.clear();
     ClustersByBalancer.clear();

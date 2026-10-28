@@ -999,22 +999,20 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
         };
 
-        // Until a Balancer row lists myt, it stays an ordinary cluster.
+        // A balancer list does not make a cluster FNX.
         assertWithMyt({});
         assertWithMyt("localhost");
-
-        {
-            DiscoverClustersRequest request;
-            auto* writeSessionParams = request.add_write_sessions();
-            writeSessionParams->set_topic("topic");
-            writeSessionParams->set_source_id("topic1.log");
-            writeSessionParams->set_preferred_cluster_name("myt");
-            DiscoverClustersResult result;
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::SUCCESS);
-        }
-
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(3);
+        assertWithMyt({});
+        assertWithMyt("logbroker-fnx.yandex.net");
+
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(4);
 
         assertOrdinaryOnly("logbroker.yandex.net");
         assertOrdinaryOnly("localhost");
@@ -1030,7 +1028,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.PQClient().RunYqlDataQuery(
             "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
             "VALUES (\"prod\", \"\", \"myt\", 1);");
-        wrapper.WaitForExactClustersDataVersion(4);
+        wrapper.WaitForExactClustersDataVersion(5);
         {
             DiscoverClustersResult result;
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1057,15 +1055,18 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "", 2);
-        wrapper.WaitForExactClustersDataVersion(5);
-        // Empty CSV: myt is no longer FNX and is visible for every host.
-        assertWithMyt("logbroker-fnx.yandex.net");
-        assertWithMyt({});
-
-        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt,missing", 3);
         wrapper.WaitForExactClustersDataVersion(6);
+        // Empty CSV leaves the fnx column set, so myt stays hidden.
         assertOrdinaryOnly("logbroker-fnx.yandex.net");
         assertOrdinaryOnly({});
+
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = false WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(7);
+        assertWithMyt("logbroker-fnx.yandex.net");
+        assertWithMyt({});
     }
 
     Y_UNIT_TEST(TestGetClustersListWhileTrackerIsWaiting) {
@@ -1253,7 +1254,11 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         wrapper.WaitForExactClustersDataVersion(1);
         WaitUntilBalancerTableCreated(server);
 
-        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "dc1,dc2", 1);
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true;\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
         wrapper.WaitForExactClustersDataVersion(2);
 
         {

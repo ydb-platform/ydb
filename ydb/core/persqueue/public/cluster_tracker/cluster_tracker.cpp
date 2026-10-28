@@ -394,7 +394,6 @@ private:
         AFL_ENSURE(clustersList->Clusters.size());
         AccountPageFrom.clear();
         clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->SumAccountVersions();
-        clustersList->MarkFnxFromBalancers();
         clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();
@@ -426,7 +425,7 @@ private:
             cluster.IsLocal = parser.ColumnParser("local").GetOptionalBool().value_or(false);
             cluster.IsEnabled = parser.ColumnParser("enabled").GetOptionalBool().value_or(false);
             cluster.Weight = parser.ColumnParser("weight").GetOptionalUint64().value_or(1000);
-            // Absent on a Cluster table without the CM fnx column: balancers alone mark FNX.
+            // Absent on a Cluster table without the CM fnx column: the cluster is not FNX.
             if (parser.ColumnIndex("fnx") >= 0) {
                 cluster.IsFnx = parser.ColumnParser("fnx").GetOptionalBool().value_or(false);
             }

@@ -168,7 +168,7 @@ namespace NKikimr::NBsController {
                         std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
                         std::nullopt));
                     CommitInProgress = true;
-                    MaybeDisableConfigV2();
+                    // the migration check reads the YAML adopted here, so it goes once the commit is complete
                 }
             } catch (const std::exception& ex) {
                 YDB_LOG_ERROR("Failed to parse config obtained from Console",
@@ -258,6 +258,7 @@ namespace NKikimr::NBsController {
         ConsoleCommitted = false;
         StorageApplyCookie = storageApplyCookie;
         StorageApplyError.reset();
+        MaybeDisableConfigV2(); // the committed YAML is in place now
         if (!Working) {
             return;
         }

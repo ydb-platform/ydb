@@ -365,8 +365,11 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(op);
             Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
                 , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
-                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
-            Finish(TResult::OK, std::nullopt);
+                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE
+                , op->SessionId));
+            // the self-heal actor replies when it is done; the reply here would be a second one, and it would end the
+            // forwarding of the request before the real result comes
+            Finish(TResult::OK, std::nullopt, {}, /*sendResult=*/ false);
             return;
         }
 
@@ -430,8 +433,9 @@ namespace NKikimr::NStorage {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
-        Finish(TResult::OK, std::nullopt);
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig,
+            op->SessionId));
+        Finish(TResult::OK, std::nullopt, {}, /*sendResult=*/ false); // the self-heal actor replies when it is done
     }
 
     void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {

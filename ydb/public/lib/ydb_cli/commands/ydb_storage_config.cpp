@@ -155,6 +155,19 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
     } else if (DisableDedicatedStorageSection) {
         SwitchDedicatedStorageSection.emplace(false);
     }
+
+    // the request this command makes carries every section it needs, so a missing one is an error here
+    if (DisableDedicatedStorageSection) {
+        if (!ClusterYaml) {
+            ythrow yexception() << "--disable-dedicated-storage-section needs the cluster YAML, given with -f (--filename) or --dedicated-cluster-yaml";
+        }
+    } else if (DedicatedConfigMode || EnableDedicatedStorageSection) {
+        if (!ClusterYaml || !StorageYaml) {
+            ythrow yexception() << "Both --dedicated-cluster-yaml and --dedicated-storage-yaml must be provided";
+        }
+    } else if (!ClusterYaml) {
+        ythrow yexception() << "Provide the configuration with -f (--filename)";
+    }
 }
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {

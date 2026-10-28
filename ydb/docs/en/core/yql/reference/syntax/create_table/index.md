@@ -8,16 +8,15 @@ The table is automatically created upon the first [INSERT INTO](../insert_into.m
 
 {% else %}
 
-The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} It also allows defining secondary indexes on the created table.
+The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It also allows defining secondary indexes on the created table.
 
 {% endif %}
 
 {% endif %}
 
-```yql
+ ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
-  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
-  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
   [, ...],
     INDEX <index_name>
       GLOBAL
@@ -148,7 +147,7 @@ When choosing a name for the table, consider the common [schema object naming ru
   );
   ```
 
-  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) section.
+  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [Partitioning row-oriented tables](../../../../concepts/datamodel/table.md#partitioning_row_table) section.
 
 
 - Creating a column-oriented table

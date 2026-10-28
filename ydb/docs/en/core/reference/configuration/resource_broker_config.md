@@ -1,4 +1,6 @@
-# resource_broker_config {#resource-broker-config}
+# resource_broker_config
+
+## Overview {#resource-broker-config}
 
 The resource broker is an [actor service](../../concepts/glossary.md#actor-service) that controls resource consumption on {{ ydb-short-name }} [nodes](../../concepts/glossary.md#node), such as:
 
@@ -11,7 +13,7 @@ Different types of activities (background operations, [TTL](../../concepts/ttl.m
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | [TTL](../../concepts/ttl.md) data deletion operations.                |
 | `queue_backup`            | 2 | — | [Backup](../../devops/backup-and-recovery.md#s3) operations.                |
-| `queue_restore`           | 10 | — | [Restore from backup](../../devops/backup-and-recovery.md#s3) operations.     |
+| `queue_restore`           | 2 | — | [Restore from backup](../../devops/backup-and-recovery.md#s3) operations.     |
 | `queue_build_index`       | 10 | — | [Online secondary index creation](../../concepts/query_execution/secondary_indexes.md#index-add) operations.   |
 | `queue_cdc_initial_scan` | 2 | — | [Initial table scan](../../concepts/cdc.md#initial-scan) operations.             |
 

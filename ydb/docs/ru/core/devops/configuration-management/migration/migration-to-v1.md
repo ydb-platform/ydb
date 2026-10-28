@@ -1,4 +1,4 @@
-﻿# Миграция на конфигурацию V1
+# Миграция на конфигурацию V1
 
 Данный документ содержит инструкцию по миграции с [конфигурации V2](../../configuration-management/configuration-v2/config-overview.md) на [конфигурацию V1](../../configuration-management/configuration-v1/index.md).
 
@@ -13,7 +13,7 @@
 Миграция на конфигурацию V1 возможна только в том случае, если в кластере используется [конфигурация V2](../../configuration-management/configuration-v2/config-overview.md). Это может быть достигнуто:
 
 - в результате [миграции на конфигурацию V2](migration-to-v2.md);
-- при [первоначальном развёртывании](../../deployment-options/manual/initial-deployment/index.md) кластера.
+- при [первоначальном развёртывании](../../deployment-options/manual/initial-deployment.md) кластера.
 
 Узнать текущую версию конфигурации на узлах можно несколькими способами, описанными в статье [Проверка версии конфигурации](../check-config-version.md). Перед началом миграции убедитесь, что кластер работает на конфигурации V2.
 
@@ -29,7 +29,7 @@
 
     {% cut "Подробнее" %}
 
-    Аргумент `--v2-internal-state` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/domains_config.md#domains-state) и [статической группы](../../../reference/configuration/blob_storage_config.md#blob_storage_config).
+    Аргумент `--v2-internal-state` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob-storage-config).
 
     {% endcut %}
 

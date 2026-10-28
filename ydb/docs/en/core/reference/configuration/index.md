@@ -1,4 +1,3 @@
-
 # {{ ydb-short-name }} Cluster Configuration
 
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run. This article provides an overview of the main configuration sections and links to detailed documentation for each section.
@@ -22,13 +21,11 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
 || [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
 || [{#T}](immediate_controls_config.md) | No | Configuration of dynamic cluster settings ||
-|| [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
 || [{#T}](security_config.md) | No | Security configuration settings ||
-|| [{#T}](table_service_config.md) | No | Query processing configuration||
 || [{#T}](tls.md) | No | TLS configuration for secure connections ||
 |#
 
@@ -42,8 +39,15 @@ While this documentation section focuses on complete reference documentation for
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
     - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
 
-- As part of [troubleshooting](../../troubleshooting/index.md)
-- As part of [security hardening](../../security/index.md)
+One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
+
+```yaml
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    type: SSD
+```
 
 Two configurations with IDs 1 (two SSD disks) and 2 (three SSD disks):
 
@@ -83,7 +87,7 @@ The example configuration files provided with the {{ ydb-short-name }} Kubernete
 
 This group lists the static cluster nodes on which the Storage processes run and specifies their main characteristics:
 
-- Numeric node ID
+- Numeric node IDs
 - DNS host name and port that can be used to connect to a node on the IP network
 - ID of the [standard host configuration](host_configs.md)
 - Placement in a specific availability zone, rack
@@ -881,4 +885,3 @@ kafka_proxy_config:
 ## Sample cluster configurations {#examples}
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.
-

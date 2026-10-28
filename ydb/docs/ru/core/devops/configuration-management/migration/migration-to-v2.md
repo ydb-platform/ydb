@@ -1,4 +1,4 @@
-﻿# Миграция на конфигурацию V2
+# Миграция на конфигурацию V2
 
 {% include [_](../_includes/experimental_v2.md) %}
 
@@ -63,7 +63,7 @@
 
     {% cut "Подробнее" %}
 
-    Включение данного флага означает, что за хранение конфигурации и операции над ней теперь отвечает таблетка [DS Controller](../../../concepts/glossary.md#ds-controller), а не таблетка [Console](../../../concepts/glossary.md#console). Это переключает основной механизм управления конфигурацией кластера.
+    Включение данного флага означает, что за хранение конфигурации и операции над ней теперь отвечает таблетка [DS Controller](../../../concepts/glossary.md#ds-controller), а не таблетка [Console](../../../concepts/glossary.md#console-databases). Это переключает основной механизм управления конфигурацией кластера.
 
     {% endcut %}
 
@@ -166,7 +166,7 @@
 
     {% cut "Подробнее" %}
 
-    После загрузки конфигурации кластер {{ ydb-short-name }} будет переведён в режим автоматического управления конфигурацией [State Storage](../../../reference/configuration/domains_config.md#domains-state) и [статической группой](../../../reference/configuration/blob_storage_config.md#blob_storage_config) с помощью механизма распределённой конфигурации.
+    После загрузки конфигурации кластер {{ ydb-short-name }} будет переведён в режим автоматического управления конфигурацией [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группой](../../../reference/configuration/index.md#blob-storage-config) с помощью механизма распределённой конфигурации.
 
     {% endcut %}
 

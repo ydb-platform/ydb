@@ -1,39 +1,5 @@
 # Список изменений {{ ydb-short-name }} Server
 
-## Версия 25.3 {#25-3}
-
-### Версия 25.3.1.27 {#25-3-1-27}
-
-Дата выхода: 20 мая 2026.
-
-#### Функциональность
-
-* Добавлена поддержка конфигурации 2 ДЦ с синхронной записью данных (режим [`Bridge`](./concepts/bridge.md)); доступно в {{ ydb-short-name }} Enterprise.
-* Улучшения топиков:
-  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
-  * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
-* Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
-* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
-
-#### Исправления ошибок
-
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/33758) ошибка, приводившая к утечке сессии на серверной стороне.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/36926) ошибка, из-за которой в редких случаях чтения из таблицы могли заблокировать её удаление.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
-* [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
-* [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/18234) нарушение сериализуемости в read-write транзакциях после рестартов шарда.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) ошибка управления памятью при коммите смещения в топиках со включённым автоматическим партиционированием.
-* [Добавлены](https://github.com/ydb-platform/ydb/pull/18698) проверки включённого шифрования в zero-copy передаче.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/20519) ошибка, приводящая к зависанию VDisk в local recovery после ошибки `ChunkRead`.
-* [Исключено](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
-* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) определение состояния PDisk — теперь используется фактическое состояние из BSC, что повышает точность healthcheck.
-* При завершении сессии через attach stream теперь [отправляется](https://github.com/ydb-platform/ydb/pull/22298) уведомление.
-* Сервис координации теперь корректно [возвращает](https://github.com/ydb-platform/ydb/pull/16901) код `SCHEME_ERROR` для несуществующих ресурсов вместо ошибочно использовавшегося кода `INTERNAL_ERROR`.
-* [Исправлены](https://github.com/ydb-platform/ydb/pull/20157) ошибки работы с памятью и нарушения внутренней согласованности данных в Workload Manager и связанном с планировщиком коде.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/20432) проблема, из-за которой запросы информации о PDisk могли завершаться таймаутом, если целевой узел был отключён или недоступен.
-
 ## Версия 25.2 {#25-2}
 
 ### Версия 25.2.1.26 {#25-2-1-26}
@@ -260,7 +226,9 @@
 
 * Включены по умолчанию:
 
-  * поддержка {% if feature_view %}[представлений (VIEW)](./concepts/datamodel/view.md){% else %}представлений (VIEW){% endif %};
+{% if feature_view %}
+  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md);
+{% endif %}
   * режим [автопартиционирования](./concepts/datamodel/topic.md#autopartitioning) топиков;
   * [транзакции с участием топиков и строковых таблиц](./concepts/transactions.md#topic-table-transactions);
   * [волатильные распределённые транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij).
@@ -348,7 +316,6 @@
 * Добавлено системное представление, позволяющее получить информацию о сессиях, установленных с базой данных, с помощью запроса.
 * Добавлена поддержка константных значений по умолчанию для колонок строковых таблиц.
 * Добавлена поддержка выражения `RETURNING` в запросах.
-* Добавлена [встроенная функция](./yql/reference/builtins/basic.md#version) `version()`.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/8708) время запуска/завершения и автор в метаданные операций резервного копирования/восстановления из S3-совместимого хранилища.
 * Добавлена поддержка резервного копирования/восстановления из S3-совместимого хранилища ACL для таблиц.
 * Для запросов, читающих из S3, в план добавлены пути и метод декомпрессии.
@@ -366,7 +333,7 @@
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1438) вкладка с информацией о [таблетках](./concepts/glossary#tablet).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1289) вкладка с информацией о [группах распределенного хранилища](./concepts/glossary#storage-group).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1218) настройка для добавления [трассировки](./reference/observability/tracing/setup) ко всем запросам и отображение результатов трассировки запроса.
-* На страницу PDisk добавлены [атрибуты](https://github.com/ydb-platform/ydb-embedded-ui/pull/1069), информация о потреблении дискового пространства, а также кнопка, которая запускает [декомиссию диска](./devops/deployment-options/manual/decommissioning).
+* На страницу PDisk добавлены [атрибуты](https://github.com/ydb-platform/ydb-embedded-ui/pull/1069), информация о потреблении дискового пространства, а также кнопка, которая запускает [декомиссию диска](./devops/deployment-options/manual/decommissioning.md).
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1313) информация о выполняющихся запросах.
 * [Добавлена](https://github.com/ydb-platform/ydb-embedded-ui/pull/1291) настройка лимита строк в выдаче для редактора запроса и отображение, если результаты запроса превысили лимит.
 * [Добавлено](https://github.com/ydb-platform/ydb-embedded-ui/pull/1049) отображение перечня запросов с максимальным потреблением CPU за последний час.
@@ -411,7 +378,7 @@
 
 ### Функциональность
 
-* Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance.md) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена возможность [задать приоритеты](./devops/concepts/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
 * Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md#node-broker-config) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](reference/configuration/auth_config.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary#dynamic) по SSL-сертификату.

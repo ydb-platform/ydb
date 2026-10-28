@@ -1,4 +1,6 @@
-# hosts {#hosts}
+# hosts
+
+## Overview {#hosts}
 
 В данной группе перечисляются статические узлы кластера, на которых запускаются процессы работы со Storage, и задаются их основные характеристики:
 
@@ -43,19 +45,6 @@ hosts:
     unit: '1'
     data_center: '1'
     rack: '1'
-```
-
-### Особенности режима bridge {#hosts-bridge}
-
-В [режиме bridge](../../concepts/bridge.md) каждый хост должен быть привязан к одному из pile, объявленных в [`bridge_config`](bridge_config.md). Для этого в разделе `location` укажите поле `bridge_pile_name` с именем pile. Пример:
-
-```yaml
-hosts:
-- host: hostname1
-  host_config_id: 1
-  location:
-    ...
-    bridge_pile_name: 'pile_1'
 ```
 
 ## Особенности Kubernetes {#hosts-k8s}

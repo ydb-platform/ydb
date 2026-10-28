@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import shlex
 import re
 import os
@@ -1013,9 +1014,50 @@ def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:
     return arc_path in nm_required_for
 
 
+def _library_for_paths(target: str, source: str) -> tuple[str, str]:
+    source = os.path.normpath(source)
+    target = os.path.normpath(target)
+    if source.startswith(("/", ".")) or not target.startswith(source + "/"):
+        raise ValueError("TS_LIBRARY_FOR expects an Arcadia-relative path to a parent project")
+    suffix = "__" + target[len(source) + 1 :].replace("/", "__")
+    target_hash = hashlib.sha256(target.encode("utf-8")).hexdigest()[:32]
+    return source, source + suffix + "." + target_hash
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
+    source, build = _library_for_paths(unit.get("MODDIR"), source)
+    _SET_TS_FOR_VARS(unit, "$S/" + source)
+    unit.set(["_FOR_MOD_PATH", "${ARCADIA_ROOT}/" + source])
+    unit.set(["_TS_LIBRARY_OUTPUT_FILE", '${output:"$B/' + build + '/output.tar"}'])
+    unit.set(["_TS_LIBRARY_FOR_BUILD_DIR", "${ARCADIA_BUILD_ROOT}/" + build])
+    unit.set(["_TS_LIBRARY_FOR", "yes"])
+    unit.set(["_TS_LIBRARY_MANIFEST_INPUT", '${hide;input:"$S/' + source + '/package.json"}'])
+    unit.set(["_TS_LIBRARY_OUTPUT_META", '${hide;output:"$B/' + build + '/output.tar.uuid"}'])
+    unit.onpeerdir([source])
+    for filename in ("package.json", "pnpm-lock.yaml"):
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + source + "/" + filename)
+    unit.set(["_TS_LIBRARY_FOR_BASE_ARGS", "--moddir " + source + " --build-suffix " + build[len(source) :]])
+    if _use_hermetic_node_modules(unit):
+        _configure_hermetic_node_modules(unit)
+    pj = _create_pm(unit).load_package_json_from_dir(unit.resolve("$S/" + source))
+    if pj.get_use_prebuilder():
+        _setup_prebuilder_resource(unit)
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+        __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS_LATE_OUTS}")
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and _node_modules_bundle_needed(unit, unit.get("MODDIR")):
+        ymake.report_configure_error("TS_LIBRARY_FOR does not support WITH_NODE_MODULES or NODE_MODULES_FOR")
+        return
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and unit.get("VCS_INFO_FILE"):
+        unit.set(["_NOTS_VCS_INFO_FILE", "${BINDIR}/" + unit.get("VCS_INFO_FILE")])
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
@@ -1072,16 +1114,19 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes":
+    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes" and unit.get("_TS_LIBRARY_FOR") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
             f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
         )
 
+    build_command = unit.get("_TS_BUILD_COMMAND")
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
+        build_command = "{} && {}".format(build_command, after_build_command)
+    if build_command:
+        _set_ts_build_command(unit, build_command)
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":

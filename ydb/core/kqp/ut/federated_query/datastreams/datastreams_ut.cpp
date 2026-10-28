@@ -1,8 +1,8 @@
 #include "common.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
@@ -2426,16 +2426,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     // Reads are recognized by their table id: internal service queries (e.g.
     // checkpoint metadata reads) also fly through the read actor and legitimately
     // take locks, so only the lookup table reads are asserted.
-    class TLockObservingPipeCacheStub final : public TActor<TLockObservingPipeCacheStub> {
+    class TLockObservingPipeCacheStub final: public TActor<TLockObservingPipeCacheStub> {
     public:
-        TLockObservingPipeCacheStub(ui64 tableOwnerId, ui64 tablePathId,
-            std::atomic<ui64>& evTableReads, std::atomic<ui64>& evTableReadsWithLocks)
+        TLockObservingPipeCacheStub(
+            ui64 tableOwnerId, ui64 tablePathId, std::atomic<ui64>& evTableReads, std::atomic<ui64>& evTableReadsWithLocks)
             : TActor<TLockObservingPipeCacheStub>(&TLockObservingPipeCacheStub::State)
             , TableOwnerId(tableOwnerId)
             , TablePathId(tablePathId)
             , EvTableReads(evTableReads)
             , EvTableReadsWithLocks(evTableReadsWithLocks)
-        {}
+        {
+        }
 
         void State(TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
@@ -2494,12 +2495,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto& tableDesc = GetLocalFlatMsgBusPQClient()->Ls("/Root/LocksKV");
         const auto& tableSelf = tableDesc->Record.GetPathDescription().GetSelf();
 
-        std::atomic<ui64> evTableReads{0};
-        std::atomic<ui64> evTableReadsWithLocks{0};
-        auto* shim = new TLockObservingPipeCacheStub(tableSelf.GetSchemeshardId(), tableSelf.GetPathId(),
-            evTableReads, evTableReadsWithLocks);
+        std::atomic<ui64> evTableReads{ 0 };
+        std::atomic<ui64> evTableReadsWithLocks{ 0 };
+        auto* shim = new TLockObservingPipeCacheStub(tableSelf.GetSchemeshardId(), tableSelf.GetPathId(), evTableReads, evTableReadsWithLocks);
         InterceptReadActorPipeCache(GetRuntime().Register(shim));
-        Y_DEFER { InterceptReadActorPipeCache(MakePipePerNodeCacheID(false)); };
+        Y_DEFER {
+            InterceptReadActorPipeCache(MakePipePerNodeCacheID(false));
+        };
 
         ExecQuery(fmt::format(R"sql(
             CREATE STREAMING QUERY LocksQuery AS DO BEGIN
@@ -2518,9 +2520,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // The .sys/streaming_queries view registration may lag behind the cluster
         // bootstrap, so poll tolerantly.
         WaitFor(TEST_OPERATION_TIMEOUT, "streaming query running", [&]() {
-            auto result = GetQueryClient()->ExecuteQuery(R"(
+            auto result = GetQueryClient()
+                              ->ExecuteQuery(R"(
                 SELECT Status FROM `.sys/streaming_queries` WHERE Path = "/Root/LocksQuery";
-            )", TTxControl::NoTx()).GetValueSync();
+            )", TTxControl::NoTx())
+                              .GetValueSync();
             if (result.GetStatus() != EStatus::SUCCESS) {
                 return false;
             }
@@ -2534,10 +2538,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WriteTopicMessage(inputTopic, R"({"ServiceId": 1})");
         WriteTopicMessage(inputTopic, R"({"ServiceId": 2})");
 
-        ReadTopicMessages(outputTopic, {
-            R"({"LookupValue":"one","ServiceId":1})",
-            R"({"LookupValue":"two","ServiceId":2})",
-        }, TInstant::Zero(), /* sort */ true);
+        ReadTopicMessages(outputTopic,
+            {
+                R"({"LookupValue":"one","ServiceId":1})", R"({"LookupValue":"two","ServiceId":2})",
+            }, TInstant::Zero(), /* sort */ true);
 
         // The streaming query reads the lookup table and must not take locks.
         // Internal service queries (e.g. checkpoint metadata reads) fly through

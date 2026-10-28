@@ -1147,6 +1147,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvRetryBridgePileOperation, HandleRetryBridgePileOperation);
         cFunc(TEvPrivate::EvRetryBridgeGroupModes, HandleRetryBridgeGroupModes);
         cFunc(TEvPrivate::EvCheckBridgeGroupModes, HandleCheckBridgeGroupModes);
+        cFunc(TEvPrivate::EvRetrySyncers, HandleRetrySyncers);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);

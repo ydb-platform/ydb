@@ -238,7 +238,8 @@ namespace NKikimr::NStorage {
                 return noReconfig(); // Current config is optimal and all nodes are good
             }
 
-            // Check can be node replacement applyed
+            // Check can be node replacement applyed; the replacements of this subsystem only decide how it changes
+            std::unordered_map<ui32, std::tuple<ui32, ui32, ui32>> localNodesToReplace;
             for (ui32 ringGroupIdx : xrange(oldSSInfo->RingGroups.size())) {
                 auto& oldRg = oldSSInfo->RingGroups[ringGroupIdx];
                 auto& newRg = newSSInfo->RingGroups[ringGroupIdx];
@@ -286,15 +287,25 @@ namespace NKikimr::NStorage {
                             continue;
                         }
                         std::tuple<ui32, ui32, ui32> placement{ ringGroupIdx, ringIdx, newRep };
-                        if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                        if (auto it = localNodesToReplace.find(oldRep); it != localNodesToReplace.end() && it->second != placement) {
                             return ReconfigType::FULL;
                         }
-                        nodesToReplace[oldRep] = placement;
+                        localNodesToReplace[oldRep] = placement;
                     }
                 }
             }
-            if (nodesToReplace.size() == 1) {
-                auto placement = nodesToReplace.begin();
+            if (localNodesToReplace.empty()) {
+                return noReconfig(); // the rings only got reordered
+            }
+            // all the subsystems replacing a node have to replace it the same way
+            for (const auto& [oldRep, placement] : localNodesToReplace) {
+                if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                    return ReconfigType::FULL;
+                }
+                nodesToReplace[oldRep] = placement;
+            }
+            if (localNodesToReplace.size() == 1) {
+                auto placement = localNodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
                 // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
                 // disables it, and the disabled rings, as well as rings with nodes not known to be good
@@ -315,7 +326,7 @@ namespace NKikimr::NStorage {
                 ui32 majority = oldRg.NToSelect / 2 + 1;
                 return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
             }
-            return nodesToReplace.empty() ? noReconfig() : ReconfigType::FULL;
+            return ReconfigType::FULL;
         };
         #define NEED_RECONFIG(NAME) needReconfig( \
             !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(), \

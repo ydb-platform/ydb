@@ -725,6 +725,41 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(mainAck->Get()->GetPathId(), pathId);
     }
 
+    // The owner has paths 1 and 3, path 2 is deleted. The full sync of every replica must tell it to delete path 2,
+    // the interval [2; 2] holding the one path.
+    Y_UNIT_TEST(FullSyncDeletesOneIdGap) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+        const auto info = GetStateStorageInfo(runtime);
+        size_t replicaCount = 0;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            replicaCount += ring.Replicas.size();
+        }
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+
+        size_t coveringGap = 0; // full sync updates deleting path 2
+        auto updates = runtime.AddObserver<NInternalEvents::TEvUpdate>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.HasDeletedLocalPathIds()) {
+                const auto& deleted = record.GetDeletedLocalPathIds();
+                coveringGap += deleted.GetBegin() <= 2 && 2 <= deleted.GetEnd();
+            }
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+
+        std::vector<std::pair<TPathId, TTwoPartDescription>> descriptions;
+        for (ui64 id : {1, 3}) {
+            const TPathId pathId(owner, id);
+            auto desc = GenerateDescribe(TStringBuilder() << "/Root/Path" << id, pathId, 1);
+            desc.SetStatus(NKikimrScheme::StatusSuccess);
+            descriptions.emplace_back(pathId, TTwoPartDescription("", std::move(desc)));
+        }
+        runtime.Register(CreateSchemeBoardPopulator(owner, 1, std::move(descriptions), 4));
+        runtime.WaitFor("full sync of every replica", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(coveringGap, replicaCount, "the full sync didn't delete path 2 on every replica");
+    }
+
     void TestColdDeletionWithPathWaitsForReplicaQuorum(bool subscribeBeforeDeletion) {
         TTestBasicRuntime runtime;
         TStateStorageInfo::TRingGroup group{};

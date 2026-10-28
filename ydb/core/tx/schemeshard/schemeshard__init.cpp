@@ -4063,8 +4063,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 } else if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
                     if (!extraData.empty()) {
-                        txState.DropReplication = std::make_shared<NKikimrSchemeOp::TDrop>();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*txState.DropReplication, extraData));
+                        NKikimrSchemeOp::TDrop drop;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(drop, extraData));
+                        txState.ReplicationSourceCleanup = drop.GetReplicationSourceCleanup();
                     }
                 } else if (txState.TxType == TTxState::TxForceDropSubDomain || txState.TxType == TTxState::TxForceDropExtSubDomain) {
                     forceDropOpIds.push_back(operationId);

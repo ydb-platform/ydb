@@ -7,6 +7,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/message_seqno.h>
 
@@ -19,7 +20,6 @@
 namespace NKikimrSchemeOp {
     enum EPathState : int;
     class TBuildIndexOutcome;
-    class TDrop;
 }
 
 namespace NKikimrTxDataShard {
@@ -88,8 +88,8 @@ struct TTxState {
     // uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
-    // Accepted DROP options, persisted in TxInFlightV2::ExtraBytes for replay.
-    std::shared_ptr<NKikimrSchemeOp::TDrop> DropReplication;
+    // Persisted in TxInFlightV2::ExtraBytes for DROP replay.
+    NKikimrReplication::ESourceCleanupPolicy ReplicationSourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

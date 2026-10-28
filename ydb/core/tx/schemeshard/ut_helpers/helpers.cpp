@@ -2186,7 +2186,7 @@ namespace NSchemeShardUT_Private {
         return CreateBuildIndexRequest(id, dbName, src, index);
     }
 
-    std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
+    std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal, const TString& nonDefaultColumnName) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
         settings.MutableScanSettings()->SetMaxBatchRows(1);
@@ -2195,6 +2195,18 @@ namespace NSchemeShardUT_Private {
         auto* col = settings.mutable_column_build_operation()->add_column();
         col->SetColumnName(columnName);
         col->mutable_default_from_literal()->CopyFrom(literal);
+
+        if (nonDefaultColumnName) {
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            auto* alter = modifyScheme.MutableAlterTable();
+            alter->SetName(SplitPath(src).back());
+            alter->AddColumns()->SetName(columnName);
+            auto* nonDefaultColumn = alter->AddColumns();
+            nonDefaultColumn->SetName(nonDefaultColumnName);
+            nonDefaultColumn->SetType("Uint32");
+            settings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
+        }
 
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
     }
@@ -2213,9 +2225,9 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, request);
     }
 
-    void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal) {
+    void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal, const TString& nonDefaultColumnName) {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = CreateBuildColumnRequest(id, dbName, src, columnName, literal);
+        auto request = CreateBuildColumnRequest(id, dbName, src, columnName, literal, nonDefaultColumnName);
 
         ForwardToTablet(runtime, schemeShard, sender, request.release());
     }
@@ -2245,9 +2257,9 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus)
+        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus, const TString& nonDefaultColumnName)
     {
-        AsyncBuildColumn(runtime, id, schemeShard, dbName, src, columnName, literal);
+        AsyncBuildColumn(runtime, id, schemeShard, dbName, src, columnName, literal, nonDefaultColumnName);
 
         TAutoPtr<IEventHandle> handle;
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);

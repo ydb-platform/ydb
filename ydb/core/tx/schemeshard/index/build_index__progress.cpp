@@ -919,9 +919,22 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
+    auto* alter = modifyScheme.MutableAlterTable();
+    const TString tableName = alter->GetName();
+    alter->CopyFrom(buildInfo.AlterMainTablePayload);
+    alter->SetName(tableName);
+
+    THashMap<TString, NKikimrSchemeOp::TColumnDescription*> columnsByName;
+    for (auto& column : *alter->MutableColumns()) {
+        columnsByName.emplace(column.GetName(), &column);
+    }
 
     for (const auto& colInfo : buildInfo.BuildColumns) {
-        auto col = modifyScheme.MutableAlterTable()->AddColumns();
+        auto it = columnsByName.find(colInfo.ColumnName);
+        auto* col = it != columnsByName.end() ? it->second : alter->AddColumns();
+        if (it != columnsByName.end()) {
+            columnsByName.erase(it);
+        }
         NScheme::TTypeInfo typeInfo;
         TString typeMod;
         Ydb::StatusIds::StatusCode status;

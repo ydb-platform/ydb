@@ -287,6 +287,17 @@ public:
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
             }
 
+            if (settings.HasAlterMainTablePayload()) {
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+                if (!settings.GetAlterMainTablePayload().UnpackTo(&modifyScheme)
+                    || modifyScheme.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable
+                    || !modifyScheme.HasAlterTable())
+                {
+                    return makeReply("invalid ALTER TABLE payload for column build");
+                }
+                buildInfo->AlterMainTablePayload.CopyFrom(modifyScheme.GetAlterTable());
+            }
+
             buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;

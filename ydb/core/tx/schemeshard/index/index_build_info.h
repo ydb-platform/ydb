@@ -227,6 +227,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TVector<TColumnBuildInfo> BuildColumns;
+    NKikimrSchemeOp::TTableDescription AlterMainTablePayload;
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
@@ -667,6 +668,11 @@ public:
         indexInfo->AlterMainTableTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
+
+        if (row.template HaveValue<Schema::IndexBuild::AlterMainTablePayload>()) {
+            Y_ENSURE(indexInfo->AlterMainTablePayload.ParseFromString(
+                row.template GetValue<Schema::IndexBuild::AlterMainTablePayload>()));
+        }
 
         indexInfo->DropColumnsTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxId>(

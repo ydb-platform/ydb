@@ -1036,13 +1036,12 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationReplicationFinis
     RequestReplicationStatus(NKikimrPQ::ReplicationDone, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
     PartitionsInfo.at(record.GetPartitionId()).ReplicationDataFinished = true;
-    ctx.Send(ev->Sender, new TEvPQ::TEvPartitionReplicationFinishedAck(record.GetPartitionId()), 0, ev->Cookie);
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {

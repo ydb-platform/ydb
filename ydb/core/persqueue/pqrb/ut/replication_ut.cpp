@@ -11,13 +11,6 @@ void SendFinished(TTestContext& tc, ui32 partitionId, ui64 cookie) {
         new TEvPQ::TEvPartitionReplicationFinished(partitionId), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
 }
 
-void ExpectAck(TTestContext& tc, ui32 partitionId, ui64 cookie) {
-    auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionReplicationFinishedAck>(tc.Edge, TDuration::Seconds(10));
-    UNIT_ASSERT(ack);
-    UNIT_ASSERT_VALUES_EQUAL(ack->Get()->Record.GetPartitionId(), partitionId);
-    UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, cookie);
-}
-
 void RestartBalancer(TTestContext& tc) {
     ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, new TEvents::TEvPoisonPill());
     TDispatchOptions options;
@@ -61,12 +54,12 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     checkProgress();
     UNIT_ASSERT(proposals.empty());
     SendFinished(tc, 0, 1);
-    ExpectAck(tc, 0, 1);
+    DispatchFor(tc);
     checkProgress();
     UNIT_ASSERT(proposals.empty());
 
     SendFinished(tc, 1, 2);
-    ExpectAck(tc, 1, 2);
+    DispatchFor(tc);
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
     const auto& proposal = proposals.front()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record;
@@ -102,7 +95,7 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
     SendFinished(tc, 2, 3);
-    ExpectAck(tc, 2, 3);
+    DispatchFor(tc);
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
     UNIT_ASSERT(proposals.back()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record
@@ -195,7 +188,7 @@ Y_UNIT_TEST(ConfigurationOffsetsAckAndReplicationDoneRequest) {
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
-Y_UNIT_TEST(AckWithoutPersist) {
+Y_UNIT_TEST(NotificationWithoutPersist) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -215,17 +208,17 @@ Y_UNIT_TEST(AckWithoutPersist) {
 
     SendFinished(tc, 0, 42);
     SendFinished(tc, 1, 43);
-    ExpectAck(tc, 0, 42);
-    ExpectAck(tc, 1, 43);
+    DispatchFor(tc);
+    DispatchFor(tc);
     UNIT_ASSERT(pendingPuts.empty());
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
     RestartBalancer(tc);
     SendFinished(tc, 0, 44);
-    ExpectAck(tc, 0, 44);
+    DispatchFor(tc);
 }
 
-Y_UNIT_TEST(LostAckCanBeRetriedAfterRestart) {
+Y_UNIT_TEST(NotificationDoesNotSendAck) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -233,23 +226,13 @@ Y_UNIT_TEST(LostAckCanBeRetriedAfterRestart) {
     SendBalancerUpdate(tc, TBalancerUpdate{.Partitions = {{0, {tc.TabletId, 1}}}});
     WaitBalancerReady(tc);
 
-    bool droppedAck = false;
-    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinishedAck::EventType && ev->Recipient == tc.Edge) {
-            droppedAck = true;
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    });
     SendFinished(tc, 0, 100);
-    auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionReplicationFinishedAck>(TDuration::Seconds(1));
+    auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionReplicationFinishedAck>(TDuration::MilliSeconds(200));
     UNIT_ASSERT(!ack);
-    UNIT_ASSERT(droppedAck);
-    tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-
     RestartBalancer(tc);
     SendFinished(tc, 0, 101);
-    ExpectAck(tc, 0, 101);
+    ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionReplicationFinishedAck>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT(!ack);
 }
 
 } // Y_UNIT_TEST_SUITE(TPqrbReplication)

@@ -580,6 +580,11 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
     CompleteReplicationConsumerOffsetsWrite(ctx);
+    if (ReplicationDataFinishedWriteInProgress) {
+        ReplicationDataFinishedWriteInProgress = false;
+        ReplicationDataFinished = true;
+        ForwardReplicationFinished(ctx);
+    }
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();

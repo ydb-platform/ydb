@@ -275,7 +275,6 @@ private:
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
     void ForwardReplicationFinished(const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
     bool AddReplicationConsumerOffsetsToPersistRequest(const TActorContext& ctx);
@@ -665,7 +664,6 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
@@ -756,7 +754,6 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
             HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
             HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
@@ -1049,6 +1046,9 @@ private:
     TActorId ReadBalancerActorId;
     std::optional<ui64> ReplicationFinishedMirrorerCookie;
     ui64 ReplicationFinishedForwardCookie = 0;
+    bool ReplicationDataFinished = false; // Committed in the partition's KV metadata.
+    bool ReplicationDataFinishedPending = false;
+    bool ReplicationDataFinishedWriteInProgress = false;
     // Source snapshot persisted atomically with the imported consumer offsets.
     std::optional<NKikimrPQ::TEvPartitionConsumerOffsets> ReplicationConsumerOffsets;
     struct TReplicationConsumerOffsetsWrite {

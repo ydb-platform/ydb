@@ -58,6 +58,7 @@ struct TCreatePartitionParams {
     // Consumers present in KV user-info but not necessarily in Config (stale leftovers).
     TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
+    bool ReplicationDataFinished = false;
     bool FillHead = false;
     // Meta has [Begin, End) but data range returns NODATA (issue #49507).
     bool NoDataKeys = false;
@@ -201,6 +202,7 @@ protected:
         TMaybe<ui64> TxId;
         TMaybe<ui64> MetaStartOffset;
         TMaybe<ui64> MetaEndOffset;
+        TMaybe<bool> ReplicationDataFinished;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -318,7 +320,7 @@ protected:
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
-    void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp);
+    void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp, bool replicationDataFinished = false);
     void WaitBlobReadRequest();
     void SendBlobReadResponse(ui64 begin, ui64 end);
     void WaitInfoRangeRequest();
@@ -529,7 +531,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendDiskStatusResponse();
 
         WaitMetaReadRequest();
-        SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp);
+        SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp, params.ReplicationDataFinished);
 
         WaitInfoRangeRequest();
         {
@@ -663,6 +665,9 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
                 UNIT_ASSERT(meta.HasEndOffset());
                 UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaEndOffset, meta.GetEndOffset());
             }
+            if (matcher.ReplicationDataFinished.Defined()) {
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.ReplicationDataFinished, meta.GetReplicationDataFinished());
+            }
             metaFound = true;
             break;
         }
@@ -755,7 +760,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
         }
     }
 
-    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined()) {
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined() || matcher.ReplicationDataFinished.Defined()) {
         UNIT_ASSERT(metaFound);
     }
 }
@@ -952,7 +957,7 @@ void TPartitionFixture::WaitMetaReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
-void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp)
+void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp, bool replicationDataFinished)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -968,6 +973,7 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
         meta.SetStartOffset(begin);
         meta.SetEndOffset(end);
         meta.SetEndWriteTimestamp(endWriteTimestamp.MilliSeconds());
+        meta.SetReplicationDataFinished(replicationDataFinished);
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -3132,11 +3138,6 @@ Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
         Ctx->Runtime->Send(new IEventHandle(ActorId, mirrorer, new TEvPQ::TEvPartitionReplicationFinished(0), 0, cookie), 0, true);
         drain();
     };
-    auto ack = [&](const TActorId& sender, ui32 partition, ui64 cookie) {
-        Ctx->Runtime->Send(new IEventHandle(ActorId, sender, new TEvPQ::TEvPartitionReplicationFinishedAck(partition), 0, cookie), 0, true);
-        drain();
-    };
-
     Config.SetVersion(2);
     Config.MutablePartitionConfig()->MutableMirrorFrom()->SetIsForTopicReplication(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
@@ -3146,38 +3147,63 @@ Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
     drain();
     UNIT_ASSERT(mirrorer);
 
-    notify(41);
-    UNIT_ASSERT(notifications.empty());
     SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(balancer));
+    drain();
+    notify(41);
+    WaitCmdWrite({.ReplicationDataFinished = true});
+    notify(41); // A retry while KV is in flight must not be acknowledged early.
+    UNIT_ASSERT(notifications.empty());
+    UNIT_ASSERT(acknowledgements.empty());
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     drain();
     UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(notifications.back().Sender, ActorId);
-    const auto firstCookie = notifications.back().Cookie;
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Sender, ActorId);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Cookie, 41);
 
     SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(restartedBalancer));
     drain();
     UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(notifications.back().Recipient, restartedBalancer);
-    ack(balancer, 0, firstCookie);
-    ack(restartedBalancer, 1, firstCookie);
-    ack(restartedBalancer, 0, firstCookie + 1);
-    UNIT_ASSERT(acknowledgements.empty());
 
-    ack(restartedBalancer, 0, firstCookie);
-    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Sender, ActorId);
-    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Cookie, 41);
-
-    // A delayed reply for the old notification must not acknowledge a new one.
+    // A lost ACK is retried from committed state, without another KV write.
     notify(42);
     UNIT_ASSERT_VALUES_EQUAL(notifications.size(), 3);
-    const auto secondCookie = notifications.back().Cookie;
-    UNIT_ASSERT(secondCookie != firstCookie);
-    ack(restartedBalancer, 0, firstCookie);
-    UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 1);
-    ack(restartedBalancer, 0, secondCookie);
     UNIT_ASSERT_VALUES_EQUAL(acknowledgements.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(acknowledgements.back().Cookie, 42);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST_F(ReplicationFinishedRestoredFromMeta, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10, .Config = initialConfig,
+        .EndWriteTimestamp = TInstant::MilliSeconds(1), .ReplicationDataFinished = true, .FillHead = true}, initialConfig);
+    const auto balancer = Ctx->Runtime->AllocateEdgeActor();
+    size_t notifications = 0;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPQ::TEvInitCredentials::EventType) {
+            // No new mirrorer completion is needed to notify PQRB after recovery.
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType && ev->Recipient == balancer) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetPartitionId(), 0);
+            ++notifications;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    Config.SetVersion(2);
+    Config.MutablePartitionConfig()->MutableMirrorFrom()->SetIsForTopicReplication(true);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite({.ReplicationDataFinished = true}); // Subsequent meta writes preserve the flag.
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+    SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(balancer));
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(notifications, 1);
     Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
 }
 

@@ -304,7 +304,10 @@ namespace NKikimr::NStorage {
                 }
                 nodesToReplace[oldRep] = placement;
             }
-            if (localNodesToReplace.size() == 1) {
+            // replacing one node disables its ring first, which a ring group of the Node list has no way to do
+            const bool flat = (ss.HasRing() && ss.GetRing().NodeSize())
+                || std::ranges::any_of(ss.GetRingGroups(), [](const auto& rg) { return rg.NodeSize() > 0; });
+            if (localNodesToReplace.size() == 1 && !flat) {
                 auto placement = localNodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
                 // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
@@ -492,13 +495,16 @@ namespace NKikimr::NStorage {
 
                 const size_t numItems = Max(ring->RingSize(), ring->NodeSize());
 
-                auto replace = [&](auto *ring, size_t i) {
+                // flat: the ring is the ring group with its nodes for one-node rings, which has no flag to disable one
+                auto replace = [&](auto *ring, size_t i, bool flat) {
                     if (ring->GetNode(i) == cmd.GetFrom()) {
                         if (found) {
                             throw TExError() << name << " ambiguous From node";
                         } else {
                             found = true;
-                            if (!cmd.GetDisableRing()) {
+                            if (flat && cmd.GetDisableRing()) {
+                                throw TExError() << name << " a ring of Node list can't be disabled";
+                            } else if (!cmd.GetDisableRing()) {
                                 ring->MutableNode()->Set(i, cmd.GetTo());
                                 ring->ClearIsDisabled();
                             } else {
@@ -517,12 +523,12 @@ namespace NKikimr::NStorage {
                         const size_t numNodes = r.NodeSize();
                         for (size_t k = 0; k < numNodes; ++k) {
                             if (r.GetNode(k) == cmd.GetFrom()) {
-                                replace(ring->MutableRing(i), k);
+                                replace(ring->MutableRing(i), k, false);
                             }
                         }
                     } else {
                         if (ring->GetNode(i) == cmd.GetFrom()) {
-                            replace(ring, i);
+                            replace(ring, i, true);
                         }
                     }
                 }

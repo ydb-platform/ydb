@@ -261,9 +261,7 @@ namespace NKikimr {
                     if (ev->Status != NKikimrProto::OK) { // can't restore this blob
                         return std::visit(TOverloaded{
                             [&](TGetState& state) -> std::unique_ptr<IEventBase> {
-                                auto& r = state.Responses[payload.Index];
-                                r = {};
-                                r.Status = NKikimrProto::ERROR;
+                                FailRestoredGetResponse(state, payload.Index);
                                 return IssueNextRestoreGet(self);
                             },
                             [&](TRangeState&) -> std::unique_ptr<IEventBase> {
@@ -285,6 +283,17 @@ namespace NKikimr {
 
                 Y_ABORT_UNLESS(std::holds_alternative<TPutState>(State));
                 return ProcessFullQuorumResponse(self, std::move(ev));
+            }
+
+            // The reply to a failed restoration keeps the identity of the query, so the caller can match it
+            void FailRestoredGetResponse(TGetState& state, size_t index) {
+                const auto& query = static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).Queries[index];
+                auto& r = state.Responses[index];
+                r = {};
+                r.Status = NKikimrProto::ERROR;
+                r.Id = query.Id;
+                r.Shift = query.Shift;
+                r.RequestedSize = query.Size;
             }
 
             bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
@@ -327,9 +336,7 @@ namespace NKikimr {
                     } else {
                         return std::visit(TOverloaded{
                             [&](TGetState& state) -> std::unique_ptr<IEventBase> {
-                                auto& r = state.Responses[payload.Index];
-                                r = {};
-                                r.Status = NKikimrProto::ERROR;
+                                FailRestoredGetResponse(state, payload.Index);
                                 return IssueNextRestoreGet(self);
                             },
                             [&](TRangeState&) -> std::unique_ptr<IEventBase> {

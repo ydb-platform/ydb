@@ -98,8 +98,9 @@ public:
             .ConsumerName("reader").AppendTopics(NYdb::NTopic::TTopicReadSettings(path)));
         const auto deadline = TInstant::Now() + TDuration::Seconds(60);
         ui64 received = 0;
+        ui64 committed = first;
         bool started = false;
-        while (received < count && TInstant::Now() < deadline) {
+        while ((received < count || committed < first + count) && TInstant::Now() < deadline) {
             if (!reader->WaitEvent().Wait(TDuration::Seconds(1))) {
                 continue;
             }
@@ -111,15 +112,17 @@ public:
             if (auto* start = std::get_if<TEvent::TStartPartitionSessionEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), first);
                 started = true;
-                start->Confirm();
+                start->Confirm(std::nullopt, std::nullopt, first + count);
             } else if (auto* data = std::get_if<TEvent::TDataReceivedEvent>(&*event)) {
-                for (const auto& message : data->GetMessages()) {
+                for (auto& message : data->GetMessages()) {
                     UNIT_ASSERT_C(received < count, "Read more messages than requested");
                     UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), first + received);
                     UNIT_ASSERT_VALUES_EQUAL(message.GetData(), "message-" + ToString(first + received));
                     message.Commit();
                     ++received;
                 }
+            } else if (auto* ack = std::get_if<TEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+                committed = ack->GetCommittedOffset();
             } else if (auto* stop = std::get_if<TEvent::TStopPartitionSessionEvent>(&*event)) {
                 stop->Confirm();
             } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
@@ -128,14 +131,24 @@ public:
         }
         UNIT_ASSERT(started);
         UNIT_ASSERT_VALUES_EQUAL_C(received, count, path);
+        UNIT_ASSERT_VALUES_EQUAL(committed, first + count);
         UNIT_ASSERT(reader->Close(TDuration::Seconds(10)));
-        const auto description = Client.DescribeConsumer(path, "reader",
-            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
-        const auto& partitions = description.GetConsumerDescription().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-        UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
-        UNIT_ASSERT_VALUES_EQUAL(partitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), first + count);
+        // DescribeConsumer statistics may lag behind the commit acknowledgement.
+        ui64 describedOffset = first;
+        while (TInstant::Now() < deadline) {
+            const auto description = Client.DescribeConsumer(path, "reader",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            const auto& partitions = description.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+            describedOffset = partitions.front().GetPartitionConsumerStats()->GetCommittedOffset();
+            if (describedOffset == first + count) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(describedOffset, first + count);
     }
 
 private:

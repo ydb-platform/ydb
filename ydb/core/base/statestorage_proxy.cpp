@@ -1151,9 +1151,13 @@ public:
         , TabletID(tabletId)
     {}
 
-    void SendResponse() {
-        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR), 0, Cookie);
+    void SendResponse(NKikimrProto::EReplyStatus status) {
+        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, status), 0, Cookie);
         PassAway();
+    }
+
+    void SendResponse() {
+        SendResponse(Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR);
     }
 
     void Bootstrap() {
@@ -1188,17 +1192,17 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        ++Count;
-        auto &record = ev->Get()->Record;
+        const auto& record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
         if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
-            SendResponse();
+            SendResponse(NKikimrProto::ERROR);
             return;
         }
+        ++Count;
         OnResponseReceived();
     }
 

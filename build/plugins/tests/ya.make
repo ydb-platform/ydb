@@ -11,6 +11,7 @@ TEST_SRCS(
     test_requirements.py
     test_res.py
     test_yql_prebuilt.py
+    test_ytest.py
 )
 
 PEERDIR(

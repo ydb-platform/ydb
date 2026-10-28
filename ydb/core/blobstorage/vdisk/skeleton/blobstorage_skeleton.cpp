@@ -3260,6 +3260,11 @@ namespace NKikimr {
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            // assimilation requests go without QoS, so their clients don't learn of the VDisk going away from the
+            // connection, and they must get replies
+            for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
+            }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
         }

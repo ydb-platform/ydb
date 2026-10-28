@@ -70,6 +70,95 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeDataKind) {
 
+    // the remote pile's answer to the interpile put tells everything the VDisks of the pile would, had the blob been
+    // written to them from here: status flags and free space, the blob written beyond the barrier, and the generation
+    // the put raced with (here the put is made with stale generation, as by the node not knowing the newer one)
+    Y_UNIT_TEST(InterpilePutResultKeepsResultFields) {
+        ui32 groupId;
+        auto env = MakeInterpileEnv(groupId);
+        const auto pileGroups = NBridgeTest::GetPileGroups(*env, groupId);
+        const TString data = "hello";
+
+        struct TResult {
+            NKikimrProto::EReplyStatus Status;
+            ui32 RacingGeneration;
+            bool WrittenBeyondBarrier;
+            ui32 StatusFlags;
+            float ApproximateFreeSpaceShare;
+        };
+        std::optional<TResult> result;
+        std::optional<TResult> localResult; // the one of pile 0, written to from here
+        bool interpile = false;
+        bool makeStale = false;
+        env->Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePut) {
+                interpile = true;
+                if (std::exchange(makeStale, false)) {
+                    auto& record = ev->Get<TEvInterpilePut>()->Record;
+                    record.SetGroupGeneration(record.GetGroupGeneration() - 1);
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->HasEvent()) {
+                if (IActor *actor = env->Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                    const auto *msg = ev->Get<TEvBlobStorage::TEvPutResult>();
+                    const TResult item{msg->Status, msg->RacingGeneration, msg->WrittenBeyondBarrier,
+                        msg->StatusFlags.Raw, msg->ApproximateFreeSpaceShare};
+                    if (msg->GroupId == pileGroups[1]) {
+                        result.emplace(item);
+                        return false; // the bridged put doesn't matter, only the answer of the pile does
+                    } else if (msg->GroupId == pileGroups[0]) {
+                        localResult.emplace(item);
+                    }
+                }
+            }
+            return true;
+        };
+        auto put = [&](const TLogoBlobID& id) {
+            result.reset();
+            localResult.reset();
+            interpile = false;
+            const TActorId sender = env->Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env->Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            NBridgeTest::WaitUntil(*env, [&] { return result && localResult; }, "answers of piles",
+                TDuration::MilliSeconds(100), 300);
+            UNIT_ASSERT_C(interpile, "no write reached a remote pile the interpile way");
+            return *result;
+        };
+
+        // whatever the VDisks tell of their space comes from the remote pile the same way it comes from the local one
+        auto res = put(TLogoBlobID(100500, 1, 2, 0, data.size(), 0));
+        UNIT_ASSERT_VALUES_EQUAL(res.Status, NKikimrProto::OK);
+        const ui32 valid = ui32(NKikimrBlobStorage::StatusIsValid);
+        UNIT_ASSERT_VALUES_EQUAL(res.StatusFlags & valid, localResult->StatusFlags & valid);
+        UNIT_ASSERT_VALUES_EQUAL(res.ApproximateFreeSpaceShare > 0, localResult->ApproximateFreeSpaceShare > 0);
+        UNIT_ASSERT(!res.WrittenBeyondBarrier);
+
+        makeStale = true;
+        res = put(TLogoBlobID(100500, 1, 3, 0, data.size(), 0));
+        UNIT_ASSERT_VALUES_EQUAL(res.Status, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(res.RacingGeneration, NBridgeTest::GetNodeGroupGeneration(*env, pileGroups[1], 9));
+
+        // the barrier comes into effect in pile 1, and the blob is written behind it
+        const TLogoBlobID probe(100600, 1, 1, 0, data.size(), 0);
+        const auto probePut = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(*env, pileGroups[1], 9,
+            new TEvBlobStorage::TEvPut(probe, data, TInstant::Max()));
+        UNIT_ASSERT_VALUES_EQUAL(probePut->Status, NKikimrProto::OK);
+        const auto gc = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvCollectGarbageResult>(*env, pileGroups[1], 9,
+            new TEvBlobStorage::TEvCollectGarbage(probe.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
+                TInstant::Max(), false));
+        UNIT_ASSERT_VALUES_EQUAL(gc->Status, NKikimrProto::OK);
+        NBridgeTest::WaitUntil(*env, [&] {
+            return NBridgeTest::ReadFromPileGroup(*env, pileGroups[1], 9, probe, data) == NKikimrProto::NODATA;
+        }, "barrier in effect", TDuration::Seconds(1), 300);
+        res = put(TLogoBlobID(probe.TabletID(), 1, 2, 0, data.size(), 0));
+        UNIT_ASSERT_VALUES_EQUAL(res.Status, NKikimrProto::OK);
+        UNIT_ASSERT(res.WrittenBeyondBarrier);
+
+        env->Runtime->FilterFunction = nullptr;
+    }
+
     // the interpile put carries every parameter of the original put, which has meaning for the remote pile
     Y_UNIT_TEST(InterpilePutKeepsPutParameters) {
         ui32 groupId;

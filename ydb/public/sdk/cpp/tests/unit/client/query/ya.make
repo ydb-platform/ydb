@@ -11,9 +11,10 @@ FORK_SUBTESTS()
 
 SRCS(
    client_session_ut.cpp
+   deferred_session_creation_ut.cpp
    exec_query_ut.cpp
    query_stats_ut.cpp
-   session_pool_ut.cpp
+   session_shutdown_ut.cpp
    virtual_timestamp_ut.cpp
 )
 

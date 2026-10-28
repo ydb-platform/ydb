@@ -53,7 +53,7 @@
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config generate > config.yaml
     ```
 
-3. Добавить в полученный на шаге 1 или 2 файл `config.yaml` следующее поле:
+3. Включить [фича-флаг](../../../reference/configuration/feature_flags.md) `switch_to_config_v2` в полученном на шаге 1 или 2 файле `config.yaml`:
 
     ```yaml
     feature_flags:

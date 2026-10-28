@@ -16,7 +16,7 @@ CREATE TABLE article (
 
 {{ ydb-short-name }} supports creating row-based and column-based tables. Their main difference lies in the use case and the data storage format on the hard disk. For row-based tables, data is stored sequentially as rows, while for column-based tables, data is stored as columns. Each table type has its own purpose.
 
-# Column Naming Rules {#column-naming-rules}
+## Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 

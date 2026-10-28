@@ -1,0 +1,262 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(nalgebra)
+
+CRATE_VERSION(0.34.1)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.34.1)
+LICENSE("Apache-2.0")
+
+CRATE_SOURCES(
+    examples/dimensional_genericity.rs
+    examples/homogeneous_coordinates.rs
+    examples/linear_system_resolution.rs
+    examples/matrix_construction.rs
+    examples/matrixcompare.rs
+    examples/mvp.rs
+    examples/point_construction.rs
+    examples/raw_pointer.rs
+    examples/reshaping.rs
+    examples/scalar_genericity.rs
+    examples/screen_to_view_coords.rs
+    examples/transform_conversion.rs
+    examples/transform_matrix4.rs
+    examples/transform_vector_point.rs
+    examples/transform_vector_point3.rs
+    examples/transformation_pointer.rs
+    examples/unit_wrapper.rs
+    src/base/alias.rs
+    src/base/alias_slice.rs
+    src/base/alias_view.rs
+    src/base/allocator.rs
+    src/base/array_storage.rs
+    src/base/blas.rs
+    src/base/blas_uninit.rs
+    src/base/cg.rs
+    src/base/componentwise.rs
+    src/base/constraint.rs
+    src/base/construction.rs
+    src/base/construction_view.rs
+    src/base/conversion.rs
+    src/base/coordinates.rs
+    src/base/default_allocator.rs
+    src/base/dimension.rs
+    src/base/edition.rs
+    src/base/helper.rs
+    src/base/indexing.rs
+    src/base/interpolation.rs
+    src/base/iter.rs
+    src/base/matrix.rs
+    src/base/matrix_simba.rs
+    src/base/matrix_view.rs
+    src/base/min_max.rs
+    src/base/mod.rs
+    src/base/norm.rs
+    src/base/ops.rs
+    src/base/par_iter.rs
+    src/base/properties.rs
+    src/base/rkyv_wrappers.rs
+    src/base/scalar.rs
+    src/base/statistics.rs
+    src/base/storage.rs
+    src/base/swizzle.rs
+    src/base/uninit.rs
+    src/base/unit.rs
+    src/base/vec_storage.rs
+    src/debug/mod.rs
+    src/debug/random_orthogonal.rs
+    src/debug/random_sdp.rs
+    src/geometry/abstract_rotation.rs
+    src/geometry/dual_quaternion.rs
+    src/geometry/dual_quaternion_construction.rs
+    src/geometry/dual_quaternion_conversion.rs
+    src/geometry/dual_quaternion_ops.rs
+    src/geometry/isometry.rs
+    src/geometry/isometry_alias.rs
+    src/geometry/isometry_construction.rs
+    src/geometry/isometry_conversion.rs
+    src/geometry/isometry_interpolation.rs
+    src/geometry/isometry_ops.rs
+    src/geometry/isometry_simba.rs
+    src/geometry/mod.rs
+    src/geometry/op_macros.rs
+    src/geometry/orthographic.rs
+    src/geometry/perspective.rs
+    src/geometry/point.rs
+    src/geometry/point_alias.rs
+    src/geometry/point_construction.rs
+    src/geometry/point_conversion.rs
+    src/geometry/point_coordinates.rs
+    src/geometry/point_ops.rs
+    src/geometry/point_simba.rs
+    src/geometry/quaternion.rs
+    src/geometry/quaternion_construction.rs
+    src/geometry/quaternion_conversion.rs
+    src/geometry/quaternion_coordinates.rs
+    src/geometry/quaternion_ops.rs
+    src/geometry/quaternion_simba.rs
+    src/geometry/reflection.rs
+    src/geometry/reflection_alias.rs
+    src/geometry/rotation.rs
+    src/geometry/rotation_alias.rs
+    src/geometry/rotation_construction.rs
+    src/geometry/rotation_conversion.rs
+    src/geometry/rotation_interpolation.rs
+    src/geometry/rotation_ops.rs
+    src/geometry/rotation_simba.rs
+    src/geometry/rotation_specialization.rs
+    src/geometry/scale.rs
+    src/geometry/scale_alias.rs
+    src/geometry/scale_construction.rs
+    src/geometry/scale_conversion.rs
+    src/geometry/scale_coordinates.rs
+    src/geometry/scale_ops.rs
+    src/geometry/scale_simba.rs
+    src/geometry/similarity.rs
+    src/geometry/similarity_alias.rs
+    src/geometry/similarity_construction.rs
+    src/geometry/similarity_conversion.rs
+    src/geometry/similarity_ops.rs
+    src/geometry/similarity_simba.rs
+    src/geometry/swizzle.rs
+    src/geometry/transform.rs
+    src/geometry/transform_alias.rs
+    src/geometry/transform_construction.rs
+    src/geometry/transform_conversion.rs
+    src/geometry/transform_ops.rs
+    src/geometry/transform_simba.rs
+    src/geometry/translation.rs
+    src/geometry/translation_alias.rs
+    src/geometry/translation_construction.rs
+    src/geometry/translation_conversion.rs
+    src/geometry/translation_coordinates.rs
+    src/geometry/translation_ops.rs
+    src/geometry/translation_simba.rs
+    src/geometry/unit_complex.rs
+    src/geometry/unit_complex_construction.rs
+    src/geometry/unit_complex_conversion.rs
+    src/geometry/unit_complex_ops.rs
+    src/geometry/unit_complex_simba.rs
+    src/io/matrix_market.rs
+    src/io/mod.rs
+    src/linalg/balancing.rs
+    src/linalg/bidiagonal.rs
+    src/linalg/cholesky.rs
+    src/linalg/col_piv_qr.rs
+    src/linalg/convolution.rs
+    src/linalg/decomposition.rs
+    src/linalg/determinant.rs
+    src/linalg/eigen.rs
+    src/linalg/exp.rs
+    src/linalg/full_piv_lu.rs
+    src/linalg/givens.rs
+    src/linalg/hessenberg.rs
+    src/linalg/householder.rs
+    src/linalg/inverse.rs
+    src/linalg/lu.rs
+    src/linalg/mod.rs
+    src/linalg/permutation_sequence.rs
+    src/linalg/pow.rs
+    src/linalg/qr.rs
+    src/linalg/schur.rs
+    src/linalg/solve.rs
+    src/linalg/svd.rs
+    src/linalg/svd2.rs
+    src/linalg/svd3.rs
+    src/linalg/symmetric_eigen.rs
+    src/linalg/symmetric_tridiagonal.rs
+    src/linalg/udu.rs
+    src/proptest/mod.rs
+    src/sparse/cs_matrix.rs
+    src/sparse/cs_matrix_cholesky.rs
+    src/sparse/cs_matrix_conversion.rs
+    src/sparse/cs_matrix_ops.rs
+    src/sparse/cs_matrix_solve.rs
+    src/sparse/cs_utils.rs
+    src/sparse/mod.rs
+    src/third_party/alga/alga_dual_quaternion.rs
+    src/third_party/alga/alga_isometry.rs
+    src/third_party/alga/alga_matrix.rs
+    src/third_party/alga/alga_point.rs
+    src/third_party/alga/alga_quaternion.rs
+    src/third_party/alga/alga_rotation.rs
+    src/third_party/alga/alga_similarity.rs
+    src/third_party/alga/alga_transform.rs
+    src/third_party/alga/alga_translation.rs
+    src/third_party/alga/alga_unit_complex.rs
+    src/third_party/alga/mod.rs
+    src/third_party/encase/mod.rs
+    src/third_party/glam/common/glam_isometry.rs
+    src/third_party/glam/common/glam_matrix.rs
+    src/third_party/glam/common/glam_point.rs
+    src/third_party/glam/common/glam_quaternion.rs
+    src/third_party/glam/common/glam_rotation.rs
+    src/third_party/glam/common/glam_similarity.rs
+    src/third_party/glam/common/glam_translation.rs
+    src/third_party/glam/common/glam_unit_complex.rs
+    src/third_party/glam/mod.rs
+    src/third_party/glam/v014/mod.rs
+    src/third_party/glam/v015/mod.rs
+    src/third_party/glam/v016/mod.rs
+    src/third_party/glam/v017/mod.rs
+    src/third_party/glam/v018/mod.rs
+    src/third_party/glam/v019/mod.rs
+    src/third_party/glam/v020/mod.rs
+    src/third_party/glam/v021/mod.rs
+    src/third_party/glam/v022/mod.rs
+    src/third_party/glam/v023/mod.rs
+    src/third_party/glam/v024/mod.rs
+    src/third_party/glam/v025/mod.rs
+    src/third_party/glam/v027/mod.rs
+    src/third_party/glam/v028/mod.rs
+    src/third_party/glam/v029/mod.rs
+    src/third_party/glam/v030/mod.rs
+    src/third_party/mint/mint_matrix.rs
+    src/third_party/mint/mint_point.rs
+    src/third_party/mint/mint_quaternion.rs
+    src/third_party/mint/mint_rotation.rs
+    src/third_party/mint/mod.rs
+    src/third_party/mod.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+    clippy.toml
+    rustfmt.toml
+    src/io/matrix_market.pest
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+    macros
+    matrixmultiply
+    nalgebra-macros
+    std
+)
+PEERDIR(
+    contrib/crates/approx-0.5.1
+    contrib/crates/matrixmultiply-0.3.10
+    contrib/crates/num-complex-0.4.6
+    contrib/crates/num-rational-0.4.2
+    contrib/crates/num-traits-0.2.19
+    contrib/crates/simba-0.9.1
+    contrib/crates/typenum-1.20.1
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/nalgebra-macros-0.3.0
+    contrib/crates/paste-1.0.15
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

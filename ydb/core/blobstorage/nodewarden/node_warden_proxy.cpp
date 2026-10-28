@@ -271,6 +271,7 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .WriteSource = WriteSourceFromProto(item.GetWriteSourceOp()),
             .DataKind = item.GetDataKind(),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
@@ -278,6 +279,9 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .ReduceInterpileTraffic = false,
             .IsZeroEntry = item.GetIsZeroEntry(),
         });
+        for (const auto& check : item.GetExtraBlockChecks()) {
+            ev->ExtraBlockChecks.emplace_back(check.GetTabletId(), check.GetGeneration());
+        }
         ev->ForceGroupGeneration = groupGeneration;
         SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
         ++common->RepliesRemaining;
@@ -293,6 +297,18 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
     item->SetStatus(msg.Status);
     if (msg.ErrorReason) {
         item->SetErrorReason(msg.ErrorReason);
+    }
+    if (msg.RacingGeneration) {
+        item->SetRacingGeneration(msg.RacingGeneration);
+    }
+    if (msg.WrittenBeyondBarrier) {
+        item->SetWrittenBeyondBarrier(true);
+    }
+    if (msg.StatusFlags.Raw) {
+        item->SetStatusFlags(msg.StatusFlags.Raw);
+    }
+    if (msg.ApproximateFreeSpaceShare) {
+        item->SetApproximateFreeSpaceShare(msg.ApproximateFreeSpaceShare);
     }
     if (!--common.RepliesRemaining) {
         auto ev = std::make_unique<TEvInterpilePutResult>();

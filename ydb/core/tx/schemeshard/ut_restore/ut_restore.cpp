@@ -3381,7 +3381,8 @@ value {
             size_t readBatchSize,
             bool compressed,
             bool enableDataShardDirectPartImport,
-            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None,
+            TDuration firstDownloadResponseDelay = TDuration::Zero())
     {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
@@ -3418,6 +3419,7 @@ value {
 
         bool wholeFileRead = false;
         bool readyToReboot = false;
+        bool downloadResponseDelayed = false;
         ui32 rebootCount = 0;
 
         if (rebootMode != EEncryptedImportRebootMode::None) {
@@ -3472,6 +3474,14 @@ value {
         )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
 
+        auto delayDownloadResponse = runtime.AddObserver<NWrappers::NExternalStorage::TEvGetObjectResponse>(
+            [&](NWrappers::NExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+                if (firstDownloadResponseDelay && !downloadResponseDelayed) {
+                    downloadResponseDelayed = true;
+                    runtime.Schedule(ev.Release(), firstDownloadResponseDelay);
+                }
+            });
+
         auto waitReadyToReboot = [&]() {
             if (!readyToReboot) {
                 TDispatchOptions opts;
@@ -3484,7 +3494,8 @@ value {
         };
 
         if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
-            UNIT_ASSERT(waitReadyToReboot());
+            // S3 uses real HTTP, so simulated time cannot bound its completion.
+            runtime.WaitFor("last imported portion before reboot", [&] { return readyToReboot; });
             runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
             RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
         } else if (rebootMode == EEncryptedImportRebootMode::AfterReadAndAfterStateSave) {
@@ -3508,11 +3519,21 @@ value {
 
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+        if (firstDownloadResponseDelay) {
+            UNIT_ASSERT(downloadResponseDelayed);
+        }
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
         ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion);
         ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithDelayedDownloadAndRebootAfterLastPortion) {
+        // Exceed the old ten-second simulated wait without delaying real I/O.
+        const auto responseDelay = TDuration::Seconds(30);
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, false, EEncryptedImportRebootMode::AfterLastPortion, responseDelay);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, false, EEncryptedImportRebootMode::AfterLastPortion, responseDelay);
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {

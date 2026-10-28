@@ -106,6 +106,7 @@ namespace NKikimr::NStorage {
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
+               EvHalt,
             };
 
             struct TEvUpdateBridgeFeatureRequirement
@@ -406,6 +407,7 @@ namespace NKikimr::NStorage {
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
+        bool Halted = false; // the keeper takes no part in distconf anymore, see Halt()
         TBackoffTimer CollectConfigsBackoffTimer{10, 1000};
 
         struct TProposition {
@@ -485,6 +487,7 @@ namespace NKikimr::NStorage {
         void Bootstrap();
         void PassAway() override;
         void Halt(); // cease any distconf activity, unbind and reject any bindings
+        void HandleHalt();
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
@@ -785,6 +788,8 @@ namespace NKikimr::NStorage {
         ui64 InvokePipelineGeneration = 1;
 
         void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId);
+        void FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record);
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 
@@ -972,10 +977,11 @@ namespace NKikimr::NStorage {
         // away are ejected, inline pile may be removed
         BridgeFeatureLevelPileOps = 2,
         BridgeFeatureLevelNonUniformStorage = 3,
+        BridgeFeatureLevelPileOverrides = 4,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelNonUniformStorage;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOverrides;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1009,9 +1015,10 @@ namespace NKikimr::NStorage {
         const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
-    // and make every static group an inline pile of itself.
+    // and make every static group an inline pile of itself. BSC converts existing pools and their groups afterwards
+    // unless their conversion is skipped, which activates non-uniform storage.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-        const NKikimrConfig::TBridgeConfig& bridgeConfig);
+        const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion = false);
 
     // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
     // destroyed have older generations and keep them.

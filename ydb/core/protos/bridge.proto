@@ -116,4 +116,9 @@ message TGroupState {
     // stages of piles are valid with, so the group can't be served with the cluster state older than that (requests are
     // routed by both); 0 when not known
     uint64 ClusterStateGeneration = 2;
+
+    // pile whose part is the only one sure to hold everything written to the group, while the group is being made fully
+    // bridged one (its other parts are synced from this one) or ordinary one (it loses its other parts); nothing is
+    // written to the group without this part, which is never reset; the only part of the group is such one implicitly
+    uint32 AuthorityPileId = 3;
 }

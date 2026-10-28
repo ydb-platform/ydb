@@ -3,8 +3,12 @@
 #include <ydb/core/grpc_streaming/ut/grpc/streaming_service.grpc.pb.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/grpc/server/grpc_request.h>
+#include <ydb/library/testlib/common/test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <thread>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
@@ -30,6 +34,9 @@ namespace {
         response.SetResponseCookie(cookie);
         return response;
     }
+
+    // Unary requests are held until the test replies to them
+    NThreading::TPromise<NYdbGrpc::IRequestContextBase*> UnaryRequestReceived;
 }
 
 template<class TImplActor>
@@ -48,7 +55,7 @@ public:
         , Counters(std::move(counters))
     { }
 
-    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr) override {
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override {
         CQ = cq;
 
         auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, &ActorSystem);
@@ -64,6 +71,14 @@ public:
             ActorSystem,
             "Session",
             getCounterBlock("streaming", "Session"));
+
+        MakeIntrusive<NYdbGrpc::TGRpcRequest<NStreamingTest::TSessionRequest, NStreamingTest::TSessionResponse, TSelf>>(
+            this, this->GetService(), CQ,
+            [](NYdbGrpc::IRequestContextBase* ctx) {
+                UnaryRequestReceived.SetValue(ctx);
+            },
+            &NStreamingTest::TStreamingService::AsyncService::RequestUnary,
+            "Unary", logger, getCounterBlock("unary", "Unary"))->Run();
     }
 
     void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter*) override {
@@ -591,6 +606,37 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
         server.Reset();
 
         THangActor::Attached = nullptr;
+    }
+
+    // A reply that comes after the shutdown deadline, like a query that outlived a bridge pile takedown,
+    // must complete on the stopped server instead of hitting its dead completion queue.
+    Y_UNIT_TEST(LateUnaryReplyAfterStopAcceptingRequests) {
+        NYdbGrpc::TServerOptions options;
+        options.SetGRpcShutdownDeadline(TDuration::MilliSeconds(100));
+        auto server = MakeHolder<TGRpcTestServer<TSimpleEchoActor>>(std::move(options));
+        UnaryRequestReceived = NThreading::NewPromise<NYdbGrpc::IRequestContextBase*>();
+
+        auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
+        auto stub = NStreamingTest::TStreamingService::NewStub(channel);
+        grpc::ClientContext context;
+        NStreamingTest::TSessionResponse response;
+        std::jthread client([&] {
+            // The server cancels the call on shutdown, so the status does not matter
+            stub->Unary(&context, MakeRequest(1), &response);
+        });
+
+        auto* ctx = UnaryRequestReceived.GetFuture().GetValueSync();
+        server->GRpcServer->StopAcceptingRequests();
+        UNIT_ASSERT_VALUES_EQUAL(server->GRpcServer->RequestsInProgress(), 1);
+
+        auto reply = MakeResponse(1);
+        ctx->Reply(&reply);
+
+        NTestUtils::WaitFor(TDuration::Seconds(10), "server drained", [&] {
+            return server->GRpcServer->RequestsInProgress() == 0;
+        });
+        server->GRpcServer->Stop();
+        client.join();
     }
 }
 

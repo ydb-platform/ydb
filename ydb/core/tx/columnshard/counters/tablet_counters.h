@@ -99,12 +99,12 @@ public:
         IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
     }
 
-    void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
-        IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
+    void OnWritePutBlobsSuccess(const ui64 rowsWritten, const bool isDelete) const {
+        IncCounter(isDelete ? COUNTER_OPERATIONS_ROWS_DELETED : COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
     }
 
-    void OnWritePutBulkBlobsSuccess(const ui64 rowsWritten) const {
-        IncCounter(NColumnShard::COUNTER_OPERATIONS_BULK_ROWS_WRITTEN, rowsWritten);
+    void OnWritePutBulkBlobsSuccess(const ui64 rowsWritten, const bool isDelete) const {
+        IncCounter(isDelete ? COUNTER_OPERATIONS_ROWS_DELETED : COUNTER_OPERATIONS_BULK_ROWS_WRITTEN, rowsWritten);
     }
 
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
@@ -115,7 +115,8 @@ public:
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
         output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN) + GetValue(COUNTER_OPERATIONS_BULK_ROWS_WRITTEN));
-        output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
+        // Physical portion cleanup also erases rows rewritten by compaction.
+        output.SetRowDeletes(GetValue(COUNTER_OPERATIONS_ROWS_DELETED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
 

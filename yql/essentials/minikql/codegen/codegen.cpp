@@ -395,6 +395,9 @@ public:
 #ifndef NDEBUG
         disableOpt = true;
 #endif
+        auto* targetMachine = Engine_->getTargetMachine();
+        using TOptimizationLevel = decltype(targetMachine->getOptLevel());
+        targetMachine->setOptLevel(disableOpt ? TOptimizationLevel::None : TOptimizationLevel::Default);
 
 #if defined(_msan_enabled_)
         AddGlobalMapping("__emutls_get_address", reinterpret_cast<void*>(GetTLSAddress));

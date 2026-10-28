@@ -7942,7 +7942,7 @@ FROM (
         const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
         auto build = [&](bool blocks) {
             return TPhysicalJoinBuilder(*joined, f.ExprCtx, f.Pos, names).BuildPhysicalOp(
-                f.ExprCtx.NewArgument(f.Pos, "left"), f.ExprCtx.NewArgument(f.Pos, "right"), blocks, f.TypeCtx);
+                f.ExprCtx.NewArgument(f.Pos, "left"), f.ExprCtx.NewArgument(f.Pos, "right"), blocks, f.TypeCtx).AsNarrow(f.ExprCtx);
         };
         auto physical = build(false);
         TExprNode::TListType cores;
@@ -7982,7 +7982,8 @@ FROM (
         UNIT_ASSERT(GetLiveOut(agg) == TUnorderedIUs{sum});
         const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
         auto physical = TPhysicalAggregationBuilder(*agg, f.ExprCtx, f.Pos, names, true)
-            .BuildPhysicalOp(f.ExprCtx.NewArgument(f.Pos, "input"), std::nullopt);
+            .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(f.ExprCtx.NewArgument(f.Pos, "input")), std::nullopt)
+            .AsNarrow(f.ExprCtx);
         TExprNode::TListType narrowMaps;
         CollectCallableNodes(physical, "NarrowMap", narrowMaps);
         UNIT_ASSERT_VALUES_EQUAL(narrowMaps.size(), 1);
@@ -8247,11 +8248,15 @@ FROM (
                 PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND NOT EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 6);
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND (SELECT foo.id FROM `/Root/foo` as foo where foo.id == -1) IS NULL;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
             R"([[3]])",
+            R"([[0]])",
             R"([[0]])",
             R"([[0]])",
             R"([[0]])",

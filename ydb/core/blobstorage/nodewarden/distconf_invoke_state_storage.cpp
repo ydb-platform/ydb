@@ -149,7 +149,21 @@ namespace NKikimr::NStorage {
             {"overrideRingsCount", overrideRingsCount},
             {"replicasSpecificVolume", replicasSpecificVolume});
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
+        const bool goodConfig = GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas,
+            overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        const auto ensureGenerated = [&](bool automaticManagement, const auto& config, const char *name) {
+            if (automaticManagement && !config.HasRing() && config.RingGroupsSize() == 0) {
+                throw TExError() << "Failed to generate a nonempty " << name << " configuration";
+            }
+        };
+        const auto *selfManagement = Self->Cfg->SelfManagementConfig.get();
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageManagement(),
+            targetConfig.GetStateStorageConfig(), "StateStorage");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageBoardManagement(),
+            targetConfig.GetStateStorageBoardConfig(), "StateStorageBoard");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticSchemeBoardManagement(),
+            targetConfig.GetSchemeBoardConfig(), "SchemeBoard");
+        if (!goodConfig && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
         }
 
@@ -506,6 +520,7 @@ namespace NKikimr::NStorage {
 
             };
             auto *m = (config.*mutableFunc)();
+            const auto oldConfig = *m;
 
             if (m->RingGroupsSize() && m->HasRing()) {
                 throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
@@ -519,6 +534,9 @@ namespace NKikimr::NStorage {
             }
             if (!found) {
                 throw TExError() << name << " From node not found";
+            }
+            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m)) {
+                throw TExError() << error;
             }
         };
 

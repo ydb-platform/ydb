@@ -313,6 +313,9 @@ public:
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                continue;
+            }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
             ui64 queueId = 1;
 
@@ -332,9 +335,7 @@ public:
                 if (Info->BelongsToSubgroup(vd, id.Hash())) {
                     if (!vget) {
                         const ui64 cookie = queueId++;
-                        if (!QuorumTracker.count(cookie)) {
-                            QuorumTracker.emplace(cookie, Info.Get());
-                        }
+                        QuorumTracker.try_emplace(cookie, Info.Get());
 
                         vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                                     vd,

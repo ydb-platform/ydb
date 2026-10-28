@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-from state_storage_selfheal import BridgeStateStorageSelfHeal, CONFIG_NAMES, groups, is_final
+from state_storage_selfheal import BridgeStateStorageSelfHeal, CONFIG_NAMES, groups, is_final, replicas
 from ydb.tests.library.common.types import TabletTypes
 
 
@@ -94,13 +94,21 @@ class TestBridgeSelfHealRootRestart(BridgeStateStorageSelfHeal):
                 )]
             # KiKiMRNode.kill performs an abrupt process kill followed by start.
             self.bridge.cluster.nodes[root].kill()
-            after = self.wait_healed(victims)
+            self.wait_healed(victims)
         assert self.invoke({"GetStateStorageConfig": {}})["Scepter"] != old_scepter
         assert self.cms_incarnation() == cms_before, "CMS/Sentinel restarted during the root-only failure"
         self.wait_bad_nodes(victims)
         states = {node["NodeId"]: node["State"] for node in self.read_config(nodes_state=True)["NodesState"]}
         assert len(states) == self.bridge.nodes_count, states
         assert all(states[node] == 4 for node in victims), states
-        self.wait_converged(after)
+
+        def healed(config):
+            assert is_final(config), config
+            self.assert_pile_locality(config)
+            for name in CONFIG_NAMES:
+                for group in groups(config, name):
+                    assert not replicas(group).intersection(victims), (name, group, victims)
+
+        self.wait_converged(check_config=healed)
         self.bridge.execute("CREATE TABLE `/Root/after_root_restart` (id Uint64, PRIMARY KEY(id));", scheme=True)
         self.bridge.write_data()

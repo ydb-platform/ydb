@@ -282,7 +282,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](group_by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
@@ -447,7 +447,7 @@ SELECT $foo;
 | ----- | ------------------------ |
 | 0     | Cost-based optimizer is disabled. |
 | 1     | Cost-based optimizer is disabled, but estimates are computed and available. |
-| 2     | Cost-based optimizer is enabled only for queries that include [column-oriented tables](../concepts/glossary.md#column-oriented-table). |
+| 2     | Cost-based optimizer is enabled only for queries that include [column-oriented tables](../../concepts/glossary.md#column-oriented-table). |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
 

@@ -1,4 +1,4 @@
-# auth_config
+# auth_config {#auth-config}
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 

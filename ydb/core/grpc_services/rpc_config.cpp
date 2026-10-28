@@ -432,7 +432,15 @@ private:
     std::optional<TString> TargetDatabase;
 
     bool ResolveTargetDatabase() {
-        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+        NYamlConfig::TDatabaseMetadata metadata;
+        try {
+            metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+        } catch (const std::exception& ex) {
+            // e.g. the version is not a number
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid config metadata: " << ex.what(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
+        }
 
         if (metadata.Database) {
             TargetDatabase = CanonizePath(*metadata.Database);

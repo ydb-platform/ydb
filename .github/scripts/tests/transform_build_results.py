@@ -249,6 +249,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     load_start = time.time()
     with open(report_file, 'r') as f:
         report = json.load(f)
+    if not isinstance(report, dict) or not isinstance(report.get("results"), list):
+        raise ValueError("Expected an object with a results list")
+    if any(not isinstance(result, dict) for result in report["results"]):
+        raise ValueError("Expected each result to be an object")
     load_time = time.time() - load_start
     log_print(f"Loaded JSON report: {load_time:.2f}s ({len(report.get('results', []))} results)")
 
@@ -401,21 +405,13 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                         result["links"].pop(link_type, None)
                         continue
 
-                    for i, file_path in enumerate(paths):
+                    # Only publish links to files that will actually be copied.
+                    result["links"].pop(link_type, None)
+                    for file_path in paths:
                         if is_coredump_artifact_file(file_path):
-                            result["links"].pop(link_type, None)
                             continue
                         if os.path.isfile(file_path) and os.stat(file_path).st_size > 0:
                             results_file_links.append((result, link_type, file_path))
-                        else:
-                            try:
-                                rel_path = os.path.relpath(file_path, ya_out_dir)
-                                quoted_path = urllib.parse.quote(rel_path)
-                                url = f"{log_url_prefix}{quoted_path}"
-                                result["links"][link_type] = [url]
-                                break
-                            except ValueError:
-                                pass
 
             if will_be_muted:
                 log_print("mute", suite_name, test_name_for_mute)

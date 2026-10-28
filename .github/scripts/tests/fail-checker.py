@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
+import sys
 from typing import List
 
 
@@ -10,20 +10,21 @@ def check_for_fail(paths: List[str], output_path: str):
     error_list = []
     
     for path in paths:
-        if not os.path.isfile(path):
-            print(f"Warning: Expected a file, but got: {path}", file=__import__('sys').stderr)
-            continue
-        
         fn = path
         try:
             with open(fn, 'r') as f:
                 report = json.load(f)
             
-            for result in report.get("results", []):
+            if not isinstance(report, dict) or not isinstance(report.get("results"), list):
+                raise ValueError("Expected an object with a results list")
+
+            for result in report["results"]:
+                if not isinstance(result, dict):
+                    raise ValueError("Expected each result to be an object")
                 # Filtering (suite, build, configure) is done by transform_build_results.py
                 status = result.get("status")
-                if not status:
-                    continue
+                if status not in ("PASSED", "FAILED", "ERROR", "SKIPPED", "MUTE"):
+                    raise ValueError(f"Unexpected normalized test status: {status!r}")
                 
                 error_type = result.get("error_type", "")
                 path_str = result.get("path", "")
@@ -50,9 +51,9 @@ def check_for_fail(paths: List[str], output_path: str):
                     failed_list.append((full_name, fn))
                 elif status == "ERROR":
                     error_list.append((full_name, fn))
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Warning: Unable to parse {fn}: {e}", file=__import__('sys').stderr)
-            continue
+        except (OSError, ValueError) as e:
+            print(f"::error::Invalid test report {fn}: {e}", file=sys.stderr)
+            raise SystemExit(2)
     
     failed_test_count = 0
 

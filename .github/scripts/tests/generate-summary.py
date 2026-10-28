@@ -147,8 +147,10 @@ class TestResult:
             status = TestStatus.ERROR
         elif status_str == "SKIPPED":
             status = TestStatus.SKIP
-        else:
+        elif status_str == "PASSED":
             status = TestStatus.PASS
+        else:
+            raise ValueError(f"Unexpected normalized test status: {status_str!r}")
         
         # Extract log URLs from links (updated by transform_build_results.py with URLs)
         # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}

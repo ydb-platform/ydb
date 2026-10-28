@@ -509,6 +509,39 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT(res.empty());
     }
 
+    // nToSelect single-node rings, all of them selected, with the first numDisabled ones disabled
+    NKikimrConfig::TStateStorageConfig MakeRings(ui32 nToSelect, ui32 numDisabled) {
+        NKikimrConfig::TStateStorageConfig config;
+        auto *ring = config.MutableRing();
+        ring->SetNToSelect(nToSelect);
+        for (ui32 i : xrange(nToSelect)) {
+            auto *r = ring->AddRing();
+            r->AddNode(i + 1);
+            if (i < numDisabled) {
+                r->SetIsDisabled(true);
+            }
+        }
+        return config;
+    }
+
+    // The proxy waits for the replies of the majority, nToSelect / 2 + 1 rings; the rings left enabled must make it,
+    // and a new configuration keeps one more ring for rolling restart
+    Y_UNIT_TEST(DisabledRingsKeepMajority) {
+        for (ui32 nToSelect : xrange(1, 7)) {
+            const ui32 maxOut = nToSelect - (nToSelect / 2 + 1);
+            for (ui32 numDisabled : xrange(nToSelect + 1)) {
+                const TString update = ValidateStateStorageConfig("StateStorage", MakeRings(nToSelect, 0),
+                    MakeRings(nToSelect, numDisabled));
+                UNIT_ASSERT_VALUES_EQUAL_C(update.empty(), numDisabled <= maxOut,
+                    "update NToSelect# " << nToSelect << " disabled# " << numDisabled << " error# " << update);
+
+                const TString initial = ValidateStateStorageConfig("StateStorage", {}, MakeRings(nToSelect, numDisabled));
+                UNIT_ASSERT_VALUES_EQUAL_C(initial.empty(), numDisabled == 0 || numDisabled + 1 <= maxOut,
+                    "initial NToSelect# " << nToSelect << " disabled# " << numDisabled << " error# " << initial);
+            }
+        }
+    }
+
     Y_UNIT_TEST(CanChangeDisabled) {
         NKikimrConfig::TStateStorageConfig cur;
         FillRing(cur.MutableRing());

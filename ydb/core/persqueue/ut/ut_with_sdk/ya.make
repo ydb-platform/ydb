@@ -35,6 +35,7 @@ SRCS(
     commitoffset_ut.cpp
     mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
+    split_read_from_timestamp_ut.cpp
     topic_timestamp_ut.cpp
     topic_ut.cpp
 )

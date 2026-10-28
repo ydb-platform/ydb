@@ -84,6 +84,6 @@ fi
 
 ## См. также {#see-also}
 
-- [{#T}](logging.md)
-- [{#T}](monitoring.md)
+- [Логирование в {{ ydb-short-name }}](logging.md)
+- [Настройка мониторинга кластера {{ ydb-short-name }}](monitoring.md)
 - [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/)

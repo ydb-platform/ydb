@@ -1,4 +1,4 @@
-# Загрузка {{ ydb-short-name }} Ops
+# Загрузка {{ ydb-short-name }} Ops {#ydbops}
 
 {{ ydb-short-name }} Ops (`ydbops`) — утилита командной строки для [управления кластером {{ ydb-short-name }}](../reference/ydbops/index.md).
 

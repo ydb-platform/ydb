@@ -338,6 +338,12 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
 
+## Detailed information about session queries {#query-sessions}
+
+The following system view contains detailed information about current sessions and the queries being executed in them.
+
+* `.sys/query_sessions` — contains information about sessions and the queries being executed in them.
+
 ## Users, groups, and access rights {#auth}
 
 The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.

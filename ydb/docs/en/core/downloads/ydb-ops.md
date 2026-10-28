@@ -1,4 +1,4 @@
-# Download {{ ydb-short-name }} Ops
+# Download {{ ydb-short-name }} Ops {#ydbops}
 
 {{ ydb-short-name }} Ops (`ydbops`) is a command-line utility for [managing {{ ydb-short-name }} clusters](../reference/ydbops/index.md).
 

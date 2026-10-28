@@ -118,6 +118,10 @@ Logical "connections" to the database that maintains the context needed to execu
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
+### Streaming queries {#streaming-query}
+
+**Streaming queries** are a query type for continuous processing of data streams: unlike regular queries, they are designed for long-running execution and periodic checkpointing for fault tolerance.
+
 ### Topology {#topology}
 
 {{ ydb-short-name }} supports several [cluster](#cluster) topologies, described in more detail in a separate article [{#T}](topology.md). A few related terms are explained below.
@@ -134,7 +138,7 @@ A **rack** or **server rack** is a piece of equipment used to mount multiple ser
 
 #### Pile {#pile}
 
-A **pile** is a set of nodes that can fail or be disabled at the same time while other parts of the cluster (other piles) keep running. Piles are used in [bridge mode](#bridge) to split the cluster into several parts with synchronous replication between them. A pile may consist of nodes in one or several regions.
+A **pile** is a set of nodes that can fail or be disabled at the same time while other parts of the cluster (other piles) keep running. Piles are used in [bridge mode](bridge.md) to split the cluster into several parts with synchronous replication between them. A pile may consist of nodes in one or several regions.
 
 ### Table {#table}
 

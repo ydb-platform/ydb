@@ -62,7 +62,7 @@ This mechanism applies only to users managed by {{ ydb-short-name }}, the so-cal
 
 {% endnote %}
 
-By default, a user is given 4 attempts to enter the correct password. Otherwise, authentication will be denied for one hour. You can configure the user lockout criteria in the [configuration](../reference/configuration/index.md#account-lockout).
+By default, a user is given 4 attempts to enter the correct password. Otherwise, authentication will be denied for one hour. You can configure the user lockout criteria in the [configuration](../reference/configuration/auth_config.md#account-lockout).
 
 If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) the user prematurely.
 

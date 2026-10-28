@@ -84,6 +84,6 @@ A minidump does not contain symbols: to obtain a human-readable stack, you need 
 
 ## See also {#see-also}
 
-- [{#T}](logging.md)
-- [{#T}](monitoring.md)
+- [Logging in {{ ydb-short-name }}](logging.md)
+- [Setting Up {{ ydb-short-name }} Cluster Monitoring](monitoring.md)
 - [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/)

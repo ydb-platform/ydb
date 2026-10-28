@@ -867,7 +867,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
     // id read. The publication must wait for the path id selection too.
     Y_UNIT_TEST(QuorumNeedsMajorityOfEachSelection) {
         TTestBasicRuntime runtime;
-        TStateStorageInfo::TRingGroup group;
+        TStateStorageInfo::TRingGroup group{};
         group.NToSelect = 3;
         constexpr size_t replicaCount = 7;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));

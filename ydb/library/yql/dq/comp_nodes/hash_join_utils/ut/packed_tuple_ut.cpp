@@ -80,10 +80,7 @@ Y_UNIT_TEST(TestCalculateCRC32AVX2) {
     if (!NX86::HaveAVX2()) {
         return;
     }
-    if (NX86::HaveAVX2())
-        TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
-    else
-        CTEST << "Skipped AVX2 test\n";
+    TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
 }
 
 }
@@ -209,9 +206,7 @@ Y_UNIT_TEST(PackSmallRowSSE42) {
 }
 
 Y_UNIT_TEST(PackNarrowRowAVX2) {
-    if (NX86::HaveAVX2()) {
-        TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
-    }
+    TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
 }
 
 Y_UNIT_TEST(Pack) {

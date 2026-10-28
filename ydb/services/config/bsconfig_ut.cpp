@@ -1860,6 +1860,56 @@ config:
         UNIT_ASSERT_C(!mainConfig->Contains("some-other-cluster"), *mainConfig);
     }
 
+    // With the dedicated storage YAML, the fetch of all the configuration without detaching the storage section must
+    // still bring both YAMLs, not an empty success.
+    Y_UNIT_TEST(FetchAllWithDedicatedStorageReturnsBoth) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        const TString storageYaml = Sprintf(R"(
+metadata:
+  kind: StorageConfig
+  cluster: ""
+  version: 0
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", pdiskPath.c_str());
+        auto makeMainYaml = [&](ui32 version, const char *name) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s
+)", version, name) + HostsYaml(*server.GetRuntime());
+        };
+        auto success = [](const auto& resp) {
+            UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        // BSC turns configuration v2 on with the first replacement, which can't switch the dedicated storage mode too
+        ReplaceConfig(server.GetChannel(), makeMainYaml(1, "single"), std::nullopt, std::nullopt, false, false, success);
+        ReplaceConfig(server.GetChannel(), makeMainYaml(2, "fetch-all"), storageYaml,
+            /*switchDedicatedStorageSection=*/ true, false, false, success);
+
+        std::optional<TString> mainConfig, storageConfig;
+        FetchConfig(server.GetChannel(), false, false, mainConfig, storageConfig);
+        UNIT_ASSERT_C(mainConfig, "no main YAML in the fetch of all the configuration");
+        UNIT_ASSERT_C(storageConfig, "no storage YAML in the fetch of all the configuration");
+        UNIT_ASSERT_C(mainConfig->Contains("cluster_name: fetch-all"), *mainConfig);
+        UNIT_ASSERT_C(storageConfig->Contains("host_config_id: 1"), *storageConfig);
+    }
+
 }
 
 } // NKikimr::NGRpcService

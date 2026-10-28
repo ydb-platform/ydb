@@ -15,6 +15,7 @@ private:
     TString RequestId;
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
+    bool AllowMissingToken = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
@@ -40,6 +41,11 @@ private:
     }
 
     bool IsTokenRequired() const {
+        // A listed gRPC method may omit credentials. Database and rate-limit checks still run.
+        if (AllowMissingToken) {
+            return false;
+        }
+
         if (GetEnforceUserTokenRequirement()) {
             return true;
         }
@@ -132,6 +138,10 @@ public:
 
     void SetRequireAdminAccess(bool requireAdminAccess) {
         RequireAdminAccess = requireAdminAccess;
+    }
+
+    void SetAllowMissingToken() {
+        AllowMissingToken = true;
     }
 
     void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {

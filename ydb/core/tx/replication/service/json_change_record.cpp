@@ -116,6 +116,10 @@ ui64 GetTxId(const NJson::TJsonValue& json, TStringBuf key) {
 }
 
 ui64 TChangeRecord::GetStep() const {
+    if (IsProto) {
+        return Proto.GetStep();
+    }
+
     switch (GetKind()) {
         case EKind::CdcDataChange: return NService::GetStep(JsonBody, "ts");
         case EKind::CdcHeartbeat: return NService::GetStep(JsonBody, "resolved");
@@ -125,6 +129,10 @@ ui64 TChangeRecord::GetStep() const {
 }
 
 ui64 TChangeRecord::GetTxId() const {
+    if (IsProto) {
+        return Proto.GetTxId();
+    }
+
     switch (GetKind()) {
         case EKind::CdcDataChange: return NService::GetTxId(JsonBody, "ts");
         case EKind::CdcHeartbeat: return NService::GetTxId(JsonBody, "resolved");
@@ -141,7 +149,26 @@ bool TChangeRecord::IsValidJson(TString& error) const {
     return false;
 }
 
+bool TChangeRecord::CheckData(TString& error) const {
+    if (!IsProto || GetKind() != EKind::CdcDataChange) {
+        return true;
+    }
+    return EnsureProtoCells(error);
+}
+
 NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
+    if (IsProto) {
+        switch (Proto.GetKindCase()) {
+        case NKikimrChangeExchange::TChangeRecord::kCdcHeartbeat:
+            return EKind::CdcHeartbeat;
+        case NKikimrChangeExchange::TChangeRecord::kCdcDataChange:
+            return EKind::CdcDataChange;
+        default:
+            break;
+        }
+        Y_ABORT("unreachable");
+    }
+
     if (JsonBody.Has("resolved")) {
         return EKind::CdcHeartbeat;
     }
@@ -149,6 +176,120 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         return EKind::CdcSchemaChange;
     }
     return EKind::CdcDataChange;
+}
+
+bool LooksLikeJson(TStringBuf body) {
+    for (const char c : body) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            continue;
+        }
+        return c == '{' || c == '[';
+    }
+    return false;
+}
+
+void TChangeRecord::ClassifyBody(TStringBuf body) {
+    if (LooksLikeJson(body)) {
+        JsonParsed = TChangeRecordBuilder::ParseJsonBody(body, JsonBody, JsonError);
+        return;
+    }
+
+    if (!Proto.ParseFromArray(body.data(), body.size())) {
+        JsonParsed = false;
+        JsonError = "CDC record is neither JSON nor a change-exchange protobuf";
+        return;
+    }
+
+    switch (Proto.GetKindCase()) {
+    case NKikimrChangeExchange::TChangeRecord::kCdcDataChange:
+    case NKikimrChangeExchange::TChangeRecord::kCdcHeartbeat:
+        IsProto = true;
+        JsonParsed = true;
+        return;
+    default:
+        JsonParsed = false;
+        JsonError = "unexpected protobuf CDC record kind";
+        return;
+    }
+}
+
+bool TChangeRecord::EnsureProtoCells(TString& error) const {
+    if (ProtoReady) {
+        error = ProtoError;
+        return ProtoError.empty();
+    }
+    ProtoReady = true;
+
+    auto fail = [&](TString message) {
+        ProtoError = std::move(message);
+        error = ProtoError;
+        return false;
+    };
+
+    if (!Schema) {
+        return fail("binary CDC record has no schema");
+    }
+    if (!IsProto || !Proto.HasCdcDataChange()) {
+        return fail("binary CDC record is not a data change");
+    }
+
+    const auto& change = Proto.GetCdcDataChange();
+    if (change.HasOldImage() || change.HasNewImage()) {
+        return fail("binary CDC image columns are not applied by async replication");
+    }
+
+    TVector<std::pair<TString, NTable::TTag>> columns;
+    columns.reserve(Schema->ValueColumns.size());
+    for (const auto& [name, column] : Schema->ValueColumns) {
+        columns.emplace_back(name, column.Tag);
+    }
+    Sort(columns);
+
+    const auto& key = change.GetKey();
+    TVector<TCell> keyCells;
+    if (!TSerializedCellVec::TryParseCells(key.GetData(), keyCells)) {
+        return fail("binary CDC key is not a serialized cell vector");
+    }
+    if (keyCells.size() != Schema->KeyColumns.size()) {
+        return fail("binary CDC key cell count does not match the primary key");
+    }
+    ProtoKeyBytes = key.GetData();
+
+    const NKikimrChangeExchange::TDataChange::TSerializedCells* values = nullptr;
+    switch (change.GetRowOperationCase()) {
+    case NKikimrChangeExchange::TDataChange::kUpsert:
+        ProtoOp = NKikimrChangeExchange::TDataChange::kUpsert;
+        values = &change.GetUpsert();
+        break;
+    case NKikimrChangeExchange::TDataChange::kReset:
+        ProtoOp = NKikimrChangeExchange::TDataChange::kReset;
+        values = &change.GetReset();
+        break;
+    case NKikimrChangeExchange::TDataChange::kErase:
+        ProtoOp = NKikimrChangeExchange::TDataChange::kErase;
+        return true;
+    default:
+        return fail("unsupported binary CDC operation");
+    }
+
+    TVector<TCell> valueCells;
+    if (!TSerializedCellVec::TryParseCells(values->GetData(), valueCells)) {
+        return fail("binary CDC values are not a serialized cell vector");
+    }
+    if (valueCells.size() != values->TagsSize()) {
+        return fail("binary CDC value cell count does not match tags");
+    }
+
+    ProtoDestTags.reserve(values->TagsSize());
+    for (int i = 0; i < values->TagsSize(); ++i) {
+        const auto index = values->GetTags(i);
+        if (index >= columns.size()) {
+            return fail("binary CDC value index is out of range");
+        }
+        ProtoDestTags.push_back(columns[index].second);
+    }
+    ProtoValueBytes = values->GetData();
+    return true;
 }
 
 static bool ParseKey(TVector<TCell>& cells,
@@ -227,6 +368,29 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
         record.SetWriteTxId(WriteTxId);
     }
 
+    if (IsProto) {
+        TString error;
+        Y_ABORT_UNLESS(EnsureProtoCells(error), "%s", error.c_str());
+        record.SetKey(ProtoKeyBytes);
+        auto fill = [&](NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& to) {
+            *to.MutableTags() = {ProtoDestTags.begin(), ProtoDestTags.end()};
+            to.SetData(ProtoValueBytes);
+        };
+        switch (ProtoOp) {
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+            fill(*record.MutableUpsert());
+            return;
+        case NKikimrChangeExchange::TDataChange::kReset:
+            fill(*record.MutableReset());
+            return;
+        case NKikimrChangeExchange::TDataChange::kErase:
+            record.MutableErase();
+            return;
+        default:
+            Y_ABORT("Unsupported binary CDC operation");
+        }
+    }
+
     TString error;
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -250,6 +414,16 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
+    if (IsProto) {
+        if (!Key) {
+            TString error;
+            Y_ABORT_UNLESS(EnsureProtoCells(error), "%s", error.c_str());
+            Key = TOwnedCellVec::FromSerialized(ProtoKeyBytes);
+        }
+        Y_ABORT_UNLESS(Key);
+        return *Key;
+    }
+
     if (!Key) {
         TString error;
 

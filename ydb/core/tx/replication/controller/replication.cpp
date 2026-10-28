@@ -311,6 +311,12 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
+        if (config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_UNSPECIFIED) {
+            config.SetChangefeedFormat(Config.GetChangefeedFormat());
+        }
+        if (config.GetChangefeedCompression() == NKikimrReplication::CHANGEFEED_COMPRESSION_UNSPECIFIED) {
+            config.SetChangefeedCompression(Config.GetChangefeedCompression());
+        }
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
             // A deferred ALTER installs the config before ResetCredentials.
             // Invalidate the old callbacks immediately, including A -> B -> A.

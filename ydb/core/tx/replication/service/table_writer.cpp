@@ -34,15 +34,18 @@ public:
             return ESchemaChangeResult::Error;
         }
 
-        if (jsonRecord.GetKind() != NChangeExchange::IChangeRecord::EKind::CdcSchemaChange) {
-            return ESchemaChangeResult::NotSchemaChange;
+        if (jsonRecord.GetKind() == NChangeExchange::IChangeRecord::EKind::CdcSchemaChange) {
+            if (!jsonRecord.TryGetSchemaChange(schema, error)) {
+                return ESchemaChangeResult::Error;
+            }
+            return ESchemaChangeResult::SchemaChange;
         }
 
-        if (!jsonRecord.TryGetSchemaChange(schema, error)) {
+        if (!jsonRecord.CheckData(error)) {
             return ESchemaChangeResult::Error;
         }
 
-        return ESchemaChangeResult::SchemaChange;
+        return ESchemaChangeResult::NotSchemaChange;
     }
 };
 

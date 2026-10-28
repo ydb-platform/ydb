@@ -1,7 +1,9 @@
 #include "json_change_record.h"
 
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/aclib/user_context.h>
@@ -482,6 +484,208 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
             TString error;
             UNIT_ASSERT_C(!record->TryGetSchemaChange(schema, error), body);
             UNIT_ASSERT_C(!error.empty(), body);
+        }
+    }
+
+    TLightweightSchema::TCPtr MakeSchema() {
+        auto schema = MakeIntrusive<TLightweightSchema>();
+        schema->KeyColumns.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        schema->ValueColumns.emplace("alpha", TLightweightSchema::TColumn{
+            7, NScheme::TTypeInfo(NScheme::NTypeIds::String)});
+        schema->ValueColumns.emplace("zeta", TLightweightSchema::TColumn{
+            3, NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)});
+        return schema;
+    }
+
+    TString KeyBytes() {
+        const ui64 key = 42;
+        const auto cell = TCell::Make(key);
+        return TSerializedCellVec::Serialize(TConstArrayRef<TCell>(&cell, 1));
+    }
+
+    TString ValueBytes() {
+        const TString alpha = "alpha-value";
+        const TString zeta = "zeta-value";
+        const TCell cells[] = {
+            TCell(zeta.data(), zeta.size()),
+            TCell(alpha.data(), alpha.size()),
+        };
+        return TSerializedCellVec::Serialize(cells);
+    }
+
+    // Wire tags are name-sorted indexes: zeta is 1, alpha is 0.
+    NKikimrChangeExchange::TChangeRecord MakeBinaryUpsert() {
+        NKikimrChangeExchange::TChangeRecord proto;
+        proto.SetStep(10);
+        proto.SetTxId(20);
+        auto& change = *proto.MutableCdcDataChange();
+        change.MutableKey()->AddTags(0);
+        change.MutableKey()->SetData(KeyBytes());
+        auto& upsert = *change.MutableUpsert();
+        upsert.AddTags(1);
+        upsert.AddTags(0);
+        upsert.SetData(ValueBytes());
+        return proto;
+    }
+
+    Y_UNIT_TEST(BinaryUpsertMapsIndexesToDestinationTags) {
+        const auto proto = MakeBinaryUpsert();
+        auto record = TChangeRecordBuilder()
+            .WithOrder(7)
+            .WithSchema(MakeSchema())
+            .WithBody(proto.SerializeAsString())
+            .Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(record->GetKind(), TChangeRecord::EKind::CdcDataChange);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetTxId(), 20);
+
+        TString error;
+        UNIT_ASSERT_C(record->CheckData(error), error);
+
+        const auto key = record->GetKey();
+        UNIT_ASSERT_VALUES_EQUAL(key.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(key[0].AsValue<ui64>(), 42);
+
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange apply;
+        TMemoryPool pool(256);
+        record->Serialize(apply, pool);
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetSourceOffset(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetKey(), KeyBytes());
+        UNIT_ASSERT(apply.HasUpsert());
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetUpsert().TagsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetUpsert().GetTags(0), 3);
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetUpsert().GetTags(1), 7);
+        UNIT_ASSERT_VALUES_EQUAL(apply.GetUpsert().GetData(), ValueBytes());
+    }
+
+    Y_UNIT_TEST(BinaryResetAndErase) {
+        auto schema = MakeSchema();
+        {
+            auto proto = MakeBinaryUpsert();
+            proto.MutableCdcDataChange()->MutableReset()->CopyFrom(proto.GetCdcDataChange().GetUpsert());
+            proto.MutableCdcDataChange()->ClearUpsert();
+            auto record = TChangeRecordBuilder()
+                .WithSchema(schema)
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT_C(record->CheckData(error), error);
+            NKikimrTxDataShard::TEvApplyReplicationChanges::TChange apply;
+            TMemoryPool pool(256);
+            record->Serialize(apply, pool);
+            UNIT_ASSERT(apply.HasReset());
+            UNIT_ASSERT_VALUES_EQUAL(apply.GetReset().GetTags(0), 3);
+            UNIT_ASSERT_VALUES_EQUAL(apply.GetReset().GetTags(1), 7);
+            UNIT_ASSERT_VALUES_EQUAL(apply.GetReset().GetData(), ValueBytes());
+        }
+        {
+            NKikimrChangeExchange::TChangeRecord proto;
+            proto.MutableCdcDataChange()->MutableKey()->AddTags(0);
+            proto.MutableCdcDataChange()->MutableKey()->SetData(KeyBytes());
+            proto.MutableCdcDataChange()->MutableErase();
+            auto record = TChangeRecordBuilder()
+                .WithSchema(schema)
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT_C(record->CheckData(error), error);
+            NKikimrTxDataShard::TEvApplyReplicationChanges::TChange apply;
+            TMemoryPool pool(256);
+            record->Serialize(apply, pool);
+            UNIT_ASSERT(apply.HasErase());
+            UNIT_ASSERT_VALUES_EQUAL(apply.GetKey(), KeyBytes());
+        }
+    }
+
+    Y_UNIT_TEST(BinaryHeartbeat) {
+        NKikimrChangeExchange::TChangeRecord proto;
+        proto.SetStep(10);
+        proto.SetTxId(20);
+        proto.MutableCdcHeartbeat();
+        auto record = TChangeRecordBuilder()
+            .WithBody(proto.SerializeAsString())
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(record->GetKind(), TChangeRecord::EKind::CdcHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetTxId(), 20);
+        TString error;
+        UNIT_ASSERT(record->CheckData(error));
+    }
+
+    Y_UNIT_TEST(BinaryRejectsImagesAndMalformedRecords) {
+        {
+            auto proto = MakeBinaryUpsert();
+            proto.MutableCdcDataChange()->MutableOldImage()->CopyFrom(proto.GetCdcDataChange().GetUpsert());
+            auto record = TChangeRecordBuilder()
+                .WithSchema(MakeSchema())
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "image columns are not applied");
+        }
+        {
+            auto record = TChangeRecordBuilder()
+                .WithBody(TString("\x07", 1))
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->IsValidJson(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "neither JSON nor a change-exchange protobuf");
+        }
+        {
+            NKikimrChangeExchange::TChangeRecord proto;
+            proto.MutableAsyncIndex();
+            auto record = TChangeRecordBuilder()
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->IsValidJson(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "unexpected protobuf CDC record kind");
+        }
+        {
+            auto proto = MakeBinaryUpsert();
+            auto record = TChangeRecordBuilder()
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "has no schema");
+        }
+        {
+            auto proto = MakeBinaryUpsert();
+            proto.MutableCdcDataChange()->MutableUpsert()->SetTags(0, 5);
+            auto record = TChangeRecordBuilder()
+                .WithSchema(MakeSchema())
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "value index is out of range");
+        }
+        {
+            auto proto = MakeBinaryUpsert();
+            const ui64 extra = 1;
+            const TCell cells[] = {TCell::Make(ui64(42)), TCell::Make(extra)};
+            proto.MutableCdcDataChange()->MutableKey()->SetData(TSerializedCellVec::Serialize(cells));
+            auto record = TChangeRecordBuilder()
+                .WithSchema(MakeSchema())
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "key cell count does not match");
+        }
+        {
+            auto proto = MakeBinaryUpsert();
+            proto.MutableCdcDataChange()->MutableUpsert()->ClearTags();
+            auto record = TChangeRecordBuilder()
+                .WithSchema(MakeSchema())
+                .WithBody(proto.SerializeAsString())
+                .Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "value cell count does not match tags");
         }
     }
 }

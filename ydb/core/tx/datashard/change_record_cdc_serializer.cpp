@@ -10,6 +10,7 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -20,6 +21,11 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -32,15 +38,69 @@ class TBaseSerializer: public IChangeRecordSerializer {
         return data;
     }
 
+    // Heartbeats stay raw. A data row below CdcZstdMinPayloadBytes stays raw.
+    // Anything we do compress is written with one ZSTD_compress2 into a context
+    // owned by this serializer. The raw bytes stay in place when zstd does not
+    // make them shorter.
+    //
+    // Negative levels select the fast strategy and use the magnitude as the
+    // search step. ZSTD_minCLevel() is -128 KiB, so a 1 KiB run is stored as
+    // literals and the frame grows. Level -1 still visits every byte and shrinks
+    // that run. Schema snapshots use the library default level.
+    static constexpr int CdcZstdDataLevel = -1;
+    void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
+            return;
+        }
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            return;
+        }
+
+        const auto& payload = data.GetData();
+        const bool schema = record.GetKind() == TChangeRecord::EKind::CdcSchemaChange;
+        if (!schema && payload.size() < CdcZstdMinPayloadBytes) {
+            return;
+        }
+        if (payload.size() > static_cast<size_t>(Max<i32>())) {
+            return;
+        }
+
+        if (!CCtx_) {
+            CCtx_ = ZSTD_createCCtx();
+            Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
+        }
+        const int level = schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel;
+        if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
+            return;
+        }
+        const size_t bound = ZSTD_compressBound(payload.size());
+        if (bound == 0) {
+            return;
+        }
+
+        TString compressed = TString::Uninitialized(bound);
+        const size_t written = ZSTD_compress2(
+            CCtx_, compressed.begin(), compressed.size(), payload.data(), payload.size());
+        if (ZSTD_isError(written) || written >= payload.size()) {
+            return;
+        }
+        compressed.resize(written);
+        data.SetCodec(NPersQueueCommon::ZSTD);
+        UncompressedSize = static_cast<ui32>(payload.size());
+        data.SetData(std::move(compressed));
+    }
+
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
         cmd.SetData(data.SerializeAsString());
     }
 
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& schemaChange = *cmd.MutableSchemaChange();
         schemaChange.SetStep(record.GetStep());
@@ -51,12 +111,15 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& heartbeat = *cmd.MutableHeartbeat();
         heartbeat.SetStep(record.GetStep());
         heartbeat.SetTxId(record.GetTxId());
         heartbeat.SetData(data.SerializeAsString());
     }
+
+    TMaybe<ui32> UncompressedSize;
 
 protected:
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
@@ -66,24 +129,41 @@ public:
         : Opts(opts)
     {}
 
+    ~TBaseSerializer() override {
+        if (CCtx_) {
+            ZSTD_freeCCtx(CCtx_);
+        }
+    }
+
+    TBaseSerializer(const TBaseSerializer&) = delete;
+    TBaseSerializer& operator=(const TBaseSerializer&) = delete;
+
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        UncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
+            SerializeDataChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcSchemaChange:
-            return SerializeSchemaChange(cmd, record);
+            SerializeSchemaChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
+            SerializeHeartbeat(cmd, record);
+            break;
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
+        }
+        if (UncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
         }
     }
 
 protected:
     const TChangeRecordSerializerOpts Opts;
+    ZSTD_CCtx* CCtx_ = nullptr;
 
 }; // TBaseSerializer
 
@@ -451,6 +531,12 @@ protected:
 public:
     using TJsonSerializer::TJsonSerializer;
 
+    void WriteSchemaJson(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        NJson::TJsonValue json;
+        SerializeSchemaChange(json, record);
+        data.SetData(JsonToString(json));
+    }
+
 }; // TYdbJsonSerializer
 
 class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
@@ -695,6 +781,135 @@ public:
 
 }; // TDebeziumJsonSerializer
 
+// Topic payload for FORMAT BINARY.
+// Data and heartbeat records are NKikimrChangeExchange::TChangeRecord.
+// Value tags are indexes of non-key columns sorted by name. The cell bytes
+// stay in the TSerializedCellVec that the tablet already stored. The key is
+// that same vector in primary-key order. Schema records stay the JSON snapshot.
+class TBinaryCdcSerializer: public TBaseSerializer {
+    struct TColumnIndex {
+        TVector<ui32> KeyOrder;
+        THashMap<ui32, ui32> ValueTagToIndex;
+    };
+
+    const TColumnIndex& ColumnIndexFor(const TChangeRecord& record) {
+        const auto* table = record.GetSchema().Get();
+        Y_ENSURE(table);
+        if (CachedTable == table && CachedVersion == record.GetSchemaVersion()) {
+            return CachedIndex;
+        }
+
+        TColumnIndex index;
+        index.KeyOrder = table->KeyColumnIds;
+        THashSet<ui32> keys(index.KeyOrder.begin(), index.KeyOrder.end());
+
+        TVector<std::pair<TString, ui32>> values;
+        values.reserve(table->Columns.size());
+        for (const auto& [tag, column] : table->Columns) {
+            if (!keys.contains(tag)) {
+                values.emplace_back(column.Name, tag);
+            }
+        }
+        Sort(values);
+
+        for (ui32 i = 0; i < values.size(); ++i) {
+            index.ValueTagToIndex.emplace(values[i].second, i);
+        }
+
+        CachedTable = table;
+        CachedVersion = record.GetSchemaVersion();
+        CachedIndex = std::move(index);
+        return CachedIndex;
+    }
+
+    static void RewriteValueTags(
+            NKikimrChangeExchange::TDataChange::TSerializedCells& cells,
+            const THashMap<ui32, ui32>& tagToIndex)
+    {
+        for (int i = 0; i < cells.TagsSize(); ++i) {
+            const auto it = tagToIndex.find(cells.GetTags(i));
+            Y_ENSURE(it != tagToIndex.end(), "Binary CDC record refers to unknown column tag " << cells.GetTags(i));
+            cells.SetTags(i, it->second);
+        }
+    }
+
+    void FillDataChange(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        const auto& index = ColumnIndexFor(record);
+        NKikimrChangeExchange::TDataChange change = record.GetDataChange();
+
+        auto* key = change.MutableKey();
+        Y_ENSURE(key->TagsSize() == static_cast<int>(index.KeyOrder.size()),
+            "Binary CDC key width does not match the primary key");
+        for (int i = 0; i < key->TagsSize(); ++i) {
+            Y_ENSURE(key->GetTags(i) == index.KeyOrder[i],
+                "Binary CDC key tag order does not match the primary key");
+            key->SetTags(i, static_cast<ui32>(i));
+        }
+
+        if (change.HasUpsert()) {
+            RewriteValueTags(*change.MutableUpsert(), index.ValueTagToIndex);
+        }
+        if (change.HasReset()) {
+            RewriteValueTags(*change.MutableReset(), index.ValueTagToIndex);
+        }
+        if (change.HasOldImage()) {
+            RewriteValueTags(*change.MutableOldImage(), index.ValueTagToIndex);
+        }
+        if (change.HasNewImage()) {
+            RewriteValueTags(*change.MutableNewImage(), index.ValueTagToIndex);
+        }
+
+        NKikimrChangeExchange::TChangeRecord proto;
+        if (Opts.VirtualTimestamps) {
+            proto.SetStep(record.GetStep());
+            proto.SetTxId(record.GetTxId());
+        }
+        *proto.MutableCdcDataChange() = std::move(change);
+        data.SetData(proto.SerializeAsString());
+    }
+
+    void FillSchemaChange(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        TYdbJsonSerializer json(Opts);
+        json.WriteSchemaJson(data, record);
+    }
+
+    void FillHeartbeat(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        NKikimrChangeExchange::TChangeRecord proto;
+        proto.SetStep(record.GetStep());
+        proto.SetTxId(record.GetTxId());
+        proto.MutableCdcHeartbeat();
+        data.SetData(proto.SerializeAsString());
+    }
+
+protected:
+    void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
+        switch (record.GetKind()) {
+        case TChangeRecord::EKind::CdcDataChange:
+            return FillDataChange(data, record);
+        case TChangeRecord::EKind::CdcSchemaChange:
+            return FillSchemaChange(data, record);
+        case TChangeRecord::EKind::CdcHeartbeat:
+            return FillHeartbeat(data, record);
+        case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
+            Y_ENSURE(false, "Unexpected");
+        }
+    }
+
+public:
+    using TBaseSerializer::TBaseSerializer;
+
+    TString DebugString(const TChangeRecord& record) override {
+        return TStringBuilder() << "binary CDC kind " << static_cast<int>(record.GetKind());
+    }
+
+private:
+    const TUserTable* CachedTable = nullptr;
+    ui64 CachedVersion = 0;
+    TColumnIndex CachedIndex;
+
+}; // TBinaryCdcSerializer
+
 TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
     TChangeRecordSerializerOpts opts;
     opts.Debug = true;
@@ -711,6 +926,8 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
         return new TDynamoDBStreamsJsonSerializer(opts);
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return new TDebeziumJsonSerializer(opts);
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatBinary:
+        return new TBinaryCdcSerializer(opts);
     default:
         Y_ENSURE(false, "Unsupported format");
     }
@@ -735,6 +952,17 @@ TString TChangeRecord::GetPartitionKey() const {
 
     PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
     return *PartitionKey;
+}
+
+TString TChangeRecord::GetRawKeyPartitionKey() const {
+    if (RawKeyPartitionKey) {
+        return *RawKeyPartitionKey;
+    }
+
+    Y_ENSURE(Kind == EKind::CdcDataChange);
+    const auto& key = GetDataChange().GetKey().GetData();
+    RawKeyPartitionKey.ConstructInPlace(MD5::Calc(TStringBuf(key)));
+    return *RawKeyPartitionKey;
 }
 
 }

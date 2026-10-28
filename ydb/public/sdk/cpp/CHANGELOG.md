@@ -2,6 +2,8 @@
 
 * Fixed Query session shutdown racing with session pool return.
 
+* Added changefeed format `BINARY` and optional changefeed compression `ZSTD` (`TChangefeedDescription::WithCompression`). Unspecified compression keeps the record as-is. `BINARY` is off unless the cluster feature flag is enabled.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

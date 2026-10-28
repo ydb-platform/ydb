@@ -20,6 +20,11 @@ public:
     virtual TString DebugString(const TChangeRecord& record) = 0;
 };
 
+// A data row shorter than this stays raw even when the stream asks for zstd.
+// Heartbeats are always raw. A longer row is stored with zstd when the
+// compressed bytes are shorter than the row.
+inline constexpr size_t CdcZstdMinPayloadBytes = 512;
+
 struct TChangeRecordSerializerOpts {
     TUserTable::TCdcStream::EFormat StreamFormat = NKikimrSchemeOp::ECdcStreamFormatInvalid;
     TUserTable::TCdcStream::EMode StreamMode = NKikimrSchemeOp::ECdcStreamModeInvalid;
@@ -29,6 +34,7 @@ struct TChangeRecordSerializerOpts {
     bool Debug = false;
     bool UserSIDs = false;
     bool TraceIds = false;
+    TUserTable::TCdcStream::ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
 
     static TChangeRecordSerializerOpts DebugOpts();
 };

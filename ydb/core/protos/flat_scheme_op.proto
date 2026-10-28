@@ -1167,6 +1167,14 @@ enum ECdcStreamFormat {
     ECdcStreamFormatJson = 2;
     ECdcStreamFormatDynamoDBStreamsJson = 3;
     ECdcStreamFormatDebeziumJson = 4;
+    // Cells in TDataChange, value tags are name-sorted indexes. Used by async replication.
+    ECdcStreamFormatBinary = 5;
+}
+
+enum ECdcStreamCompression {
+    ECdcStreamCompressionUnspecified = 0;
+    ECdcStreamCompressionNone = 1;
+    ECdcStreamCompressionZstd = 2;
 }
 
 message TCdcStreamScanProgress {
@@ -1191,6 +1199,9 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
+    // Codec of the stored change record. Unspecified and NONE keep the record as-is.
+    // ZSTD stores zstd when the compressed bytes are shorter than the record.
+    optional ECdcStreamCompression Compression = 15;
 }
 
 message TCreateCdcStream {

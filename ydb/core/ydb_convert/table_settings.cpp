@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -338,8 +339,9 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& table
     return true;
 }
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
-    const Ydb::Table::AlterTableRequest& proto,
+template <typename TRequest>
+static bool FillAlterTableSettingsDescImpl(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const TRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
 {
     bool hadPartitionConfig = tableDesc.HasPartitionConfig();
@@ -502,6 +504,20 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     }
 
     return true;
+}
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const Ydb::Table::AlterTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
+{
+    return FillAlterTableSettingsDescImpl(tableDesc, proto, code, error, changed);
+}
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const NKikimrKqp::TKqpAlterTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
+{
+    return FillAlterTableSettingsDescImpl(tableDesc, proto, code, error, changed);
 }
 
 bool FillIndexTablePartitioning(

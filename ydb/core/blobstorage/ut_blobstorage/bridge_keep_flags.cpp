@@ -423,4 +423,37 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
     }
 
+
+    // the blob put behind the barrier is reported so by the bridged group as by any other, which BlobDepot checks
+    Y_UNIT_TEST(PutBeyondBarrierReported) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        const TString data = "blob";
+        const TLogoBlobID probe(100500, 1, 1, 0, data.size(), 0);
+        for (ui32 pile : {0, 1}) {
+            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+        }
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(probe.TabletID(), 1, 0, 0, true, 1, 10, nullptr, nullptr,
+            TInstant::Max(), false), {}, groupId);
+        for (ui32 pile : {0, 1}) {
+            WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+        }
+
+        auto put = [&](const TLogoBlobID& id) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            return res->Get()->WrittenBeyondBarrier;
+        };
+        UNIT_ASSERT(put(TLogoBlobID(probe.TabletID(), 1, 2, 0, data.size(), 0)));
+        UNIT_ASSERT(!put(TLogoBlobID(probe.TabletID(), 1, 11, 0, data.size(), 0)));
+    }
+
 }

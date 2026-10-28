@@ -197,7 +197,12 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> Combine(TThis& self, TEvBlobStorage::TEvPutResult *ev, auto *current) {
                 Y_DEBUG_ABORT_UNLESS(!current || current->Id == ev->Id);
-                return CreateWithErrorReason(ev, ev->Status, ev->Id, StatusFlags, self.GroupId, ApproximateFreeSpaceShare);
+                auto result = std::make_unique<TEvBlobStorage::TEvPutResult>(ev->Status, ev->Id, StatusFlags, self.GroupId,
+                    ApproximateFreeSpaceShare);
+                result->ErrorReason = std::move(ev->ErrorReason);
+                // the blob written beyond the barrier in any pile is the one written beyond the barrier of the group
+                result->WrittenBeyondBarrier = ev->WrittenBeyondBarrier || (current && current->WrittenBeyondBarrier);
+                return result;
             }
 
             std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto* /*current*/) {

@@ -32,12 +32,14 @@
 
 Подробнее про первоначальное развертывание:
 
-* [Ansible](../devops/deployment-options/ansible/initial-deployment.md)
+* [Ansible](../devops/deployment-options/ansible/initial-deployment/index.md)
 * [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
-* [Вручную](../devops/deployment-options/manual/initial-deployment.md)
+* [Вручную](../devops/deployment-options/manual/initial-deployment/index.md)
 * [{#T}](./builtin-security.md)
 
 {% endnote %}
+
+### SID {#sid}
 
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются [SID](../concepts/glossary.md#access-sid) с использованием суффикса.
 

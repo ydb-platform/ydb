@@ -1,8 +1,8 @@
-# Загрузка {{ ydb-short-name }} Ops {#ydbops}
+# Загрузка {{ ydb-short-name }} Ops
 
 {{ ydb-short-name }} Ops (`ydbops`) — утилита командной строки для [управления кластером {{ ydb-short-name }}](../reference/ydbops/index.md).
 
-## Linux
+## Linux {#ydbops}
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | :--- | :--- | :--- | :--- |

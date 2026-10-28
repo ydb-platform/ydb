@@ -26,22 +26,22 @@ The `SELECT` query result is calculated as follows:
 {% if feature_tablesample==true %}
 * Apply [SAMPLE](sample.md)/[TABLESAMPLE](sample.md) to input tables.
 {% endif %}
-* Execute [FLATTEN COLUMNS](../flatten.md#flatten-columns) or [FLATTEN BY](../flatten.md); aliases set in `FLATTEN BY` become visible after this point.
+* Execute [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
 
-* Execute every [JOIN](../join.md).
+* Execute every [JOIN](join.md).
 
 {% endif %}
 
-* Add to (or replace in) the data the columns listed in [GROUP BY ... AS ...](../group_by.md).
+* Add to (or replace in) the data the columns listed in [GROUP BY ... AS ...](group-by.md).
 * Execute [WHERE](where.md) &mdash; Discard all the data mismatching the predicate.
-* Execute [GROUP BY](../group_by.md), evaluate aggregate functions.
-* Apply the filter [HAVING](../group_by.md#having).
+* Execute [GROUP BY](group-by.md), evaluate aggregate functions.
+* Apply the filter [HAVING](group-by.md#having).
 
 {% if feature_window_functions %}
 
-* Evaluate [window functions](../window.md);
+* Evaluate [window functions](window.md);
 
 {% endif %}
 
@@ -71,7 +71,7 @@ If you enable `PRAGMA OrderedColumns;`, the order of columns is preserved in the
 
 {% if feature_join %}
 
-* The order of columns after [JOIN](../join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.
+* The order of columns after [JOIN](join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.
 
 {% endif %}
 

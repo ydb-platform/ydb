@@ -209,9 +209,9 @@ domains_config:
 
 - В рамках первоначального развёртывания кластера {{ ydb-short-name }}:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+    - [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
+    - [Вручную](../../devops/deployment-options/manual/initial-deployment/index.md)
 
 - В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
 - В рамках [усиления безопасности](../../security/index.md)

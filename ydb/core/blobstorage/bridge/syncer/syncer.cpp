@@ -206,9 +206,12 @@ namespace NKikimr::NBridge {
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if ((!sourceItem || sourceItem->DoNotKeep) && targetItem && !targetItem->DoNotKeep) {
-                        // we are missing source item (or it has DoNotKeep flag); given Puts are forbidden at this stage
-                        // or before, it means that blob has vanished and should be deleted
+                    if (targetItem && !targetItem->DoNotKeep && (sourceItem ? sourceItem->DoNotKeep : targetItem->Keep)) {
+                        // the source item has DoNotKeep flag, or it is missing; the source collects blobs only behind
+                        // the barriers already synced to the target, so the missing blob vanishes from the target too,
+                        // unless it is kept there; the blob not kept is left alone, as it may also be the write which
+                        // has reached the target only, and the bridge proxy can restore it into the source later on, so
+                        // DoNotKeep here would make piles disagree on its fate
                         doNotKeepToIssue.push_back(blobId);
                     }
                     break;

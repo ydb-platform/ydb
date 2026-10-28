@@ -76,7 +76,9 @@ codec. Waiting keeps the compute worker available for other tasks.
 
 **Replay** requires an explicit `IReplayCodec` for every invoked provider, checked
 before input consumption. The codec has a versioned `Contract`, `Encode` and
-`Decode`. It describes logical arguments and permits repeating an external call;
+`Decode`. Encode(request, output) writes into a bounded output sink and must not build an
+unbounded temporary descriptor. Provider-private scratch space must have its own
+bound. It describes logical arguments and permits repeating an external call;
 async or batch capability does not imply replay safety. Encode/Decode must be
 pure, bounded codecs. They must not serialize secrets, transport handles,
 reservations, execution identity, native stacks or process-local clock deadlines.
@@ -126,13 +128,23 @@ Normal D3 admission, batching, concurrency and CPU bounds apply to replay. Old
 callbacks remain bound to the old lifecycle and cannot affect restored frames.
 Input stays paused until the boundary can be forwarded/released.
 
-Snapshot copies reserve three times `MaxSnapshotBytes` from the same D3 quota
-before saving, covering serializer buffers plus the returned image. The configured
-size bound is checked during serialization. Restore reserves bounded temporary
+Snapshot copies reserve eight times MaxSnapshotBytes from the same D3 quota
+before saving. This conservative working-set allowance covers the fixed-capacity
+frame/descriptor buffers, packer growth and optional-mask scratch, request copies,
+graph assembly and the returned image. It is a temporary reservation, released on
+save failure or storage acknowledgement; a quota too small for it fails explicitly.
+Scalar values are checked recursively without copying payloads before packing:
+a conservative 32-byte allowance per Data/Optional/Struct/Tuple node plus all
+variable string bytes must fit the remaining snapshot space. Therefore a value
+very close to the size limit may be rejected conservatively. Large and aggregate
+strings cannot first allocate their full packed copies and only then fail.
+Writes (including codec output and graph assembly) check available space before
+copying. The on-wire graph/frame version and scalar packing format are unchanged. Restore reserves bounded temporary
 snapshot space before parsing/hydration and charges restored frames/descriptors
 and retained allocator pages. `SnapshotStored` transfers image accounting to the
 embedding checkpoint store; it must not be called merely to waive a memory limit.
-Existing allocator guards still enforce transient allocation peaks, and provider
+The ordinary heap serializer buffers are covered by the save reservation;
+MiniKQL allocator guards cover its own allocations, and provider
 private buffers keep their own accounting as in D3. No unlimited waiting for an
 impossible snapshot reservation is introduced.
 
@@ -153,3 +165,8 @@ error-text disclosure; actual batches of eight; queued work under concurrency
 one; 200-row recovery; stale-image rejection and a second crash from the refreshed
 cut; missing codecs, invalid cuts/mode/plan/version/truncated data; snapshot
 memory/size failures; restore gating; and legacy synchronous graph state.
+
+AsyncMap explicitly retains state in dependency invalidation: changing a graph
+entrypoint clears its cached stream, including when checkpointing is disabled.
+Tests exercise this reuse, rejection before packing a 16 MiB row, aggregate string
+bounds, atomic bounded writes, descriptor expansion and unchanged packed bytes.

@@ -1,4 +1,5 @@
 #include "compute.h"
+#include "checkpoint.h"
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <map>
 #include <set>
@@ -313,20 +314,23 @@ TString TExecutionServices::BeforeSave() {
     Impl_->Saving = true;
     ++Impl_->SnapshotRevision;
     const auto bytes = Impl_->Settings.Checkpoint.MaxSnapshotBytes;
-    Y_ENSURE(bytes && bytes <= Impl_->Context.GetQuota()->GetLimit() / 3, "Snapshot memory limit");
-    Impl_->SnapshotMemory = Impl_->Context.GetQuota()->TryReserve(3 * bytes);
+    Y_ENSURE(bytes && bytes <= Impl_->Context.GetQuota()->GetLimit() / 8, "Snapshot memory limit");
+    Impl_->SnapshotMemory = Impl_->Context.GetQuota()->TryReserve(8 * bytes);
     Y_ENSURE(Impl_->SnapshotMemory, "Snapshot memory limit");
-    TString header;
-    WriteString(header, "DQ-ASYNC");
-    WriteUi32(header, 1);
-    WriteString(header, Impl_->Settings.Checkpoint.PlanFingerprint);
-    WriteUi32(header, static_cast<ui32>(GetCheckpointMode()));
-    WriteUi64(header, Impl_->CheckpointId);
-    WriteUi32(header, Impl_->Participants.size());
+    TSnapshotWriter header(bytes);
+    header.String("DQ-ASYNC");
+    header.Ui32(1);
+    header.String(Impl_->Settings.Checkpoint.PlanFingerprint);
+    header.Ui32(static_cast<ui32>(GetCheckpointMode()));
+    header.Ui64(Impl_->CheckpointId);
+    header.Ui32(Impl_->Participants.size());
     for (const auto& [id, _] : Impl_->Participants) {
-        WriteUi32(header, id);
+        header.Ui32(id);
     }
-    return header;
+    return TString(header.View());
+}
+ui64 TExecutionServices::GetSnapshotLimit() const {
+    return Impl_->Settings.Checkpoint.MaxSnapshotBytes;
 }
 void TExecutionServices::CheckSnapshotSize(ui64 bytes) const {
     Y_ENSURE(bytes <= Impl_->Settings.Checkpoint.MaxSnapshotBytes, "Async snapshot exceeds size limit");

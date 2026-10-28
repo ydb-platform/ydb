@@ -758,11 +758,16 @@ public:
         TString result;
         try {
             if (checkpoint) {
-                WriteString(result, checkpoint->BeforeSave());
+                const auto header = checkpoint->BeforeSave();
+                checkpoint->CheckSnapshotSize(ui64(header.size()) + MAX_PACKED32_SIZE);
+                WriteString(result, header);
             }
             for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
                 const NUdf::TUnboxedValuePod& mutableValue = Ctx_->MutableValues[i];
                 if (mutableValue.IsInvalid()) {
+                    if (checkpoint) {
+                        checkpoint->CheckSnapshotSize(ui64(result.size()) + MAX_PACKED64_SIZE);
+                    }
                     WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
                 } else if (mutableValue.IsBoxed()) {
                     TList<TString> taskState;
@@ -773,6 +778,9 @@ public:
                         NUdf::TUnboxedValue str;
                         while (listIt.Next(str)) {
                             const TStringBuf strRef = str.AsStringRef();
+                            if (checkpoint) {
+                                checkpoint->CheckSnapshotSize(ui64(result.size()) + MAX_PACKED64_SIZE + taskStateSize + strRef.Size());
+                            }
                             taskStateSize += strRef.Size();
                             taskState.push_back({});
                             taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
@@ -786,12 +794,18 @@ public:
                         NUdf::TUnboxedValue saved = mutableValue.Save();
                         if (saved.IsString() || saved.IsEmbedded()) { // Old version.
                             const TStringBuf savedBuf = saved.AsStringRef();
+                            if (checkpoint) {
+                                checkpoint->CheckSnapshotSize(ui64(result.size()) + MAX_PACKED64_SIZE + savedBuf.Size());
+                            }
                             taskState.push_back({});
                             taskState.back().AppendNoAlias(savedBuf.Data(), savedBuf.Size());
                             taskStateSize = savedBuf.Size();
                         } else {
                             saveList(saved);
                         }
+                    }
+                    if (checkpoint) {
+                        checkpoint->CheckSnapshotSize(ui64(result.size()) + MAX_PACKED64_SIZE + taskStateSize);
                     }
                     WriteUi64(result, taskStateSize);
                     for (auto it = taskState.begin(); it != taskState.end();) {
@@ -802,6 +816,9 @@ public:
                     MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()),
                                 "State is expected to have data or invalid value");
                     const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
+                    if (checkpoint) {
+                        checkpoint->CheckSnapshotSize(ui64(result.size()) + MAX_PACKED64_SIZE + savedRef.Size());
+                    }
                     WriteUi64(result, savedRef.Size());
                     result.AppendNoAlias(savedRef.Data(), savedRef.Size());
                 }

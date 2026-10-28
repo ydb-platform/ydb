@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/stream/output.h>
+
 #include <yql/essentials/minikql/async/async.h>
 #include <yql/essentials/minikql/computation/mkql_async_checkpoint.h>
 #include <yql/essentials/minikql/async/scheduler.h>
@@ -52,11 +54,13 @@ enum class ECheckpointMode {
 // Explicit replay permission, independent of batching and async capability.
 // Encode/Decode are pure logical codecs: no transport handles, identity, secret,
 // deadline clock or I/O. Contract must change when descriptor semantics change.
+// Encode writes to a bounded sink; do not build an unbounded temporary descriptor.
+// Any codec-private scratch buffers must be independently bounded by the provider.
 class IReplayCodec {
 public:
     virtual ~IReplayCodec() = default;
     virtual TString Contract() const = 0;
-    virtual TString Encode(const TRequest& request) const = 0;
+    virtual void Encode(const TRequest& request, IOutputStream& output) const = 0;
     virtual TRequest Decode(TStringBuf descriptor) const = 0;
 };
 struct TSnapshotId {
@@ -135,6 +139,7 @@ public:
 
     TString BeforeSave() override;
     void CheckSnapshotSize(ui64 bytes) const override;
+    ui64 GetSnapshotLimit() const;
     void AfterSave() override;
     void AbortSave() noexcept override;
     void BeforeLoad(TStringBuf header, ui64 bytes) override;

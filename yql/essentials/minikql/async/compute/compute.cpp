@@ -1,4 +1,5 @@
 #include "program.h"
+#include "checkpoint.h"
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -43,6 +44,9 @@ public:
         , RowType_(rowType)
         , Metadata_(std::move(metadata))
     {
+        // GetValue retains a serializable stream even for a single consumer.
+        // Keep its value index in dependency invalidation as well.
+        Stateless_ = false;
     }
 
     class TStream final: public TComputationValue<TStream> {
@@ -327,63 +331,67 @@ public:
         }
         NUdf::TUnboxedValue Save() const final {
             MKQL_ENSURE(!Failed_, "Cannot save failed AsyncMap");
-            TString out;
-            WriteUi32(out, 1);
-            WriteString(out, Map_.Metadata_);
-            WriteBool(out, Finished_);
-            WriteBool(out, SourceFetchCharged_);
-            WriteBool(out, bool(SourceReservation_));
-            WriteUi32(out, FrameCursor_);
-            WriteUi32(out, Frames_.size());
+            TSnapshotWriter out(Services_->GetSnapshotLimit());
+            out.Ui32(1);
+            out.String(Map_.Metadata_);
+            out.Bool(Finished_);
+            out.Bool(SourceFetchCharged_);
+            out.Bool(bool(SourceReservation_));
+            out.Ui32(FrameCursor_);
+            out.Ui32(Frames_.size());
             for (const auto& frame : Frames_) {
-                TValuePacker rowPacker(false, Map_.RowType_);
-                WriteString(out, rowPacker.Pack(frame.Row));
+                out.Packed(Map_.RowType_, frame.Row);
                 for (ui32 i = 0; i < Map_.Steps_.size(); ++i) {
-                    WriteBool(out, frame.Done[i]);
+                    out.Bool(frame.Done[i]);
                     if (frame.Done[i]) {
-                        TValuePacker packer(false, Map_.Steps_[i].Type);
-                        WriteString(out, packer.Pack(frame.Values[i]));
+                        out.Packed(Map_.Steps_[i].Type, frame.Values[i]);
                     }
                 }
-                WriteUi32(out, frame.Stack.size());
+                out.Ui32(frame.Stack.size());
                 for (auto index : frame.Stack) {
-                    WriteUi32(out, index);
+                    out.Ui32(index);
                 }
                 const TResult* result = frame.RestoredResult ? &*frame.RestoredResult : frame.Operation ? Services_->PeekResult(*frame.Operation)
                                                                                                         : nullptr;
                 const bool pending = frame.Operation || frame.ReplayDescriptor;
-                WriteByte(out, result ? 2 : pending ? 1
-                                                    : 0);
+                out.Byte(result ? 2 : pending ? 1
+                                              : 0);
                 if (result) {
-                    WriteUi32(out, static_cast<ui32>(result->Outcome));
-                    WriteUi32(out, static_cast<ui32>(result->Error));
-                    WriteString(out, result->Outcome == EOutcome::Success ? std::string_view(result->Payload) : std::string_view{});
+                    out.Ui32(static_cast<ui32>(result->Outcome));
+                    out.Ui32(static_cast<ui32>(result->Error));
+                    out.String(result->Outcome == EOutcome::Success ? std::string_view(result->Payload) : std::string_view{});
                 } else if (pending) {
                     MKQL_ENSURE(Services_->GetCheckpointMode() == ECheckpointMode::Replay, "Pending frame requires Replay");
                     const auto& ins = Map_.Steps_[frame.Stack.back()].Instruction;
                     const auto& codec = Services_->GetReplayCodec(ins.Provider);
-                    WriteString(out, codec.Contract());
+                    out.String(codec.Contract());
                     if (frame.ReplayDescriptor) {
-                        WriteString(out, *frame.ReplayDescriptor);
+                        out.String(*frame.ReplayDescriptor);
                     } else {
                         const auto input = ins.Dependencies[0];
-                        TValuePacker packer(false, Map_.Steps_[input].Type);
-                        WriteString(out, codec.Encode({.Operation = ins.Operation,
-                                                       .Payload = TString(packer.Pack(frame.Values[input])),
-                                                       .MaxResponseBytes = ins.MaxResponseBytes}));
+                        auto remaining = out.Remaining();
+                        TSnapshotWriter::CheckPackedValue(Map_.Steps_[input].Type, frame.Values[input], remaining);
+                        TRequest request{.Operation = ins.Operation, .MaxResponseBytes = ins.MaxResponseBytes};
+                        {
+                            TValuePacker packer(false, Map_.Steps_[input].Type);
+                            request.Payload = TString(packer.Pack(frame.Values[input]));
+                        }
+                        out.Check(MAX_PACKED32_SIZE);
+                        TSnapshotWriter descriptor(out.Remaining() - MAX_PACKED32_SIZE);
+                        codec.Encode(request, descriptor);
+                        out.String(descriptor.View());
                     }
                 }
-                Services_->CheckSnapshotSize(out.size());
             }
-            return MakeString(out);
+            return MakeString(out.View());
         }
         bool Load2(const NUdf::TUnboxedValue& state) final {
             TString bytes;
             auto it = state.GetListIterator();
             NUdf::TUnboxedValue part;
             while (it.Next(part)) {
+                Services_->CheckSnapshotSize(ui64(bytes.size()) + part.AsStringRef().Size());
                 bytes += part.AsStringRef();
-                Services_->CheckSnapshotSize(bytes.size());
             }
             Load(NUdf::TStringRef(bytes));
             return true;

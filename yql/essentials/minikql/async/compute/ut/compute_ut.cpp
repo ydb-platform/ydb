@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/minikql/async/compute/compute.h>
+#include <yql/essentials/minikql/async/compute/checkpoint.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -130,9 +131,9 @@ struct TEchoReplayCodec final: IReplayCodec {
     TString Contract() const override {
         return "test-echo/v1";
     }
-    TString Encode(const TRequest& request) const override {
+    void Encode(const TRequest& request, IOutputStream& output) const override {
         UNIT_ASSERT_VALUES_EQUAL(request.Operation, "echo");
-        return request.Payload;
+        output.Write(request.Payload);
     }
     TRequest Decode(TStringBuf descriptor) const override {
         return {.Operation = "echo", .Payload = TString(descriptor), .MaxResponseBytes = 1024};
@@ -196,10 +197,10 @@ struct TFixture {
         }
         BuildProgram(program);
     }
-    void BuildProgram(TRuntimeNode program, TString llvm = "OFF", bool materialize = true) {
+    void BuildProgram(TRuntimeNode program, TString llvm = "OFF", bool materialize = true, const std::vector<TNode*>& entryPoints = {}) {
         Setup.Explorer.Walk(program.GetNode(), Setup.Env->GetNodeStack());
         TComputationPatternOpts opts(Setup.Alloc.Ref(), *Setup.Env, GetTestFactory(CheckpointTestFactory), Setup.FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception, llvm, EGraphPerProcess::Multi);
-        Setup.Pattern = MakeComputationPattern(Setup.Explorer, program, {}, opts);
+        Setup.Pattern = MakeComputationPattern(Setup.Explorer, program, entryPoints, opts);
         auto execution = opts.ToComputationOptions(*Setup.RandomProvider, *Setup.TimeProvider);
         execution.AsyncServices = Services;
         if (Services->GetCheckpointMode() != ECheckpointMode::Disabled) {
@@ -350,6 +351,119 @@ struct TYqlFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TAsyncCheckpoint) {
+
+Y_UNIT_TEST(OversizedRowRejectedBeforePackingAndReservationReleased) {
+    auto settings = CheckpointSettings(ECheckpointMode::Replay);
+    settings.Checkpoint.MaxSnapshotBytes = 64 * 1024;
+    TFixture f(1000, {}, settings);
+    f.EnableReplay();
+    auto* integer = f.Pb().NewDataLiteral<ui64>(0).GetStaticType();
+    auto* string = f.Pb().NewDataLiteral<NUdf::EDataSlot::String>("").GetStaticType();
+    TType* members[] = {integer, string, integer};
+    auto* tuple = TTupleType::Create(3, members, *f.Setup.Env);
+    auto input = f.Pb().Arg(tuple);
+    TCallableBuilder source(f.Pb().GetTypeEnvironment(), "CheckpointTestSource", TStreamType::Create(integer, *f.Setup.Env), true);
+    source.Add(f.Pb().NewDataLiteral<ui64>(1));
+    auto stream = f.Pb().Map(TRuntimeNode(source.Build(), false), [&](TRuntimeNode) { return input; });
+    auto row = f.Pb().Arg(tuple);
+    f.BuildProgram(BuildAsyncMap(f.Pb(), stream, row, f.Echo(f.Pb().Nth(row, 0)), f.Registry, 1), "OFF", false, {input.GetNode()});
+    struct TGuardedTuple final: TComputationValue<TGuardedTuple> {
+        TGuardedTuple(TMemoryUsageInfo* memory, bool& armed, ui32& afterLarge)
+            : TComputationValue<TGuardedTuple>(memory)
+            , Armed(armed)
+            , AfterLarge(afterLarge)
+            , Large(MakeString(TString(16 * 1024 * 1024, 'x')))
+        {
+        }
+        NUdf::TUnboxedValue GetElement(ui32 index) const override {
+            if (index == 1) {
+                return Large;
+            }
+            if (index == 2 && Armed) {
+                ++AfterLarge;
+                ythrow yexception() << "packer traversed past oversized string";
+            }
+            return NUdf::TUnboxedValuePod(ui64(1));
+        }
+        bool& Armed;
+        ui32& AfterLarge;
+        const NUdf::TUnboxedValue Large;
+    };
+    bool armed = false;
+    ui32 afterLarge = 0;
+    auto value = f.Graph->GetHolderFactory().Create<TGuardedTuple>(armed, afterLarge);
+    f.Graph->GetEntryPoint(0, true)->SetValue(f.Graph->GetContext(), std::move(value));
+    f.Stream = f.Graph->GetValue();
+    f.Turn();
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 1);
+    f.Cut();
+    const auto before = f.Services->GetSchedulerStats().MemoryBytes;
+    armed = true;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "size limit before value packing");
+    UNIT_ASSERT_VALUES_EQUAL(afterLarge, 0);
+    UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().MemoryBytes, before);
+    UNIT_ASSERT(f.Services->CanSaveCheckpoint());
+}
+Y_UNIT_TEST(SnapshotPackedValuesCheckAggregateSizeAndPreserveFormat) {
+    TFixture f;
+    auto first = f.Pb().NewDataLiteral<NUdf::EDataSlot::String>(TString(40000, 'x'));
+    auto second = f.Pb().NewDataLiteral<NUdf::EDataSlot::String>(TString(40000, 'y'));
+    auto program = f.Pb().NewTuple({first, second});
+    f.BuildProgram(program, "OFF", false);
+    auto value = f.Graph->GetValue();
+    TSnapshotWriter small(65536);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(small.Packed(program.GetStaticType(), value), yexception, "before value packing");
+    UNIT_ASSERT(small.View().empty());
+    TSnapshotWriter large(128 * 1024);
+    large.Packed(program.GetStaticType(), value);
+    TValuePacker packer(false, program.GetStaticType());
+    TString legacy;
+    WriteString(legacy, packer.Pack(value));
+    UNIT_ASSERT_VALUES_EQUAL(large.View(), legacy);
+}
+Y_UNIT_TEST(SnapshotWriterRejectsBeforePartialAppend) {
+    TSnapshotWriter out(64);
+    out.String("prefix");
+    const TString before(out.View());
+    const TString big(16 * 1024 * 1024, 'x');
+    UNIT_ASSERT_EXCEPTION_CONTAINS(out.String(big), yexception, "size limit");
+    UNIT_ASSERT_VALUES_EQUAL(out.View(), before);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(out.Write(big), yexception, "size limit");
+    UNIT_ASSERT_VALUES_EQUAL(out.View(), before);
+}
+Y_UNIT_TEST(ReplayCodecCannotGrowSnapshotBeyondLimit) {
+    auto settings = CheckpointSettings(ECheckpointMode::Replay);
+    settings.Checkpoint.MaxSnapshotBytes = 64 * 1024;
+    TFixture f(1000, {}, settings);
+    struct TExpandingCodec final: IReplayCodec {
+        mutable bool WroteOversizedDescriptor = false;
+        TString Contract() const override {
+            return "expanding/v1";
+        }
+        void Encode(const TRequest&, IOutputStream& output) const override {
+            const char block[4096] = {};
+            for (ui32 i = 0; i < 32; ++i) {
+                output.Write(block, sizeof(block));
+            }
+            WroteOversizedDescriptor = true;
+        }
+        TRequest Decode(TStringBuf) const override {
+            UNIT_FAIL("unexpected Decode");
+            return {};
+        }
+    };
+    auto codec = std::make_shared<TExpandingCodec>();
+    f.Services->RegisterReplayCodec("native", codec);
+    f.BuildCheckpoint(1, [&](auto row) { return f.Echo(row); });
+    f.Turn();
+    f.Cut();
+    const auto before = f.Services->GetSchedulerStats().MemoryBytes;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(f.Graph->SaveGraphState(), yexception, "size limit");
+    UNIT_ASSERT(!codec->WroteOversizedDescriptor);
+    UNIT_ASSERT_VALUES_EQUAL(f.Services->GetSchedulerStats().MemoryBytes, before);
+    UNIT_ASSERT(f.Services->CanSaveCheckpoint());
+}
+
 Y_UNIT_TEST(DrainWaitsForRpcAndSlowDownstream) {
     TString snapshot;
     {
@@ -863,6 +977,33 @@ Y_UNIT_TEST(LateStorageAcknowledgementCannotConfirmAnotherSnapshot) {
 } // Y_UNIT_TEST_SUITE(TAsyncCheckpoint)
 
 Y_UNIT_TEST_SUITE(TResumableComputation) {
+Y_UNIT_TEST(ExternalInputInvalidatesAsyncStream) {
+    TFixture f;
+    f.Provider->Inline = true;
+    auto* type = f.Pb().NewDataLiteral<ui64>(0).GetStaticType();
+    auto input = f.Pb().Arg(type);
+    auto source = f.Pb().Iterator(f.Pb().NewList(type, {input}), {});
+    auto row = f.Pb().Arg(type);
+    auto program = BuildAsyncMap(f.Pb(), source, row, f.Echo(row), f.Registry, 1);
+    f.BuildProgram(program, "OFF", false, {input.GetNode()});
+    auto* entry = f.Graph->GetEntryPoint(0, true);
+    entry->SetValue(f.Graph->GetContext(), NUdf::TUnboxedValuePod(ui64(1)));
+    f.Stream = f.Graph->GetValue();
+    f.Turn();
+    f.Pump();
+    UNIT_ASSERT(f.Finished);
+    f.Check({1});
+    f.Stream.Clear();
+    f.Output.clear();
+    f.Finished = false;
+    entry->SetValue(f.Graph->GetContext(), NUdf::TUnboxedValuePod(ui64(2)));
+    f.Stream = f.Graph->GetValue();
+    f.Turn();
+    f.Pump();
+    f.Check({2});
+    UNIT_ASSERT_VALUES_EQUAL(f.Provider->Calls.size(), 2);
+}
+
 Y_UNIT_TEST(CpuQuantumMakesProgressWhenFirstCheckIsExpired) {
     ui64 cpu = 0;
     TExecutionSettings settings;

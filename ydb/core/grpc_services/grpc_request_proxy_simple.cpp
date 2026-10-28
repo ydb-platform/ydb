@@ -3,6 +3,8 @@
 #include "operation_helpers.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -64,6 +66,19 @@ public:
 private:
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev);
 
+    void PassAway() override {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest);
+        TBase::PassAway();
+    }
+
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        if (ev->Get()->PathNormalizer.has_value()) {
+            PathNormalizer = *ev->Get()->PathNormalizer;
+        }
+        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(ev->Get()->Record), 0, ev->Cookie);
+    }
+
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext&) {
@@ -107,7 +122,12 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+<<<<<<< HEAD
         requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+=======
+        requestBaseCtx->InitializePathNormalization(PathNormalizer);
+        requestBaseCtx->CountRequestPaths();
+>>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
 
         LogRequest(event);
 
@@ -155,9 +175,14 @@ private:
     const NKikimrConfig::TAppConfig AppConfig;
     std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
+    PathNormalizer = AppData(ctx)->PathNormalizer;
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+             NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}), IEventHandle::FlagTrackDelivery);
     auto nodeID = SelfId().NodeId();
 
     YDB_LOG_NOTICE_CTX(ctx, "Grpc simple request proxy started",
@@ -171,6 +196,8 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 
 void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            break;
         default:
             YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source type",
                 {"type", ev->Get()->SourceType});
@@ -227,6 +254,9 @@ void LogRequest(const TEvent& event) {
 
 void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+        IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+        cFunc(TEvents::TSystem::Poison, PassAway);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);

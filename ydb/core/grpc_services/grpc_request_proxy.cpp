@@ -138,7 +138,12 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+<<<<<<< HEAD
         requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+=======
+        requestBaseCtx->InitializePathNormalization(PathNormalizer);
+        requestBaseCtx->CountRequestPaths();
+>>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
 
         LogRequest(event);
 
@@ -323,6 +328,8 @@ private:
     }
 
     virtual void PassAway() override {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest);
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -350,15 +357,18 @@ private:
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
+    PathNormalizer = AppData(ctx)->PathNormalizer;
     AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
 
     // Subscribe for TableService config changes
     ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+             tableServiceConfigKind, NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
          IEventHandle::FlagTrackDelivery);
 
     Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
@@ -410,6 +420,9 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetC
 
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     auto &event = ev->Get()->Record;
+    if (ev->Get()->PathNormalizer.has_value()) {
+        PathNormalizer = *ev->Get()->PathNormalizer;
+    }
 
     ChannelBufferSize.store(
         event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
@@ -652,6 +665,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
+        cFunc(TEvents::TSystem::Poison, PassAway);
         HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 

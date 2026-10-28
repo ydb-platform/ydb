@@ -15,6 +15,10 @@
 #include "http_proxy_sock64.h"
 #include "http_proxy_ssl.h"
 
+#include <functional>
+#include <memory>
+#include <optional>
+
 namespace NHttp {
 
 using namespace NActors;
@@ -119,6 +123,11 @@ struct TEvHttpProxy {
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
         TString UserToken; // built and serialized
+<<<<<<< HEAD
+=======
+        TString Database; // raw extracted from request; empty if not specified
+        std::optional<std::shared_ptr<const std::function<TString(TStringBuf)>>> PathNormalizer;
+>>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))

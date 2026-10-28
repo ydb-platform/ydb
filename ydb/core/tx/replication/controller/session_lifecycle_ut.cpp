@@ -1,7 +1,9 @@
 #include "controller_impl.h"
 
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

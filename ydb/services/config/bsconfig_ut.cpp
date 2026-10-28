@@ -1107,6 +1107,26 @@ config:
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::BAD_REQUEST);
     }
 
+    // The metadata of the database YAML has a version that is not a number: the replacement is a bad request, and
+    // the server goes on serving
+    Y_UNIT_TEST(DatabaseConfigWithInvalidVersionIsBadRequest) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {}, /*enableDatabaseAdmin*/ false);
+        const auto replace = DoReplaceConfig(server.GetChannel(), "root@builtin", std::nullopt, R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/Root/some_database"
+  version: not-a-number
+config:
+  feature_flags: {}
+)");
+        UNIT_ASSERT_CHECK_STATUS(replace.operation(), Ydb::StatusIds::BAD_REQUEST);
+
+        // the control: a valid request is served after that
+        const auto fetch = DoFetchConfig(server.GetChannel(), "root@builtin", std::nullopt);
+        AssertAllowed(fetch.operation(), "FetchConfig");
+    }
+
     Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminDisabled) {
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");

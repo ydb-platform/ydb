@@ -300,8 +300,18 @@ namespace NKikimr {
                 return PartHoldsEverything(Info->Group->GetBridgeGroupState(), pile);
             }
 
+            // A read not restoring data takes the answer of a trusted pile, so an error of a pile not holding all the data
+            // must not end it while other piles are still to answer
+            bool IgnoreUntrustedReadError(const TBridgeInfo::TPile& pile) const {
+                return !MustRestoreFirst && !IsRestoring && ResponsesPending && !DataIsTrustedInPile(pile);
+            }
+
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
+                if (ev->Status != NKikimrProto::OK && std::holds_alternative<TGetState>(State)
+                        && IgnoreUntrustedReadError(pile)) {
+                    return nullptr;
+                }
                 if (ev->Status != NKikimrProto::OK) {
                     return std::visit(TOverloaded{
                         [&](TGetState&) -> std::unique_ptr<IEventBase> {
@@ -585,7 +595,7 @@ namespace NKikimr {
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvRangeResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
                 if (ev->Status != NKikimrProto::OK) {
-                    return MakeErrorFrom(self, ev.get());
+                    return IgnoreUntrustedReadError(pile) ? nullptr : MakeErrorFrom(self, ev.get());
                 }
 
                 Y_ABORT_UNLESS(std::holds_alternative<TRangeState>(State));

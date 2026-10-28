@@ -337,23 +337,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-<<<<<<< HEAD
-=======
             if (const auto error = state.ApplyDataCenterStates()) {
                 *errorDescription = *error;
                 return false;
             }
 
-            // virtual group state reported to node wardens may change without explicit group content change (for
-            // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
-            for (const auto& [base, overlay] : state.Groups.Diff()) {
-                if (base && overlay->second && base->second->GetReportedVirtualGroupState() !=
-                        overlay->second->GetReportedVirtualGroupState()) {
-                    state.GroupContentChanged.insert(overlay->first);
-                }
-            }
-
->>>>>>> 32b9cce070f (Add volatile cluster-wide data center states for mirror-3-dc (#56799))
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
             for (TGroupId groupId : state.GroupContentChanged) {

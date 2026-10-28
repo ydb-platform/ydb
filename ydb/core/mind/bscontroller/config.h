@@ -382,21 +382,8 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
-<<<<<<< HEAD
-=======
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
-
-            template<typename TCallback>
-            void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);
-
-            // turn ordinary groups of the storage pool being made bridged into inline piles, and give every bridged
-            // group of the pool its parts in all piles
-            void MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId);
-
-            // designate the part every bridged group of the storage pool being made ordinary keeps
-            void MakeStoragePoolGroupsOrdinary(TBoxStoragePoolId storagePoolId, const TString& retainPileName);
->>>>>>> 32b9cce070f (Add volatile cluster-wide data center states for mirror-3-dc (#56799))
         };
 
     } // NBsController

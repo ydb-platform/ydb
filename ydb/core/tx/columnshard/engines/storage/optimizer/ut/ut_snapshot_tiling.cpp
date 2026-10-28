@@ -875,6 +875,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingCounters) {
         snapshots.Set(2, 900, 1'100);
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 900);
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 200);
+        // The newest planner gives the minimum delay.
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMinDelaySeconds(), 100);
         // The older planner leaves: the other one's value is the oldest again.
         snapshots.Remove(2, 1'200);
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'000);
@@ -884,6 +886,7 @@ Y_UNIT_TEST_SUITE(SnapshotTilingCounters) {
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetOldestSeconds(), 1'300);
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetCurrentSeconds(), 1'300);
         UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMaxDelaySeconds(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.GetMinDelaySeconds(), 0);
     }
 
     Y_UNIT_TEST(SettledPlannerKeepsItsDelayBetweenReports) {
@@ -909,8 +912,8 @@ Y_UNIT_TEST_SUITE(SnapshotTilingCounters) {
         UNIT_ASSERT(&move != &level);
         UNIT_ASSERT(&move == &TGeneralCompactionCounters::ForReason("snapshot_move"));
         const auto startedBefore = move.GetTasksStarted();
-        move.OnStart(1, 0, TDuration::MilliSeconds(5));
-        move.OnWritten(0, 0);
+        move.OnStart(1, 0, 0, 0, TDuration::MilliSeconds(5));
+        move.OnWritten(0, 0, 0, 0);
         move.OnFinish(true, TDuration::MilliSeconds(20));
         UNIT_ASSERT_VALUES_EQUAL(move.GetTasksStarted(), startedBefore + 1);
         UNIT_ASSERT_VALUES_EQUAL(move.GetTasksFinished(), startedBefore + 1);

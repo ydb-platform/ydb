@@ -146,26 +146,40 @@ private:
     TMutex Mutex;
     THashMap<ui64, TReport> SnapshotSecondsByPlanner;
     const NMonitoring::TDynamicCounters::TCounterPtr OldestSnapshotSeconds;
+    const NMonitoring::TDynamicCounters::TCounterPtr NewestSnapshotSeconds;
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentSnapshotSeconds;
     const NMonitoring::TDynamicCounters::TCounterPtr MaxDelaySeconds;
+    const NMonitoring::TDynamicCounters::TCounterPtr MinDelaySeconds;
     const NMonitoring::TDynamicCounters::TCounterPtr Planners;
 
+    /// The oldest and the newest S over the planners, and the delays they make with the clock: the band every shard's
+    /// lag lies in (the minimum added 2026-10-28 for the write-amplification dashboard).
     void Publish(const ui64 nowSeconds) {
         ui64 oldest = nowSeconds;
+        ui64 newest = 0;
         for (const auto& [_, report] : SnapshotSecondsByPlanner) {
-            oldest = std::min(oldest, report.SnapshotAt(nowSeconds));
+            const ui64 seconds = std::min(nowSeconds, report.SnapshotAt(nowSeconds));
+            oldest = std::min(oldest, seconds);
+            newest = std::max(newest, seconds);
+        }
+        if (SnapshotSecondsByPlanner.empty()) {
+            newest = nowSeconds;
         }
         OldestSnapshotSeconds->Set(oldest);
+        NewestSnapshotSeconds->Set(newest);
         CurrentSnapshotSeconds->Set(nowSeconds);
         MaxDelaySeconds->Set(nowSeconds - oldest);
+        MinDelaySeconds->Set(nowSeconds - newest);
         Planners->Set(SnapshotSecondsByPlanner.size());
     }
 
 public:
     TCompactedSnapshotCounters(const NColumnShard::TCommonCountersOwner& owner)
         : OldestSnapshotSeconds(owner.GetValue("Snapshot/Compacted/OldestSeconds"))
+        , NewestSnapshotSeconds(owner.GetValue("Snapshot/Compacted/NewestSeconds"))
         , CurrentSnapshotSeconds(owner.GetValue("Snapshot/CurrentSeconds"))
         , MaxDelaySeconds(owner.GetValue("Snapshot/Compacted/MaxDelaySeconds"))
+        , MinDelaySeconds(owner.GetValue("Snapshot/Compacted/MinDelaySeconds"))
         , Planners(owner.GetValue("Snapshot/Compacted/Planners"))
     {
     }
@@ -192,6 +206,10 @@ public:
 
     ui64 GetMaxDelaySeconds() const {
         return MaxDelaySeconds->Val();
+    }
+
+    ui64 GetMinDelaySeconds() const {
+        return MinDelaySeconds->Val();
     }
 };
 

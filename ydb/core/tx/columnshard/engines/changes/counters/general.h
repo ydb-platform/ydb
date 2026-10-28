@@ -26,6 +26,13 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr BytesIn;
     const NMonitoring::TDynamicCounters::TCounterPtr PortionsOut;
     const NMonitoring::TDynamicCounters::TCounterPtr BytesOut;
+    /// Raw (uncompressed) bytes, the size compaction holds in memory, per task and in total (2026-10-28).
+    const NMonitoring::TDynamicCounters::TCounterPtr RawBytesIn;
+    const NMonitoring::TDynamicCounters::TCounterPtr RawBytesOut;
+    /// Rows read and written: write amplification measured in rows is independent of compression (2026-10-28).
+    const NMonitoring::TDynamicCounters::TCounterPtr RowsIn;
+    const NMonitoring::TDynamicCounters::TCounterPtr RowsOut;
+    const NMonitoring::THistogramPtr HistogramRawBytesIn;
     const NMonitoring::THistogramPtr HistogramPortionsIn;
     const NMonitoring::THistogramPtr HistogramBytesIn;
     const NMonitoring::THistogramPtr HistogramPortionsOut;
@@ -43,6 +50,11 @@ public:
         , BytesIn(TBase::GetDeriviative("Tasks/BytesIn/Bytes"))
         , PortionsOut(TBase::GetDeriviative("Tasks/PortionsOut/Count"))
         , BytesOut(TBase::GetDeriviative("Tasks/BytesOut/Bytes"))
+        , RawBytesIn(TBase::GetDeriviative("Tasks/RawBytesIn/Bytes"))
+        , RawBytesOut(TBase::GetDeriviative("Tasks/RawBytesOut/Bytes"))
+        , RowsIn(TBase::GetDeriviative("Tasks/RowsIn/Count"))
+        , RowsOut(TBase::GetDeriviative("Tasks/RowsOut/Count"))
+        , HistogramRawBytesIn(TBase::GetHistogram("Tasks/RawBytesIn", NMonitoring::ExponentialHistogram(25, 2, 1024)))
         , HistogramPortionsIn(TBase::GetHistogram("Tasks/PortionsIn", NMonitoring::ExponentialHistogram(15, 2)))
         , HistogramBytesIn(TBase::GetHistogram("Tasks/BytesIn", NMonitoring::ExponentialHistogram(25, 2, 1024)))
         , HistogramPortionsOut(TBase::GetHistogram("Tasks/PortionsOut", NMonitoring::ExponentialHistogram(15, 2)))
@@ -53,21 +65,26 @@ public:
     }
 
     /// The task starts: its inputs, and the wait between its generation by the planner and its start.
-    void OnStart(const ui64 portionsIn, const ui64 bytesIn, const TDuration wait) const {
+    void OnStart(const ui64 portionsIn, const ui64 bytesIn, const ui64 rawBytesIn, const ui64 rowsIn, const TDuration wait) const {
         TasksStarted->Inc();
         PortionsIn->Add(portionsIn);
         BytesIn->Add(bytesIn);
+        RawBytesIn->Add(rawBytesIn);
+        RowsIn->Add(rowsIn);
         HistogramPortionsIn->Collect(portionsIn);
         HistogramBytesIn->Collect(bytesIn);
+        HistogramRawBytesIn->Collect(rawBytesIn);
         HistogramWaitMs->Collect(wait.MilliSeconds());
     }
 
     /// The task's outputs reached the index.
-    void OnWritten(const ui64 portionsOut, const ui64 bytesOut) const {
+    void OnWritten(const ui64 portionsOut, const ui64 bytesOut, const ui64 rawBytesOut, const ui64 rowsOut) const {
+        RowsOut->Add(rowsOut);
         PortionsOut->Add(portionsOut);
         BytesOut->Add(bytesOut);
         HistogramPortionsOut->Collect(portionsOut);
         HistogramBytesOut->Collect(bytesOut);
+        RawBytesOut->Add(rawBytesOut);
     }
 
     /// The task ended, in success or in failure, after this long since its start.

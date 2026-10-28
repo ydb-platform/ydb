@@ -5,6 +5,7 @@
 #include <ydb/core/base/events.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
@@ -41,31 +42,22 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TString DebugString() const;
 
     const TVector<TCluster>& GetClusters(TStringBuf authority) const;
-    // Read clusters for an account. Unknown account or no cluster with CanRead: every non-FNX
-    // cluster plus FNX clusters with CanWrite. Otherwise only CanRead clusters, plus those FNX clusters.
+    // Read clusters for an account: FNX clusters from Write, plus non-FNX clusters from Read
+    // (every non-FNX cluster when Read is empty). Unknown account: every non-FNX cluster.
     TVector<TCluster> GetReadClusters(TStringBuf account) const;
     // Sum of PQ/Config/V2/Account.version. Each account keeps its own version.
     i64 SumAccountVersions() const;
+    // A cluster named by a balancer is FNX even without Cluster.fnx.
     void MarkFnxFromBalancers();
     void BuildVisibleClusters();
 
     struct TAccountClusters {
-        struct TAccess {
-            bool CanRead = false;
-            bool CanWrite = false;
-
-            bool operator==(const TAccess& rhs) const {
-                return CanRead == rhs.CanRead && CanWrite == rhs.CanWrite;
-            }
-        };
-
-        absl::flat_hash_map<TString, TAccess> Clusters;
+        absl::flat_hash_set<TString> Read;
+        absl::flat_hash_set<TString> Write;
         // From PQ/Config/V2/Account.version. Independent of every other account.
         i64 Version = 0;
 
-        bool operator==(const TAccountClusters& rhs) const {
-            return Clusters == rhs.Clusters && Version == rhs.Version;
-        }
+        bool operator==(const TAccountClusters& rhs) const = default;
     };
 
     TVector<TCluster> Clusters;
@@ -83,8 +75,6 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     i64 Version = 0;
     i64 ClusterVersion = 0;
     i64 BalancerVersion = 0;
-    // Sum of per-account versions. Not the Versions row named Account.
-    i64 AccountVersion = 0;
 };
 
 struct TEvClusterTracker {

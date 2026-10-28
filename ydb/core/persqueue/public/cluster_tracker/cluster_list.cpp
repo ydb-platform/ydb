@@ -10,7 +10,7 @@ void TClustersList::MarkFnxFromBalancers() {
         fnxNames.insert(names.begin(), names.end());
     }
     for (auto& cluster : Clusters) {
-        cluster.IsFnx = fnxNames.contains(cluster.Name);
+        cluster.IsFnx = cluster.IsFnx || fnxNames.contains(cluster.Name);
     }
 }
 
@@ -40,34 +40,19 @@ void TClustersList::BuildVisibleClusters() {
 TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf account) const {
     TString key(account);
     key.to_lower();
-    const TAccountClusters* spec = nullptr;
-    if (const auto it = Accounts.find(key); it != Accounts.end()) {
-        spec = &it->second;
+    const auto it = Accounts.find(key);
+    if (it == Accounts.end()) {
+        return DefaultVisibleClusters;
     }
-
-    bool hasReadList = false;
-    if (spec) {
-        for (const auto& [_, access] : spec->Clusters) {
-            if (access.CanRead) {
-                hasReadList = true;
-                break;
-            }
-        }
-    }
+    const auto& spec = it->second;
 
     TVector<TCluster> visible;
     visible.reserve(Clusters.size());
     for (const auto& cluster : Clusters) {
-        const TAccountClusters::TAccess* access = nullptr;
-        if (spec) {
-            if (const auto it = spec->Clusters.find(cluster.Name); it != spec->Clusters.end()) {
-                access = &it->second;
-            }
-        }
-        const bool listed = hasReadList && access && access->CanRead;
-        const bool assignedFnx = cluster.IsFnx && access && access->CanWrite;
-        const bool everyCommunal = !hasReadList && !cluster.IsFnx;
-        if (listed || assignedFnx || everyCommunal) {
+        const bool readable = cluster.IsFnx
+            ? spec.Write.contains(cluster.Name)
+            : spec.Read.empty() || spec.Read.contains(cluster.Name);
+        if (readable) {
             visible.push_back(cluster);
         }
     }

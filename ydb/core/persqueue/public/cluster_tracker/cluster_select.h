@@ -15,8 +15,8 @@ TString AccountNameFromDatabase(TStringBuf database);
 
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv);
 
-TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath);
-TString AccountTablePathFromClusterTable(TStringBuf clusterTablePath);
+// `tableName` next to the Cluster table: `.../Cluster` -> `.../<tableName>`.
+TString SiblingTablePath(TStringBuf clusterTablePath, TStringBuf tableName);
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath);
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath);

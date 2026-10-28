@@ -100,53 +100,37 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("")), (TVector<TString>{"sas", "vla"}));
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("missing")), (TVector<TString>{"sas", "vla"}));
 
-        list.Accounts["prod"].Clusters = {
-            {"myt", {false, true}},
-            {"sas", {false, true}},
-        };
-        list.BuildVisibleClusters();
+        auto& prod = list.Accounts["prod"];
+        prod.Write = {"myt", "sas"};
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("PROD")), (TVector<TString>{"sas", "vla", "myt"}));
 
-        list.Accounts["prod"].Clusters = {
-            {"vla", {true, false}},
-            {"myt", {false, true}},
-            {"sas", {false, true}},
-        };
-        list.BuildVisibleClusters();
+        prod.Read = {"vla"};
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"vla", "myt"}));
 
-        list.Accounts["prod"].Clusters = {
-            {"klg", {true, false}},
-            {"missing", {true, false}},
-            {"myt", {false, true}},
-        };
-        list.BuildVisibleClusters();
-        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"myt", "klg"}));
+        // Read lists choose among non-FNX clusters only: klg is FNX and missing is unknown.
+        prod.Read = {"klg", "missing"};
+        prod.Write = {"myt"};
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"myt"}));
 
-        list.Accounts["prod"].Clusters = {
-            {"sas", {true, true}},
-        };
+        prod.Read = {"sas"};
+        prod.Write = {"sas"};
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas"}));
 
-        list.Accounts["prod"].Clusters.clear();
+        prod.Read.clear();
+        prod.Write.clear();
         UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla"}));
-
-        list.Accounts["prod"].Clusters = {
-            {"klg", {true, false}},
-        };
-        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"klg"}));
     }
 
     Y_UNIT_TEST(AccountVersionsStayIndependent) {
         TClustersList::TAccountClusters left;
-        left.Clusters = {{"sas", {true, false}}};
+        left.Read = {"sas"};
         left.Version = 2;
         TClustersList::TAccountClusters right = left;
         UNIT_ASSERT(left == right);
         right.Version = 3;
         UNIT_ASSERT(!(left == right));
         right.Version = 2;
-        right.Clusters["sas"].CanWrite = true;
+        right.Write = {"sas"};
         UNIT_ASSERT(!(left == right));
 
         TClustersList list;
@@ -155,14 +139,13 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         list.Clusters.push_back(MakeCluster("myt", true));
         list.ClusterVersion = 3;
         list.BalancerVersion = 4;
-        list.Accounts["prod"].Clusters = {{"myt", {false, true}}};
+        list.Accounts["prod"].Write = {"myt"};
         list.Accounts["prod"].Version = 2;
-        list.Accounts["dev"].Clusters = {{"sas", {true, false}}};
+        list.Accounts["dev"].Read = {"sas"};
         list.Accounts["dev"].Version = 5;
 
         UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 7);
-        list.AccountVersion = list.SumAccountVersions();
-        list.Version = list.ClusterVersion + list.BalancerVersion + list.AccountVersion;
+        list.Version = list.ClusterVersion + list.BalancerVersion + list.SumAccountVersions();
         UNIT_ASSERT_VALUES_EQUAL(list.Version, 14);
 
         list.Accounts["prod"].Version = 9;
@@ -202,10 +185,13 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(!list.Clusters[0].IsFnx);
         UNIT_ASSERT(list.Clusters[1].IsFnx);
 
-        list.Balancers.clear();
-        list.MarkFnxFromBalancers();
-        UNIT_ASSERT(!list.Clusters[0].IsFnx);
-        UNIT_ASSERT(!list.Clusters[1].IsFnx);
+        // Cluster.fnx stays FNX without a balancer.
+        TClustersList fromColumn;
+        fromColumn.Clusters.push_back(MakeCluster("sas", false));
+        fromColumn.Clusters.push_back(MakeCluster("klg", true));
+        fromColumn.MarkFnxFromBalancers();
+        UNIT_ASSERT(!fromColumn.Clusters[0].IsFnx);
+        UNIT_ASSERT(fromColumn.Clusters[1].IsFnx);
     }
 
     Y_UNIT_TEST(ClustersListEqualityAndDebugString) {
@@ -249,12 +235,15 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         right.Clusters.front().IsAvailable = true;
     }
 
-    Y_UNIT_TEST(BalancerTablePathFromClusterTable) {
+    Y_UNIT_TEST(SiblingTablePath) {
         UNIT_ASSERT_VALUES_EQUAL(
-            BalancerTablePathFromClusterTable("/Root/PQ/Config/V2/Cluster"),
+            SiblingTablePath("/Root/PQ/Config/V2/Cluster", "Balancer"),
             "/Root/PQ/Config/V2/Balancer");
         UNIT_ASSERT_VALUES_EQUAL(
-            BalancerTablePathFromClusterTable("/Root/PQ/Config/V2/Other"),
+            SiblingTablePath("/Root/PQ/Config/V2/Cluster", "Account"),
+            "/Root/PQ/Config/V2/Account");
+        UNIT_ASSERT_VALUES_EQUAL(
+            SiblingTablePath("/Root/PQ/Config/V2/Other", "Balancer"),
             "/Root/PQ/Config/V2/OtherBalancer");
     }
 
@@ -268,8 +257,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(!MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains(balancer));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
-        const TString account = AccountTablePathFromClusterTable(cluster);
-        UNIT_ASSERT_VALUES_EQUAL(account, "/Root/PQ/Config/V2/Account");
+        const TString account = SiblingTablePath(cluster, "Account");
         const TString accountsQuery = MakeListAccountsQuery(account);
         UNIT_ASSERT(accountsQuery.Contains("A.readClusters"));
         UNIT_ASSERT(accountsQuery.Contains("A.writeClusters"));

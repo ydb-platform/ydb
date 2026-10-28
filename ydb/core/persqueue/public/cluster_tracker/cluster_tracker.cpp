@@ -84,25 +84,22 @@ private:
     }
 
     TString GetBalancerTablePath() const {
-        return BalancerTablePathFromClusterTable(Cfg().GetClusterTablePath());
+        return SiblingTablePath(Cfg().GetClusterTablePath(), "Balancer");
     }
 
     TString GetAccountTablePath() const {
-        return AccountTablePathFromClusterTable(Cfg().GetClusterTablePath());
+        return SiblingTablePath(Cfg().GetClusterTablePath(), "Account");
     }
 
-    void StartListAccounts(bool nextPage = false) {
-        if (!nextPage) {
-            AccountPageFrom.clear();
-        }
+    void StartListAccounts() {
         QueryInFlight = true;
         CurrentQuery = EQueryKind::ListAccounts;
         SendDml(MakeListAccountsQuery(GetAccountTablePath()), AccountPageFrom);
     }
 
-    void ApplyCachedAccounts(TClustersList& clustersList) const {
-        clustersList.Accounts = LastAccounts;
-        clustersList.AccountVersion = LastAccountVersion;
+    void FinishWithCachedAccounts() {
+        PendingClustersList->Accounts = LastAccounts;
+        FinishClustersList(std::move(PendingClustersList));
     }
 
     STATEFN(Working) {
@@ -354,8 +351,7 @@ private:
                     if (PendingClustersList) {
                         PendingClustersList->BalancerVersion = LastBalancerVersion;
                         PendingClustersList->Balancers = LastBalancers;
-                        ApplyCachedAccounts(*PendingClustersList);
-                        FinishClustersList(std::move(PendingClustersList));
+                        FinishWithCachedAccounts();
                     } else {
                         FailAndRetry();
                         return;
@@ -371,39 +367,19 @@ private:
                     FailAndRetry();
                     return;
                 }
-                if (success) {
-                    const bool hasResult = record.GetResponse().YdbResultsSize() > 0;
-                    const bool truncated = hasResult && record.GetResponse().GetYdbResults(0).truncated();
-                    if (!hasResult) {
-                        if (AccountPageFrom.empty()) {
-                            PendingClustersList->Accounts.clear();
-                            PendingClustersList->AccountVersion = 0;
-                        }
-                        AccountPageFrom.clear();
-                        RememberAccounts(*PendingClustersList);
-                        FinishClustersList(std::move(PendingClustersList));
-                    } else {
-                        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
-                        UpdateAccountsList(parser, truncated);
-                    }
+                if (success && record.GetResponse().YdbResultsSize() > 0) {
+                    UpdateAccountsList(record.GetResponse().GetYdbResults(0));
                     return;
                 }
-                if (IssuesLookLikeMissingAccountTable(issues)) {
+                if (!success && IssuesLookLikeMissingAccountTable(issues)) {
                     YDB_LOG_DEBUG_CTX(Ctx(), "Account table is absent, account cluster lists are empty",
                         {"record", record});
-                    AccountPageFrom.clear();
-                    PendingClustersList->Accounts.clear();
-                    PendingClustersList->AccountVersion = 0;
                     LastAccounts.clear();
-                    LastAccountVersion = 0;
-                    FinishClustersList(std::move(PendingClustersList));
-                    return;
+                } else {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list accounts, publish clusters with last account cache",
+                        {"record", record});
                 }
-                AccountPageFrom.clear();
-                YDB_LOG_ERROR_CTX(Ctx(), "Failed to list accounts, publish clusters with last account cache",
-                    {"record", record});
-                ApplyCachedAccounts(*PendingClustersList);
-                FinishClustersList(std::move(PendingClustersList));
+                FinishWithCachedAccounts();
                 return;
 
             case EQueryKind::None:
@@ -416,8 +392,8 @@ private:
     void FinishClustersList(TIntrusivePtr<TClustersList> clustersList) {
         AFL_ENSURE(clustersList);
         AFL_ENSURE(clustersList->Clusters.size());
-        clustersList->AccountVersion = clustersList->SumAccountVersions();
-        clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->AccountVersion;
+        AccountPageFrom.clear();
+        clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion + clustersList->SumAccountVersions();
         clustersList->MarkFnxFromBalancers();
         clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
@@ -450,7 +426,10 @@ private:
             cluster.IsLocal = parser.ColumnParser("local").GetOptionalBool().value_or(false);
             cluster.IsEnabled = parser.ColumnParser("enabled").GetOptionalBool().value_or(false);
             cluster.Weight = parser.ColumnParser("weight").GetOptionalUint64().value_or(1000);
-            cluster.IsFnx = false;
+            // Absent on a Cluster table without the CM fnx column: balancers alone mark FNX.
+            if (parser.ColumnIndex("fnx") >= 0) {
+                cluster.IsFnx = parser.ColumnParser("fnx").GetOptionalBool().value_or(false);
+            }
             // Absent on not-yet-migrated schema; NULL -> available (LOGBROKER-10701)
             if (parser.ColumnIndex("available") >= 0) {
                 cluster.IsAvailable = parser.ColumnParser("available").GetOptionalBool().value_or(true);
@@ -488,72 +467,43 @@ private:
         StartListAccounts();
     }
 
-    template<typename TProtoRecord>
-    void UpdateAccountsList(TProtoRecord& parser, bool truncated) {
-        auto clustersList = PendingClustersList;
-        PendingClustersList = nullptr;
-        if (!clustersList) {
-            FailAndRetry();
-            return;
-        }
+    void UpdateAccountsList(const Ydb::ResultSet& resultSet) {
+        auto parseNames = [](TStringBuf csv) {
+            const auto names = ParseFnxClusterCsv(csv);
+            return absl::flat_hash_set<TString>(names.begin(), names.end());
+        };
 
+        NYdb::TResultSetParser parser(resultSet);
         TString pageLastName;
         while (parser.TryNextRow()) {
-            const TString rawName = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
-            if (!rawName.empty()) {
-                pageLastName = rawName;
-            }
-            TString name = rawName;
-            name.to_lower();
+            TString name(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
             if (name.empty()) {
                 continue;
             }
-            auto readNames = ParseFnxClusterCsv(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
-            auto writeNames = ParseFnxClusterCsv(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
-            TClustersList::TAccountClusters spec;
-            auto add = [&](TVector<TString>& names, bool canRead, bool canWrite) {
-                for (auto& clusterName : names) {
-                    clusterName.to_lower();
-                    if (clusterName.empty()) {
-                        continue;
-                    }
-                    auto& access = spec.Clusters[clusterName];
-                    access.CanRead = access.CanRead || canRead;
-                    access.CanWrite = access.CanWrite || canWrite;
-                }
-            };
-            add(readNames, true, false);
-            add(writeNames, false, true);
-            spec.Version = parser.ColumnParser(3).GetOptionalInt64().value_or(0);
-            clustersList->Accounts[name] = std::move(spec);
+            pageLastName = name;
+            name.to_lower();
+            auto& account = PendingClustersList->Accounts[name];
+            account.Read = parseNames(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
+            account.Write = parseNames(parser.ColumnParser(2).GetOptionalUtf8().value_or(""));
+            account.Version = parser.ColumnParser(3).GetOptionalInt64().value_or(0);
         }
 
-        if (truncated) {
+        if (resultSet.truncated()) {
             // A truncated page is not the account table. Keep the previous complete cache.
-            if (pageLastName.empty() || pageLastName <= AccountPageFrom) {
+            if (pageLastName <= AccountPageFrom) {
                 YDB_LOG_ERROR_CTX(Ctx(), "Account list page did not advance, keep the previous account cache",
                     {"from", AccountPageFrom},
                     {"pageLastName", pageLastName});
-                AccountPageFrom.clear();
-                ApplyCachedAccounts(*clustersList);
-                FinishClustersList(std::move(clustersList));
+                FinishWithCachedAccounts();
                 return;
             }
             AccountPageFrom = pageLastName;
-            PendingClustersList = std::move(clustersList);
-            StartListAccounts(true);
+            StartListAccounts();
             return;
         }
 
-        AccountPageFrom.clear();
-        clustersList->AccountVersion = clustersList->SumAccountVersions();
-        RememberAccounts(*clustersList);
-        FinishClustersList(std::move(clustersList));
-    }
-
-    void RememberAccounts(const TClustersList& clustersList) {
-        LastAccountVersion = clustersList.AccountVersion;
-        LastAccounts = clustersList.Accounts;
+        LastAccounts = PendingClustersList->Accounts;
+        FinishClustersList(std::move(PendingClustersList));
     }
 
     void RememberBalancers(const TClustersList& clustersList) {
@@ -575,7 +525,6 @@ private:
     EQueryKind CurrentQuery = EQueryKind::None;
     i64 LastBalancerVersion = 0;
     absl::flat_hash_map<TString, TVector<TString>> LastBalancers;
-    i64 LastAccountVersion = 0;
     absl::flat_hash_map<TString, TClustersList::TAccountClusters> LastAccounts;
     // Exclusive lower bound of the account page being read. Empty starts from the first name.
     TString AccountPageFrom;

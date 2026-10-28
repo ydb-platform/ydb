@@ -100,20 +100,12 @@ const TVector<TClustersList::TCluster>& TClustersList::GetClusters(TStringBuf au
     return DefaultVisibleClusters;
 }
 
-TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath) {
+TString SiblingTablePath(TStringBuf clusterTablePath, TStringBuf tableName) {
     static constexpr TStringBuf suffix = "/Cluster";
     if (clusterTablePath.EndsWith(suffix)) {
-        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size())) + "/Balancer";
+        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size() + 1)) + tableName;
     }
-    return TString(clusterTablePath) + "Balancer";
-}
-
-TString AccountTablePathFromClusterTable(TStringBuf clusterTablePath) {
-    static constexpr TStringBuf suffix = "/Cluster";
-    if (clusterTablePath.EndsWith(suffix)) {
-        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size())) + "/Account";
-    }
-    return TString(clusterTablePath) + "Account";
+    return TString(clusterTablePath) + tableName;
 }
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath) {
@@ -153,7 +145,7 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
     // Match federation_recipe / CM Cluster schema, including kikimrHost.
     // Do not add extra columns (fnx): DestPrepare CREATE TABLE then fails with
-    // "Table name conflict". FNX is taken from Balancer.clusters.
+    // "Table name conflict". FNX comes from the CM fnx column when present and from Balancer.clusters.
     return Sprintf(
         R"(
                --!syntax_v1

@@ -1281,6 +1281,50 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
     }
 
+    Y_UNIT_TEST(TestClusterFnxColumnWithoutBalancer) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().UpsertCluster("myt", "myt.logbroker.yandex.net", false, true, 1000);
+        wrapper.WaitForExactClustersDataVersion(2);
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(3);
+
+        {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+        }
+
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, version Int64, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
+            "VALUES (\"prod\", \"dc2,myt\", \"myt\", 1);");
+        wrapper.WaitForExactClustersDataVersion(4);
+        {
+            // myt from readClusters alone is ignored; it is readable through writeClusters.
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, {}, "/Root/prod"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc2", "myt"}));
+        }
+    }
+
     Y_UNIT_TEST(TestPreferredClusterAlreadyFirst) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");

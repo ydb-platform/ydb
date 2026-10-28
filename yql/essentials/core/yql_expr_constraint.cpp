@@ -140,6 +140,7 @@ public:
         Functions_["OrderedFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions_["Filter"] = &TCallableConstraintTransformer::FilterWrap<false>;
         Functions_["WideFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
+        Functions_["AsyncMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;
         Functions_["OrderedMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;
         Functions_["Map"] = &TCallableConstraintTransformer::MapWrap<false, false>;
         Functions_["MapNext"] = &TCallableConstraintTransformer::MapWrap<true, false>;

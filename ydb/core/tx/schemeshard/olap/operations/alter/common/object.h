@@ -10,6 +10,11 @@ private:
     YDB_READONLY_DEF(TColumnTableInfo::TPtr, TableInfo);
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) = 0;
     virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoBuildUpdate(const NKikimrSchemeOp::TModifyScheme& modification) const = 0;
+
+    template <class TInitializer>
+    TConclusion<std::shared_ptr<ISSEntityUpdate>> BuildUpdate(
+        const NKikimrSchemeOp::TModifyScheme& modification, TInitializer&& initializer) const;
+
 protected:
     TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& ssContext) const override final;
     virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) override final;

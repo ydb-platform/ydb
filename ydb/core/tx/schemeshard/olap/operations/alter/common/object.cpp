@@ -4,6 +4,22 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+template <class TInitializer>
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::BuildUpdate(
+    const NKikimrSchemeOp::TModifyScheme& modification, TInitializer&& initializer) const {
+    auto update = DoBuildUpdate(modification);
+    if (update.IsFail()) {
+        return update;
+    }
+
+    auto status = initializer(*update.GetResult());
+    if (status.IsFail()) {
+        return status;
+    }
+
+    return update;
+}
+
 TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdate(const TUpdateRestoreContext& context) const {
     auto& ssContext = *context.GetSSOperationContext();
     auto tableInfo = ssContext.SS->ColumnTables.GetVerifiedPtr(GetPathId());
@@ -22,17 +38,7 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdat
     NKikimrSchemeOp::TModifyScheme mScheme;
     *mScheme.MutableAlterColumnTable() = *tableInfo->AlterData->AlterBody;
     mScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-    auto update = DoBuildUpdate(mScheme);
-    if (update.IsFail()) {
-        return update;
-    }
-
-    auto status = update.GetResult()->Restore(context);
-    if (status.IsFail()) {
-        return status;
-    }
-
-    return update;
+    return BuildUpdate(mScheme, [&](ISSEntityUpdate& update) { return update.Restore(context); });
 }
 
 TConclusionStatus TColumnTableEntity::DoInitialize(const TEntityInitializationContext& context) {
@@ -49,17 +55,7 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate
         return NKikimr::TConclusionStatus::Fail("There's another Alter in flight");
     }
 
-    auto update = DoBuildUpdate(*context.GetModification());
-    if (update.IsFail()) {
-        return update;
-    }
-
-    auto status = update.GetResult()->Initialize(context);
-    if (status.IsFail()) {
-        return status;
-    }
-
-    return update;
+    return BuildUpdate(*context.GetModification(), [&](ISSEntityUpdate& update) { return update.Initialize(context); });
 }
 
 }

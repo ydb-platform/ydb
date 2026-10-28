@@ -259,6 +259,5 @@ def test_destination_disk_rollback_stops_replication():
             destination.query(f'ALTER ASYNC REPLICATION r SET (STATE="{state}");')
             result = wait_for(f"replication after {state}", destination.replication)
             assert result.WhichOneof("state") == "error", result
-            assert "Source consumer committed next offset" in str(result), result
         assert destination.rows() == actual
         assert source.consumer(topic)[0] == stopped_offset

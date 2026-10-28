@@ -100,6 +100,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 }
             }
         } catch(...) {
+            if (Settings.ReportStats_) {
+                SendError();
+            }
             Leave(TEvWorker::TEvGone::UNAVAILABLE, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
             return;
         }

@@ -260,6 +260,12 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        // Runs on actor activation, before the token requirement is checked.
+        // Derived code that needs AppData belongs here: the constructor may run
+        // without an activation context.
+        if constexpr (requires(TDerived& self) { self.PrepareAuthentication(); }) {
+            static_cast<TDerived*>(this)->PrepareAuthentication();
+        }
         TSecureRequestActor<TActorBootstrapped<TActorBootstrappedSecureRequest<TDerived>>, TDerived>::Bootstrap(ctx);
     }
 };
